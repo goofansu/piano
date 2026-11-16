@@ -22,7 +22,6 @@ import type { ConnectionHandlers } from "../web/src/lib/ws.ts";
 import { initialState, sessionKey } from "../web/src/store.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
 
-/** An address bar with a history stack: push, replace, back and forward, like the browser's. */
 function addressBar(start: string) {
   const entries = [start];
   let index = 0;
@@ -63,7 +62,6 @@ function addressBar(start: string) {
   };
 }
 
-/** A page at `url`: the client seeded as App seeds it, navigation over a fake address bar, the test playing the server. */
 function page(url: string, memory?: SurfaceMemory, rail?: Preference<boolean>) {
   const address = addressBar(url);
   const sent: ClientMessage[] = [];
@@ -459,7 +457,7 @@ for (const failure of ["disconnect", "error"] as const)
 test("history can revisit a superseded session route or cancel it by returning to Settings", () => {
   const p = page("/s/a");
   p.navigation.openSettings();
-  p.back(); // /s/a waits for the registry again.
+  p.back();
   assert.equal(p.navigation.getState().settings, null);
   p.forward();
   assert.equal(p.navigation.getState().settings, "providers");
@@ -513,7 +511,7 @@ test("explicit session selection supersedes a deferred startup route", () => {
 test("New supersedes a deferred history route, which back can still revisit", () => {
   const p = page("/s/a");
   p.navigation.openProjects();
-  p.back(); // The registry still has not arrived: /s/a is pending again.
+  p.back();
   p.navigation.openNew();
   assert.equal(p.path(), "/new");
   p.registry();
@@ -569,7 +567,6 @@ test("a session without history keeps its URL, is not selected, and says so", ()
   assert.deepEqual(p.entries, ["/s/gone"]);
   assert.equal(p.title(), "History unavailable - Piano");
 
-  // A missing checkout still lets history be read, so its address opens the session.
   const q = page("/s/gone");
   q.server({
     _tag: "registry",
@@ -654,7 +651,6 @@ test("archiving or deleting a previously viewed session keeps the project home a
           ? [sessionReference("/scratch", "a", { projectId: "p1", archived: true })]
           : [],
     });
-    // The server may still hold the old selection after the browser leaves the session.
     p.server({
       _tag: "selected",
       selectionId,
@@ -735,7 +731,6 @@ test("back and forward apply the address bar's route; back onto the same New pag
   assert.ok(p.moves() > 0);
 });
 
-/** The Surface area as the user sees it: its tabs in order and the one shown, or null while hidden. */
 function shownTabs(navigation: ReturnType<typeof createNavigation>) {
   const { surface, area } = navigation.getState();
   return surface
@@ -743,7 +738,6 @@ function shownTabs(navigation: ReturnType<typeof createNavigation>) {
     : { tabs: [], active: null, area };
 }
 
-/** A browser tab's sessionStorage, which outlives a reload of the page. */
 function tabMemory(): SurfaceMemory {
   let value: string | null = null;
   return {
@@ -933,13 +927,11 @@ test("choosing Changes again shows its one tab in place: no toggle, no duplicate
   );
 });
 
-/** What sits on the Agent area's right side by side: the session rail, the Surface area, or nothing. */
 function rightSide(navigation: ReturnType<typeof createNavigation>) {
   const { layout } = navigation.getState();
   return layout.rail ? "rail" : layout.surface ? "surface" : null;
 }
 
-/** A browser's localStorage for one preference, which outlives every page. */
 function railStorage(): PreferenceStorage {
   const values = new Map<string, string>();
   return {
@@ -1036,8 +1028,6 @@ test("a reload keeps the session rail over the tabs it covered, unless it was tu
   after.navigation.toggleRail();
   assert.equal(rightSide(after.navigation), "surface", "turned off, the covered tabs return");
 
-  // Another tab of this browser turned the rail off (`storage` now says so) while this one was
-  // away with the tabs covered: the tabs show, since no rail covers them.
   const away = tabMemory();
   const left = page("/s/a", away, railPreference(railStorage()));
   left.registry();
@@ -1291,7 +1281,6 @@ test("resolved file reads do not reopen closed tabs, steal focus or affect anoth
     active: "changes",
     area: "surface",
   });
-  // The spelling resolved there, so it rereads in that tab.
   const closed = open();
   p.navigation.closeTab("file:reference/map.html");
   const before = shownTabs(p.navigation);
@@ -1314,8 +1303,6 @@ test("a path through `..` keeps its spelling until the server resolves the direc
   p.navigation.select("/scratch", "a");
   p.selected("a");
   p.navigation.openFile("README.md");
-  // With `alias -> ../sibling/sub`, `alias/../README.md` is sibling/README.md, as the server
-  // reads it: only the server can tell, so the tab names the path as the link wrote it.
   p.navigation.openFile("alias/../README.md");
   p.navigation.openFile("/scratch/alias/../README.md");
   assert.deepEqual(shownTabs(p.navigation).tabs, ["file:README.md", "file:alias/../README.md"]);
@@ -1384,7 +1371,6 @@ test("a retained acquisition is not persisted or reread by tab selection; an exp
     path: "note.txt",
     from: "agent",
   });
-  // Reload restores locations only, with a fresh acquisition.
   const reloaded = page("/s/a", { read: () => kept, write: () => {} });
   reloaded.registry();
   reloaded.selected("a");

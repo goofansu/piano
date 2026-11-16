@@ -28,7 +28,6 @@ const git = (dir: string, ...args: string[]) =>
   execFileSync("git", ["-C", dir, "-c", "user.name=t", "-c", "user.email=t@example.com", ...args], {
     stdio: "pipe",
   });
-/** Offered once per Git discovery the sidebar starts, while a test listens. */
 let discovered: Queue.Queue<string> | undefined;
 let databases = 0;
 const run = <A, E>(
@@ -60,7 +59,6 @@ const run = <A, E>(
     ),
   );
 };
-/** Listens for the sidebar's next discovery, once the ones already started have finished. */
 const listen = Effect.gen(function* () {
   yield* (yield* SidebarView).fresh;
   const queue = yield* Queue.unbounded<string>();
@@ -79,20 +77,17 @@ test("INV-06: worktree commands require a registered folder, answer the refusal 
     Effect.gen(function* () {
       const commands = yield* WorkspaceCommands,
         registry = yield* Registry;
-      // Some folder is registered, so the sidebar has something to rediscover.
       yield* registry.addFolder(cwd);
       for (const attempt of [
         commands.addWorktree(repo, linked),
         commands.createWorktree(repo, "other", {}),
       ]) {
         const discoveries = yield* listen;
-        // Nothing ran, so the browser need not ask for rediscovery.
         assert.deepEqual(yield* attempt, {
           status: "error",
           detail: "Select a registered folder first.",
           unconfirmed: false,
         });
-        // Without a rediscovery this waits until the test times out.
         yield* Queue.take(discoveries);
       }
       assert.deepEqual((yield* registry.get).worktrees, []);
@@ -119,7 +114,6 @@ test("INV-06: a worktree request that may have left a checkout is answered uncon
   git(repo, "init", "--quiet");
   git(repo, "commit", "--quiet", "--allow-empty", "-m", "init");
   git(repo, "worktree", "add", "--quiet", "-b", "feature", linked);
-  // A Worktrunk that creates nothing: it fails, or reports a creation, as `wt-reply` says.
   writeFileSync(
     wt,
     `#!${process.execPath}\nimport {readFileSync} from 'node:fs';
@@ -134,7 +128,6 @@ else{const r=readFileSync(${JSON.stringify(reply)},'utf8');if(r==='fail'){consol
     created_branch: true,
     base_branch: "main",
   });
-  // Worktrunk failing, then the registry or a defect failing after Worktrunk or Git answered.
   const failures = {
     worktrunk: { reply: "fail", record: Effect.void, detail: /hook failed/ },
     registry: {
@@ -154,7 +147,6 @@ else{const r=readFileSync(${JSON.stringify(reply)},'utf8');if(r==='fail'){consol
       Effect.gen(function* () {
         const registry = yield* Registry;
         yield* registry.addFolder(repo);
-        // Built in the test's scope, which outlives the work FolderWorktrees forks into it.
         const commands = Context.get(
           yield* Layer.build(
             Layer.fresh(WorkspaceCommandsLive.pipe(Layer.provide(FolderWorktreesLive))),
@@ -166,7 +158,6 @@ else{const r=readFileSync(${JSON.stringify(reply)},'utf8');if(r==='fail'){consol
           add: commands.addWorktree(repo, linked),
         };
         for (const [request, attempt] of Object.entries(attempts)) {
-          // Adding an existing checkout runs no Worktrunk, so only a later failure applies.
           if (kind === "worktrunk" && request === "add") continue;
           const discoveries = yield* listen;
           const result = yield* attempt;
@@ -189,7 +180,6 @@ test("INV-02/06: a requester that leaves while Worktrunk runs still gets the wor
   mkdirSync(repo);
   git(repo, "init", "--quiet");
   git(repo, "commit", "--quiet", "--allow-empty", "-m", "init");
-  // A Worktrunk that says it started creating, then waits to be released before answering.
   writeFileSync(
     wt,
     `#!${process.execPath}\nimport {existsSync,writeFileSync} from 'node:fs';
@@ -220,7 +210,6 @@ console.log(${JSON.stringify(JSON.stringify({ action: "created", branch: "next",
         Effect.sync(() => (existsSync(started) ? true : undefined)),
         "Worktrunk running",
       );
-      // The socket closes: its request fiber is interrupted while Worktrunk is still creating.
       yield* Fiber.interrupt(requester);
       writeFileSync(release, "");
       const registered = yield* until(
@@ -233,7 +222,6 @@ console.log(${JSON.stringify(JSON.stringify({ action: "created", branch: "next",
 });
 
 test("INV-01: a trust decision is saved in Pi's store and every client's model catalog is invalidated", async () => {
-  // A project skill makes the directory's trust matter to Pi.
   mkdirSync(join(cwd, ".agents/skills/hello"), { recursive: true });
   writeFileSync(
     join(cwd, ".agents/skills/hello/SKILL.md"),
@@ -244,7 +232,6 @@ test("INV-01: a trust decision is saved in Pi's store and every client's model c
       Effect.gen(function* () {
         const commands = yield* WorkspaceCommands,
           facts = yield* DirectoryFacts;
-        // Each socket forwards this stream as `catalogs_invalidated`.
         const invalidated = yield* (yield* facts.changes).pipe(
           Stream.take(2),
           Stream.runCollect,

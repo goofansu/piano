@@ -1,27 +1,7 @@
-/*
- * piano design system: "Moonstone", after Lefos's palette (docs/design-moonstone.md).
- *
- * Type: the system sans for the interface and body, and the system mono for anything the machine
- * produced verbatim (code, commands, paths, branches, the model chip). No web fonts.
- * Body stays 16px; labels are 16px on phones / 14px on desktop, captions 14px / 12px.
- * Weights 400/500/600.
- *
- * Layers: every surface belongs to one of four layers, and a layer decides its
- * background, its edge and its shadow. Nothing borrows an edge from another layer.
- *   0 canvas   the navigation shell; the conversation is a quiet inset sheet
- *   1 surface  things placed on the canvas: the composer, inputs, user prompts, code
- *   2 raised   things that float over the canvas: menus, popovers, tooltips
- *   3 overlay  things that take over: dialogs, the mobile sidebar sheet
- *
- * Colour: a moonstone canvas and warm-white sheet in light mode, midnight and evening blue with
- * parchment ink in dark mode. One accent means "live" (the focus ring, the send key, the
- * selection): evening blue in light mode, parchment in dark mode. Status hues are Lefos's earth
- * accents. Contrast sets lightness (4.5:1 text, 3:1 glyphs); chroma stays capped.
- */
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-/* shadcn's attachment component expects `scrollbar-none`; shadcn/tailwind.css 4.21 only ships `no-scrollbar`. */
+/* shadcn attachments need scrollbar-none; shadcn/tailwind.css 4.21 only ships no-scrollbar. */
 @utility scrollbar-none {
   -ms-overflow-style: none;
   scrollbar-width: none;
@@ -31,9 +11,6 @@
 }
 
 @custom-variant dark (&:is(.dark *));
-/* Where a control may drop below a 44px target: a wide screen whose pointer is not coarse. A phone
-   or any touch screen keeps the target, so a control writes its touch size and `compact:` its mouse
-   one. */
 @custom-variant compact (@media (width >= 48rem) and (not (pointer: coarse)));
 
 .slash-textarea {
@@ -55,7 +32,6 @@
   color: var(--ink);
 }
 
-/* The mirror paints the text; the native editor still paints its caret and selection. */
 .slash-textarea[data-command="true"] > textarea {
   color: transparent;
   caret-color: var(--ink);
@@ -83,56 +59,40 @@
 :root {
   --radius: 0.625rem;
 
-  /* On desktop each column, the sidebar included, sits in the same frame: this gap from the
-   * screen's edge and the pane's line. Inside it every leading glyph is `--gutter` from the frame's
-   * edge, so the sidebar's Hide and a pane's Show share a point. A row or leading button starts
-   * `--glyph-pad` before its glyph. Below md nothing is framed. */
   --pane-inset: 0.5rem;
   --pane-line: 1px;
   --pane-frame: calc(var(--pane-inset) + var(--pane-line));
   --gutter: 1rem;
   --glyph-pad: 0.5rem;
   --row-inset: calc(var(--gutter) - var(--glyph-pad));
-  /* The room the session rail takes at the Agent area's right while it floats over the
-   * transcript's scroller; the transcript, notices and composer keep clear of it. */
   --rail-inset: 0px;
 
-  /* Compact UI must be as readable as the composer on phones. */
   --type-label: 1rem;
   --type-caption: 0.875rem;
 
-  /* layers: a moonstone canvas, a warm-white sheet, and warm near-whites that lighten as they rise */
   --surface-0: oklch(0.93 0.006 60);
   --conversation: oklch(0.962 0.004 75);
   --surface-1: oklch(0.978 0.004 75);
   --surface-2: oklch(0.985 0.004 75);
   --surface-3: oklch(0.99 0.003 75);
-  /* driftwood lines and fills */
   --line: oklch(0.46 0.01 68 / 14%);
   --line-strong: oklch(0.46 0.01 68 / 24%);
   --fill: oklch(0.46 0.01 68 / 6%);
   --fill-hover: oklch(0.46 0.01 68 / 8%);
   --fill-active: oklch(0.46 0.01 68 / 10%);
-  /* umber-tinted shadows */
   --shadow-1: 0 1px 2px oklch(0.32 0.035 55 / 7%), 0 8px 24px -16px oklch(0.32 0.035 55 / 26%);
   --shadow-2: 0 2px 6px oklch(0.32 0.035 55 / 9%), 0 16px 40px -18px oklch(0.32 0.035 55 / 40%);
   --shadow-3: 0 8px 20px oklch(0.32 0.035 55 / 11%), 0 32px 80px -24px oklch(0.32 0.035 55 / 55%);
-  /* the dim behind dialogs and the phone sheet */
   --scrim: oklch(0.25 0.03 55 / 38%);
 
-  /* ink: warm-black, warm-40, and warm-30 darkened until it reads on every layer and fill */
   --ink: oklch(0.2 0.007 60);
   --ink-2: oklch(0.44 0.012 62);
   --ink-3: oklch(0.48 0.012 62);
 
-  /* the one colour: evening blue, a step lighter than Lefos's so it reads as blue beside warm-black ink */
   --brand: oklch(0.36 0.05 257);
   --brand-ink: oklch(0.97 0.004 75);
   --brand-soft: oklch(0.36 0.05 257 / 12%);
 
-  /* States, in Herdr's vocabulary (src/client/shell.rs), drawn from Lefos's earth accents:
-   * working sunkissed, done tidal blue, idle sage, blocked terracotta, merged dusk lilac. Lightness
-   * set so glyphs pass 3:1 and text 4.5:1 on canvas and sheet; chroma capped so they stay earthy. */
   --busy: oklch(0.58 0.105 75);
   --done: oklch(0.5 0.06 232);
   --ok: oklch(0.5 0.07 118);
@@ -141,15 +101,12 @@
   --err-soft: oklch(0.48 0.12 33 / 10%);
   --merged: oklch(0.5 0.07 320);
 
-  /* shadcn vocabulary, mapped onto the layers */
   --background: var(--surface-0);
   --foreground: var(--ink);
   --card: var(--surface-1);
   --card-foreground: var(--ink);
   --popover: var(--surface-2);
   --popover-foreground: var(--ink);
-  /* A solid surface, hovered: for a control that floats over content, where the translucent
-   * `--accent` fill would tint what lies beneath instead of the control. */
   --popover-hover: color-mix(in oklch, var(--popover), var(--foreground) 5%);
   --primary: var(--brand);
   --primary-foreground: var(--brand-ink);
@@ -184,8 +141,6 @@
 }
 
 .dark {
-  /* Lefos in dark mode: midnight canvas, evening-blue layers and warm parchment ink. Elevation adds
-   * lightness so menus and dialogs separate without bright outlines. */
   --surface-0: oklch(0.215 0.022 257);
   --conversation: oklch(0.25 0.022 257);
   --surface-1: oklch(0.285 0.024 257);
@@ -205,12 +160,10 @@
     inset 0 1px oklch(0.85 0.021 53 / 6%);
   --scrim: oklch(0.1 0.02 257 / 62%);
 
-  /* warm-10 ink, softer than white; secondary and tertiary stay readable on raised, filled layers */
   --ink: oklch(0.91 0.006 68);
   --ink-2: oklch(0.8 0.012 62);
   --ink-3: oklch(0.76 0.014 60);
 
-  /* In dark mode the one colour turns to parchment, the warm light Lefos sets on evening blue. */
   --brand: oklch(0.84 0.04 55);
   --brand-ink: oklch(0.215 0.022 257);
   --brand-soft: oklch(0.84 0.04 55 / 12%);
@@ -224,7 +177,6 @@
   --merged: oklch(0.76 0.07 320);
 }
 
-/* Match the shell's md breakpoint; preserve desktop information density. */
 @media (min-width: 48rem) {
   :root {
     --gutter: 1.5rem;
@@ -234,7 +186,6 @@
 }
 
 @theme inline {
-  /* Shared responsive UI layers; body and display sizes stay stable. */
   --text-xs: var(--type-caption);
   --text-sm: var(--type-label);
   --text-sm--line-height: 1.45;
@@ -352,7 +303,6 @@
     scrollbar-width: thin;
     scrollbar-color: var(--line-strong) transparent;
   }
-  /* Rows in menus, selects and command lists are touch-sized on phones. */
   @media (pointer: coarse) {
     [data-slot="dropdown-menu-item"],
     [data-slot="dropdown-menu-checkbox-item"],
@@ -365,18 +315,13 @@
   }
 }
 
-/* shadcn owns the internal backdrops (no overlay props on Content). Keep these narrow slot
- * exceptions here rather than copying Dialog/Sheet internals into app wrappers. */
 [data-slot="dialog-overlay"],
 [data-slot="sheet-overlay"] {
-  /* Moonstone dims with a scrim; upstream also blurs the page behind, which costs compositing on phones. */
   background-color: var(--scrim);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
 
-/* PianoSidebarReveal owns these surfaces, not upstream Sheet internals. The page remains
- * mounted at full width; only its position changes, so composer and scroll state survive. */
 [data-slot="mobile-sidebar"] {
   position: fixed;
   inset: 0;
@@ -385,7 +330,6 @@
   outline: none;
 }
 [data-slot="mobile-sidebar"][data-state="closed"] {
-  /* Keep Radix Presence mounted while the children and live page settle closed. */
   animation: sidebar-reveal-exit var(--sidebar-duration) linear;
 }
 @keyframes sidebar-reveal-exit {
@@ -421,8 +365,6 @@
     border-radius var(--sidebar-duration) var(--sidebar-easing);
   will-change: transform, opacity;
 }
-/* Opened by a tap, the sidebar enters from closed; a drag already painted its start, and a
- * sidebar restored open across a machine switch is already there. */
 @starting-style {
   [data-slot="mobile-sidebar"][data-dragging="false"]:not([data-restored])
     [data-slot="sidebar-reveal-navigation"] {
@@ -443,7 +385,6 @@
     transition:
       transform var(--sidebar-duration) var(--sidebar-easing),
       border-radius var(--sidebar-duration) var(--sidebar-easing);
-    /* Keep the live page on its own layer before the first touch, not mid-gesture. */
     will-change: transform;
   }
 }
@@ -452,14 +393,12 @@
     display: none;
   }
 }
-/* The finger moves the surfaces 1:1; they settle only once it lets go. */
 [data-slot="layout-main"][data-sidebar-dragging="true"],
 [data-slot="mobile-sidebar"][data-dragging="true"] [data-slot="sidebar-reveal-navigation"],
 [data-slot="mobile-sidebar"][data-dragging="true"] [data-slot="sidebar-scrim"] {
   transition: none;
 }
 
-/* A spatial fade, not an animation: only edges with off-screen rail content soften. */
 [data-slot="session-rail"] {
   mask-image: linear-gradient(
     to bottom,
@@ -470,14 +409,11 @@
   );
 }
 
-/* Radix's inline display: table widens this internal wrapper to the longest line, defeating
- * truncation. There is no shadcn prop for it; preserve the existing block-layout fix. */
+/* Override Radix's inline display: table, which defeats truncation. */
 [data-slot="scroll-area-viewport"] > div {
-  /* !important: override Radix's inline display, not utility classes. */
   display: block !important;
 }
 
-/* A selected row: parchment in light mode, so it reads warm and distinct from the driftwood hover. */
 :root {
   --selected: oklch(0.88 0.021 53);
 }
@@ -485,8 +421,6 @@
   --selected: oklch(0.84 0.04 55 / 14%);
 }
 
-/* On phones, session navigation reads at its own scale; on desktop it keeps the app's density.
- * Menus portaled outside it keep theirs. */
 @media (width < 48rem) {
   [data-slot="session-sidebar"] {
     --type-label: 1.0625rem;
@@ -494,7 +428,6 @@
   }
 }
 
-/* Markdown from the assistant. The gutter glyph sits outside; this sets only the text. */
 .prose-chat {
   overflow-wrap: anywhere;
   line-height: 1.7;
@@ -551,7 +484,6 @@
 .prose-chat strong {
   font-weight: 600;
 }
-/* A continuous underline: skipping descenders left gaps under p and g. */
 .prose-chat a,
 .prose-chat .local-file-link {
   color: var(--brand);
@@ -645,7 +577,6 @@
   color: var(--ink-2);
 }
 
-/* Landscape/short windows must leave space for the composer, not desktop welcome chrome. */
 @media (max-height: 500px) {
   .new-session-layout {
     padding-top: 3.5rem;
@@ -687,8 +618,6 @@
     0 0 0 3px color-mix(in oklab, var(--brand) 7%, transparent),
     var(--shadow-1);
 }
-/* A reconnecting notice or loading placeholder waits a moment before showing, so a quick load
- * never flashes it. It appears at once, without a fade. */
 .late-enter {
   animation: late-enter 600ms step-end;
 }
@@ -701,10 +630,6 @@
   overflow: hidden;
 }
 
-/* The keys. The three-key mark is the instrument's live signal: while Pi works the keys play a
- * scale, each dipping one pixel below the fallboard and dimming in turn on a 1.2s cycle; when Pi
- * finishes they rest. A CSS animation, so it keeps time on the compositor while replies stream.
- * The pressed state underneath is what reduced motion holds still. */
 .keys[data-playing="true"] [data-key] {
   transform: translateY(1px);
   opacity: 0.6;
@@ -729,8 +654,6 @@
   }
 }
 
-/* The streaming caret sits at the end of the last block of a streaming reply, where the next word
- * will land. */
 .streaming-caret > :last-child::after,
 .streaming-caret:empty::after {
   content: "";
@@ -744,20 +667,11 @@
 .streaming-caret > pre:last-child::after {
   display: none;
 }
-/* Motion is opt-in. An element moves only when it carries `data-motion`, or is one of the few
- * upstream pieces whose own motion Piano keeps: spinners, Sonner's toasts and the overlay behind a
- * moving dialog. `.late-enter` is exempt too: its delay decides when, not how, something shows.
- * Everything else, including upstream hover and enter motion, stays still. One strong ease-out for
- * every entrance; exits are shorter than entrances. */
 :root {
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-  /* Strong ease-in-out for motion that stays on screen: the keys' press. */
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
-  /* iOS-like drawer curve (Ionic), for the phone sidebar. */
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 }
-/* Menus, popovers, selects and tooltips scale from their trigger (Radix's transform origin) with
- * no slide; dialogs scale from the centre. */
 [data-motion="anchored"],
 [data-motion="tooltip"],
 [data-motion="dialog"] {
@@ -782,7 +696,6 @@
   --tw-animation-duration: 120ms;
   --tw-ease: ease-out;
 }
-/* A key that answers a press: it gives a little under the finger and springs back. */
 [data-motion="press"] {
   transition: transform 150ms var(--ease-out);
 }
@@ -790,24 +703,18 @@
   translate: none;
   transform: scale(0.96);
 }
-/* Two faces of one control (Send and Stop) cross-fade in place; the blur hides the overlap. */
 [data-motion="swap"] {
   transition:
     opacity 150ms var(--ease-out),
     scale 150ms var(--ease-out),
     filter 150ms var(--ease-out);
 }
-/* A fold's chevron turns with it. */
 [data-motion="turn"] {
   transition: rotate 150ms var(--ease-out);
 }
-/* A status dot breathes while its state is in progress (Pi working, an app starting, Piano
- * reconnecting): opacity alone, on the keys' 1.2s clock, so it keeps time on the compositor. */
 [data-motion="pulse"] {
   animation: status-pulse 1.2s var(--ease-in-out) infinite;
 }
-/* A glyph that breathes for a read in flight waits as `.late-enter` does, so a quick read never
- * flickers it; only a wait the user can feel shows motion. */
 [data-motion="pulse"][data-late] {
   animation-delay: 600ms;
 }
@@ -820,13 +727,11 @@
     opacity: 0.3;
   }
 }
-/* The composer's focus and drop ring is a change of colour, so it eases. */
 [data-motion="ring"] {
   transition:
     border-color 150ms ease,
     box-shadow 150ms ease;
 }
-/* Something added to the page (an attachment) grows in where it lands; a notice only fades. */
 [data-motion="enter"] {
   transition:
     opacity 150ms var(--ease-out),
@@ -842,11 +747,6 @@
     opacity: 0;
   }
 }
-/* A row's actions (`RowActions`) sit over its end and come forward while the row is pointed at,
- * holds keyboard focus or has its menu open; what they cover makes room. The row says how wide they
- * are in `--row-actions`. A value beside them steps aside (`aside`); a title fades out beneath them
- * (`yield`, a mask, since rows' fills are translucent). Keyboard focus shows them at once. On a
- * touch screen nothing hovers: the actions stay in the row's flow, always shown. */
 @property --yield {
   syntax: "<length>";
   inherits: false;
@@ -867,7 +767,6 @@
   );
   transition: --yield 100ms ease-out;
 }
-/* `:where`, so the focus, touch and reduced-motion rules after it win. */
 [data-row]:where(:hover, :has(:focus-visible), :has([aria-haspopup="menu"][data-state="open"])) {
   & [data-motion="reveal"] {
     opacity: 1;
@@ -898,7 +797,6 @@
     mask-image: none;
   }
 }
-/* !important: the reset must beat every component's own motion. */
 :not(
   [data-motion],
   [data-slot="dialog-overlay"]:has(+ [data-motion]),
@@ -911,12 +809,10 @@
   animation: none !important;
   transition: none !important;
 }
-/* Descending specificity is safe: it sets only motion properties, which no earlier rule shares. */
 * {
   scroll-behavior: auto !important;
 }
 @media (prefers-reduced-motion: reduce) {
-  /* Fades stay; nothing scales or moves. */
   [data-motion] {
     --tw-enter-scale: 1 !important;
     --tw-exit-scale: 1 !important;
@@ -938,12 +834,10 @@
   [data-row] :is([data-motion="aside"], [data-motion="yield"]) {
     transition: none;
   }
-  /* The keys hold their pressed state instead of playing, and a status dot holds its colour. */
   [data-motion="key"],
   [data-motion="pulse"] {
     animation: none !important;
   }
-  /* The phone sidebar comes to rest at once; finger tracking stays. */
   [data-motion="drawer"] {
     transition: none !important;
     animation: none !important;

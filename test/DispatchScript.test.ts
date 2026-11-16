@@ -44,7 +44,6 @@ function run(args: string[], url: string, env: NodeJS.ProcessEnv = {}) {
   });
 }
 
-/** Minimal wire peer: exercise the actual CLI/native WebSocket, without a server or Pi history. */
 async function peer(t: TestContext) {
   const requests: ClientMessage[] = [];
   const origins: (string | undefined)[] = [];
@@ -98,8 +97,6 @@ async function peer(t: TestContext) {
         const message = decodeClientMessage(payload.toString());
         requests.push(message);
         if (message._tag === "ping") send({ _tag: "pong", nonce: message.nonce });
-        // One existing session, "portable-session", running in `existingCwd`; Piano refuses a
-        // read of "refused-session" for capacity.
         if (message._tag === "session_status" && "sessionId" in message.target)
           send({
             _tag: "session_status",
@@ -248,7 +245,6 @@ test("explicit flags override env and save full JSON exclusively", async (t) => 
 
 test("a Piano that cannot be reached reports and records a start that was not sent", async (t) => {
   const f = fixture(t);
-  // A loopback port nothing listens on: the WebSocket never opens.
   const closed = createServer();
   await new Promise<void>((resolve) => closed.listen(0, "127.0.0.1", resolve));
   const port = (closed.address() as { port: number }).port;
@@ -274,7 +270,6 @@ test("invalid configuration and input fail before network side effects and reser
   const p = await peer(t);
   const out = join(f.dir, "never.json");
   for (const extra of [
-    // Removed options: a dispatched session always starts on Piano's default model and effort.
     ["--model", "provider/model"],
     ["--thinkingLevel", "low"],
     ["--ws-url", "wss://public.example/ws"],

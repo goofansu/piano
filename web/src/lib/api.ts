@@ -1,13 +1,4 @@
-/**
- * The browser's half of the HTTP seam: one function per endpoint of shared/http.ts, the table the
- * server router also serves. Each response is decoded against the endpoint's Schema, and every
- * failure has one error shape.
- *
- * Paths never travel in URLs: registered workspaces and sessions are addressed by ID in the query
- * string, filesystem paths in a request body.
- */
 import { Schema } from "effect";
-// Relative so module tests can load the Schemas under plain Node, which has no `@shared` alias.
 import {
   type Endpoint,
   Endpoints,
@@ -51,11 +42,6 @@ export const createPrompt = (body: import("../../../shared/prompts.ts").PromptCr
 export const removePrompt = (name: string) =>
   call(Endpoints.prompts.remove, { body: { name } }, local());
 
-/**
- * Every failed request: the server's own `error` message when it sent one, otherwise the
- * endpoint's fallback, and the form `field` the server said it belongs to. `status` is 0 when no
- * response arrived. Aborts are rethrown unchanged.
- */
 export class ApiError extends Error {
   readonly status: number;
   readonly field: string | undefined;
@@ -67,25 +53,16 @@ export class ApiError extends Error {
   }
 }
 
-/** A request only this Piano answers: it always goes to Local. */
 export interface RequestOptions {
   signal?: AbortSignal;
 }
 
-/**
- * A request another machine can answer (`RemoteRequests`): the caller names the machine, captured
- * where the request is made (`useMachineId`), never read from mutable selected-machine state. No
- * default, so a forgotten machine is a compile error rather than a request to Local, where the
- * same workspace and session IDs may name something else (INV-07).
- */
 export interface MachineRequest extends RequestOptions {
   machineId: string;
 }
 
-/** Local, stated: the machine for requests only this Piano answers. */
 const local = (options?: RequestOptions): MachineRequest => ({ ...options, machineId: LOCAL.id });
 
-/** What a call sends: the endpoint's ID parameters and, when it has one, its body. */
 type Input<Q extends IdParam, B extends Json | undefined> = ([Q] extends [never]
   ? unknown
   : { readonly query: Readonly<Record<Q, string>> }) &
@@ -115,7 +92,6 @@ async function call<Q extends IdParam, B extends Json | undefined, R extends Jso
     if (signal?.aborted) throw error;
     throw new ApiError(failure(0), 0);
   }
-  // A proxy or crashed server may answer with something other than JSON.
   const json: unknown = await (
     response.ok && readSuccess ? readSuccess(response) : response.json()
   ).catch((error) => {
@@ -131,11 +107,8 @@ async function call<Q extends IdParam, B extends Json | undefined, R extends Jso
   return decoded.value;
 }
 
-/** Always this Piano's own list: a remote's machines are not this browser's. */
 export const listMachines = (signal?: AbortSignal) =>
   call(Endpoints.machines, {}, local({ signal })).then(({ machines }) => machines);
-
-// Folder picker
 
 export const listDirectory = (path: string, options?: RequestOptions) =>
   call(Endpoints.listDirectory, { body: { path } }, local(options));
@@ -160,7 +133,6 @@ export const workspaceFile = (workspaceId: string, path: string, options: Machin
     },
   );
 
-/** The exact file, for saving. Its name comes from the server's attachment header, else the path. */
 export const workspaceFileDownload = (workspaceId: string, path: string, options: MachineRequest) =>
   call(
     Endpoints.workspaceFileDownload,
@@ -181,14 +153,11 @@ function attachmentName(disposition: string | null): string | undefined {
   if (exact) {
     try {
       return decodeURIComponent(exact[1]);
-    } catch {
-      /* fall through to the path */
-    }
+    } catch {}
   }
   return undefined;
 }
 
-/** A session's Changes under its saved scope, or `scope` for this read. */
 export const sessionChanges = (
   workspaceId: string,
   sessionId: string,
@@ -208,7 +177,6 @@ export const sessionChangedFile = (
   options: MachineRequest,
 ) => call(Endpoints.sessionChangedFile, { query: { workspaceId, sessionId }, body }, options);
 
-/** Save the session's scope (`null` for the automatic one); answers with a fresh read. */
 export const setSessionChangesScope = (
   workspaceId: string,
   sessionId: string,
@@ -221,17 +189,6 @@ export const setSessionChangesScope = (
     options,
   );
 
-/**
- * Where each of `paths` stands in `workspace` (one `WrittenFile` per path, in order): one
- * observation however many paths are asked about. A request carries `WRITTEN_PATHS_LIMIT` paths,
- * so a longer list is read one batch at a time, in order, and the batches' files are joined here.
- * The read stops at the first abort, failure or error result rather than publishing the batches
- * before it. The answer carries the oldest `observedAt` it was built from: no part of it is fresher.
- *
- * Every reply must name `workspace`, by all of its identity — ID, path and folder (INV-07). A
- * reply that names another is as far outside the contract as a malformed one, so it fails the
- * same way `call` does, an `ApiError` carrying the reply's status, with the reason in its message.
- */
 export const workspaceWrittenFiles = async (
   workspace: Workspace,
   paths: readonly string[],
@@ -261,9 +218,6 @@ export const workspaceWrittenFiles = async (
   return { workspace, observedAt: first!.observedAt, result: { status: "ready", files } };
 };
 
-// Session pull request
-
-/** Reads always bypass the HTTP cache: GitHub facts are live. */
 export const sessionPullRequest = (
   workspaceId: string,
   sessionId: string,
@@ -278,13 +232,9 @@ export const sessionPullRequest = (
       )
     : call(Endpoints.sessionPullRequest, { query: { workspaceId, sessionId } }, options);
 
-// Composer
-
-/** Before a session starts, from the directory's probe. */
 export const slashCommands = async (cwd: string, options: MachineRequest) =>
   (await call(Endpoints.slashCommands, { body: { cwd } }, options)).commands;
 
-/** From the running session's own child; fails with 409 once it has stopped. */
 export const sessionCommands = async (
   workspaceId: string,
   sessionId: string,
@@ -292,7 +242,6 @@ export const sessionCommands = async (
 ) =>
   (await call(Endpoints.sessionCommands, { query: { workspaceId, sessionId } }, options)).commands;
 
-/** Pi's probed catalog, not this answer, names the saved default. */
 export const saveDefaults = async (
   model: string | undefined,
   thinkingLevel: ThinkingLevel,
@@ -301,8 +250,6 @@ export const saveDefaults = async (
   await call(Endpoints.saveDefaults, { body: { model, thinkingLevel } }, options);
 };
 
-// Settings
-
 export const oauthProviders = async (options?: RequestOptions) =>
   (await call(Endpoints.oauthProviders, {}, local(options))).providers;
 
@@ -310,14 +257,12 @@ export const providerLogout = async (provider: string, options?: RequestOptions)
   await call(Endpoints.providerLogout, { body: { provider } }, local(options));
 };
 
-/** Each sign-in request answers with the current attempt, or null when none exists. */
 export type SignInRequest =
   | { method: "GET" }
   | { method: "POST"; body: SignInEndpoints["start"]["body"]["Type"] }
   | { method: "PUT"; body: SignInEndpoints["answer"]["body"]["Type"] }
   | { method: "DELETE"; body: SignInEndpoints["cancel"]["body"]["Type"] };
 
-/** One sign-in lane's requests, the shape both sign-in dialogs drive. */
 export const signInApi =
   (endpoints: SignInEndpoints) =>
   async (request: SignInRequest = { method: "GET" }, options?: RequestOptions) => {
@@ -342,8 +287,6 @@ export const changeProviderApiKey = async (
   await call(Endpoints.changeProviderApiKey, { body }, local());
 };
 
-// Voice input
-
 export const voiceInput = (options?: RequestOptions) =>
   call(Endpoints.voiceInput, {}, local(options));
 export const saveVoiceInput = (body: typeof Endpoints.saveVoiceInput.body.Type) =>
@@ -352,13 +295,10 @@ export const transcribe = (body: typeof Endpoints.transcribe.body.Type, options?
   call(Endpoints.transcribe, { body }, local(options));
 
 export const providerLogin = signInApi(Endpoints.providerLogin);
-/** The same sign-in attempt as providers', run by Pi's MCP OAuth for an MCP server. */
 export const mcpLogin = signInApi(Endpoints.mcpLogin);
 
 export const mcpSetup = async (options?: RequestOptions) =>
   (await call(Endpoints.mcpSetup, {}, local(options))).state;
-/** A change to the MCP setup: the setup after it, and the server to sign in to when it waits for
- * a sign-in before saving. */
 export const changeMcpSetup = (request: McpSetupRequest) =>
   call(Endpoints.changeMcpSetup, { body: request }, local());
 

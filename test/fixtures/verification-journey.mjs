@@ -1,5 +1,3 @@
-// Failure probes for the existing harness, not another critical-path journey.
-// node test/fixtures/verification-journey.mjs <evidence-directory> setup|failure|cancel
 import assert from "node:assert/strict";
 import { run } from "../browser/harness.mjs";
 

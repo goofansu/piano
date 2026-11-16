@@ -1,5 +1,3 @@
-/** Read-only saved-history projection. Full files/SDK entries never cross back to the server:
- * a reply is a Snapshot, an exported branch, or small session metadata. */
 import { readFileSync } from "node:fs";
 import { parentPort } from "node:worker_threads";
 import type { SessionManager } from "@earendil-works/pi-coding-agent";
@@ -28,9 +26,7 @@ export type HistoryReply =
   | { readonly error: true };
 
 const savedFacts = (sm: SessionManager, path: string, sessionId: string): PiSessionFacts => {
-  // Pi owns compaction/context edits/active branch, just as for RPC get_messages.
   const context = sm.buildSessionContext();
-  // Selection can be virtual, unlike the physical model of the last assistant message.
   const selection = sm.getBranch().findLast((entry) => entry.type === "model_change");
   const model =
     selection?.type === "model_change"
@@ -60,7 +56,6 @@ parentPort!.on("message", ({ operation, path, sessionId }: HistoryRequest) => {
     const manager = savedSession(readFileSync(path, "utf8"), sessionId);
     if (operation === "peek") {
       const value = projectSnapshot(snapshotOf(savedFacts(manager, path, sessionId)));
-      // Image URLs refer to the server's bounded cache, not this worker's private heap.
       const ids = new Set(
         value.messages.flatMap((m) => m.attachments?.map((a) => a.url.split("/").at(-1)!) ?? []),
       );

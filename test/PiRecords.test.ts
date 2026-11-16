@@ -5,21 +5,17 @@ import { dialogAnswerFor, modelChoicesOf, piExchangeFor } from "../server/PiReco
 import { proposalDialog } from "../shared/library.ts";
 import type { Dialog } from "../shared/wire.ts";
 
-/** What reaches Pi's stdin for an action, or why nothing does. */
 const sent = (action: Parameters<typeof piExchangeFor>[0]) => {
   const exchange = piExchangeFor(action);
   return "rejected" in exchange ? exchange : { command: exchange.command };
 };
 
-/** An action's exchange, which these actions always produce. */
 const exchangeFor = <A extends Parameters<typeof piExchangeFor>[0]>(action: A) => {
   const exchange = piExchangeFor(action);
   assert.ok(!("rejected" in exchange), `${action._tag} must be sent`);
   return exchange;
 };
 
-// Expected efforts follow pi-ai getSupportedThinkingLevels: off..high unless mapped to null,
-// xhigh and max only when mapped, and off alone for a model that cannot reason.
 test("INV-12: Pi's model reply becomes model choices with the efforts Pi accepts", () => {
   const reply = {
     models: [
@@ -106,7 +102,6 @@ test("INV-12: a model ref that is not provider/id is refused before reaching Pi"
       rejected: `Model must be provider/id, got "${model}"`,
     });
   }
-  // Only the first slash separates the provider; Pi's model IDs may contain more.
   assert.deepEqual(sent({ _tag: "set_model", model: "openrouter/openai/gpt-5" }), {
     command: { type: "set_model", provider: "openrouter", modelId: "openai/gpt-5" },
   });
@@ -206,12 +201,10 @@ test("INV-04: a dialog answer reaches Pi as its original value, and cancel as a 
   };
   const answer = (value: string, cancelled?: boolean) =>
     dialogAnswerFor({ _tag: "answer", id: "d1", generation: "g", value, cancelled }, dialog);
-  // The browser saw only redacted labels; a unique one still selects the original option.
   assert.deepEqual(answer("Use token=[REDACTED]"), {
     command: { type: "extension_ui_response", id: "d1", value: "Use token=abc12345" },
     answer: { title: undefined, value: "Use token=abc12345" },
   });
-  // Two options share "Use [REDACTED]": refuse instead of guessing.
   assert.deepEqual(answer("Use [REDACTED]"), {
     rejected: "This option is unavailable or ambiguous after redaction. Cancel the dialog instead.",
   });
@@ -231,8 +224,6 @@ test("INV-04: a dialog answer reaches Pi as its original value, and cancel as a 
 });
 
 test("INV-11: a select option shown through the published dialog answers with its original value", () => {
-  // A known secret is compiled once for the whole published dialog and again for each option
-  // when the answer is matched: both passes must apply the same rule.
   process.env.PIANO_ROUNDTRIP_TOKEN = "roundtrip-secret-0123";
   try {
     const dialog: Dialog = {
@@ -308,7 +299,6 @@ test("INV-04: a save proposal redaction changed is shown as concealed and cannot
   const confirm = (dialog: Dialog, confirmed: boolean) =>
     dialogAnswerFor({ _tag: "answer", id: "p1", generation: "g", confirmed }, dialog);
 
-  // Only the key changes, and the key is what Piano hides: the shown diff would be empty.
   const hidden = raised(
     "Use api_key: staging-111 for $1\n",
     "Use api_key: production-999 for $1\n",
@@ -325,7 +315,6 @@ test("INV-04: a save proposal redaction changed is shown as concealed and cannot
     answer: { title: "Update prompt: deploy", value: false },
   });
 
-  // A snapshot carries the same mark for a dialog still open when the browser connects.
   const snapshot = projectSessionEvent({
     _tag: "snapshot",
     snapshot: { state: { sessionId: "s", isStreaming: false }, messages: [], dialogs: [hidden] },
@@ -333,7 +322,6 @@ test("INV-04: a save proposal redaction changed is shown as concealed and cannot
   assert.ok(snapshot._tag === "snapshot");
   assert.equal(snapshot.snapshot.dialogs[0]?.concealed, true);
 
-  // A proposal shown as written is approved as before.
   const plain = raised("Use $1\n", "Use $1 twice\n");
   const shown = projectSessionEvent({ _tag: "dialog", dialog: plain });
   assert.ok(shown._tag === "dialog");

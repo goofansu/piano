@@ -1,6 +1,3 @@
-/** Internal to PiSessions: one scoped child, bounded byte framing/queues, request
- * correlation and delivery uncertainty. Owns terminal failure and process cleanup.
- * It never publishes browser state or decides dialog/action semantics. */
 import {
   Cause,
   Clock,
@@ -27,40 +24,24 @@ import type { PiExchange, PiReadback, PiRecord } from "./PiRecords.ts";
 export class PiSessionError extends Data.TaggedError("PiSessionError")<{
   readonly reason: "spawn" | "exited" | "protocol" | "rejected" | "timeout" | "transport";
   readonly detail: string;
-  /** Refused before Pi saw the action (a closing host, a missing checkout, Stop in progress, full
-   * input capacity, an exited Pi): never delivered. Build it with `refusedUnsent`. */
   readonly notSent?: true;
-  /** Failed startup only: its child was observed stopped after closing the startup scope. */
   readonly startupStopped?: true;
 }> {}
 
-/** A refusal before Pi saw the action, so its sender may take the input back. */
 export const refusedUnsent = (reason: PiSessionError["reason"], detail: string) =>
   new PiSessionError({ reason, detail, notSent: true });
 
-/** Base host acknowledgement deadline, not a deadline for model work or extension execution.
- * A request of 1 MiB or more adds time for Pi to read it (`deliveryDeadline`). */
 export const PiRequestTimeoutMs = Context.Reference<number>("piano/PiRequestTimeoutMs", {
   defaultValue: () => 30_000,
 });
 
 const MiB = 1024 * 1024;
-// Reuse small stdout storage. Large image/history bursts get a short reuse window,
-// not a maximum-size buffer pinned for this live child's lifetime.
 const RETAINED_STDOUT_BYTES = MiB;
 const LARGE_STDOUT_REUSE_MS = 1000;
-/** Extra acknowledgement time per whole MiB a request writes. Pi's JSONL reader rescans its buffer
- * for every stdin chunk, so a line's read time grows faster than its size: on an exe.dev VM a
- * 28 MiB line took about 4.5 s and a 67 MiB line (a full attachment batch) about 23 s, roughly
- * 0.35 s per MiB at the largest size. One second per MiB leaves about three times that on a slower
- * machine, before the base deadline is added. Requests under 1 MiB keep the base deadline. */
 const PI_INPUT_MS_PER_MIB = 1000;
-/** The stdin write and acknowledgement deadline for a request of `bytes`. */
 const deliveryDeadline = (base: number, bytes: number) =>
   base + Math.floor(bytes / MiB) * PI_INPUT_MS_PER_MIB;
 
-// Validate only the envelope; PiRecords owns payload interpretation. Unknown
-// event types and extra fields remain forward compatible, not malformed input.
 const validEnvelope = Schema.is(
   Schema.Struct({ type: Schema.NonEmptyString, id: Schema.optional(Schema.String) }),
 );
@@ -75,36 +56,22 @@ const validResponse = Schema.is(
   }),
 );
 
-/** The inbound capacity a command occupies. "control" is the reserved lane ordinary work cannot
- * fill; the caller chooses it (PiSessions, from its action policy), never a command's name. */
 export type PiLane = "control" | "ordinary";
 
-/** A spawned Pi child with request correlation. Everything above builds on `request` and `records`. */
 export interface PiTransport {
-  /** An exchange's command, which may change Pi, its reply decoded; a reply of the wrong shape
-   * fails as "protocol". One whose delivery becomes uncertain leaves pending work. */
   readonly request: <A>(
     exchange: PiExchange<A>,
     options: { readonly lane: PiLane; readonly dispatched?: Deferred.Deferred<void> },
   ) => Effect.Effect<A, PiSessionError>;
-  /** A readback's query, its reply decoded; a reply of the wrong shape fails as "protocol".
-   * Uses the ordinary lane. A missing reply does not mark an uncertain mutation, but unresolved
-   * stdin delivery can still leave pending work. */
   readonly read: <A>(readback: PiReadback<A>) => Effect.Effect<A, PiSessionError>;
-  /** Write an unacknowledged record, such as a dialog answer. Success means stdin accepted the
-   * bytes, not that Pi consumed them. A failure may still mean delivery unless `notSent` is set. */
   readonly write: (
     record: Record<string, unknown>,
     options: { readonly lane: PiLane },
   ) => Effect.Effect<void, PiSessionError>;
-  /** Every accepted non-response record, in stdout order. Ends after stdout drains or fails. */
   readonly records: Stream.Stream<{ record: PiRecord; receivedAt: number }>;
   readonly exited: Deferred.Deferred<SessionClosure>;
-  /** OS exit evidence, independent of protocol failure/closure announcements. Never kills. */
   readonly stopped: Effect.Effect<boolean>;
-  /** Stop an unusable session and settle all transport work before killing Pi. */
   readonly fail: (detail: string) => Effect.Effect<void>;
-  /** Includes queued records, so readbacks cannot race output not yet projected. */
   readonly observationVersion: () => number;
   readonly hasPendingWork: () => boolean;
 }
@@ -133,7 +100,6 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
   const writes = new Map<Deferred.Deferred<void, PiSessionError>, () => void>();
   let transportError: PiSessionError | undefined;
   const pending = new Map<string, Deferred.Deferred<unknown, PiSessionError>>();
-  // OS exit stops input, but is not the end of already-produced RPC output.
   const processExited = yield* Deferred.make<void>();
   const stdoutDrained = yield* Deferred.make<void>();
   const exited = yield* Deferred.make<SessionClosure>();
@@ -151,8 +117,6 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
       cli.cli,
       "--mode",
       "rpc",
-      // Before the session arguments, so a `-e` in PIANO_PI_ARGS adds to Piano's own extensions
-      // rather than being shadowed by them.
       ...(cli.extensions ?? []).flatMap((path) => ["--extension", path]),
       ...(cli.promptTemplates ?? []).flatMap((path) => ["--prompt-template", path]),
       ...(cli.skills ?? []).flatMap((path) => ["--skill", path]),
@@ -161,11 +125,7 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
     ],
     {
       cwd,
-      // Development only: `npm run dev` (node --watch) sets WATCH_REPORT_DEPENDENCIES=1, and Pi's
-      // image-resize worker then mistakes Node's dependency-watch message for its result and
-      // reports a bogus size-limit omission. `npm start` and the hosted service never set it (INV-12).
-      // `cli.env` carries this instance's session endpoint (SessionEndpoint), `lifetime.env` this
-      // session's own values; no other launch variable reaches Pi (ChildEnvironment).
+      // Node --watch messages confuse Pi's image-resize worker; clear WATCH_REPORT_DEPENDENCIES.
       env: {
         ...childEnvironment(),
         WATCH_REPORT_DEPENDENCIES: undefined,
@@ -180,8 +140,6 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
   ).pipe(Effect.mapError((e) => new PiSessionError({ reason: "spawn", detail: String(e) })));
   debug("spawned pid", handle.pid);
 
-  /** `bytes` is the line's framed size on stdout, not its decoded length: invalid UTF-8 grows on
-   * decode, and admission must agree with the RPC line limit that framing enforced. */
   const onLine = Effect.fnUntraced(function* (line: string, bytes: number) {
     if (closed) return;
     const record: unknown = yield* Effect.try({
@@ -202,9 +160,8 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
       "record",
       record.type,
       record.type === "response" && "command" in record ? record.command : "",
-    ); // Never log unprojected protocol content.
+    );
     if (record.type === "response") {
-      // Late/unmatched acknowledgements must not become session activity.
       if (typeof record.id !== "string" || !pending.has(record.id)) return;
       const d = pending.get(record.id) as Deferred.Deferred<unknown, PiSessionError>;
       pending.delete(record.id);
@@ -218,9 +175,6 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
       }
       return;
     }
-    // Once the session takes records, a full queue stops reading stdout until one is taken: Pi
-    // waits on its full pipe, so a burst costs time instead of the session. Before readiness
-    // nothing takes records and the readiness reply is behind this line, so a full queue fails.
     const item = { record, receivedAt: yield* Clock.currentTimeMillis };
     const admitted = yield* records.offer(item, bytes).pipe(
       Effect.mapError(
@@ -245,7 +199,6 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
         stderr = (stderr + chunk).slice(-8192);
       }),
     ),
-    // Diagnostic-only stream: losing stderr does not invalidate RPC stdout.
     Effect.catchCause((cause) =>
       Cause.hasInterruptsOnly(cause)
         ? Effect.void
@@ -258,7 +211,6 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
     if (inputClosure) return;
     inputClosure = closure;
     lifetime?.onExit();
-    // Discard queued writes, not accepted stdout. Never replay an uncertain write.
     yield* Queue.shutdown(stdin);
     for (const [done, release] of writes) {
       release();
@@ -276,32 +228,25 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
       yield* Deferred.fail(d, new PiSessionError({ reason: "exited", detail: closure.detail }));
     }
     pending.clear();
-    // Ending preserves accepted records; PiSessions projects them before closure.
     yield* records.end;
   });
 
   const failOutput = Effect.fn("PiTransport.failOutput")(function* (detail: string) {
     if (closed) return;
-    // Settle callers and publish failure before waiting for process termination.
-    // Never include raw protocol content (which may contain secrets) in diagnostics.
     yield* finish({ _tag: "failed", detail });
     yield* Queue.end(stdin);
     yield* handle.kill({ forceKillAfter: "1 second" }).pipe(Effect.ignore);
   });
 
-  // Frame bytes before decoding or parsing. A newline-free producer cannot grow
-  // splitLines' internal string without bound; multibyte UTF-8 may span chunks.
   let partial = Buffer.alloc(0),
     partialLength = 0;
   let partialRelease: ReturnType<typeof setTimeout> | undefined;
   const retainPartial = (lineBytes: number) => {
     if (partial.length <= RETAINED_STDOUT_BYTES) return;
-    // Small records must not indefinitely renew a large allocation's lifetime.
     if (lineBytes <= RETAINED_STDOUT_BYTES && partialRelease) return;
     clearTimeout(partialRelease);
     partialRelease = setTimeout(() => {
       partialRelease = undefined;
-      // Never discard an unfinished line. Its completion schedules another release.
       if (partialLength === 0) partial = Buffer.alloc(0);
     }, LARGE_STDOUT_REUSE_MS);
     partialRelease.unref();
@@ -355,8 +300,6 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
         }),
       ),
       Effect.andThen(Deferred.succeed(stdoutDrained, undefined)),
-      // Normal EOF usually precedes exitCode notification. A child that closes
-      // stdout but stays alive cannot acknowledge further commands.
       Effect.andThen(
         Deferred.await(processExited).pipe(
           Effect.timeoutOption("1 second"),
@@ -388,8 +331,6 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
         };
         yield* stopInput(closure);
         yield* Deferred.succeed(processExited, undefined);
-        // A descendant may retain stdout indefinitely. Give already-produced
-        // output a bounded drain, including response correlation and framing.
         const drained = yield* Deferred.await(stdoutDrained).pipe(Effect.timeoutOption("1 second"));
         if (drained._tag === "None") {
           yield* failOutput(
@@ -409,8 +350,6 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
     Effect.forkScoped,
   );
 
-  // Acknowledge a write only after the sink has pulled its bytes and accepted
-  // them with backpressure. This still cannot prove Pi consumed a UI response.
   yield* Stream.fromQueue(stdin).pipe(
     Stream.flatMap(({ bytes, done }) =>
       Stream.make(bytes).pipe(
@@ -438,9 +377,6 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
           yield* Deferred.fail(done, transportError);
         }
         writes.clear();
-        // Preserve pending response correlation: a failed write does not erase
-        // acknowledgements for earlier commands still draining from stdout.
-        // Only a child that keeps running with unusable stdin is a transport failure.
         const exit = yield* Deferred.await(processExited).pipe(Effect.timeoutOption("1 second"));
         if (exit._tag === "None") yield* failOutput(transportError.detail);
       }),
@@ -448,7 +384,6 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
     Effect.forkScoped,
   );
 
-  // Orderly shutdown: close stdin, give Pi a moment, then kill.
   yield* Effect.addFinalizer(() =>
     Effect.gen(function* () {
       lifetime?.onExit();
@@ -460,8 +395,6 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
     }),
   );
 
-  // Finish serialization/enqueueing before awaiting delivery: only the queued bytes,
-  // not a second full JSON string, need to live while Pi is slow to read.
   const enqueue = Effect.fnUntraced(function* (
     record: Record<string, unknown>,
     options: { readonly lane: PiLane },
@@ -482,8 +415,6 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
         "rejected",
         "Pi input capacity is full. Nothing was sent; wait for pending work before trying again.",
       );
-    // Encode directly into the final byte buffer. Appending LF to the JSON string
-    // would force another full string allocation when byteLength flattens the rope.
     const bytes = Buffer.allocUnsafe(size);
     bytes.write(text, 0, size - 1, "utf8");
     bytes[size - 1] = 10;
@@ -521,8 +452,6 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
           uncertainWrite = true;
         }),
       ),
-      // Queued bytes keep their capacity lease after caller timeout/interruption
-      // until the sink accepts them or the transport closes (delivery is uncertain).
     );
   });
 
@@ -564,8 +493,6 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
       }),
       Effect.tapError((error) =>
         Effect.sync(() => {
-          // Timeout is not cancellation. A newer successful command cannot
-          // establish that an older, unacknowledged mutation stopped running.
           if (!readback && error.reason !== "rejected") uncertainMutation = true;
         }),
       ),
@@ -578,8 +505,6 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
     );
   });
 
-  // Decoded after `send`: a reply of the wrong shape still proves delivery, so it marks no
-  // uncertain mutation.
   const exchange = Effect.fnUntraced(function* <A>(
     { command, decode, invalid }: PiExchange<A>,
     options: { lane: PiLane; dispatched?: Deferred.Deferred<void>; readback: boolean },
@@ -603,8 +528,6 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
     write,
     records: records.items,
     exited,
-    // `exitCode` fails for a child a signal ended, which shutdown's own kill does to one that
-    // outlives its closed stdin. That is still an exit: wait for either outcome, then ask the OS.
     stopped: handle.exitCode.pipe(
       Effect.exit,
       Effect.timeoutOption("1 second"),

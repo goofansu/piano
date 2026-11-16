@@ -118,7 +118,6 @@ test("remotes: github.com in https, scp and ssh forms, the exe.dev integration, 
     repo: "owner/repo",
     apiHost: "github.int.exe.xyz",
   });
-  // GitHub Enterprise and lookalike hosts are not routed: gh would authenticate elsewhere.
   for (const remote of [
     "https://github.example.com/owner/repo.git",
     "git@github.example.com:owner/repo.git",
@@ -132,7 +131,6 @@ test("remotes: github.com in https, scp and ssh forms, the exe.dev integration, 
 
 const exe = "github.int.exe.xyz";
 const url = "https://github.com/example/repo/pull/42";
-/** A checkout with `remote`, a fake gh that checks the API route, and the adapter. */
 async function routing(t: TestContext, remote: string) {
   const root = mkdtempSync(join(tmpdir(), "piano-gh-route-")),
     repo = join(root, "repo"),
@@ -157,7 +155,6 @@ async function routing(t: TestContext, remote: string) {
     rmSync(root, { recursive: true, force: true });
   });
   const github = await runtime.runPromise(GitHubPullRequests);
-  /** Serve one open pull request, answering only through `host`. */
   const serve = (host: string, extra: Record<string, unknown> = {}) =>
     writeFileSync(
       forge,
@@ -222,7 +219,6 @@ const checksRefused =
 
 test("a token that cannot read checks still links the pull request, its checks unknown", async (t) => {
   const f = await routing(t, "git@github.com:example/repo.git");
-  // On github.com, gh resolves the repository from the checkout: openForHead names none.
   f.serve("github.com", {
     expectedRepo: undefined,
     checksError: `${checksRefused}, Resource not accessible by personal access token (repository.pullRequest.commits.nodes.0.commit.statusCheckRollup)`,

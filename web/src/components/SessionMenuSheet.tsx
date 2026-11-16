@@ -43,14 +43,11 @@ import { usePreviews } from "@/lib/useMachine";
 
 type Page = "actions" | "projects" | "preview";
 
-/** A full-width, 44px row with 16px icons, shared by buttons and the display switch's label. */
 const row =
   "h-11 w-full justify-start gap-3 border border-transparent px-3 text-base font-normal [&_svg]:size-4 [&_svg]:shrink-0";
 
-/** A row's muted value after its label: the pull request's number, the preview's host. */
 const value = "truncate text-sm font-normal text-muted-foreground";
 
-/** A descriptor as a sheet row; running it closes the sheet, as choosing a menu item would. */
 function SessionCommandRow({
   command,
   run,
@@ -72,10 +69,6 @@ function SessionCommandRow({
   );
 }
 
-/**
- * A project command as a sheet row, by its icon and label unless `icon` or `children` names it. A
- * project is drawn with the Target icon, as the breadcrumb and the Projects page draw it.
- */
 function ProjectCommandRow({
   command,
   run,
@@ -101,7 +94,6 @@ function ProjectCommandRow({
   );
 }
 
-/** A row that pushes a second pane: its icon and name, then a chevron. */
 function PaneRow({
   icon,
   onClick,
@@ -121,12 +113,6 @@ function PaneRow({
   );
 }
 
-/**
- * A link out of Piano as a sheet row: its icon in the leading column the other rows use, so the
- * labels align, then its label, a muted value and the external-link icon. `to` is a URL, or a link
- * command, which `CommandLink` renders as every surface does. It opens a new tab, so `onOpen`
- * closes the sheet as choosing an action would.
- */
 function LinkRow({
   to,
   icon,
@@ -162,7 +148,6 @@ function LinkRow({
   );
 }
 
-/** Preview pushes inspection in this sheet, without embedding the app. */
 function PreviewRow({ preview, onShow }: { preview: SessionPreview; onShow: () => void }) {
   const face = previewFace(preview);
   return (
@@ -177,11 +162,6 @@ function PreviewRow({ preview, onShow }: { preview: SessionPreview; onShow: () =
   );
 }
 
-/**
- * The session ID with the dropdown menu's details beside it (Copy session path), as the dropdown
- * shows them, its icon buttons 44px here. Running one closes the sheet and toasts, as choosing the
- * dropdown's icon does.
- */
 function SessionIdRow({
   sessionId,
   details,
@@ -212,7 +192,6 @@ function SessionIdRow({
   );
 }
 
-/** A pushed pane's header: Back, then its title. */
 function PaneHeader({ title, onBack }: { title: string; onBack: () => void }) {
   return (
     <div className="flex items-center gap-1">
@@ -230,26 +209,16 @@ function PaneHeader({ title, onBack }: { title: string; onBack: () => void }) {
   );
 }
 
-/**
- * The session menu for one-area-at-a-time or a narrow viewport: a bottom sheet, one level deep.
- * The header's second line says where the session runs. The sheet starts with the dropdown menu's
- * session ID and its details, then includes the linked pull request and known Preview, not the
- * rail's Outputs or Environment copy menus. Project and Preview rows push panes within this
- * sheet. Opening details or a confirmation calls `onLeave`, closing the sheet and leaving focus
- * to that destination.
- */
 export function SessionMenuSheet({
   onLeave,
   onDismissFocus,
 }: {
   onLeave: () => void;
-  /** Where focus returns when Escape or a tap outside dismisses the sheet. */
   onDismissFocus: RefObject<HTMLElement | null>;
 }) {
   const { state } = useCommands();
   const { commands, run } = useSessionCommands();
   const { pullRequest, sessionId } = sessionContext(state);
-  // The saved link opens GitHub from any machine; the app shows only where its machine observes it.
   const pr = pullRequestView({ link: pullRequest ?? null, pullRequest: null });
   const preview = useSeenPreview(state);
   const previews = usePreviews();
@@ -265,8 +234,6 @@ export function SessionMenuSheet({
   };
   const [page, setPage] = useState<Page>("actions");
   const pane = useRef<HTMLDivElement>(null);
-  // The first row, as a menu would focus its first item: the details' copy controls are reached
-  // by Tab, since a copy control's tooltip opens on keyboard focus and would take the first Escape.
   const focusFirstRow = () =>
     pane.current
       ?.querySelector<HTMLElement>(
@@ -277,7 +244,6 @@ export function SessionMenuSheet({
   useLayoutEffect(() => {
     if (previousPage.current === page) return;
     previousPage.current = page;
-    // Replacing the pressed row must not strand focus on the document body.
     focusFirstRow();
   }, [page]);
 
@@ -294,7 +260,6 @@ export function SessionMenuSheet({
       aria-describedby={undefined}
       className="max-h-[85dvh] gap-0 overflow-y-auto rounded-t-2xl p-2 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
       onOpenAutoFocus={(event) => {
-        // Each opening starts on the first pane with nothing chosen yet.
         left.current = false;
         dismissed.current = false;
         setPage("actions");
@@ -308,8 +273,6 @@ export function SessionMenuSheet({
         dismissed.current = true;
       }}
       onCloseAutoFocus={(event) => {
-        // A destination owns focus; a dismissal returns it to the menu's button, as the rail's
-        // toggle did; choosing an action returns it only when the keyboard chose.
         if (left.current) event.preventDefault();
         else if (dismissed.current) {
           event.preventDefault();
@@ -323,7 +286,6 @@ export function SessionMenuSheet({
             <SheetTitle className="sr-only">Session</SheetTitle>
             <SessionIdRow sessionId={sessionId} details={menu.details} run={run} />
             <Separator className="my-1" />
-            {/* The pull request opens in a browser tab, so the sheet closes as after an action. */}
             {pr && (
               <LinkRow
                 to={pr.url}
@@ -347,7 +309,6 @@ export function SessionMenuSheet({
             {facts && <Separator className="my-1" />}
             {menu.sections.map((section, i) => {
               if (section === "project")
-                // The project entry opens its own page, so it continues the manage rows unseparated.
                 return (
                   projects && (
                     <PaneRow
@@ -429,7 +390,6 @@ export function SessionMenuSheet({
           <>
             <PaneHeader title={projects.entry.label} onBack={() => setPage("actions")} />
             <Separator className="my-1" />
-            {/* Below md the header has no breadcrumb, so this row is the way to the project's home. */}
             {projects.current && projects.open && (
               <Button
                 variant="ghost"

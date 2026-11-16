@@ -57,8 +57,6 @@ const run = <A, E>(
       Effect.provideService(SessionLinkOrigin, "https://piano.example"),
     ),
   );
-/** Webhooks fed by real session hosts on fake Pi, delivering into `requests`, until the scope
- * closes as Piano's does at shutdown. */
 const live =
   (name: string, requests: Received[]) =>
   <A, E>(work: Effect.Effect<A, E, Webhooks | SessionHosts | Registry | Scope.Scope>) =>
@@ -94,10 +92,8 @@ const registered = Effect.gen(function* () {
   yield* registry.addSession(cwd, "s", "Test session");
   return registry;
 });
-/** Session "s" completed a response, as a running host observes it. */
 const responseCompleted = (hooks: Webhooks["Service"], observed: Snapshot = snapshot) =>
   hooks.observe(cwd, "s", observed, { _tag: "response_completed" }, observed);
-/** Session "s" stopped with `closure`. */
 const stopped = (hooks: Webhooks["Service"], closure: SessionClosure) =>
   hooks.observe(
     cwd,
@@ -116,7 +112,6 @@ const choose: Dialog = {
   title: "Choose",
   options: ["yes", "no"],
 };
-/** Session "s" hears a dialog event for `dialog`; `before` is its view before it. */
 const asked = (hooks: Webhooks["Service"], dialog: Dialog, before: Snapshot = emptySnapshot("s")) =>
   hooks.observe(cwd, "s", before, { _tag: "dialog", dialog }, { ...before, dialogs: [dialog] });
 
@@ -195,14 +190,11 @@ test("subscription/active filtering is paired with positive delivery; payloads a
         code: 3,
         detail: `Failed in ${cwd} /tmp/elsewhere secret-canary`,
       });
-      // Stops the browser does not flag are not failures: a quiet release and a clean exit.
       for (const closure of [
         { _tag: "released", detail: "Released" },
         { _tag: "exited", code: 0, detail: "Pi exited with code 0" },
       ] as const)
         yield* stopped(hooks, closure);
-      // Observe admits synchronously, so once the subscribed deliveries arrive nothing else is queued;
-      // the inactive hook still answers its Test, so its receiver can be heard.
       yield* wait(() => requests.length === 4);
       assert.equal((yield* hooks.test(inactive.id)).status, "delivered");
       const live = requests.filter((r) => r.body.event !== "ping");
@@ -284,20 +276,16 @@ test("Webhooks decides which live events it sends: a completion, a dialog newly 
       const hooks = yield* Webhooks;
       yield* hooks.save({ ...input, events: WEBHOOK_EVENTS });
       const sent = () => requests.map((r) => r.body.event);
-      // An attachment replays nothing, whatever its snapshot shows.
       const asking: Snapshot = { ...snapshot, dialogs: [choose] };
       yield* hooks.observe(cwd, "s", undefined, { _tag: "snapshot", snapshot: asking }, asking);
       yield* responseCompleted(hooks);
       yield* wait(() => requests.length === 1);
       assert.deepEqual(sent(), ["session.completed"]);
-      // A dialog is asked once: a resent frame with the same id and generation sends nothing,
-      // a new generation of the same dialog asks again.
       yield* asked(hooks, choose);
       yield* asked(hooks, choose, asking);
       yield* asked(hooks, { ...choose, generation: "g2" }, asking);
       yield* wait(() => requests.length === 3);
       assert.deepEqual(sent(), ["session.completed", "session.needs_input", "session.needs_input"]);
-      // A stop the browser would not flag sends nothing; one it would is a failure.
       yield* stopped(hooks, { _tag: "stopped", detail: "Stopped" });
       yield* stopped(hooks, { _tag: "exited", code: 0, detail: "Pi exited with code 0" });
       yield* stopped(hooks, { _tag: "exited", code: 1, detail: "Pi exited with code 1" });
@@ -362,7 +350,6 @@ test("a webhook token is redacted whole before the answer is cut, even across th
       yield* hooks.save({ ...input, token });
       const b = yield* hooks.save(input);
       yield* responseCompleted(hooks, answered(`${"x".repeat(100)} ${token}`));
-      // The token spans characters 1,982-2,021; the tail keeps the redacted answer over 2,000.
       yield* responseCompleted(hooks, answered(`${"x".repeat(1980)} ${token} ${"y".repeat(100)}`));
       yield* responseCompleted(hooks, answered("z".repeat(LAST_ANSWER_CHARS)));
       const fromB = () => requests.filter((r) => r.headers.get("x-piano-hook-id") === b.id);
@@ -394,7 +381,6 @@ test("an answer cut at an emoji leaves the emoji out whole, and is flagged trunc
       yield* registered;
       const hooks = yield* Webhooks;
       yield* hooks.save(input);
-      // The emoji's two UTF-16 units sit at 1,999-2,000, across the limit.
       const head = "x".repeat(LAST_ANSWER_CHARS - 1);
       yield* responseCompleted(hooks, answered(`${head}\u{1F600} tail`));
       yield* wait(() => requests.length === 1);
@@ -418,7 +404,6 @@ test("a save that omits url and events keeps the stored ones; a removed hook sta
         events: ["session.failed", "session.needs_input"],
         active: true,
       });
-      // The Active switch sends only what it changes, from a list that may predate the edit.
       yield* hooks.save({ id, active: false });
       assert.deepEqual(
         (yield* hooks.list).map((h) => [h.url, h.events, h.active]),
@@ -439,7 +424,6 @@ test("a refusal names the field it belongs to", async () => {
     "fields",
     Effect.gen(function* () {
       const hooks = yield* Webhooks;
-      // A bearer header carries bytes: a pasted zero-width space would fail every delivery.
       for (const value of ["a b", "private\u200bcanary", "   "]) {
         const token = yield* hooks.save({ ...input, token: value }).pipe(Effect.flip);
         assert.deepEqual(
@@ -447,7 +431,6 @@ test("a refusal names the field it belongs to", async () => {
           ["token", "Use only visible ASCII characters, without spaces."],
         );
       }
-      // A short token would redact ordinary words out of every webhook's payload.
       const short = yield* hooks.save({ ...input, token: "test" }).pipe(Effect.flip);
       assert.deepEqual([short.field, short.detail], ["token", "Use at least 8 characters."]);
       assert.equal((yield* hooks.save({ ...input, token: "12345678" })).hasToken, true);
@@ -519,7 +502,6 @@ test("previously stored private receivers fail delivery without reaching the tra
         });
         const delivery = yield* hooks.test("legacy");
         assert.equal(delivery.status, "failed");
-        // The row names the rule the stored URL breaks, so the user knows to replace it.
         assert.deepEqual([delivery.httpStatus, delivery.detail], [null, RECEIVER_RULE]);
       }
       assert.equal(requests.length, 0);
@@ -532,8 +514,6 @@ test("previously stored private receivers fail delivery without reaching the tra
 });
 
 test("a refusal the transport makes names itself on the delivery row; a network failure does not echo", async () => {
-  // What `webhookFetch` rejects with (WebhookReceiver.test.ts proves it): a DNS answer the rule
-  // refuses, a redirect, and a socket error that could carry the host.
   const rejections = [
     new ReceiverRefusal(RECEIVER_RULE),
     new ReceiverRefusal(REDIRECT_REFUSED),
@@ -590,7 +570,6 @@ test("admission stays bounded under a stalled receiver, a Test goes ahead of it;
         1,
         "admission did not wait for delivery or start unbounded fetches",
       );
-      // A Test checks this very receiver: it goes ahead of the full backlog, not behind or refused.
       const again = yield* hooks.test(hook.id).pipe(Effect.forkChild);
       release();
       assert.equal((yield* Fiber.join(test)).status, "failed");
@@ -616,7 +595,6 @@ test("admission stays bounded under a stalled receiver, a Test goes ahead of it;
 test("one webhook's backlog never drops another webhook's deliveries or Test", async () => {
   const requests: Received[] = [];
   const logs: unknown[] = [];
-  // Receiver A never answers; B answers at once.
   const fetch: typeof globalThis.fetch = async (url, init) => {
     const response = await receive(requests)(url, init);
     if (String(url) === "https://stuck.example/events")
@@ -685,7 +663,6 @@ test("a test queued behind a slow delivery answers, and sends nothing, once its 
       yield* responseCompleted(hooks);
       yield* wait(() => requests.length === 1);
       const test = yield* hooks.test(hook.id).pipe(Effect.result, Effect.forkChild);
-      // Let the test pass admission, which still finds the webhook, and wait in its lane.
       yield* Effect.sleep(50);
       yield* hooks.remove(hook.id);
       release();
@@ -718,7 +695,6 @@ test("loopback transport double: redirects/non-2xx fail, a dead receiver does no
   const address = server.address();
   assert.ok(address && typeof address === "object");
   const url = "https://receiver.example";
-  // Only the injected network boundary routes these public URLs to a local test receiver.
   const localFetch: typeof fetch = (target, init) =>
     globalThis.fetch(`http://127.0.0.1:${address.port}${new URL(String(target)).pathname}`, init);
   try {
@@ -731,7 +707,6 @@ test("loopback transport double: redirects/non-2xx fail, a dead receiver does no
         const started = Date.now();
         const dead = yield* hooks.test(slow.id).pipe(Effect.forkChild);
         yield* wait(() => paths.includes("/dead"));
-        // Answered well before the dead receiver's request times out.
         assert.equal((yield* hooks.test(fast.id).pipe(Effect.timeout(1500))).httpStatus, 204);
         for (const path of ["redirect", "fail"]) {
           const hook = yield* hooks.save({ ...input, url: `${url}/${path}` });
@@ -768,7 +743,6 @@ test("live fake-Pi completion/dialog/exit drive the worker once; opening history
       const session = yield* hosts.open({ cwd, sessionId: "s" });
       yield* session.act({ _tag: "prompt", text: "notification success" });
       yield* wait(() => requests.filter((r) => r.body.event === "session.completed").length === 2);
-      // A new attachment only observes a snapshot; no completion replay or cancellation.
       yield* session.events.pipe(Stream.take(1), Stream.runCollect);
       yield* session.act({ _tag: "prompt", text: "ask choose" });
       yield* wait(() => requests.some((r) => r.body.event === "session.needs_input"));
@@ -789,7 +763,6 @@ test("live fake-Pi completion/dialog/exit drive the worker once; opening history
         ["session.completed"],
       );
       assert.equal(live.filter((r) => r.headers.get("x-piano-hook-id") === inactive.id).length, 0);
-      // Archive and delete stop Pi mid-work because the person asked: not a failure.
       const stopMidWork = (id: string, stop: Effect.Effect<void, unknown>) =>
         Effect.gen(function* () {
           yield* (yield* Registry).addSession(cwd, id);
@@ -804,7 +777,6 @@ test("live fake-Pi completion/dialog/exit drive the worker once; opening history
         });
       yield* stopMidWork("archived", hosts.archive(cwd, "archived"));
       yield* stopMidWork("deleted", hosts.delete(cwd, "deleted"));
-      // Delivery is in order per hook, so Test arriving means their events would have too.
       yield* hooks.test(all.id);
       assert.deepEqual(
         requests.filter((r) => r.body.event === "session.failed").map((r) => r.body.session?.id),
@@ -827,8 +799,6 @@ test("a Piano shutdown during work announces nothing, as shutdown drops pending 
       yield* wait(() => requests.some((r) => r.body.event === "session.needs_input"));
     }).pipe(live("shutdown", requests)),
   );
-  // The scope has closed, as at shutdown, with Pi still waiting on its dialog; nothing is left
-  // to send afterwards. A crash's session.failed arrives in the test above.
   assert.deepEqual(
     requests.map((r) => r.body.event),
     ["session.needs_input"],

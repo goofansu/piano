@@ -5,33 +5,16 @@ import { Button } from "@/components/ui/button";
 import { UsageDivider } from "@/components/UsageDivider";
 
 interface Props {
-  /** The trigger's and the panel's accessible name. */
   label: string;
-  /** The panel's header; the label unless given. */
   title?: string;
-  /** Shown before the count on phones, where the noun is hidden. */
   icon: LucideIcon;
   count: number;
-  /** The noun after the count, singular then plural. */
   noun: readonly [string, string];
-  /** Ends the trigger's accessible description, after the count and noun. */
   description: string;
-  /**
-   * The selector of the row to centre in the list, read on opening and again while open when it
-   * changes, so a caller memoizes it on what it reads. Without it, opening shows the end: the
-   * lists run in conversation order, newest at the bottom like the transcript, and the row wanted
-   * is nearly always recent.
-   */
   centre?: () => string;
-  /** The list's `<li>` rows. Choosing a link or button in one closes the popover. */
   children: ReactNode;
 }
 
-/**
- * A usage row list popover (Jump to): a count that opens a list above the composer, and the short
- * divider after it. The caller owns its rows; the trigger, panel, list, scrolling and closing live
- * here.
- */
 export function UsageListPopover({
   label,
   title = label,
@@ -86,7 +69,6 @@ export function UsageListPopover({
           className="w-[28rem] max-w-[calc(100vw-2rem)] gap-0 p-0 font-sans"
         >
           <p className="border-b border-line px-4 py-2.5 text-sm font-medium">{title}</p>
-          {/* Captured, so the popover closes before the row's own action runs. */}
           <ul
             ref={list}
             onClickCapture={(event) => {

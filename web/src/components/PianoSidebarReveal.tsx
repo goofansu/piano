@@ -3,9 +3,6 @@ import { type CSSProperties, type ReactNode, type RefObject, useEffect, useState
 import { Sheet, SheetTitle } from "@/components/PianoSheet";
 import { useSidebarLayout } from "@/lib/useSidebarLayout";
 
-/** Sheet/Drawer move the navigation over the page. This reveal instead moves the live page.
- * Compose the same Radix modal primitive to retain focus trapping, Escape and nested overlays;
- * own its surface because shadcn SheetContent cannot expose a finger-driven partial scrim. */
 export function PianoSidebarReveal({
   open,
   dragging,
@@ -24,8 +21,6 @@ export function PianoSidebarReveal({
   children: ReactNode;
 }) {
   const { restoreFocus } = useSidebarLayout();
-  // Mounted already open (a machine switch remounts the page under a sidebar the layout keeps
-  // open), the sidebar is simply there: no entrance. Once closed, the next open enters again.
   const [restored, setRestored] = useState(open);
   if (restored && !open) setRestored(false);
   useEffect(() => {
@@ -49,13 +44,11 @@ export function PianoSidebarReveal({
             if (!dragging) content.current?.focus({ preventScroll: true });
           }}
           onCloseAutoFocus={(event) => {
-            // The layout knows what had focus before the sheet opened, and which control to fall back to.
             event.preventDefault();
             restoreFocus();
           }}
         >
           <SheetTitle className="sr-only">{title}</SheetTitle>
-          {/* No standard surface reveals a stationary sidebar beneath a translated live page. */}
           <div data-slot="sidebar-reveal-navigation" data-motion="drawer">
             {children}
           </div>

@@ -1,10 +1,3 @@
-/**
- * The filesystem as the folder picker and folder registration see it: listing a directory's
- * subdirectories with Git hints, creating one, and requiring that a path names a directory.
- * Callers name a directory in their own spelling (`~/x`, `/home/me/x/`); answers carry the one
- * path `directoryPath` makes of it. Every failure is a `DirectoryError` whose `detail` is the text
- * shown to the person. Git details stay behind Worktrees.
- */
 import { access, mkdir, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -13,7 +6,6 @@ import type { DirListing } from "../shared/wire.ts";
 import { directoryPath } from "./PiEnv.ts";
 import { checkoutHint } from "./Worktrees.ts";
 
-/** A directory could not be listed, created or found; `detail` is the text shown to the person. */
 export class DirectoryError extends Data.TaggedError("DirectoryError")<{
   readonly detail: string;
 }> {
@@ -25,7 +17,6 @@ export class DirectoryError extends Data.TaggedError("DirectoryError")<{
 const code = (error: unknown) => (error as NodeJS.ErrnoException | undefined)?.code;
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-/** Subdirectories for the folder picker, with Git HEAD subjects for checkouts (as Shelley does). Hidden folders are skipped. */
 const list = Effect.fn("Directories.list")(function* (
   raw: string,
 ): Effect.fn.Return<DirListing, DirectoryError> {
@@ -47,7 +38,6 @@ const list = Effect.fn("Directories.list")(function* (
     try: () => readdir(path),
     catch: unreadable,
   })).filter((name) => !name.startsWith("."));
-  // Follow directory symlinks, with bounded IO and no synchronous filesystem waits.
   const directories = yield* Effect.forEach(
     children,
     (name) =>
@@ -87,8 +77,6 @@ const list = Effect.fn("Directories.list")(function* (
   };
 });
 
-/** Create the directory and any missing parents (mkdir -p); answers with its path. The
- * filesystem root is refused: it is never a new folder. */
 const make = Effect.fn("Directories.make")(function* (
   raw: string,
 ): Effect.fn.Return<string, DirectoryError> {
@@ -102,7 +90,6 @@ const make = Effect.fn("Directories.make")(function* (
   return path;
 });
 
-/** The path, when it names an existing directory (following links). */
 const requireDirectory = Effect.fn("Directories.require")(function* (
   raw: string,
 ): Effect.fn.Return<string, DirectoryError> {

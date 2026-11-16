@@ -10,14 +10,12 @@ import { UserSkillsEnvironment } from "../server/UserSkills.ts";
 import { type LibraryProposal, readProposal } from "../shared/library.ts";
 import { type RouterFixture, startRouter } from "./fixtures/router.ts";
 
-// The production router and services in a scratch directory; Piano's folders are this test's own.
 const scratch = mkdtempSync(join(tmpdir(), "piano-library-folders-"));
 const skills = join(scratch, "piano", "skills");
 const prompts = join(scratch, "piano", "prompts");
 const elsewhere = join(scratch, ".agents", "skills");
 const agentDir = join(scratch, ".pi", "agent");
 const promptsElsewhere = join(agentDir, "prompts");
-// Pi reads `~/.agents/skills` from `HOME`.
 process.env.HOME = scratch;
 let server: RouterFixture;
 before(async () => {
@@ -34,7 +32,6 @@ after(async () => {
   rmSync(scratch, { recursive: true, force: true });
 });
 
-/** The Piano a session's extension reaches, and a user who answers the proposal with `decide`. */
 function user(decide: (proposal: LibraryProposal) => boolean | Promise<boolean>) {
   const asked: LibraryProposal[] = [];
   const deps: LibraryDeps = {
@@ -93,7 +90,6 @@ test("a prompt is saved only after the user's Save, and an update shows what it 
 test("a stop during the proposal writes nothing", async () => {
   const controller = new AbortController();
   const stopped = user(() => {
-    // Stop/Abort cancels the dialog: Pi's confirm answers false once the signal aborts.
     controller.abort();
     return false;
   });
@@ -106,7 +102,6 @@ test("a stop during the proposal writes nothing", async () => {
   assert.equal(result.status, "cancelled");
   assert.equal(existsSync(join(skills, "stopped")), false);
 
-  // A Save racing the stop is not approval either.
   const racing = new AbortController();
   const late = user(() => {
     racing.abort();
@@ -160,7 +155,6 @@ test("a skill is saved after approval, and a name Pi loads from another folder i
   );
   assert.deepEqual(await listed("/api/settings/skills"), ["fix-flaky"]);
 
-  // An update keeps the saved skill's Disable model invocation unless the draft says otherwise.
   const flagged = user(() => true);
   await saveToLibrary(
     "skill",
@@ -182,7 +176,6 @@ test("a skill is saved after approval, and a name Pi loads from another folder i
     join(elsewhere, "shared", "SKILL.md"),
     "---\nname: shared\ndescription: Theirs.\n---\n\nTheirs.\n",
   );
-  // Refused before the user is asked: a Save the server would refuse is never offered.
   const refused = await saveToLibrary(
     "skill",
     { name: "shared", description: "Mine.", instructions: "Mine." },
@@ -217,7 +210,6 @@ test("a prompt name Pi loads from its own folder is refused before the user is a
   });
   assert.equal(existsSync(join(prompts, "standup.md")), false);
 
-  // Piano's prompt predates Pi's of the same name: the update Pi would ignore is never offered.
   mkdirSync(prompts, { recursive: true });
   writeFileSync(join(prompts, "retro.md"), "Mine\n");
   writeFileSync(join(promptsElsewhere, "retro.md"), "Theirs\n");
@@ -246,7 +238,6 @@ test("of two sessions updating one skill from the same file, the second Save is 
   const path = join(skills, "review", "SKILL.md");
   const shown = readFileSync(path, "utf8");
 
-  // Both proposals are on screen, each a diff against the same file, before either Save.
   let release = () => {};
   const bothAsked = new Promise<void>((resolve) => {
     let waiting = 2;
@@ -294,15 +285,12 @@ test("an update that names no file it replaces is refused, for a skill and a pro
   const files = [join(skills, "blind", "SKILL.md"), join(prompts, "blind.md")];
   const before = files.map((file) => readFileSync(file, "utf8"));
 
-  // Any caller of the endpoint, not only the extension: without `previous` nothing is written.
   for (const path of ["/api/settings/skills", "/api/settings/prompts"]) {
     const response = await server.handle(path, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ ...draft, instructions: "Overwritten." }),
     });
-    // The prompt's refusal once still asked for "a name and the prompt", after a prompt gained a
-    // required description and its text became Instructions.
     assert.deepEqual(
       { status: response.status, body: await response.json() },
       { status: 400, body: { error: "Enter a name, a description and instructions." } },
@@ -331,8 +319,6 @@ test("an update that omits Disable model invocation writes the file proposed", a
   const path = join(skills, "quiet", "SKILL.md");
   const shown = readFileSync(path, "utf8");
 
-  // Any caller of the endpoints, not only the extension: the update's body is the draft the
-  // proposal was made from, plus the file it showed.
   const changed = { ...draft, instructions: "Two." };
   const proposal = await server.handle("/api/settings/skills/proposal", {
     method: "POST",

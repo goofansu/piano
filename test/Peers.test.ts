@@ -3,8 +3,6 @@ import { test } from "node:test";
 import { gatewayFixture, identity } from "./fixtures/peer-gateway.ts";
 import { readRegistry } from "./fixtures/registry.ts";
 
-// Two separate network peers, intentionally identical workspace/session/generation identities.
-// Their credentials, Origin, catalogs and prompts must remain owned by the requested machine.
 test(
   "concurrent peers keep HTTP, WS, credentials and failures isolated despite identical session IDs",
   { timeout: 30_000 },
@@ -75,7 +73,6 @@ test(
       }
     }
 
-    // A pending read keeps its own response/credentials even while another peer is used.
     first.state.mode = "http-held";
     const pendingRead = fetch(path("eng-1"));
     await first.until(() => first.state.pendingHttp.length === 1);

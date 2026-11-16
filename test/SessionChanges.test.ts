@@ -13,7 +13,6 @@ import { GhCommand } from "../server/Subprocess.ts";
 import { WorkspaceChangesLive } from "../server/WorkspaceChanges.ts";
 import type { WorkspaceChanges as Observation } from "../shared/wire.ts";
 
-/** A folder on `main` with a worktree on `feature` Piano registered with its base, and a session there. */
 async function fixture(t: TestContext) {
   const root = mkdtempSync(join(tmpdir(), "piano-session-changes-")),
     repo = join(root, "repo"),
@@ -89,7 +88,6 @@ async function fixture(t: TestContext) {
     await runtime.dispose();
     rmSync(root, { recursive: true, force: true });
   });
-  // Stand in for the router: the workspace and session entry resolved by ID.
   const resolve = (cwd: string, sessionId: string) =>
     Effect.gen(function* () {
       const data = yield* registry.get;
@@ -144,7 +142,6 @@ test("a session's Changes compare its worktree with the base Piano recorded, kee
     ["a"],
   );
   assert.deepEqual(ready(await f.read(f.worktree, "one", { scope: "uncommitted" })).files, []);
-  // A qualified same-repository PR can select its locally held remote base.
   f.git(f.repo, "update-ref", "refs/remotes/origin/release", "release");
   await f.runtime.runPromise(
     Effect.gen(function* () {
@@ -164,7 +161,6 @@ test("a session's Changes compare its worktree with the base Piano recorded, kee
     [fromPr.comparison.target?.name, fromPr.comparison.target?.from],
     ["release", "pull-request"],
   );
-  // On the folder's root, main is the target itself: explicit Branch still says why.
   assert.equal(ready(await f.read(f.repo, "root")).comparison.scope, "uncommitted");
   const refused = await f.read(f.repo, "root", { scope: "branch" });
   assert.equal(refused.result.status, "unavailable");
@@ -193,8 +189,6 @@ test("INV-01/07: a manual foreign PR with the same head name stays linked withou
 
 test("INV-01/07: a fork PR uses only its base repository's locally held remote ref", async (t) => {
   const f = await fixture(t);
-  // Use the branch's tracking repository, not a hard-coded origin. Remote URL rewrites are
-  // Git's policy too; only this test's isolated HOME supplies them.
   const home = mkdtempSync(join(tmpdir(), "piano-comparison-home-"));
   const previous = { HOME: process.env.HOME, XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME };
   Object.assign(process.env, { HOME: home, XDG_CONFIG_HOME: join(home, "config") });
@@ -213,7 +207,6 @@ test("INV-01/07: a fork PR uses only its base repository's locally held remote r
   f.git(f.repo, "remote", "add", "origin", "https://github.com/other/repo.git");
   f.git(f.repo, "update-ref", "refs/remotes/fork/feature", "feature");
   f.git(f.worktree, "branch", "--set-upstream-to=fork/feature");
-  // Colliding names in the fork/local checkout must never stand in for the upstream base.
   f.git(f.repo, "branch", "-f", "release", "feature");
   f.git(f.repo, "update-ref", "refs/remotes/fork/release", "feature");
   f.serve("example/repo", "upstream/repo");
@@ -285,7 +278,6 @@ test("Uncommitted is the default; a saved branch choice overrides it only for th
     (s) => s.sessionId === "one",
   );
   assert.equal(saved?.changesScope, "branch");
-  // A read may still ask for another scope without changing the saved one.
   assert.equal(
     ready(await f.read(f.worktree, "one", { scope: "uncommitted" })).comparison.scope,
     "uncommitted",
@@ -296,7 +288,6 @@ test("Uncommitted is the default; a saved branch choice overrides it only for th
     (s) => s.sessionId === "one",
   );
   assert.equal(cleared?.changesScope, undefined);
-  // A saved scope the checkout cannot read is refused, never swapped for another.
   await f
     .setScope(f.repo, "root", "branch")
     .then((value) => assert.equal(value.result.status, "unavailable"));
@@ -310,7 +301,6 @@ test("local work shows whatever the scope, even one the checkout cannot read", a
     if (value.result.status !== "unavailable") throw new Error("Read was not refused");
     return value.result;
   };
-  // On the base branch itself, the branch scope has nothing to compare with.
   assert.deepEqual(unavailable(await f.read(f.repo, "root", { scope: "branch" })).local, {
     commitsNotPushed: null,
     uncommitted: false,

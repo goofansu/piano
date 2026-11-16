@@ -1,26 +1,14 @@
-/**
- * Text rules and interaction policy for completing a leading slash command in a composer. Only the
- * first token of a draft completes; sending trims the prompt, so whitespace before it is harmless.
- * A `/a/b` path is never a command. Nothing here depends on React or the DOM: the component reports
- * events, keeps the returned state and performs the returned effect.
- */
 import type { SlashCommand } from "@shared/wire";
 import { isImeKey } from "./keys.ts";
 
-/** At most this many suggestions are offered at once. */
 export const MAX_SUGGESTIONS = 50;
 
-/** The command token being typed: `from` is the slash, `to` the token end, `query` lowercased. */
 export interface CompletionRange {
   from: number;
   to: number;
   query: string;
 }
 
-/**
- * The leading token to complete for a collapsed caret inside or at the end of it, after the slash.
- * The query is the lowercased text between the slash and the caret.
- */
 export function completionRange(
   text: string,
   selection: { start: number; end: number },
@@ -35,7 +23,6 @@ export function completionRange(
   return { from, to, query: text.slice(from + 1, start).toLowerCase() };
 }
 
-/** The span of the leading command token while it still names the command last accepted. */
 export function commandToken(
   text: string,
   accepted: string | undefined,
@@ -46,12 +33,6 @@ export function commandToken(
     : null;
 }
 
-/**
- * Skills and prompt templates whose name contains the query, those whose name without `skill:`
- * starts with it first, then by that name, capped at {@link MAX_SUGGESTIONS}. `commands` is in
- * invocation precedence, so a name runs its first entry: a template shadowed by an extension is not
- * offered. Extension commands stay executable when typed but are not offered.
- */
 export function rankCommands(commands: readonly SlashCommand[], query: string): SlashCommand[] {
   const needle = query.toLowerCase();
   const bare = (command: SlashCommand) => command.name.replace(/^skill:/, "").toLowerCase();
@@ -69,10 +50,6 @@ export function rankCommands(commands: readonly SlashCommand[], query: string): 
     .slice(0, MAX_SUGGESTIONS);
 }
 
-/**
- * Replace the range with `/name` and one separator. An existing whitespace separator is reused,
- * and the caret lands after it so the next character starts an argument, not the name.
- */
 export function acceptCompletion(
   text: string,
   range: { from: number; to: number },
@@ -87,33 +64,24 @@ export function acceptCompletion(
   };
 }
 
-/** A textarea selection; collapsed when `start === end`. */
 export interface TextSelection {
   start: number;
   end: number;
 }
 
-/** What the composer currently shows the completion; supplied fresh on every render. */
 export interface SlashView {
   value: string;
-  /** Completion is possible: a folder to discover commands in and an enabled textarea. */
   enabled: boolean;
   readOnly: boolean;
-  /** Identifies the discovery context; a dismissal or highlight holds only within it. */
   context: string;
 }
 
-/** Interaction state of one composer's completion list. */
 export interface SlashState {
-  /** The textarea selection as the DOM last reported it. */
   selection: TextSelection;
   focused: boolean;
   composing: boolean;
-  /** Where the list was closed; editing or moving the caret elsewhere reopens it. */
   dismissed?: string;
-  /** The highlighted suggestion and where it was chosen; a new position starts at the top. */
   highlight?: { position: string; index: number };
-  /** The command name last accepted, marked while the leading token still names it. */
   accepted?: string;
 }
 
@@ -128,7 +96,6 @@ const positionOf = (context: string, value: string, selection: TextSelection) =>
 const position = (state: SlashState, view: SlashView) =>
   positionOf(view.context, view.value, state.selection);
 
-/** Open while focused, not composing and not dismissed here, with the caret in a leading token. */
 export function slashOpen(state: SlashState, view: SlashView): boolean {
   return (
     view.enabled &&
@@ -139,19 +106,16 @@ export function slashOpen(state: SlashState, view: SlashView): boolean {
   );
 }
 
-/** The highlighted index among `count` suggestions. */
 export function slashActive(state: SlashState, view: SlashView, count: number): number {
   const index = state.highlight?.position === position(state, view) ? state.highlight.index : 0;
   return Math.min(index, Math.max(0, count - 1));
 }
 
-/** What the textarea holds after an edit or caret move, read from the DOM. */
 export interface TextareaSnapshot {
   value: string;
   selection: TextSelection;
 }
 
-/** A textarea or list event. */
 export type SlashEvent =
   | ({ type: "select" } & TextareaSnapshot)
   | ({ type: "focus" } & TextareaSnapshot)
@@ -162,7 +126,6 @@ export type SlashEvent =
   | { type: "dismiss" };
 
 export function slashUpdate(state: SlashState, view: SlashView, event: SlashEvent): SlashState {
-  // Moving the caret or editing starts the highlight at the top again.
   const at = (snapshot: TextareaSnapshot): SlashState => ({
     ...state,
     selection: snapshot.selection,
@@ -175,7 +138,6 @@ export function slashUpdate(state: SlashState, view: SlashView, event: SlashEven
     case "select":
       return at(event);
     case "focus":
-      // Focusing again offers the list again, even where it was dismissed.
       return { ...at(event), focused: true, dismissed: undefined };
     case "blur":
       return { ...state, focused: false };
@@ -194,7 +156,6 @@ export function slashUpdate(state: SlashState, view: SlashView, event: SlashEven
   }
 }
 
-/** The parts of a keydown the policy reads; `selection` is the textarea's at that moment. */
 export interface SlashKey {
   key: string;
   repeat: boolean;
@@ -207,13 +168,6 @@ export interface SlashKey {
   selection: TextSelection;
 }
 
-/**
- * What the component does with a keydown. `ignore` neither handles nor forwards it (IME); `pass`
- * forwards it to the composer; every other effect prevents the default. `select-token` selects the
- * accepted command token so one more Backspace deletes it whole; `close` also stops propagation so
- * Escape does not reach the composer; `hold` swallows a repeated Tab or Enter so holding the key
- * neither accepts twice nor sends.
- */
 export type SlashEffect =
   | { type: "ignore" }
   | { type: "pass" }
@@ -223,7 +177,6 @@ export type SlashEffect =
   | { type: "accept"; index: number }
   | { type: "hold" };
 
-/** The keyboard contract with `count` suggestions listed. */
 export function slashKeyDown(
   state: SlashState,
   view: SlashView,
@@ -268,11 +221,6 @@ export function slashKeyDown(
   return { state, effect: { type: "pass" } };
 }
 
-/**
- * Accept `name` into the open token. `current` is the textarea as the DOM holds it now; a pointer
- * action or delayed render against an obsolete text or caret accepts nothing. The list stays
- * closed at the caret after the accepted name.
- */
 export function slashAccept(
   state: SlashState,
   view: SlashView,

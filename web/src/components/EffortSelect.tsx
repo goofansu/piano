@@ -9,16 +9,14 @@ interface Props {
   onChange: (level: ThinkingLevel) => void;
   onCommit?: () => void;
   levels: ThinkingLevel[];
-  /** Pi's own default, marked in the list. */
   defaultLevel?: string;
   disabled?: boolean;
 }
 
-/** A toggle group inside the model picker: no second popup, and only Pi-supported levels. */
 export function EffortSelect({ value, onChange, onCommit, levels, defaultLevel, disabled }: Props) {
   const labelId = useId();
   return (
-    // One labelled composite control: avoid native fieldset/legend intrinsic sizing in Safari.
+    // Avoid Safari's fieldset/legend intrinsic-sizing issue.
     <Field aria-label="Effort" className="min-w-0 gap-2">
       <FieldLabel asChild>
         <span id={labelId}>Reasoning effort</span>
@@ -52,7 +50,6 @@ export function EffortSelect({ value, onChange, onCommit, levels, defaultLevel, 
               }
             }}
             aria-description={level === defaultLevel ? "Default effort" : undefined}
-            // Reserve the filled, outlined treatment for the choice, not the pointer.
             className="flex-auto px-1 text-xs hover:bg-transparent data-[state=on]:border-ink data-[state=on]:bg-muted data-[state=on]:text-ink"
           >
             {level}

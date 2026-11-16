@@ -44,8 +44,6 @@ import { WorkspaceChanges } from "./WorkspaceChanges.ts";
 import { downloadWorkspaceFile, readWorkspaceFile } from "./WorkspaceFiles.ts";
 import { handleSocket } from "./WsClient.ts";
 
-/** A failed request as the browser sees it: a status, the `error` message it shows and, for a
- * form's refusal, the `field` the message belongs to. */
 class ApiFailure extends Data.TaggedError("ApiFailure")<{
   readonly status: number;
   readonly error: string;
@@ -54,11 +52,8 @@ class ApiFailure extends Data.TaggedError("ApiFailure")<{
 
 const fail = (status: number, error: string) => Effect.fail(new ApiFailure({ status, error }));
 
-/** How long an upload's whole body may take to arrive. */
 const UPLOAD_READ_MS = 30_000;
 
-/** An upload's body read within its bounds: actual bytes are counted, chunked or misdeclared
- * uploads included, before any JSON text is allocated. */
 const uploadBody = Effect.fn("Router.uploadBody")(function* (
   request: HttpServerRequest.HttpServerRequest,
   upload: Upload,
@@ -84,9 +79,6 @@ const uploadBody = Effect.fn("Router.uploadBody")(function* (
   return Buffer.concat(chunks, size).toString("utf8");
 });
 
-/** A service's refusal: a tagged error whose `detail` is written for people, and optionally the
- * form `field` it belongs to. Its endpoint declares the status (`refused`). SignInAttempts keeps
- * token responses out of sign-in details (INV-11). */
 interface Refusal {
   readonly _tag: string;
   readonly detail: string;
@@ -99,9 +91,6 @@ const isRefusal = (error: unknown): error is Refusal =>
   typeof (error as Partial<Refusal>)._tag === "string" &&
   typeof (error as Partial<Refusal>).detail === "string";
 
-/** The failure a request ends with: a handler's own ApiFailure, a refusal at the endpoint's
- * status, or anything else (a defect included) as a logged 500 with the endpoint's fallback,
- * never its own message. */
 const failure = (endpoint: Endpoint, cause: Cause.Cause<unknown>) => {
   const error = Option.getOrUndefined(Cause.findErrorOption(cause));
   if (error instanceof ApiFailure) return Effect.succeed(error);
@@ -124,14 +113,12 @@ const failure = (endpoint: Endpoint, cause: Cause.Cause<unknown>) => {
   );
 };
 
-/** What a handler receives: the decoded body, and the registered workspace and session its IDs name. */
 type Input<Q extends IdParam, B extends Json | undefined> = (B extends Json
   ? { readonly body: B["Type"] }
   : unknown) &
   ("workspaceId" extends Q ? { readonly workspace: Workspace } : unknown) &
   ("sessionId" extends Q ? { readonly session: SessionEntry } : unknown);
 
-/** `attachment` with an ASCII fallback name and the exact name RFC 5987-encoded. */
 const attachment = (name: string) =>
   `attachment; filename="${name.replace(/[^\x20-\x7e]|["\\]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(name)}`;
 
@@ -142,12 +129,6 @@ const respond = (body: unknown, status: number, { noStore = false, redact = true
     ...(noStore ? { headers: { "cache-control": "no-store" } } : {}),
   });
 
-/**
- * One route per endpoint of shared/http.ts. IDs are resolved and the body decoded before the
- * handler runs; its result leaves through the response Schema, so the server cannot answer
- * outside the contract the browser decodes. An endpoint that declares an `upload` gets its own
- * capacity, claimed before anything is read, and a bounded body read.
- */
 const route =
   (router: HttpRouter.HttpRouter) =>
   <
@@ -158,7 +139,6 @@ const route =
     Req,
   >(
     endpoint: Endpoint<Q, B, R, F>,
-    /** May fail with a refusal only when the endpoint declares a status for it. */
     handler: (
       input: Input<Q, B>,
     ) => Effect.Effect<
@@ -169,7 +149,6 @@ const route =
     respondWith?: (result: R["Type"]) => HttpServerResponse.HttpServerResponse,
   ) => {
     const { upload } = endpoint;
-    // Created once per route, so every request to the endpoint shares it.
     const slots = upload && Semaphore.makeUnsafe(upload.concurrent);
     return router.add(
       endpoint.method,
@@ -220,7 +199,6 @@ const route =
         if (respondWith) return respondWith(result);
         return respond(encoded.value, 200, { noStore: endpoint.noStore, redact: endpoint.redact });
       }).pipe(
-        // Guard the matched route, not its raw URL: router-normalized aliases share capacity.
         (handler) =>
           upload && slots
             ? handler.pipe(
@@ -244,11 +222,9 @@ const route =
 export const AppRouter = HttpRouter.use((router) =>
   Effect.gen(function* () {
     const allowedOrigins = yield* AllowedOrigins;
-    // INV-11: run before body decoding, side effects, and WebSocket upgrade/dispatch.
     yield* router.addGlobalMiddleware((handler) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
-        // A rebound DNS name reaches Piano with its own Host: refuse it for reads as well.
         if (!hostAllowed(allowedOrigins, request.headers.host)) {
           return HttpServerResponse.text("Request host is not allowed.", { status: 403 });
         }
@@ -277,8 +253,6 @@ export const AppRouter = HttpRouter.use((router) =>
         return HttpServerResponse.empty();
       }).pipe(Effect.scoped),
     );
-    // Another machine's Piano attaches here through its gateway, never at /ws: a separate path
-    // cannot be stripped in transit the way a header could, so the slice cannot silently widen.
     yield* router.add(
       "GET",
       "/ws/peer",
@@ -328,7 +302,6 @@ export const AppRouter = HttpRouter.use((router) =>
     yield* serve(
       Endpoints.workspaceFileDownload,
       ({ workspace, body }) => downloadWorkspaceFile(workspace, body.path),
-      // The file itself: an attachment of exact bytes, outside the display redaction by design.
       ({ name, mime, bytes }) =>
         HttpServerResponse.uint8Array(new Uint8Array(bytes), {
           contentType: mime.startsWith("text/") ? `${mime}; charset=utf-8` : mime,
@@ -483,8 +456,6 @@ export const AppRouter = HttpRouter.use((router) =>
       ),
     );
 
-    // One lane's four routes. Credential values and callback URLs travel only in bodies. This
-    // global operation creates no session and owns no conversation history.
     const serveSignIn = Effect.fnUntraced(function* <R>(
       endpoints: SignInEndpoints,
       lane: Effect.Effect<SignInLane, never, R>,
@@ -508,7 +479,6 @@ export const AppRouter = HttpRouter.use((router) =>
       Effect.map(McpSetup, (setup) => setup.signIn),
     );
 
-    // Image bytes, not JSON: outside the endpoint table. The ID is a content hash, never a path.
     yield* router.add(
       "GET",
       IMAGE_PREVIEW_ROUTE,

@@ -41,7 +41,6 @@ import {
 } from "@/lib/pullRequestView";
 import type { useSessionPullRequest } from "@/lib/useSessionPullRequest";
 
-/** Each state's icon and colour, GitHub's: green open, grey draft, purple merged, red closed. */
 export const pullRequestStates = {
   open: { Icon: GitPullRequestIcon, color: "text-ok", variant: "success" },
   draft: { Icon: GitPullRequestDraftIcon, color: "text-muted-foreground", variant: "secondary" },
@@ -61,27 +60,18 @@ const signalIcons: Record<SignalOutcome, { Icon: LucideIcon; color: string }> = 
 
 export type PullRequestControl = ReturnType<typeof useSessionPullRequest>;
 
-/** The linked pull request as the control knows it: named from the registry's link at once. */
 export function pullRequestViewOf(pr: PullRequestControl): PullRequestView | undefined {
   return pullRequestView(
     pr.value ?? (pr.registered ? { link: pr.registered, pullRequest: null } : undefined),
   );
 }
 
-/**
- * The row under the Changes toolbar. While the registry links a pull request: the number and
- * title (the link to GitHub), its state, checks and review, what is still only local, and its
- * branches when it was not opened from the branch Changes inspects, with the link's actions in its menu.
- * Without one, the same row holds what is still only local, and nothing when nothing is.
- * Hand-written: a one-line fact row with an actions menu has no shadcn component.
- */
 export function PullRequestRow({
   pr,
   fromBranch,
   local,
 }: {
   pr: PullRequestControl;
-  /** The server's answer: the pull request was opened from the branch Changes inspects. */
   fromBranch: boolean | undefined;
   local: LocalWork | undefined;
 }) {
@@ -98,7 +88,6 @@ export function PullRequestRow({
   );
 }
 
-/** The linked row's shape (icon, then facts, at the same height) without a link to carry. */
 function LocalWorkRow({ local }: { local: LocalWork | undefined }) {
   const facts = localWorkFacts(local);
   if (facts.length === 0) return null;
@@ -128,8 +117,6 @@ function LinkedPullRequestRow({
   fromBranch: boolean | undefined;
   local: LocalWork | undefined;
 }) {
-  // Only facts arriving after the row was shown fade. Already-read facts appear at once.
-  // The group stays mounted across refreshes, including unavailable status and its recovery.
   const [fadeFacts, setFadeFacts] = useState(() => !pr.value);
   const loading = pr.loading && !pr.value;
   const row = pullRequestRow(view, { fromBranch, local, loading });
@@ -147,7 +134,6 @@ function LinkedPullRequestRow({
         className={`size-3.5 shrink-0 ${state?.color ?? "text-muted-foreground"}`}
         aria-hidden
       />
-      {/* One wrapping line: the link, then each fact whole; a narrow row flows them beneath. */}
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
         <a
           href={row.url}
@@ -225,23 +211,15 @@ function LinkedPullRequestRow({
   );
 }
 
-/**
- * The link dialog: linking a pull request to a session without one (with Find from branch), or
- * changing the saved link. Opened from Changes or the palette; a link
- * that appears closes it.
- */
 export function PullRequestLinkDialog({
   pr,
   fallbackTrigger,
 }: {
   pr: PullRequestControl;
-  /** The session menu: a stable focus fallback when the palette opens this with Changes hidden. */
   fallbackTrigger: React.RefObject<HTMLButtonElement | null>;
 }) {
   const editing = pr.surface === "editing";
   const open = editing || pr.surface === "link-form";
-  // Linking replaces the toolbar button with the row's menu. Return keyboard focus to whichever
-  // PR control is now visible; a pointer close leaves focus where the click put it.
   const restoreFocus = (event: Event) => {
     returnFocusForKeyboard(event);
     if (event.defaultPrevented) return;
@@ -267,7 +245,6 @@ export function PullRequestLinkDialog({
   );
 }
 
-/** Mount a draft only while open; background refreshes must not replace typed input. */
 function PullRequestForm({ pr, editing }: { pr: PullRequestControl; editing: boolean }) {
   const [url, setUrl] = useState(pr.value?.link?.url ?? pr.registered?.url ?? "");
   const inputRef = useRef<HTMLInputElement>(null);

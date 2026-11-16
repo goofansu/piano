@@ -71,7 +71,6 @@ const waitAudit = (id: string, pred: (records: Record[]) => boolean) =>
   Effect.promise(
     (signal) =>
       new Promise<void>((resolve, reject) => {
-        // Poll: on a loaded machine fs.watch can drop the event for the append that matters.
         const poll = setInterval(check, 20);
         const timer = setTimeout(() => {
           cleanup();
@@ -99,18 +98,14 @@ const run = <A, E>(
     holdShutdown?: boolean;
     holdReadiness?: boolean;
     failReadiness?: "empty" | "saved";
-    /** Pi's runtime is not installed, so no child is ever spawned. */
     missingNode?: boolean;
     unconfirmedStop?: boolean;
     holdStats?: boolean;
     statsFile?: string;
     clock?: boolean;
     timeoutMs?: number;
-    /** The general fake Pi, which keeps names and messages, with a fresh registry of this name. */
     fakePi?: string;
-    /** Substitutes every preview owner's adapter, as the host supervisor would answer. */
     previewAdapter?: PreviewAdapter;
-    /** A fresh registry of this name, free of other tests' references. */
     registry?: string;
   } = {},
 ) => {
@@ -210,7 +205,6 @@ test("INV-01/02: a failed fresh startup whose Pi had to be killed is still a con
   await run(
     Effect.gen(function* () {
       const hosts = yield* SessionHosts;
-      // The fixture outlives its closed stdin, so shutdown ends it with a signal, not an exit code.
       const error = yield* Effect.flip(hosts.create({ cwd, options: {} }));
       assert.equal(error._tag, "SessionNotCreated");
       assert.deepEqual((yield* (yield* Registry).get).sessions, []);
@@ -328,13 +322,11 @@ const quiescent = (s: PiSession) =>
   Effect.gen(function* () {
     while (!(yield* s.state).isQuiescent) yield* Effect.yieldNow;
   });
-/** A registered session, running. */
 const registered = (sessionId: string) =>
   Effect.gen(function* () {
     yield* (yield* Registry).addSession(cwd, sessionId);
     return yield* (yield* SessionHosts).open({ cwd, sessionId });
   });
-/** Assert stopped readbacks through the same boundary selection uses. */
 const saved = Effect.fn("test.saved")(function* (
   hosts: SessionHosts["Service"],
   cwd: string,
@@ -409,7 +401,6 @@ test(
       }),
       { statsFile },
     );
-    // A new layer rereads the registry from disk, not the previous host's memory.
     await run(
       Effect.gen(function* () {
         const hosts = yield* SessionHosts;
@@ -520,7 +511,6 @@ test("INV-01/02/06: deleted checkout history remains readable and can be archive
       yield* registry.addSession(path, "missing-archive");
       yield* registry.addSession(path, "missing-delete");
       rmSync(path, { recursive: true });
-      // SessionReferences' tests own how a removed checkout's history is found and read.
       assert.equal(yield* hosts.get(path, "missing-archive"), undefined);
       assert.equal(
         (yield* saved(hosts, path, "missing-archive")).snapshot.state.checkoutMissing,
@@ -562,8 +552,6 @@ for (const removed of ["checkout", "alias"])
         const session = yield* hosts.open({ cwd: path, sessionId: id });
         yield* prompt(session, "/settle");
         yield* quiescent(session);
-        // Activity is the updated time and a first-prompt title; retiring the host may still
-        // mirror Pi's statistics, so those are not compared.
         const activity = Effect.map(registry.get, ({ sessions }) => {
           const entry = sessions.find((s) => s.sessionId === id);
           return { updatedAt: entry?.updatedAt, title: entry?.title };
@@ -623,7 +611,6 @@ test("archiving or deleting working Pi announces a quiet stop to every viewer; r
   await run(
     Effect.gen(function* () {
       const hosts = yield* SessionHosts;
-      // Another viewer of the session, still attached when Pi stops.
       const closureSeenBy = (id: string, stop: Effect.Effect<void, unknown>) =>
         Effect.gen(function* () {
           const session = yield* registered(id);
@@ -643,7 +630,6 @@ test("archiving or deleting working Pi announces a quiet stop to every viewer; r
         const closure = yield* closureSeenBy(id, stop(id));
         assert.equal(closureNeedsAttention(closure), false, `${id}: ${JSON.stringify(closure)}`);
       }
-      // Without the person asking, as at shutdown, a stop that interrupts work still needs them.
       const released = yield* closureSeenBy(
         "unrequested-release",
         hosts.release(cwd, "unrequested-release"),
@@ -686,7 +672,6 @@ test("a subscriber hears a session stop that happens before it reads the stream"
       const hosts = yield* SessionHosts;
       yield* quiescent(yield* registered("subscribed-stop"));
       const running = yield* hosts.subscribe;
-      // As when a browser connects: Pi stops after the subscription, before anything reads it.
       yield* hosts.archive(cwd, "subscribed-stop");
       const lists = yield* running.pipe(
         Stream.takeUntil((list) => !list.some((h) => h.sessionId === "subscribed-stop")),
@@ -749,7 +734,6 @@ test(
         const hosts = yield* SessionHosts,
           registry = yield* Registry;
         yield* registry.saveProject({ id: "abandoned", name: "Abandoned" });
-        // Registration precedes Pi, so the fresh ID is learned from the registry write.
         const registered = yield* Deferred.make<string>();
         yield* registry.onChange((_, after) => {
           const entry = after.sessions.find((s) => s.projectId === "abandoned");
@@ -799,7 +783,6 @@ test(
         const reopening = yield* hosts
           .open({ cwd: alias, sessionId: "reopen" })
           .pipe(Effect.forkChild);
-        // Another checkout/session remains usable while this shutdown is blocked.
         const independent = yield* registered("independent");
         assert.equal(records("reopen").filter((r) => r.event === "spawn").length, 1);
         assert.equal(
@@ -847,7 +830,6 @@ test("INV-02/06: archive/delete retain the session on preview cleanup failure; e
         const endpoint = records(id).find((r) => r.event === "spawn")?.previewOwner;
         assert.ok(endpoint);
         writeFileSync(intent, "corrupt launch intent");
-        // A live tool admission makes this owner responsible even when its observation fails.
         yield* Effect.promise(() =>
           assert.rejects(
             ownerRequest(endpoint, {
@@ -915,8 +897,6 @@ for (const operation of ["archive", "delete"] as const)
     },
   );
 
-// SessionReferences' tests own which reference and file a session resolves to and what a
-// conflict is; this one owns that Pi starts under the owner's spelling and a refusal starts none.
 test("PIN-152: bulk archive keeps live and pinned sessions, includes closed/missing checkouts, and unarchive starts nothing", async () => {
   await run(
     Effect.gen(function* () {
@@ -1064,7 +1044,7 @@ test(
             yield* Fiber.join(received);
             yield* TestClock.adjust(1000);
             yield* Fiber.join(pending);
-            yield* prompt(s, "/newer-handled"); // must not erase uncertainty of the older command
+            yield* prompt(s, "/newer-handled");
           } else yield* prompt(s, `/${mode}`);
           yield* TestClock.adjust(2000);
           assert.equal(yield* hosts.get(alias, id), s, `${mode} cannot be retired`);
@@ -1092,7 +1072,6 @@ test("the hosts list calls a session working while it holds queued work Pi is no
         hosts.list,
         (list) => list.find((h) => h.sessionId === "listed-queue")?.working,
       );
-      // Pi is not streaming, but a follow-up waits: Archive must ask, and the sidebar shows work.
       yield* prompt(s, "/queue");
       assert.equal((yield* s.state).isStreaming, false);
       assert.equal(yield* working, true);
@@ -1110,7 +1089,6 @@ test("the browser hears a session's working state change when only its queue cha
       const hosts = yield* SessionHosts;
       const s = yield* registered("pushed-queue");
       yield* quiescent(s);
-      // Skip the list as it stood on subscribing: only pushes reach a connected browser.
       let seen = false;
       const pushed = yield* (yield* hosts.subscribe).pipe(
         Stream.drop(1),
@@ -1123,7 +1101,6 @@ test("the browser hears a session's working state change when only its queue cha
         Effect.timeoutOption("3 seconds"),
         Effect.forkChild,
       );
-      // Pi answers Restore with a queue update alone, no state change: the sidebar must hear it.
       yield* prompt(s, "/queue");
       yield* s.act({ _tag: "restore_queue" });
       const working = Option.getOrUndefined(yield* Fiber.join(pushed));
@@ -1139,7 +1116,6 @@ test(
     timeout: 15000,
   },
   async () => {
-    /** A supervisor that cannot answer whether this generation's app is gone. */
     class UnknownPreview extends PreviewAdapter {
       override async request(): Promise<never> {
         throw new Error("no supervisor in this test");
@@ -1152,11 +1128,9 @@ test(
     await run(
       Effect.gen(function* () {
         const hosts = yield* SessionHosts;
-        // Opened first, so the sweep checks it before the other host.
         const failing = yield* registered("idle-check-fails");
         const endpoint = records("idle-check-fails").find((r) => r.event === "spawn")?.previewOwner;
         assert.ok(endpoint);
-        // An admitted start makes this owner ask its adapter before idle release.
         yield* Effect.promise(() =>
           assert.rejects(
             ownerRequest(endpoint, {
@@ -1207,7 +1181,6 @@ test(
     await run(
       Effect.gen(function* () {
         const hosts = yield* SessionHosts;
-        // An admitted action Pi has not answered keeps the session busy.
         const held = yield* registered("busy-held");
         const received = yield* observe(
           held,
@@ -1217,11 +1190,10 @@ test(
           .act({ _tag: "prompt", text: "/uncertain" })
           .pipe(Effect.forkChild);
         yield* Fiber.join(received);
-        yield* TestClock.adjust(500); // past the idle deadline, before the command times out
+        yield* TestClock.adjust(500);
         assert.equal(yield* hosts.get(cwd, "busy-held"), held, "in-flight input is not idle");
         yield* hosts.release(cwd, "busy-held");
-        yield* Fiber.await(pending); // release interrupts the admitted action
-        // Settled with no action in flight: not busy, so the idle deadline retires it.
+        yield* Fiber.await(pending);
         const s = yield* registered("busy-settled");
         yield* prompt(s, "/final");
         yield* quiescent(s);
@@ -1263,7 +1235,7 @@ test(
         yield* Fiber.join(silenced);
         const dialog = yield* observe(s, (e) => e._tag === "dialog");
         const next = yield* s.act({ _tag: "prompt", text: "/events" }).pipe(Effect.forkChild);
-        const events = yield* Fiber.join(dialog); // BEFORE advancing the withheld state/stats deadline
+        const events = yield* Fiber.join(dialog);
         assert.ok(
           events.some(
             (e) => e._tag === "message_end" && e.message.text.includes("behind hung readback"),
@@ -1276,8 +1248,6 @@ test(
             rs.filter((r) => r.command === "get_session_stats").length >= 2,
         );
         yield* TestClock.adjust(1000);
-        // The handled command also reconciles context. Its fresh activity read must time out
-        // independently; a previous state timeout is not evidence that this query has completed.
         yield* waitAudit(
           "hung-inspection",
           (rs) => rs.filter((r) => r.command === "get_state").length >= initialStateReads + 4,
@@ -1339,7 +1309,6 @@ test("INV-01/02: a project deleted after preflight refuses registration before P
       const hosts = yield* SessionHosts,
         registry = yield* Registry;
       yield* registry.saveProject({ id: "launch", name: "Launch" });
-      // Another tab deletes the project once creation has passed its check and registered the folder.
       yield* registry.onChange((before, after) =>
         after.folders.length > before.folders.length
           ? registry.deleteProject("launch").pipe(Effect.orDie)
@@ -1448,7 +1417,6 @@ test("a member session's Pi gets its project's instructions at each launch; othe
 });
 
 test("a Piano started inside a project member's session passes its parent's instructions to no Pi", async () => {
-  // Pi gives the session it runs the instructions variable, so a Piano started from it inherits it.
   process.env.PIANO_PROJECT_INSTRUCTIONS = "Inherited from the parent session.";
   try {
     await run(
@@ -1496,12 +1464,10 @@ test("INV-01: a prompt or steer records activity on every path to a running sess
               bumps.push(s.sessionId);
         }),
       );
-      // Activity times have millisecond resolution; keep each step on its own tick so every bump is a change.
       const tick = Effect.sleep("2 millis");
       yield* tick;
       yield* session.act({ _tag: "prompt", text: "  First prompt  " });
       yield* tick;
-      // Another caller, such as the HTTP router, reaches the same running session through `get`.
       yield* (yield* hosts.get(cwd, id))!.act({ _tag: "steer", text: "Steer" });
       assert.deepEqual(bumps, [id, id], "each records activity");
       yield* tick;
@@ -1514,8 +1480,6 @@ test("INV-01: a prompt or steer records activity on every path to a running sess
 });
 
 test("INV-01/02: input refused because its Pi is closing records no activity", async () => {
-  // Holds the close in its first step, preview cleanup: the session's lock is held, but the host
-  // is not closing yet, so input that arrives now is refused only once the close completes.
   let entered!: () => void, finish!: () => void;
   const cleaning = new Promise<void>((resolve) => (entered = resolve));
   const cleaned = new Promise<void>((resolve) => (finish = resolve));
@@ -1558,7 +1522,6 @@ test("INV-01/02: input refused because its Pi is closing records no activity", a
               bumps.push(s.sessionId);
         }),
       );
-      // Activity times have millisecond resolution; keep each step on its own tick.
       yield* Effect.sleep("2 millis");
       yield* prompt(session, "accepted");
       assert.equal(bumps.length, 1, "accepted input records activity");
@@ -1574,7 +1537,6 @@ test("INV-01/02: input refused because its Pi is closing records no activity", a
       const refused = yield* session
         .act({ _tag: "prompt", text: "while closing" })
         .pipe(Effect.flip, Effect.forkChild);
-      // Real time for input that does not wait for the close to record its activity, as it did.
       yield* Effect.sleep("100 millis");
       yield* Effect.sync(finish);
       yield* Fiber.join(closing);
@@ -1591,7 +1553,6 @@ test("INV-02: a session's slash commands come from its running child; a stopped 
     Effect.gen(function* () {
       const hosts = yield* SessionHosts;
       const id = (yield* hosts.create({ cwd, options: {} })).spec.sessionId;
-      // The fake Pi lists `live-only` in a session and `probe-only` when started without one.
       const names = (yield* hosts.commands(cwd, id)).map((c) => c.name);
       assert.ok(names.includes("live-only") && !names.includes("probe-only"), names.join());
       yield* hosts.release(cwd, id);
@@ -1656,13 +1617,11 @@ test("INV-01/06: a new session in a linked worktree is listed under its main che
   mkdirSync(join(linked, "nested"));
   git(root, "clone", "--quiet", "--bare", repo, bare);
   git(bare, "worktree", "add", "--quiet", bareLinked, "main");
-  // Git reports physical paths; the fixture root may be reached through a symlink (macOS /var).
   const physical = (path: string) => realpathSync(path);
   await run(
     Effect.gen(function* () {
       const hosts = yield* SessionHosts,
         registry = yield* Registry;
-      // Nothing registered yet: the worktree brings its main checkout in as the folder, both under Git's spelling.
       const session = yield* hosts.create({ cwd: linkedAlias, options: {} });
       assert.equal(session.spec.cwd, physical(linked));
       let data = yield* registry.get;
@@ -1670,7 +1629,6 @@ test("INV-01/06: a new session in a linked worktree is listed under its main che
       assert.deepEqual(data.worktrees, [
         { folder: physical(repo), path: physical(linked), branch: "feature" },
       ]);
-      // A subdirectory of a checkout and a worktree of a bare repository are folders of their own, as on the New page.
       for (const cwd of [join(linked, "nested"), bareLinked])
         yield* hosts.create({ cwd, options: {} });
       data = yield* registry.get;
@@ -1683,7 +1641,6 @@ test("INV-01/06: a new session in a linked worktree is listed under its main che
     Effect.gen(function* () {
       const hosts = yield* SessionHosts,
         registry = yield* Registry;
-      // A folder registered under an alias of the main checkout is reused, not duplicated.
       yield* registry.addFolder(repoAlias);
       yield* hosts.create({ cwd: linked, options: {} });
       const data = yield* registry.get;
@@ -1701,7 +1658,6 @@ test("INV-01: a closed folder's registered worktree reopens its folder, under it
     const result = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
     assert.equal(result.status, 0, result.stderr);
   };
-  // Git's spelling, as `place` registers a worktree it discovers.
   const base = realpathSync(root),
     repo = join(base, "closed-repo"),
     linked = join(base, "closed-linked"),
@@ -1806,7 +1762,6 @@ test("INV-01: a closed folder reached by another spelling reopens under its regi
     Effect.gen(function* () {
       const hosts = yield* SessionHosts,
         registry = yield* Registry;
-      // A linked worktree of the closed folder's checkout, not yet registered, joins that folder.
       yield* hosts.create({ cwd: repoAlias, options: {} });
       yield* registry.removeFolder(repoAlias);
       yield* hosts.create({ cwd: linked, options: {} });
@@ -1844,7 +1799,6 @@ test(
       "-m",
       "baseline",
     );
-    // The installed Worktrunk, isolated from the user's configuration, and slow to start creating.
     const config = join(root, "wt-config", "worktrunk");
     mkdirSync(config, { recursive: true });
     writeFileSync(join(config, "config.toml"), "");
@@ -1888,16 +1842,12 @@ const r=spawnSync(${JSON.stringify(real)},a,{stdio:'inherit',env:{...process.env
           "Worktrunk running",
         );
         yield* Fiber.interrupt(requester);
-        // Without its requester, the creation still completes: the worktree, its registration
-        // under the repository's folder, the session's reference and its running child.
         const entry = yield* until(
           Effect.map(registry.get, (data) => data.sessions.find((s) => s.cwd !== repo)),
           "a session registered in the new worktree",
         );
         assert.ok(git(repo, "worktree", "list", "--porcelain").includes(`worktree ${entry.cwd}\n`));
         assert.equal(git(entry.cwd, "branch", "--show-current"), "slow");
-        // Git reports physical paths; the fixture root may be reached through a symlink (macOS /var).
-        // Worktrunk's reported base branch is kept: Changes compares the branch with it.
         assert.deepEqual((yield* registry.get).worktrees, [
           { folder: realpathSync(repo), path: entry.cwd, branch: "slow", baseBranch: "main" },
         ]);

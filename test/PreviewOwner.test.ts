@@ -50,8 +50,6 @@ for (const dead of [true, false])
 
 for (const platform of ["linux", "darwin"] as Platform[]) {
   const fixture = (t: TestContext, lockWait?: number) => ownerFixture(t, platform, lockWait);
-  // A running app's ownership is discovered from the real host (/proc on Linux, ps and lsof on
-  // macOS), so cases that observe one run only on their native platform.
   const foreign = process.platform !== platform;
 
   test(`[${platform}] terminal outcomes distinguish app failure from cleanup and fence attribution`, async (t) => {
@@ -65,7 +63,6 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
       exitCode: 42,
       signal: null,
     };
-    // systemd can unload a clean transient unit; launchd records the runner's group kill.
     f.host.phase = platform === "linux" ? "gone" : "failed";
     for (const [reason, exitCode, signal, expected] of [
       ["app-exit", 42, null, "failed"],
@@ -129,7 +126,6 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
       /ownership conflict/,
       "a failed app still belongs to its live owner",
     );
-    // A different owner retiring must never stop this owner's app.
     await other.prepareRelease();
     assert.equal(f.stops.length, 0);
     f.host.phase = "failed";
@@ -168,8 +164,7 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
     },
     async (t) => {
       const f = await fixture(t);
-      await f.call(); // a failed app: idle may retire it once the lock and state are readable
-      // Another helper holds the account-wide lock; idle must not wait out its 65-second bound.
+      await f.call();
       const holder = new DatabaseSync(join(f.state, "lock.sqlite"));
       holder.exec("BEGIN EXCLUSIVE");
       try {
@@ -179,7 +174,6 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
         holder.close();
       }
       assert.equal(await f.owner.prepareRelease(true), true, "a free lock lets idle retire");
-      // The state root became a file: idle answers not-idle, explicit cleanup reports the failure.
       const next = await f.open("unusable-state");
       await f.call(next);
       await rm(f.state, { recursive: true });
@@ -217,9 +211,9 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
   test(`[${platform}] late cleanup cannot stop a replacement generation; reopen never adopts`, async (t) => {
     const f = await fixture(t);
     const first = await f.call();
-    f.owner.disconnect(); // old Pi died; its cleanup is delayed until after the next launch
-    const reopened = await f.open(); // same saved conversation, different Pi generation
-    const next = await f.call(reopened); // old failed launch is confirmed stopped first
+    f.owner.disconnect();
+    const reopened = await f.open();
+    const next = await f.call(reopened);
     assert.notEqual(first.instanceId, next.instanceId);
     assert.notEqual(first.owner.generation, next.owner.generation);
     const count = f.stops.length;
@@ -348,7 +342,6 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
 
   test(`[${platform}] admitted startup/replace versus idle and owner death cannot escape cleanup`, async (t) => {
     const f = await fixture(t);
-    // Hold real configuration input, not lifecycle methods, while the admitted replacement waits.
     let hold = false;
     let proceed!: () => void;
     let entered!: () => void;
@@ -399,7 +392,6 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
   test(`[${platform}] a replacement clears the old app once stopped and shows the new one starting`, async (t) => {
     if (foreign) return t.skip("needs native process ownership");
     const f = await fixture(t);
-    // A and B share one port, as when Piano reuses it; B answers 503 until it warms up.
     const port = await freePort();
     f.config.ports = [port];
     const servers = new Set<Server>();
@@ -421,7 +413,6 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
       });
     t.after(() => Promise.all([...servers].map(shut)));
 
-    // What the session's state shows after each owner publication, in order.
     let shown: SessionPreview | undefined;
     const published: (SessionPreview | undefined)[] = [];
     f.owner.observe((request, outcome) => {
@@ -436,7 +427,6 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
     assert.equal(readyA.ready, true);
     assert.equal(shown?.url, `http://localhost:${port}/`);
 
-    // Rejected before A stops: A and its ready link remain.
     assert.equal((await f.call(f.owner, { replace: "stale-instance" })).status, "not-current");
     await assert.rejects(
       f.call(f.owner, {
@@ -466,7 +456,6 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
     while (!(shown && shown.instanceId !== a.instanceId) && Date.now() < deadline)
       await new Promise((resolve) => setTimeout(resolve, 20));
 
-    // B is held unready: the replacement has not completed, yet the state already moved on.
     assert.equal(settled, false, "the replacement is still waiting for B's readiness");
     assert.ok(
       published.indexOf(undefined) >= 0 &&
@@ -487,7 +476,6 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
     assert.equal(shown?.instanceId, b.instanceId);
     assert.equal(shown?.url, `http://localhost:${port}/`);
 
-    // A stale stop of A cannot target B.
     assert.equal(
       (await f.call(f.owner, { action: "stop", instanceId: a.instanceId })).status,
       "not-current",

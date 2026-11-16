@@ -1,12 +1,3 @@
-/**
- * The worktree picker's work against one folder's repository: discovering its worktrees, and one
- * deliberate operation at a time, creating a branch or selecting a discovered checkout (INV-06).
- * An operation is sent once and never retried automatically; it ends with its own receipt
- * (matched by request ID), a timeout or a lost connection, and the last two tell the user to
- * rediscover before retrying because the checkout may already have changed. Discovery is
- * serialized per folder: overlapping refresh intents coalesce into one trailing request, and
- * refreshing stays true until that answers. Nothing here depends on React or render timing.
- */
 import type { ClientCommand, WorktreeDiscovery, WorktreeFacts } from "@shared/wire";
 import type { Client } from "./client.ts";
 import { branchLabel } from "./format.ts";
@@ -19,19 +10,14 @@ export type WorktreeRequestStatus =
   | { status: "failed"; detail: string; unconfirmed: boolean };
 
 export interface WorktreeOperationState {
-  /** The folder the picker was last opened on. */
   folder: string | undefined;
-  /** This picker's latest discovery of that folder; undefined until one answers. */
   discovery: WorktreeDiscovery | undefined;
-  /** Discovery was requested and has not answered yet. */
   refreshing: boolean;
   request: WorktreeRequestStatus;
 }
 
-/** How long a pending operation waits for its receipt before failing. */
 export const RECEIPT_TIMEOUT_MS = 75_000;
 
-/** Timers, behind a seam so the policy runs in Node. */
 export interface WorktreeTimers {
   setTimeout: (run: () => void, ms: number) => unknown;
   clearTimeout: (timer: unknown) => void;
@@ -41,22 +27,17 @@ export interface WorktreeOperationOptions {
   client: Pick<Client, "getState" | "subscribe" | "send" | "listen">;
   newRequestId?: () => string;
   timers?: WorktreeTimers;
-  /** The operation succeeded with this checkout. */
   ready?: (path: string) => void;
 }
 
 export interface WorktreeOperation {
   getState: () => WorktreeOperationState;
   subscribe: (listener: () => void) => () => void;
-  /** Hears receipts, discoveries and the connection; returns the stop function, which also drops the timer. */
   start: () => () => void;
-  /** The picker opened on a folder: forget a settled outcome and discover afresh. */
   open: (folder: string | undefined) => void;
-  /** Ask the folder's repository again, keeping the operation's outcome on screen. */
   refresh: () => void;
   create: (branch: string, hooks: boolean) => void;
   select: (path: string) => void;
-  /** The user moved on from a failure. */
   dismiss: () => void;
 }
 
@@ -84,7 +65,6 @@ export function createWorktreeOperation({
     refreshing: false,
     request: IDLE,
   };
-  /** Correlation also fences replies from a picker unmounted on this same socket. */
   const awaiting = new Map<string, { requestId: string; trailing: boolean }>();
   const discoveries = new Map<string, WorktreeDiscovery>();
   let timer: unknown;
@@ -160,7 +140,6 @@ export function createWorktreeOperation({
         if (now === connected) return;
         connected = now;
         if (now) return;
-        // Requests on the lost connection are never answered; a pending one may still have run.
         awaiting.clear();
         if (pendingId() !== undefined)
           settle({ status: "failed", detail: CONNECTION_LOST, unconfirmed: true });
@@ -197,7 +176,6 @@ export function createWorktreeOperation({
       };
     },
     open: (folder) => {
-      // A pending operation keeps its receipt; anything settled is forgotten.
       publish({ folder, request: pendingId() === undefined ? IDLE : state.request });
       discover();
     },
@@ -228,7 +206,6 @@ export function createWorktreeOperation({
 export const worktreeLabel = (worktree: WorktreeFacts) =>
   branchLabel(worktree.branch, worktree.detached);
 
-/** Literal matching avoids unrelated fuzzy hits and preserves discovery order. */
 export function filterWorktrees(
   all: readonly WorktreeFacts[],
   query: string,
@@ -241,19 +218,15 @@ export function filterWorktrees(
     : all;
 }
 
-/** The picker's form fields, which the component keeps as local state. */
 export interface WorktreesForm {
-  /** The new-worktree form is open instead of the list. */
   creating: boolean;
   branch: string;
   hooks: boolean;
-  /** The list's search text. */
   query: string;
 }
 
 export interface WorktreesViewInput<Folder extends { discovery: WorktreeDiscovery }> {
   state: WorktreeOperationState;
-  /** The registered folder the picker is on; its sidebar snapshot carries its last discovery. */
   folder: Folder | undefined;
   connected: boolean;
   form: WorktreesForm;
@@ -261,46 +234,33 @@ export interface WorktreesViewInput<Folder extends { discovery: WorktreeDiscover
 
 export interface WorktreesFailure {
   title: string;
-  /** Shown in order, preserving line breaks. */
   lines: readonly string[];
-  /** The raw error behind a disclosure, when the outcome is unconfirmed. */
   details?: string;
 }
 
 export interface WorktreesView<Folder> {
-  /** This picker's own discovery, or the sidebar snapshot until that answers. */
   discovery: WorktreeDiscovery | undefined;
-  /** The folder a new worktree goes into: only once discovery found a Git repository. */
   target: Folder | undefined;
-  /** Discovered worktrees matching the search, in discovery order. */
   visible: readonly WorktreeFacts[];
   pending: boolean;
-  /** Refresh and selection wait: an operation, a discovery or the connection is outstanding. */
   busy: boolean;
-  /** A new operation may begin: the new-worktree buttons. */
   canStart: boolean;
-  /** The form may be submitted; the Create button and the submit guard both read this. */
   canSubmit: boolean;
-  /** The trimmed search text, offered as a new branch when nothing matches it. */
   createFromQuery: string | undefined;
-  /** What the list says when it has no rows. */
   emptyText: string;
   failure: WorktreesFailure | undefined;
-  /** Notices under the list. */
   notices: { disconnected: string | undefined; discoveryError: string | undefined };
 }
 
 const HOOKS_HINT =
   "For unapproved hooks, review and approve them in a terminal, or leave hooks off.";
 
-/** What the Worktrees picker shows and allows. Pure; the component renders it and keeps the form. */
 export function worktreesView<Folder extends { discovery: WorktreeDiscovery }>({
   state,
   folder,
   connected,
   form,
 }: WorktreesViewInput<Folder>): WorktreesView<Folder> {
-  // The sidebar snapshot stands in only until this picker's own discovery answers.
   const discovery = folder && (state.discovery ?? folder.discovery);
   const ready = discovery?.status === "ready" ? discovery : undefined;
   const target = ready ? folder : undefined;
@@ -319,8 +279,7 @@ export function worktreesView<Folder extends { discovery: WorktreeDiscovery }>({
           ],
           details: request.detail,
         }
-      : // Nothing changed on disk, so the error itself is the whole story.
-        {
+      : {
           title: form.creating ? "Could not create the worktree" : "Could not open the worktree",
           lines: [request.detail],
         };

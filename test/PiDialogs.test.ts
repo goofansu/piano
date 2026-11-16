@@ -141,7 +141,6 @@ test("a sent answer holds for its attachment; a later one may answer the dialog 
   assert.equal(dialogAnswer.view(1_000, null).disabled, true);
   assert.equal(dialogAnswer.answer({ value: "again" }, 1_000, "sel"), false);
   assert.equal(dialogAnswer.abort(1_000, "sel"), false);
-  // Still listed on a new attachment: the server never claimed the first answer.
   assert.equal(dialogAnswer.view(1_000, "sel2").submitted, false);
   assert.equal(dialogAnswer.answer({ value: "again" }, 1_000, "sel2"), true);
   assert.equal(dialogAnswer.answer({ value: "third" }, 1_000, "sel2"), false);
@@ -388,7 +387,6 @@ test("a question's typed reply outlasts its component while the question stays o
   const key = pendingDialogs(state).session;
   assert.equal(replies.get(key, asked), "draft", "an untouched question starts from its prefill");
   replies.set(key, asked, "a half-typed paragraph");
-  // A resync and another session's view both hide the question; neither ends it.
   show({ ...ready, resync: true, session: queued });
   show({ ...ready, session: { ...session([]), sessionId: "s2" } });
   show({ ...ready, session: queued });
@@ -403,7 +401,6 @@ test("a question's typed reply outlasts its component while the question stays o
   replies.set(key, choice, "2");
   show({ ...ready, session: session([asked, choice]) });
   assert.equal(replies.get(key, choice), "2");
-  // Answered, cancelled or timed out: the question leaves the queue and its reply goes with it.
   show({ ...ready, session: session([choice]) });
   assert.equal(replies.get(key, asked), "draft");
   stop();

@@ -3,7 +3,6 @@ import { test } from "node:test";
 import { Deferred, Effect, Fiber, Logger, type Scope } from "effect";
 import { makeCoalescedReader } from "../server/CoalescedReader.ts";
 
-/** A read the test completes by hand: each run parks on a gate and answers what the test says. */
 const controlledRead = () => {
   const runs: Array<{
     readonly superseded: () => boolean;
@@ -17,7 +16,6 @@ const controlledRead = () => {
         runs.push({ superseded, gate });
         return yield* Deferred.await(gate);
       }),
-    /** The run under way; a test fails here rather than hanging when none is. */
     current: () => {
       const run = runs[runs.length - 1];
       assert.ok(run, "a read is in flight");
@@ -26,7 +24,6 @@ const controlledRead = () => {
   };
 };
 
-/** Awaits `done` in the background and says whether it has resolved yet. */
 const watch = (done: Deferred.Deferred<void>) =>
   Effect.gen(function* () {
     let resolved = false;
@@ -89,7 +86,6 @@ test("a waiter resolves only after a read that started after its request install
       yield* reader.request();
       yield* Effect.yieldNow;
       const first = io.current();
-      // Asked for while the first read is under way: that read may predate the facts it wants.
       const done = yield* Deferred.make<void>();
       yield* reader.request(done);
       const waiting = yield* watch(done);
@@ -114,7 +110,6 @@ test("a superseded read leaves its waiters to the next read, which answers them"
       yield* Effect.yieldNow;
       const first = io.current();
       yield* reader.request();
-      // The read chooses to install nothing because a newer request arrived.
       assert.equal(first.superseded(), true);
       yield* Deferred.succeed(first.gate, false);
       yield* Effect.yieldNow;

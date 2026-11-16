@@ -35,7 +35,6 @@ const state: AppState = {
     sessionReference("/work/piano.index", "index", { projectId: "verify", updatedAt: at(30) }),
     sessionReference("/api", "hook", { projectId: "verify", updatedAt: at(20) }),
     sessionReference("/api", "billing", { projectId: "launch", updatedAt: at(25) }),
-    // Archived: neither counted nor dating its project.
     sessionReference("/piano", "old", { projectId: "launch", archived: true, updatedAt: at(50) }),
     sessionReference("/piano", "loose", { updatedAt: at(40) }),
   ],

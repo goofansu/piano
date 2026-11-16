@@ -48,7 +48,6 @@ test("a link whose GitHub status is unavailable is named from its URL", () => {
 });
 
 test("a pull request is named as the server parses its link, read or not", () => {
-  // GitHub's facts and the saved link name the same pull request, whatever page the link opened.
   const files = pullRequestView(
     { link: { url: `${url}/files`, source: "manual" }, pullRequest: null },
     now,
@@ -157,7 +156,6 @@ test("the row names the PR, its state and what is still only local; branches onl
     [],
     "nothing local says nothing",
   );
-  // An unreadable status keeps its badge; a first read keeps only the link, without a badge.
   assert.deepEqual(
     pullRequestRow(pullRequestView(linked(null), now)!, { fromBranch: true, local: undefined })
       .status,

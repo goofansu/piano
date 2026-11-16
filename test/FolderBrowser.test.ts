@@ -4,7 +4,6 @@ import type { DirListing } from "../shared/wire.ts";
 import { createFolderBrowser } from "../web/src/lib/folderBrowser.ts";
 import type { ObservationEnvironment } from "../web/src/lib/observation.ts";
 
-/** Timers that never fire on their own and a focus nobody gives, so every read here is one the test caused. */
 const environment: ObservationEnvironment = {
   setTimeout: () => undefined,
   clearTimeout: () => {},
@@ -16,10 +15,6 @@ const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 const HOME = "/home/ada";
 
-/**
- * A disk of empty folders behind Piano's directory endpoints. The test answers each listing and
- * each mkdir when it chooses; answers ignore aborts, like a response already on the wire.
- */
 function disk(folders: string[]) {
   const all = new Set([HOME, ...folders]);
   const listings: { path: string; answer: () => void }[] = [];
@@ -54,7 +49,6 @@ function disk(folders: string[]) {
         fail: reject,
       });
     });
-  /** Answers every listing still waiting. */
   const answerListings = async () => {
     for (const l of listings.splice(0)) l.answer();
     await settle();
@@ -114,7 +108,6 @@ test("picking while the listing loads picks nothing and remembers nothing", asyn
 
   await fs.answerListings();
   browser.setInput(`${HOME}/code/pi`);
-  // A single prefix match is the folder Enter picks.
   assert.equal(browser.pick(), `${HOME}/code/piano`);
 });
 

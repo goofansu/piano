@@ -8,7 +8,6 @@ import { makeSessionReadbacks } from "../server/SessionReadbacks.ts";
 import { makeSessionRecordProgress } from "../server/SessionRecordProgress.ts";
 import type { RenderMsg, SessionState } from "../shared/wire.ts";
 
-/** One readback Pi has been asked for, answered when the test resolves its raw reply. */
 interface PendingRead {
   readonly type: string;
   readonly since?: unknown;
@@ -22,12 +21,8 @@ const initial: SessionState = {
   sessionName: "before",
 };
 
-/** The message a context readback publishes, so its landing shows in the snapshot. */
 const contextMessage: RenderMsg = { id: "context", role: "user", text: "from Pi's context" };
 
-/** SessionReadbacks over a fake Pi whose reads wait on the test, landing through the session's
- * real SessionPublication and fenced by its real SessionRecordProgress. The test plays the
- * transport (receiving records) and PiSessions (processing them). */
 const harness = Effect.fn("harness")(function* (options: { drainDeadline?: Duration.Input } = {}) {
   const scope = yield* Effect.scope;
   const reads = yield* Queue.unbounded<PendingRead>();
@@ -37,7 +32,6 @@ const harness = Effect.fn("harness")(function* (options: { drainDeadline?: Durat
     observed: () => received,
     drainDeadline: options.drainDeadline,
   });
-  /** Process the oldest received record. */
   const processOne = (record: PiRecord = { type: "future_event" }) =>
     Effect.gen(function* () {
       assert.ok(buffered > 0, "only a received record can be processed");
@@ -45,7 +39,6 @@ const harness = Effect.fn("harness")(function* (options: { drainDeadline?: Durat
       yield* publication.transaction(() => Effect.sync(() => progress.project(record)));
       yield* progress.processed();
     });
-  /** Pi sends a record and it is processed. */
   const receiveProcessed = (record?: PiRecord) =>
     Effect.suspend(() => {
       received++;
@@ -78,24 +71,17 @@ const harness = Effect.fn("harness")(function* (options: { drainDeadline?: Durat
   return {
     readbacks,
     state: publication.state,
-    /** Whether a context readback has replaced the projected history. */
     contextLanded: Effect.map(publication.snapshot, (snapshot) =>
       snapshot.messages.some((message) => message.id === contextMessage.id),
     ),
-    /** A Pi record arrives and is processed: state facts change under the lock. */
     record: (patch: Partial<SessionState>) =>
       publication.patchState(patch).pipe(Effect.andThen(receiveProcessed())),
-    /** A Pi record arrives and is processed without a state change; `record` shapes message
-     * boundaries. */
     output: receiveProcessed,
-    /** A Pi record arrives but is not processed yet. */
     buffer: () => {
       received++;
       buffered++;
     },
-    /** Process the oldest received record. */
     process: processOne,
-    /** The next readback Pi was asked for, which must be of `type`. */
     next: (type: string) =>
       Effect.gen(function* () {
         const read = yield* Queue.take(reads);
@@ -194,7 +180,6 @@ test("a context raced by Pi output is read three times, then becomes a projectio
         "Pi context changed during refresh. This view may be stale until the next command or settled boundary.",
       );
 
-      // The next unraced readback publishes the context and clears the error.
       const retry = yield* pi.readbacks.refresh("context").pipe(Effect.forkChild);
       yield* pi.answer(yield* pi.next("get_state"), rawState({}));
       yield* pi.answer(yield* pi.next("get_messages"), { messages: [] });
@@ -206,7 +191,6 @@ test("a context raced by Pi output is read three times, then becomes a projectio
   );
 });
 
-/** Let a worker that could proceed reach Pi. */
 const settleFibers = Effect.gen(function* () {
   for (let i = 0; i < 10; i++) yield* Effect.yieldNow;
 });
@@ -219,8 +203,6 @@ test("a record received while the context is read blocks replacement until it is
       const refresh = yield* pi.readbacks.refresh("context").pipe(Effect.forkChild);
       yield* settleFibers;
       assert.equal(yield* pi.pending, 0, "Pi is not read before received records are processed");
-      // A second record arrives before the first is processed: the drain the refresh waited for
-      // ends, but the output it then reads includes a record not yet projected.
       pi.buffer();
       yield* pi.process();
       yield* pi.answer(yield* pi.next("get_state"), rawState({}));
@@ -283,7 +265,6 @@ test("an open message defers the context read until its end", async () => {
 for (const [activeAt, via] of [
   ["preflight", "schedule"],
   ["post-read", "schedule"],
-  // Opening a session Pi is still running asks for its context explicitly.
   ["preflight", "refresh"],
   ["post-read", "refresh"],
 ] as const) {
@@ -298,8 +279,6 @@ for (const [activeAt, via] of [
           rawState({ isStreaming: activeAt === "preflight" }),
         );
         if (activeAt === "post-read") {
-          // Pi can start after preflight, before agent_start reaches Piano: no output
-          // watermark moves here. Only the retained post-read state check prevents publication.
           yield* pi.answer(yield* pi.next("get_messages"), { messages: [] });
           yield* pi.answer(yield* pi.next("get_state"), rawState({ isStreaming: true }));
         }
@@ -308,7 +287,6 @@ for (const [activeAt, via] of [
         assert.equal(yield* pi.contextLanded, false);
         assert.equal((yield* pi.state).projectionError, undefined);
 
-        // No explicit context request: the pending intent must survive until this boundary.
         yield* pi.readbacks.schedule("stats");
         for (let i = 0; i < 4; i++) {
           const read = yield* pi.nextRead;
@@ -345,7 +323,6 @@ test("requests made while a readback runs coalesce into one more run", async () 
       assert.equal(pi.readbacks.idle(), false);
       yield* pi.readbacks.schedule("context");
       yield* pi.readbacks.schedule("context", "context");
-      // Let any worker those requests could have started reach Pi.
       yield* Effect.yieldNow;
       assert.equal(yield* pi.pending, 0, "one worker per kind: no concurrent read");
       yield* pi.answer(first, { messages: [] });

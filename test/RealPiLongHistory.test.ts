@@ -1,8 +1,3 @@
-/**
- * Real locked CLI: a session whose lifetime history outgrows Pi's RPC line limit, while repeated
- * compactions keep its active context small, still resumes. Runs' spend and the dispatching
- * session are counted from the whole history, never from one `get_entries` reply.
- */
 import assert from "node:assert/strict";
 import { statSync } from "node:fs";
 import { join } from "node:path";
@@ -35,7 +30,6 @@ test(
     process.env.PI_CODING_AGENT_SESSION_DIR = fixture.sessionDir;
     const cwd = fixture.project("long-history");
     try {
-      // Legitimate history through Pi's own SDK: a dispatch record, then repeated groups of large prompts each closed by a compaction.
       const manager = SessionManager.create(cwd, fixture.sessionDir);
       manager.appendCustomEntry(DISPATCH_ENTRY, { parentSessionId: "parent-session" });
       let peakContext = 0;
@@ -104,7 +98,6 @@ test(
         if (oldEnv[i] === undefined) delete process.env[key];
         else process.env[key] = oldEnv[i];
       }
-      // Asserts every fixture Pi child has exited.
       await fixture.close();
     }
   },

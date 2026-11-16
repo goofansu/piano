@@ -12,25 +12,12 @@ import {
 } from "./PreviewAdapter.ts";
 import { READY_INTERVAL_MS, WARMUP_SECONDS } from "./PreviewReadiness.ts";
 
-/** An adapter outcome. A failed observation after a failed start carries the instance that start
- * saved, if any: it may be running. */
 export type PreviewOutcome = { result: unknown } | { error: unknown; attempted?: unknown };
 
-/** What each admitted request showed: a start's progress (the app it replaced stopped, then its
- * own launch starting), its own outcome, or for a failed start, a status read of what that start
- * left behind. */
 export type PreviewObserver = (request: PreviewRequest, outcome: PreviewOutcome) => void;
 
-/** This generation's app as an adapter result shows it. */
 export type GenerationApp = Record<string, unknown> & { instanceId: string };
 
-/** What an outcome says about this generation's app, decided once for the owner's warming checks
- * and for the session's projection alike:
- * - `app`: an observation of this generation's app;
- * - `gone`: this session has no app (`instanceId` undefined: an absent record, or a status read
- *   finding another owner's app) or no longer the named instance (a confirmed stop or clear);
- * - `nothing`: nothing about the app, which stays as it was last seen. An error, busy or not, and
- *   a request naming an instance that is not current (`not-current`) observe nothing. */
 export type AppObservation =
   | { kind: "app"; app: GenerationApp }
   | { kind: "gone"; instanceId?: string }
@@ -53,14 +40,10 @@ export function observeApp(
     return typeof app.instanceId === "string"
       ? { kind: "gone", instanceId: app.instanceId }
       : { kind: "nothing" };
-  // A status naming another owner's app: this session has none in its workspace.
   if (request.action === "status" && typeof app.instanceId === "string") return { kind: "gone" };
   return { kind: "nothing" };
 }
 
-/** One Pi generation's admission gate and live connections. Browser/tool cancellation never
- * closes it. The service runner must connect before it can spawn, including a late submission
- * after Piano dies. A server crash closes the kernel connections without running JS cleanup. */
 export class PreviewOwner {
   readonly identity: PreviewOwnerIdentity;
   private readonly adapter: PreviewAdapter;
@@ -74,8 +57,6 @@ export class PreviewOwner {
   private ending = false;
   private disposed?: Promise<void>;
   private observer?: PreviewObserver;
-  /** The warming-up app whose readiness this owner keeps checking, until when at the latest, and
-   * its scheduled or running check. */
   private warming?: { instanceId: string; until: number; timer?: NodeJS.Timeout };
 
   private constructor(
@@ -102,7 +83,6 @@ export class PreviewOwner {
       this.sockets.add(socket);
       socket.on("error", () => {});
       socket.on("close", () => this.sockets.delete(socket));
-      // Only the initial frame has a deadline; a held owner connection never expires.
       socket.setTimeout(5000, () => socket.destroy());
       socket.setEncoding("utf8");
       let input = "";
@@ -122,8 +102,6 @@ export class PreviewOwner {
           if (message.lease) {
             if (message.generation !== this.identity.generation)
               throw new Error("Preview owner generation mismatch.");
-            // This per-generation private socket is not inherited by the app. A runner cannot
-            // reconnect to a new owner: that generation has a different endpoint.
             socket.write("owned\n");
           } else {
             void this.request(message).then(
@@ -149,7 +127,6 @@ export class PreviewOwner {
     } = {},
   ) {
     const workspace = await realpath(spec.cwd);
-    // Short enough for macOS Unix-domain paths, private to the current OS user.
     const directory = await mkdtemp(join(tmpdir(), "piano-"));
     const owner = new PreviewOwner(
       { workspace, sessionId: spec.sessionId, generation, endpoint: join(directory, generation) },
@@ -176,25 +153,15 @@ export class PreviewOwner {
     return next;
   }
 
-  /** Hear every admitted request's outcome in order, the session's tool and the browser alike,
-   * and each readiness check of a warming-up app. */
   observe(observer: PreviewObserver) {
     this.observer = observer;
   }
 
-  /** Publish an outcome to the observer, then let it decide the warming check. */
   private publish(request: PreviewRequest, outcome: PreviewOutcome) {
     this.observer?.(request, outcome);
     this.follow(request, outcome);
   }
 
-  /** The one rule for checking a warming-up app, on the same reading of an outcome as the
-   * session's projection (`observeApp`): an observation of this generation's app starts or ends
-   * the check, and the app gone ends it; an outcome that observed nothing (an error, busy or not,
-   * or a stale request's `not-current`) keeps checking the same app. A start's deadline ends only
-   * its caller's wait. The check ends once the app answers, exits or is replaced, and at the
-   * latest when its warm-up window after launch closes, so a persistent error cannot keep it
-   * checking forever. */
   private follow(request: Pick<PreviewRequest, "action">, outcome: PreviewOutcome) {
     if (this.ending) return;
     const seen = observeApp(this.identity.generation, request, outcome);
@@ -218,7 +185,6 @@ export class PreviewOwner {
       return;
     }
     warming.timer = setTimeout(() => this.check(warming), READY_INTERVAL_MS);
-    // A pending check never keeps a process alive by itself.
     warming.timer.unref();
   }
 
@@ -246,10 +212,8 @@ export class PreviewOwner {
       } catch (error) {
         outcome = { error };
       }
-      // Another request may have replaced or stopped the app while this one waited.
       if (this.ending || this.warming !== warming) return;
       warming.timer = undefined;
-      // A busy lock observed nothing worth showing: the app is as warm as it was.
       if ("error" in outcome && outcome.error instanceof PreviewBusyError)
         this.follow(status, outcome);
       else this.publish(status, outcome);
@@ -269,8 +233,6 @@ export class PreviewOwner {
           this.root,
           await this.config(),
           this.identity,
-          // A start publishes each change it has made as it makes it: a stopped app must not
-          // look ready while its replacement waits for readiness.
           (result) => this.publish(request, { result }),
         );
       try {
@@ -282,8 +244,6 @@ export class PreviewOwner {
           this.publish(request, { error });
           throw error;
         }
-        // A failed start may already have stopped the app it replaced, or launched one it could
-        // not observe. Only the adapter can tell, so read the workspace before the next request.
         const status: PreviewRequest = { action: "status", workspace: this.identity.workspace };
         try {
           this.publish(status, { result: await run(status) });
@@ -298,7 +258,6 @@ export class PreviewOwner {
     });
   }
 
-  /** Called at transport exit, before waiting for adapter locks or supervisor commands. */
   disconnect() {
     this.ending = true;
     this.stopWarming();
@@ -307,14 +266,10 @@ export class PreviewOwner {
       this.disposed = new Promise<void>((resolve) => this.server.close(() => resolve())).then(() =>
         rm(join(this.identity.endpoint, ".."), { recursive: true, force: true }),
       );
-      // Transport exit cannot await filesystem cleanup. Keep the rejection for prepareRelease,
-      // but never turn a delayed cleanup error into an unhandled process-wide rejection.
       void this.disposed.catch(() => {});
     }
   }
 
-  /** Reserve idle retirement atomically against incoming launches, or clean up for release.
-   * False means active/unknown. Explicit cleanup failures propagate and can be retried. */
   async prepareRelease(idle = false): Promise<boolean> {
     if (!idle) this.disconnect();
     return this.serial(async () => {

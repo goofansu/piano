@@ -6,11 +6,6 @@ import {
   type SignInAttemptState,
 } from "./signInAttempt.ts";
 
-/**
- * One sign-in attempt for a dialog, opened when it mounts and polled while `open`; closing stops
- * polling and keeps the attempt. `api` and `provider` are fixed for the dialog's lifetime
- * (`ProviderLoginDialog` keys it per opening); `signedIn` and `close` may change between renders.
- */
 export function useSignInAttempt({
   api,
   provider,

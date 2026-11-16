@@ -26,7 +26,6 @@ function observation(result: Result) {
   return result;
 }
 
-/** One supervisor per host OS; each runs where its real ownership checks work. */
 const supervisors: [Platform, string][] = [
   ["linux", "systemd"],
   ["darwin", "launchd"],
@@ -36,7 +35,6 @@ for (const [platform, name] of supervisors) {
   const only = { skip: process.platform !== platform };
   const contract = (title: string, body: (t: TestContext) => Promise<void>) =>
     test(`[${name}] ${title}`, only, body);
-  // A Mac serves previews on localhost by default; Linux needs its configured exe.dev origin.
   const origin = platform === "darwin" ? "http://localhost" : "https://test.exe.xyz";
 
   async function fixture(t: TestContext) {
@@ -87,7 +85,6 @@ for (const [platform, name] of supervisors) {
     };
   }
 
-  /** Points the saved preview at a listener this test owns, as if the app had bound it. */
   async function bindTo(f: Awaited<ReturnType<typeof fixture>>, serviceId: string, port: number) {
     const path = join(f.stateRoot, `${serviceId}.json`);
     const record = JSON.parse(await readFile(path, "utf8"));
@@ -154,7 +151,6 @@ for (const [platform, name] of supervisors) {
     assert.deepEqual(second.spec.command, [process.execPath, "-e", "process.exit(0)"]);
     assert.equal(f.stops.length, 1);
     assert.equal(f.launched.length, 2);
-    // Without a command, replace restarts the same launch.
     const third = observation(await f.call({ command: undefined, replace: second.instanceId }));
     assert.notEqual(third.instanceId, second.instanceId);
     assert.deepEqual(third.spec.command, [process.execPath, "-e", "process.exit(0)"]);
@@ -229,7 +225,6 @@ for (const [platform, name] of supervisors) {
       await writeFile(join(f.workspace, "app.py"), "checkout\n");
       await writeFile(join(f.root, "sibling", "app.py"), "sibling\n");
       await symlink("../sibling/sub", join(f.workspace, "apps"));
-      // The kernel resolves `apps` before `..`: this spelling opens the sibling's file.
       assert.equal(await readFile(`${f.workspace}/apps/../app.py`, "utf8"), "sibling\n");
       const rejected = [
         ["/usr/bin/python3", "apps/../app.py"],
@@ -267,7 +262,6 @@ for (const [platform, name] of supervisors) {
       const app = join(f.workspace, "apps", "web");
       await mkdir(app, { recursive: true });
       await symlink(app, join(f.workspace, "web"));
-      // Admission reads the program name; the start still needs each to be a runnable file.
       const bin = join(f.root, "bin");
       await mkdir(bin);
       const tool = async (name: string) => {
@@ -366,7 +360,6 @@ for (const [platform, name] of supervisors) {
         assert.equal(current.state, "running");
         assert.equal(current.url, healthy.url);
       }
-      // A runnable absolute file still replaces, and only the exact current instance.
       f.host.onStop = async () => {
         f.host.phase = "failed";
       };
@@ -387,7 +380,6 @@ for (const [platform, name] of supervisors) {
       assert.ok("replaced" in replaced && replaced.replaced === healthy.instanceId);
       assert.equal(f.stops.length, 1);
       assert.equal(f.launched.length, 2);
-      // A bare name still resolves on the app's PATH under the same exact-instance check.
       f.config.path = "/usr/bin:/bin";
       assert.deepEqual(await f.call({ command: ["true"], replace: healthy.instanceId }), {
         serviceId: healthy.serviceId,
@@ -455,7 +447,6 @@ for (const [platform, name] of supervisors) {
     const port = await freePort();
     f.config.ports = [port];
     f.host.journal = "Compiling assets…";
-    // Each mode is one way a cold app answers: not at all, slower than a second, or an error.
     let mode: "hang" | "slow" | "error" = "hang";
     const server = createHttpServer((_request, response) => {
       if (mode === "hang") return;
@@ -479,7 +470,6 @@ for (const [platform, name] of supervisors) {
       await once(server, "listening");
     };
 
-    // The start's own deadline bounds its wait, whatever one request's timeout is.
     const began = performance.now();
     const cold = observation(
       await f.call({ command: [process.execPath, "-e", "process.exit(0)"], timeoutSeconds: 1 }),
@@ -499,14 +489,12 @@ for (const [platform, name] of supervisors) {
     assert.equal(erring.warming, true, "an error answer before the first good one is warm-up");
     assert.match(erring.detail, /^Warming up; Piano keeps checking until .*HTTP 500$/);
 
-    // A request slower than a second still counts: each check has its own timeout.
     mode = "slow";
     const warm = observation(await f.call({ action: "status" }));
     assert.equal(warm.ready, true);
     assert.equal(warm.warming, false);
     assert.equal(warm.url, `${origin}:${port}/`);
 
-    // Once it has answered, a later error is a problem, not warm-up.
     mode = "error";
     const broken = observation(await f.call({ action: "status" }));
     assert.equal(broken.ready, false);
@@ -516,7 +504,6 @@ for (const [platform, name] of supervisors) {
 
   contract("an unrelated listener cannot establish readiness", async (t) => {
     const f = await fixture(t);
-    // Answers every request, so only ownership can keep it from counting as the app.
     const server = createHttpServer((_request, response) => response.end("not the app"));
     t.after(() => new Promise<void>((resolve) => server.close(() => resolve())));
     server.listen(0, "127.0.0.1");
@@ -531,7 +518,6 @@ for (const [platform, name] of supervisors) {
     assert.equal(status.ready, false);
     assert.equal(status.url, null);
     assert.equal(status.instanceId, first.instanceId);
-    // The same listener, owned by the unit, is ready: ownership is what decided.
     f.host.owner = "self";
     assert.equal(observation(await f.call({ action: "status" })).ready, true);
   });
@@ -608,9 +594,7 @@ for (const [platform, name] of supervisors) {
             });
           });
           break;
-        } catch {
-          /* Try another scratch port. */
-        }
+        } catch {}
       }
       f.config.ports = [port, 5173, 8000, 8001, 7070, 9999];
       f.config.reservedPorts = [9999];
@@ -649,7 +633,6 @@ for (const [platform, name] of supervisors) {
       assert.ok(!JSON.stringify(result).includes("secret"));
       const launch = f.launched[0];
       assert.ok(launch.includes("APP_TOKEN=secret"));
-      // No automatic restart, on either supervisor.
       assert.ok(
         launch.includes(platform === "linux" ? "Restart=no" : "<key>KeepAlive</key><false/>"),
       );
@@ -801,7 +784,6 @@ test("the tool is offered only where a supervisor can own the app", () => {
   assert.deepEqual(offered("win32", {}), []);
 });
 
-/** A free port in the range every preview origin supports. */
 async function freePort() {
   for (;;) {
     const port = 3000 + Math.floor(Math.random() * 7000);

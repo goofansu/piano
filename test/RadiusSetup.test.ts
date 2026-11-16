@@ -14,7 +14,6 @@ const URL = "https://radius.pi.dev/mcp";
 const json = (path: string) => JSON.parse(readFileSync(path, "utf8"));
 const save = (path: string, value: unknown) => writeFileSync(path, JSON.stringify(value, null, 2));
 type Installer = typeof RadiusSetupEnvironment.Service.install;
-/** The real DirectoryFacts over a counting probe: a re-probe is the observable effect of invalidation. */
 type Probes = { facts: DirectoryFacts["Service"]; count: () => number };
 async function fixture(
   run: (
@@ -79,8 +78,6 @@ const settled = (setup: RadiusSetup["Service"]) =>
     }
   }).pipe(Effect.timeout("5 seconds"));
 
-// The network/package manager process is the fake boundary. Pi still owns settings
-// persistence and package discovery; no fixture writes the user's agent directory.
 async function installed(source: string, directory: string) {
   const path = join(directory, "npm/node_modules/@earendil-works/pi-radius-web-search");
   mkdirSync(path, { recursive: true });
@@ -298,8 +295,6 @@ test("INV-02/10: uninstall is confirmation-bound, retryable and serialized with 
         yield* setup.change({ action: "configure-mcp" });
         const mcp = json(join(directory, "mcp.json"));
         const stale = (yield* setup.state).webSearch.removalKey!;
-        // Filters and pinned version are part of the review identity. Explicit removal
-        // may remove a filtered package, while installation still refuses to reset it.
         save(file, {
           defaultThinkingLevel: "high",
           packages: ["/keep", { source: `${PACKAGE}@1.0.0`, extensions: [] }],

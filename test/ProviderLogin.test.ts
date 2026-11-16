@@ -48,7 +48,6 @@ async function fixture(
     ...radius,
     auth: { oauth: { ...radius.auth.oauth!, login: flow } },
   });
-  // The real DirectoryFacts over a counting probe: a re-probe is the observable effect of invalidation.
   let count = 0;
   const sessions = Layer.succeed(
     PiSessions,
@@ -129,7 +128,6 @@ test("INV-01/11/12: OAuth interactions relay through Pi, persist credentials thr
         assert(!providers.some((p) => p.id === "deepseek"));
         const started = yield* login.signIn.start("radius");
         assert.equal(started.status, "running");
-        // One lane for every provider: they share a loopback callback port.
         assert.match(
           (yield* Effect.flip(login.signIn.start("anthropic"))).detail,
           /already in progress/,
@@ -265,7 +263,6 @@ test("INV-01/02: completing sign-in or sign-out invalidates the model catalog in
         yield* catalog.catalog(cwd);
         yield* catalog.catalog(cwd);
         assert.equal(count(), 1, "a cached catalog is not re-probed");
-        // Watch only the service state, never the HTTP route that used to invalidate on GET.
         yield* login.signIn.start("radius");
         yield* until(login, (s) => s.status === "success");
         yield* catalog.catalog(cwd);
@@ -273,7 +270,6 @@ test("INV-01/02: completing sign-in or sign-out invalidates the model catalog in
         yield* login.signOut("radius");
         yield* catalog.catalog(cwd);
         assert.equal(count(), 3, "sign-out re-probes the catalog");
-        // A failed sign-out changes no credentials and leaves the cache alone.
         assert((yield* Effect.result(login.signOut("radius")))._tag === "Failure");
         yield* catalog.catalog(cwd);
         assert.equal(count(), 3);
@@ -315,7 +311,6 @@ test("INV-01/11/12: API keys persist through Pi, replace and remove without expo
             assert(!JSON.stringify(providers).includes("private-"));
             yield* catalog.catalog(cwd);
             assert.equal(count(), ++expectedProbes);
-            // A fresh Pi runtime, not Piano's cache, can resolve the saved credential.
             const fresh = yield* Effect.promise(() =>
               ModelRuntime.create({
                 authPath,
@@ -338,7 +333,6 @@ test("INV-01/11/12: API keys persist through Pi, replace and remove without expo
   );
 });
 
-/** Holds Pi's `method` once entered until `release`, so a disconnect can land mid-write. */
 function stall(runtime: ModelRuntime, method: "login" | "logout") {
   let enter!: () => void, release!: () => void, complete!: () => void;
   const entered = new Promise<void>((resolve) => {
@@ -363,7 +357,6 @@ function stall(runtime: ModelRuntime, method: "login" | "logout") {
   return { entered, release, completed };
 }
 
-/** Starts `write`, interrupts it as a disconnect would once Pi has been asked, and lets Pi finish. */
 const disconnectDuring = (
   stalled: ReturnType<typeof stall>,
   write: Effect.Effect<unknown, unknown>,
@@ -376,8 +369,6 @@ const disconnectDuring = (
     stalled.release();
     yield* Effect.promise(() => stalled.completed);
     yield* Fiber.join(disconnect);
-    // The write ran to its end: the interrupt lands only once the uninterruptible region is over,
-    // so a refusal before Pi was asked would show here as a failure, not as a timeout later.
     const exit = yield* Fiber.await(writing);
     assert(!Exit.hasFails(exit) && !Exit.hasDies(exit), `the write failed: ${exit}`);
   });
@@ -444,7 +435,6 @@ test("INV-11: API-key setup rejects commands, blank keys, unsupported providers 
           [" ", "Enter an API key."],
           ["!echo secret", "Enter a valid API key, not a command."],
           ["key\nsecond-line", "Use only visible ASCII characters, without spaces."],
-          // Not \s to a regex, yet no HTTP header can carry it: every model request would throw.
           ["sk-private\u200bkey", "Use only visible ASCII characters, without spaces."],
           ["x".repeat(8193), "Use at most 8192 characters."],
         ]) {
@@ -469,7 +459,6 @@ test("INV-11: API-key setup rejects commands, blank keys, unsupported providers 
             ._tag === "Failure",
         );
         assert.equal(readFileSync(authPath, "utf8"), before);
-        // An externally written OAuth credential must not be mistaken for a saved API key.
         const oauth = JSON.stringify({
           deepseek: {
             type: "oauth",

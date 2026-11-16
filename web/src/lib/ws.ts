@@ -1,11 +1,3 @@
-/**
- * The browser's WebSocket transport (INV-02/05). It acks every frame it reads, delivers each
- * deliveryId once and in order, and reconnects for a current view rather than skipping a gap. A
- * socket counts as alive only while the pong for its latest ping arrives in time; one stuck
- * connecting is dropped too. Why it gave up is reported as data; the client decides what the
- * person is told. Nothing here depends on React.
- */
-// Relative, not @shared: module tests load this file directly in Node.
 import {
   type ClientMessage,
   type DisconnectReason,
@@ -16,9 +8,6 @@ import {
 } from "../../../shared/wire.ts";
 import { LOCAL, machineFrameBytes, machineSocketUrl } from "./machine.ts";
 
-/** Local disposition only: `sent` is socket acceptance, not a server or Pi receipt.
- * A throwing send is uncertain; only a message the wire cannot encode, or a socket checked
- * non-open, is known not to have sent. */
 export type SendDisposition = "not-sent" | "sent" | "uncertain";
 
 export interface Connection {
@@ -26,7 +15,6 @@ export interface Connection {
   close: () => void;
 }
 
-/** Why a socket closed when the person should hear about it (`CloseCode` in shared/wire.ts). */
 export type { DisconnectReason };
 
 export interface ConnectionHandlers {
@@ -34,7 +22,6 @@ export interface ConnectionHandlers {
   onStatus: (connected: boolean, reason?: DisconnectReason) => void;
 }
 
-/** What a socket reports; `close` carries the close code. */
 export interface SocketEvents {
   open: () => void;
   close: (code: number) => void;
@@ -43,24 +30,19 @@ export interface SocketEvents {
 }
 
 export interface SocketLike {
-  /** The socket can send and its frames count (`WebSocket.OPEN`). */
   isOpen: () => boolean;
   send: (data: string) => void;
   close: () => void;
 }
 
-/** Sockets, timers, network status, the URL and ping nonces, behind a seam so the policy runs in Node. */
 export interface SocketEnvironment {
   open: (url: string, events: SocketEvents) => SocketLike;
   url: () => string;
-  /** The largest frame the machine at `url` accepts (`machineFrameBytes`). */
   frameBytes: number;
   nonce: () => string;
   setTimeout: (run: () => void, ms: number) => unknown;
   clearTimeout: (timer: unknown) => void;
-  /** Subscribes to the browser going online; returns the unsubscribe function. */
   onOnline: (listener: () => void) => () => void;
-  /** Subscribes to the browser going offline; returns the unsubscribe function. */
   onOffline: (listener: () => void) => () => void;
 }
 
@@ -92,22 +74,15 @@ export const browserSocketEnvironment: SocketEnvironment = {
   },
 };
 
-/** Milliseconds a socket may take to open. Mobile sockets can stick connecting. */
 const CONNECT_TIMEOUT = 10_000;
-/** Milliseconds after a matching pong before the next ping. */
 const PING_INTERVAL = 5_000;
-/** Milliseconds a ping waits for its pong. */
 const PONG_TIMEOUT = 8_000;
-/** Milliseconds between losing a socket and opening the next. */
 const RECONNECT_DELAY = 2_000;
 
-/** Whether a frame's UTF-8 bytes stay within `limit`; it counts them only when its length
- * leaves the answer open (a UTF-16 unit takes one to three bytes). */
 const fits = (data: string, limit: number) =>
   data.length * 3 <= limit ||
   (data.length <= limit && new TextEncoder().encode(data).byteLength <= limit);
 
-/** Auto-reconnecting WebSocket that speaks the shared wire schema. */
 export function openConnection(
   handlers: ConnectionHandlers,
   env: SocketEnvironment = browserSocketEnvironment,
@@ -121,21 +96,16 @@ export function openConnection(
     if (closed) return;
     let lastDeliveryId = 0;
     let nonce: string | null = null;
-    // Assigned before any event can arrive: the browser only dispatches after this turn.
     let ws: SocketLike | null = null;
     const current = () => !closed && ws !== null && socket.current === ws;
     const lost = (code?: number) => {
       if (!current() || !ws) return;
-      // A half-open socket may never finish its close handshake. Retire it now,
-      // rather than waiting for onclose to disable actions and start recovery.
       socket.current = null;
       env.clearTimeout(heartbeat);
       const reason = code === undefined ? undefined : disconnectReason(code);
-      // Fatal loss ends the whole connection, including online recovery, before notifying callers.
       if (reason === "too-large") close();
       handlers.onStatus(false, reason);
       ws.close();
-      // An invocation may stop observing from onStatus (for example uncertain creation).
       if (closed) return;
       timer = env.setTimeout(connect, RECONNECT_DELAY);
     };
@@ -148,8 +118,6 @@ export function openConnection(
         lost();
         return;
       }
-      // Only the matching pong proves that the outgoing path works. Streaming
-      // frames must not extend this deadline (INV-02/05).
       heartbeat = env.setTimeout(lost, PONG_TIMEOUT);
     };
     ws = env.open(env.url(), {
@@ -165,8 +133,6 @@ export function openConnection(
         if (!current() || !ws?.isOpen()) return;
         try {
           const message = decodeServerMessage(data);
-          // Protect caller-only results (for example restored drafts) as well as
-          // sequenced session frames. These counters reset with this socket.
           if (message.deliveryId > lastDeliveryId) {
             if (message.deliveryId !== lastDeliveryId + 1)
               throw new Error("Delivery gap; reconnecting for current state");
@@ -182,14 +148,12 @@ export function openConnection(
           ws.send(encodeClientMessage({ _tag: "ack", deliveryId: message.deliveryId }));
         } catch (err) {
           console.warn("bad server message", err);
-          // A frame we cannot project cannot be silently skipped.
           lost();
         }
       },
     });
     socket.current = ws;
     recover.current = lost;
-    // Bound connection establishment too: mobile sockets can stick CONNECTING.
     heartbeat = env.setTimeout(lost, CONNECT_TIMEOUT);
   };
   const stopOffline = env.onOffline(() => recover.current());
@@ -216,13 +180,11 @@ export function openConnection(
       const ws = socket.current;
       let data: string;
       try {
-        // A message the wire refuses (five images, say) never reaches the socket.
         data = encodeClientMessage(m);
       } catch (err) {
         console.warn("unencodable client message", err);
         return "not-sent";
       }
-      // Nor does one larger than the machine accepts: its socket would close and drop it unseen.
       if (!fits(data, env.frameBytes)) {
         console.warn("client message exceeds the machine's frame limit");
         return "not-sent";

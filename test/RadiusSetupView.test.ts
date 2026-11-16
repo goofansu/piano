@@ -94,7 +94,6 @@ test("a running web-search change locks every step and words its row by action",
     assert.equal(running.webSearch.uninstall?.enabled, false);
     const fresh = view({ state: { ...missing, installation: { status: "running", action } } });
     assert.equal(fresh.mcp.install?.enabled, false);
-    // Refresh reads Pi again, so it stays available while Pi runs the change.
     assert.equal(running.canRefresh, true);
   }
 });
@@ -217,7 +216,6 @@ test("each uninstall is confirmed in its own tool's words, and MCP changes annou
   });
   assert.equal(radiusDoneMessage("configure-mcp"), "Radius MCP installed for new sessions");
   assert.equal(radiusDoneMessage("remove-mcp"), "Radius MCP uninstalled for new sessions");
-  // Web search reports its own outcome once Pi's background change settles.
   assert.equal(radiusDoneMessage("install-web-search"), undefined);
   assert.equal(radiusDoneMessage("uninstall-web-search"), undefined);
 });

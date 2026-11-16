@@ -1,4 +1,3 @@
-/** The production router over the production services (PianoServices), in a scratch directory; only the Pi child is faked. */
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -16,19 +15,15 @@ import type { SessionHosts } from "../../server/SessionHosts.ts";
 
 export interface RouterFixture {
   readonly root: string;
-  /** A registered folder: a git checkout whose README.md has one uncommitted added line. */
   readonly repo: string;
   readonly workspaceId: string;
-  /** Answer a request as the server would; a relative URL resolves against the server's origin. */
   readonly handle: (input: string, init?: RequestInit) => Promise<Response>;
-  /** Run against the same services the router answers from, e.g. to start a session it can see. */
   readonly run: <A, X>(
     effect: Effect.Effect<A, X, SessionHosts | Registry | ProviderLogin>,
   ) => Promise<A>;
   readonly dispose: () => Promise<void>;
 }
 
-/** `services` replaces production services, to put a fake behind one of their interfaces. */
 export async function startRouter<Fakes = never>(
   prefix: string,
   services?: Layer.Layer<Fakes>,
@@ -61,7 +56,6 @@ export async function startRouter<Fakes = never>(
     Layer.succeed(RegistryDatabasePath, join(root, "registry.db")),
     NodeServices.layer,
   );
-  // Production adapters a test may replace through `services`: a later layer wins a merge.
   const Adapters = PianoAdaptersLive.pipe(Layer.provideMerge(Config));
   const Services = PianoServicesLive({ idleMs: 0 }).pipe(
     Layer.provideMerge(services ? Layer.merge(Adapters, services) : Adapters),
@@ -87,7 +81,6 @@ export async function startRouter<Fakes = never>(
       const headers = new Headers(init?.headers);
       if (!headers.has("origin")) headers.set("origin", "http://piano.test");
       const url = new URL(input, "http://piano.test");
-      // A server receives the Host its client dialled; a web Request carries none of its own.
       if (!headers.has("host")) headers.set("host", url.host);
       return web.handler(new Request(url, { ...init, headers }));
     },

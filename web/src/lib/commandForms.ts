@@ -1,13 +1,3 @@
-/**
- * Owns command-form drafts, validation and submission independently of React. Submission checks
- * current state again: a connection, session attachment or project can change while a form is open.
- * Known non-delivery keeps the input; uncertain delivery closes the form to prevent blind replay.
- *
- * Project navigation waits for the registry change to appear in client state, not merely for the
- * command to be sent.
- * CommandHost and the dialogs render this state and supply its effects.
- */
-// Relative, not @shared: module tests load this file directly in Node.
 import { type ClientCommand, SESSION_TITLE_MAX, type ServerMessage } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import type { CommandForm } from "./commands.ts";
@@ -26,46 +16,27 @@ import { sessionMutable, sessionReady, sessionWorking } from "./sessionContext.t
 import { previewClaimHolds, sessionHasPreview, stopPreview } from "./sessionPreview.ts";
 import type { SendDisposition } from "./ws.ts";
 
-/**
- * Whether the form may be submitted now (otherwise its submit control is disabled) and, when it
- * may, the socket command submitting sends.
- */
 export type FormAnswer = {
-  /** Project settings field feedback, from the same decision as its save. */
   projectCheck?: ProjectDraftCheck;
 } & (
   | { allowed: false }
   | {
       allowed: true;
       command: ClientCommand;
-      /**
-       * The page submitting opens once the server confirms the change. A new project not created
-       * for a session opens its home, or the New page for it when the New page's project picker
-       * created it; a deleted project's home or New page, when on screen, gives way to the Projects
-       * index the project was listed in.
-       */
       open?: FormPage;
     }
 );
 
-/** A page a submitted form opens: a project's home, the New page for a project, or the Projects index. */
 export type FormPage =
   | { kind: "project"; projectId: string }
   | { kind: "new"; projectId: string }
   | { kind: "projects" };
 
 export interface AnswerContext {
-  /** Names a new project; called only for an allowed new-project answer. */
   newId?: () => string;
-  /** Project settings: the project as the dialog opened on it, which a save changes only where
-   * the draft differs; the project as saved now when absent. */
   opened?: ProjectDraft;
 }
 
-/**
- * Answer `form` with its input: the session title for rename, the project draft for a new project
- * or a project's settings; confirmations take none. A project form answered with a title is refused.
- */
 export function answerForm(
   state: AppState,
   form: CommandForm,
@@ -124,8 +95,6 @@ export function answerForm(
       const id = newId();
       return {
         allowed: true,
-        // Create the project and assign the existing session atomically; a separate move could
-        // leave the session unassigned if the connection drops between commands.
         command: {
           _tag: "save_project",
           project: { id, name, ...(instructions ? { instructions } : {}) },
@@ -136,7 +105,6 @@ export function answerForm(
           : {}),
       };
     }
-    // A project deleted while its settings are open refuses the save, as a vanished session refuses rename.
     case "project-settings": {
       if (typeof input === "string") return { allowed: false };
       return projectSettingsSave(state, form.projectId, input, opened);
@@ -144,20 +112,13 @@ export function answerForm(
   }
 }
 
-/** What a confirmation form asks; the one confirm dialog renders this and nothing else. */
 export interface Confirmation {
   title: string;
   description: string;
-  /** The confirm button's label. */
   confirmLabel: string;
-  /** The confirm button is destructive: the change cannot be undone. */
   destructive: boolean;
 }
 
-/**
- * The question a confirmation form asks, as of `state`; undefined for a form with its own dialog
- * (rename, project, project settings). Deleting a working session warns that it interrupts the work.
- */
 export function confirmation(state: AppState, form: CommandForm): Confirmation | undefined {
   switch (form.kind) {
     case "stop-preview":
@@ -189,7 +150,6 @@ export function confirmation(state: AppState, form: CommandForm): Confirmation |
         : preview
           ? "This will stop the app the session started. "
           : "";
-      // The name sits in the body, where a long one wraps; the title stays one short line.
       return {
         title: "Delete session?",
         description: `${stop}"${sessionLabel(form.target.title)}" and its transcript are removed from Pi's session store. This cannot be undone.`,
@@ -205,14 +165,11 @@ export function confirmation(state: AppState, form: CommandForm): Confirmation |
         destructive: false,
       };
     case "delete-project": {
-      // Read from the sidebar as it is once the project is gone: a member whose folder is closed
-      // leaves it and a pinned one stays in Pinned, so only the rest move to No project.
       const { id } = form.project;
       const count = sessionCatalog({
         ...state,
         projects: state.projects.filter((p) => p.id !== id),
       }).filter((s) => s.projectId === id && inSidebarGroups(s)).length;
-      // Named as the sidebar's group is, so the reader knows where the sessions go.
       const moved =
         count === 0
           ? ""
@@ -234,20 +191,14 @@ export function confirmation(state: AppState, form: CommandForm): Confirmation |
 }
 
 export interface CommandFormsState {
-  /** The open form; `null` when none is. */
   form: CommandForm | null;
-  /** The rename form's text input: the session title; empty for every other form. */
   text: string;
-  /** The New project or Project settings form's Name and Instructions; empty for every other form. */
   projectDraft: ProjectDraft;
 }
 
 export interface CommandFormsOptions {
-  /** The page's state as of now; forms are answered against it when rendered and submitted. */
   getState: () => AppState;
-  /** Sends a form's answer; one known not sent ("not-sent") keeps the form open to retry. */
   send: (command: ClientCommand) => SendDisposition;
-  /** Opens the page a submitted form waits on, once the server confirms its change. */
   openPage: (page: FormPage) => void;
   newId?: () => string;
 }
@@ -255,41 +206,21 @@ export interface CommandFormsOptions {
 export interface CommandForms {
   getState: () => CommandFormsState;
   subscribe: (listener: () => void) => () => void;
-  /** The open form's answer as of now; `{ allowed: false }` when none is open. */
   answer: () => FormAnswer;
-  /**
-   * Open `form`, replacing any open one. Rename starts from the session's title, Project settings
-   * from the project's saved name and instructions.
-   */
   open: (form: CommandForm) => void;
-  /** The rename form's title. */
   edit: (text: string) => void;
-  /** The New project or Project settings form's draft. */
   editProject: (draft: ProjectDraft) => void;
-  /**
-   * Send the open form's answer if it is allowed now, then close. An answer known not sent leaves
-   * the form open with its input. Returns whether anything was sent (or may have been).
-   */
   submit: () => boolean;
-  /** Close the open form. */
   cancel: () => void;
-  /**
-   * Open the page the last submit waits on once the page's state shows its change: the new project
-   * saved, or the deleted one gone. A dropped connection, or a move to another screen, drops it.
-   * Call after each change of state.
-   */
   settle: () => void;
-  /** Hear a server frame: an error, which the server does not tie to a registry change, drops the waiting page. */
   hear: (message: ServerMessage) => void;
 }
 
 const editsProject = (form: CommandForm) =>
   form.kind === "project" || form.kind === "project-settings";
 
-/** Said when a form's answer is known not sent; the form stays open to retry. */
 export const FORM_NOT_SENT = "Change not sent. Retry when Piano reconnects.";
 
-/** Whether `state` shows the change `command` makes, so the page it opens can show it. */
 const confirmedIn = (state: AppState, command: ClientCommand) =>
   command._tag === "save_project"
     ? !!findProject(state, command.project.id)
@@ -310,10 +241,7 @@ export function createCommandForms({
   newId,
 }: CommandFormsOptions): CommandForms {
   let state = CLOSED;
-  /** The project Project settings opened on, so another tab's change to it is kept on save. */
   let opened: ProjectDraft | undefined;
-  /** The page a submitted form opens once the server confirms its command, and the screen it was
-   * submitted from: a user who moves on in the meantime keeps the screen they chose. */
   let waiting: { page: FormPage; command: ClientCommand; from: string } | null = null;
   const screen = () => screenKey(getState());
   const listeners = new Set<() => void>();
@@ -363,7 +291,6 @@ export function createCommandForms({
       if (!form) return false;
       const answered = answer();
       if (!answered.allowed) return false;
-      // Sent or uncertain closes: an uncertain answer may have arrived, so it is never replayed.
       if (send(answered.command) === "not-sent") return false;
       waiting = answered.open
         ? { page: answered.open, command: answered.command, from: screen() }

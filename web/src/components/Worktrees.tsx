@@ -25,12 +25,6 @@ import {
 } from "@/lib/worktreeOperation";
 import type { AppState } from "@/store";
 
-/**
- * The current folder's repository only: opening or refreshing rediscovers that one repository. One
- * deliberate selection or new-branch operation; never automatic retries. The operation
- * (lib/worktreeOperation) owns requests, receipts and discovery, and `worktreesView` decides what
- * the picker shows and allows; this renders it and keeps the form's own fields.
- */
 export function WorktreesPopover({
   operation,
   state,
@@ -43,7 +37,6 @@ export function WorktreesPopover({
   const [query, setQuery] = useState("");
   const [branch, setBranch] = useState("");
   const [hooks, setHooks] = useState(false);
-  // Picking is the common case; the creation form opens on request.
   const [creating, setCreating] = useState(false);
   const errorRef = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
@@ -99,7 +92,6 @@ export function WorktreesPopover({
         }
       }}
     >
-      {/* The list and the form trade places with a short slide, so the swap reads as one surface. */}
       {creating && target ? (
         <form
           key="create"

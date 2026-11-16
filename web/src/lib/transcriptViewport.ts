@@ -1,106 +1,44 @@
-/**
- * Where the reader is in the transcript, and whether it follows new output. One viewport per
- * transcript: the transcript reports its scrolls, renders and resizes, and the jump list asks
- * where the reader is and moves them. A reader who scrolled up, by however little, is never moved
- * by new output, not even when content shrinking above them leaves them clamped at the end for a
- * moment; a pinned reader stays on the bottom when content grows or the container shrinks, and a
- * jump to the end pins the reader there even if content grows afterwards. The DOM is read only
- * through `ViewportElement`, so the policy runs in Node.
- */
 import { type JumpEntry, messageAnchorId } from "./transcript.ts";
 
-/** Within this many pixels of the bottom counts as at the bottom; scrolling down into it pins the view. */
 const NEAR_BOTTOM = 80;
-/** Within this many pixels of the bottom is the end itself, where the view is always pinned. */
 const AT_END = 1;
-/** Within this many pixels of the top counts as at the top. */
 const NEAR_TOP = 40;
-/** A message whose top is above this line under the container's top edge is the one being read. */
 const READING_LINE = 80;
-/** A jump lands a message this far under the container's top edge. */
 export const TRANSCRIPT_JUMP_MARGIN = 16;
-/** A wheel's `deltaMode` values: pixels, lines (`WheelEvent.DOM_DELTA_LINE`) or pages. */
 const DELTA_LINE = 1;
 const DELTA_PAGE = 2;
-/** Pixels per wheel line, where the browser reports lines. */
 const LINE_PX = 16;
 
-/** The transcript's scroll container, as the viewport sees it. */
 export interface ViewportElement {
   readonly scrollHeight: number;
   scrollTop: number;
   readonly clientHeight: number;
   scrollTo: (options: { top: number }) => void;
-  /** A message's top edge relative to the container's top edge; `undefined` when it is not rendered. */
   anchorTop: (messageId: string) => number | undefined;
-  /** Windowed transcripts locate an index, then refine the jump as its rows are measured. */
   jumpToMessage?: (messageId: string, animate: boolean) => boolean;
   jumpToEdge?: (edge: "top" | "bottom") => void;
 }
 
-/** A fold's edges relative to the container's top edge, measured before it changes. */
 export interface FoldEdges {
-  /** The fold's top edge, where its header sits in the flow. */
   top: number;
-  /** Its header's top edge; below `top` only while the header sticks to the container's edge. */
   header: number;
 }
 
 export interface TranscriptViewport {
-  /** The transcript's container mounted (a fresh view starts pinned) or unmounted (`null`). */
   attach: (element: ViewportElement | null) => void;
-  /**
-   * The reader scrolled: pinned when they reached the end, or moved down to near it. Any move up
-   * short of the end unpins, so small steps up from the bottom are not undone by new output.
-   */
   scrolled: () => void;
-  /** Consume any pending reader scroll, then apply geometry compensation without changing intent. */
   correct: (move: () => void) => void;
-  /**
-   * A wheel turned elsewhere in the area, handed to the transcript: moves the reader by the
-   * wheel's `deltaY` in its `deltaMode` units (pixels, lines, or pages of the container) and
-   * applies the same policy as `scrolled`; nothing happens without a transcript. The browser then
-   * reports the move as a scroll of its own, which `scrolled` sees as a repeated position and
-   * leaves the decision alone.
-   */
   wheel: (deltaY: number, deltaMode: number) => void;
-  /**
-   * The reader opened or collapsed a fold, before it changes height. Opening is reading where it
-   * is: the view stops following output, so what opens grows below the header they clicked instead
-   * of scrolling past them to its end; reaching the end again pins the view, as any scroll does.
-   * Collapsing keeps the header where the reader sees it: a header stuck to the container's edge
-   * (or scrolled out above it) is brought there in the flow before the body goes, as a
-   * programmatic correction. When that moves the view off the end it stops following, so the
-   * shrinking transcript does not drag the reader past the header to its end. `edges` is read
-   * only on collapse; `undefined` leaves the view alone.
-   */
   fold: (open: boolean, edges: () => FoldEdges | undefined) => void;
-  /** The transcript re-rendered: a pinned view follows the bottom. */
   rendered: () => void;
-  /**
-   * The container or its content changed size. Content growing only changes whether the bottom is
-   * in view; the container itself resizing is not the reader's doing, so a pinned view follows.
-   */
   resized: (changed: { container: boolean }) => void;
-  /** The bottom is in view; subscribe to hear when that changes. */
   atBottom: () => boolean;
   subscribe: (listener: () => void) => () => void;
-  /**
-   * Scrolls to an entry; `false` when there is nowhere to go.
-   * Only the transcript moves: `scrollIntoView` would also scroll `main` on phones and leave the
-   * composer sitting high.
-   */
   jump: (entry: JumpEntry, options?: { animate: boolean }) => boolean;
-  /**
-   * A jump to this message has come to rest: its top sits at the jump margin, or the transcript
-   * ended before the message could reach it. `false` while it is not rendered.
-   */
   landed: (messageId: string) => boolean;
-  /** The entry the reader is looking at: bottom when there, top near the top, else the message under the top edge. */
   current: (entries: ReadonlyArray<JumpEntry>) => string;
 }
 
-/** The DOM fold behind `FoldEdges`, measured against the transcript container it sits in. */
 export function domFoldEdges(fold: HTMLElement, header: HTMLElement): FoldEdges | undefined {
   const container = fold.closest<HTMLElement>('[data-slot="transcript"]');
   if (!container) return undefined;
@@ -111,7 +49,6 @@ export function domFoldEdges(fold: HTMLElement, header: HTMLElement): FoldEdges 
   };
 }
 
-/** The DOM container behind the seam; messages are found by their anchor id in its document. */
 export function domViewportElement(container: HTMLElement): ViewportElement {
   const anchor = (messageId: string) =>
     container.ownerDocument.getElementById(messageAnchorId(messageId));
@@ -138,7 +75,6 @@ export function domViewportElement(container: HTMLElement): ViewportElement {
   };
 }
 
-/** Destination geometry varies by adapter; jump intent does not. */
 function moveTo(el: ViewportElement, entry: JumpEntry, animate: boolean): boolean {
   if (entry.kind === "top" || entry.kind === "bottom") {
     if (el.jumpToEdge) el.jumpToEdge(entry.kind);
@@ -168,31 +104,21 @@ export function createTranscriptViewport(): TranscriptViewport {
     bottom = value;
     for (const listener of listeners) listener();
   };
-  /** The position and content height the next scroll report is compared with. */
   const note = (el: ViewportElement) => {
     lastTop = el.scrollTop;
     lastHeight = el.scrollHeight;
   };
   const follow = (el: ViewportElement) => {
-    // Rendering or resize can precede a native scroll's event. Read that movement before
-    // following output overwrites it; growth alone leaves scrollTop unchanged.
     if (el.scrollTop !== lastTop) scrolled();
     if (!stick) return;
     el.scrollTop = el.scrollHeight;
     note(el);
   };
 
-  // A scroll reported at the position already decided on (the browser's own event after a
-  // handed wheel, or after a follow) keeps that decision; a move up from the bottom would
-  // otherwise read as a move down to it.
   const scrolled = () => {
     if (!element) return;
     const top = element.scrollTop;
     if (top !== lastTop) {
-      // Content shrinking under a reader (rows above them measured smaller than estimated) can
-      // leave them clamped at the new end, moved up by the browser rather than down by their own
-      // hand. That is not reaching the end: a windowed transcript restores their row next, and
-      // following output would instead drag them to the bottom.
       const clamped = element.scrollHeight < lastHeight && top < lastTop && atEnd(element);
       if (!clamped) stick = atEnd(element) || (near(element) && top >= lastTop);
       lastTop = top;
@@ -211,8 +137,6 @@ export function createTranscriptViewport(): TranscriptViewport {
     },
     scrolled,
     correct: (move) => {
-      // A native scroll's event can still be queued when a measurement changes geometry.
-      // Observe that move before acknowledging the programmatic correction, not afterwards.
       scrolled();
       move();
       if (!element) return;
@@ -229,8 +153,6 @@ export function createTranscriptViewport(): TranscriptViewport {
     fold: (open, edges) => {
       const el = element;
       if (!el) return;
-      // Consume older reader movement first, as a jump does, so a queued scroll event cannot
-      // rediscover that move and re-pin the view, or be mistaken for this correction.
       scrolled();
       if (open) {
         stick = false;
@@ -239,9 +161,7 @@ export function createTranscriptViewport(): TranscriptViewport {
       const fold = edges();
       if (!fold) return;
       const from = el.scrollTop;
-      // Never scroll ancestors (notably main on phones): only the container moves.
       el.scrollTop = from + fold.top - Math.max(fold.header, 0);
-      // A move up off the end is the reader's choice to stay on this header, as a scroll up is.
       if (el.scrollTop !== from) stick = atEnd(el);
       note(el);
       setBottom(near(el));
@@ -262,12 +182,9 @@ export function createTranscriptViewport(): TranscriptViewport {
     jump: (entry, options) => {
       const el = element;
       if (!el) return false;
-      // Consume older reader movement before choosing the explicit jump's intent. A virtual
-      // adapter can synchronously call correct() while moving; it must not rediscover that
-      // queued scroll and overwrite this decision. All destinations share this transaction.
       scrolled();
       const previous = stick;
-      stick = entry.kind === "bottom"; // Unpin before mounting an earlier destination.
+      stick = entry.kind === "bottom";
       const found = moveTo(el, entry, options?.animate ?? false);
       if (!found) stick = previous;
       note(el);

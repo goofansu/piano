@@ -1,4 +1,3 @@
-/** Pull-based HTTP bounds shared by the two image hops. Never trust Content-Length alone. */
 import { Data } from "effect";
 import {
   IMAGE_ROUTES,
@@ -14,7 +13,6 @@ export class ImageTransferError extends Data.TaggedError("ImageTransferError")<{
 export const imageFailure = (detail = "Could not prepare images. Try again.", status = 400) =>
   new ImageTransferError({ detail, status });
 
-/** Includes the terminal read, so an endless/lying body cannot pass by filling the limit. */
 export function boundedImageStream(
   source: ReadableStream<Uint8Array>,
   maximum: number,
@@ -98,7 +96,6 @@ export async function readImageResponse(response: Response, signal: AbortSignal)
   return new Response(stream).text();
 }
 
-/** What an admitted image request is; a body route's length is its declared Content-Length. */
 export type ImageRoute =
   | {
       readonly kind: "upload" | "cancel";
@@ -112,14 +109,10 @@ export type ImageRoute =
       readonly query: NonNullable<ReturnType<typeof previewQuery>>;
     };
 
-/** The one shape of each image route, for the relay on main and the owning peer alike, so a
- * request one hop forwards is never one the other refuses. Each hop's own origin and capacity
- * checks stay with it; this decides only method, transport headers, address and body. */
 export function imageRoute(
   path: string,
   method: string,
   headers: Readonly<Record<string, string | undefined>>,
-  /** The request URL's raw search, `?` included, as `URL.search` gives it. */
   search: string,
 ): ImageRoute | ImageTransferError {
   const kind = (Object.keys(IMAGE_ROUTES) as (keyof typeof IMAGE_ROUTES)[]).find(

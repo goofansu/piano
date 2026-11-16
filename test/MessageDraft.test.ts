@@ -13,7 +13,6 @@ import {
   sessionDraftKey,
 } from "../web/src/lib/messageDraft.ts";
 
-// Limits and formats from docs/image-attachments.md, written out rather than imported.
 const MiB = 1024 * 1024;
 const SIGNATURES = {
   "image/png": [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d],
@@ -27,7 +26,6 @@ const png = (name: string, size: number, type = "image/png"): ImageCandidate => 
   type,
   head: Uint8Array.from(SIGNATURES["image/png"]),
 });
-/** An accepted image already in the draft, `size` original bytes long. */
 const held = (size: number): Attachment => ({
   kind: "image",
   name: "held.png",
@@ -145,7 +143,6 @@ test("PNG, JPEG, GIF and WebP are recognized by signature; the declared type mus
 });
 
 test("an image tile names its type and size as the refusals do, in binary units", () => {
-  // 1.5 × 1024 × 1024 = 1572864; 9.5 MiB = 9961472; 1.5 KiB = 1536.
   assert.equal(imageLabel("image/jpeg", 1572864), "JPEG · 1.5 MiB");
   assert.equal(imageLabel("image/jpeg", 9961472), "JPEG · 9.5 MiB");
   assert.equal(imageLabel("image/webp", 10 * MiB), "WebP · 10 MiB");
@@ -267,7 +264,6 @@ test("submit refuses while images are being read and keeps the whole draft", asy
     });
     return encode(file);
   });
-  // Let the head read finish so the encoder is waiting.
   while (!finish) await new Promise((resolve) => setImmediate(resolve));
   assert.equal(drafts.get(key).images.busy, true);
   assert.equal(drafts.sendable(key), false);
@@ -298,7 +294,6 @@ test("submit refuses while images are being read and keeps the whole draft", asy
   assert.equal(drafts.get(key), EMPTY_DRAFT);
 });
 
-/** The page's client, as far as drafts listen to it. */
 function source() {
   const listeners = new Set<(message: ServerMessage) => void>();
   return {
@@ -383,7 +378,6 @@ test("text added to a draft starts a new paragraph only after visible text; typi
   );
 });
 
-/** What every tab attached to the session hears: Pi's receipt for some tab's input, or a refusal. */
 const receipt = (inputId: string, outcome = "started") =>
   ({
     _tag: "session",
@@ -439,7 +433,6 @@ test("PIN-132: refused images returned while another is added stay editable past
     }),
     true,
   );
-  // The writer adds an eleventh while the server's refusal is on its way; the check sees one image.
   let finish!: () => void;
   const reading = drafts.addImages(key, [pngFile("11.png")], async (file) => {
     await new Promise<void>((resolve) => {
@@ -470,8 +463,6 @@ test("PIN-132: refused images returned while another is added stay editable past
   assert.equal(drafts.sendable(key), true);
 });
 
-// INV-02/03: the session announces `submitting` before it asks Pi, so that first receipt must not
-// settle the draft; only the session's verdict does, and `not_sent` (Pi never saw it) gives it back.
 test("a follow-up its session refused before Pi saw it comes back to its draft, once", () => {
   const page = source();
   const drafts = createDrafts();
@@ -498,7 +489,6 @@ test("a follow-up its session refused before Pi saw it comes back to its draft, 
     page.emit(message);
   assert.equal(drafts.get(key).text, "never reached Pi");
 
-  // The session's error for the same input follows its receipt; the draft is not doubled.
   page.emit(refusal(refused));
   assert.equal(drafts.get(key).text, "never reached Pi");
 });

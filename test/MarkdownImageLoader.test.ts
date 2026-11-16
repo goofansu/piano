@@ -5,7 +5,6 @@ import { markdownImageLoader } from "../web/src/lib/markdownImageLoader.ts";
 
 const MiB = 1024 * 1024;
 
-/** A workspace whose files are PNGs of the given sizes; each read waits until the test settles it. */
 function workspace(sizes: Record<string, number>) {
   const reads: string[] = [];
   const signals: AbortSignal[] = [];
@@ -17,7 +16,6 @@ function workspace(sizes: Record<string, number>) {
     read: (path, signal) => {
       reads.push(path);
       signals.push(signal);
-      // Answers late even when aborted, as a reply already on the wire may.
       return new Promise<FilePreview>((resolve, reject) => {
         pending.push(() => {
           const size = sizes[path];
@@ -43,7 +41,6 @@ function workspace(sizes: Record<string, number>) {
       revoked.push(url);
     },
   });
-  /** Answers every read until no read is waiting. */
   const settle = async () => {
     for (;;) {
       await new Promise((resolve) => setImmediate(resolve));
@@ -69,7 +66,6 @@ test("an image added to growing prose loads alone; earlier images stay without a
   assert.deepEqual(revoked, []);
   assert.equal(loader.images().get("a.png"), a);
   assert.ok(loader.images().get("b.png"));
-  // a never left the shown images while b loaded.
   assert.ok(seen.every((images) => images.get("a.png") === a));
 });
 
@@ -119,7 +115,6 @@ test("disposing an owner aborts its read and revokes every Blob URL it made", as
   await first.settle();
   assert.equal(first.live.size, 0);
   assert.deepEqual(first.revoked, ["blob:0"]);
-  // The next (workspace, document) owner reads afresh and shares no blob with the old one.
   const second = workspace({ "a.png": 1 });
   second.loader.show(["a.png"]);
   await second.settle();

@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createObservation, type ObservationEnvironment } from "../web/src/lib/observation.ts";
 
-/** A clock the test advances, a focus event it fires and a visibility flag it sets. */
 function environment() {
   let now = 0,
     hidden = false;
@@ -52,8 +51,6 @@ function environment() {
 
 const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 
-/** A loader whose reads the test answers one by one, recording what was asked and what was aborted. It
- * ignores aborts, like a response already on the wire, so fencing cannot rely on the loader rejecting. */
 function server() {
   const reads: {
     key: string;
@@ -93,7 +90,6 @@ test("a key change aborts the old key's read, and its late response never shows 
   await settle();
   assert.equal(observation.getState().value, "changes in b");
 
-  // Switching back starts from nothing rather than showing a's earlier value.
   observation.observe("workspace-a");
   assert.equal(observation.getState().value, undefined);
   assert.equal(observation.getState().loading, true);
@@ -147,7 +143,6 @@ test("a failure is shown once settled: hidden while a re-read is in flight, neve
   await settle();
   assert.equal(observation.getState().failure, "still offline");
 
-  // A failure belongs to its key: the next key starts without one, and the old key's late failure is dropped.
   void observation.refresh();
   observation.observe("other");
   pi.reads[2].reject(new Error("stale"));
@@ -196,7 +191,6 @@ test("a mutation supersedes an in-flight read, holds reads off, and its result i
     mutating: false,
   });
 
-  // Reads resume after the change settles.
   focus();
   assert.equal(pi.reads.length, 2);
 });
@@ -271,7 +265,6 @@ test("refresh triggers: focus, interval (skipped while hidden), a debounced trig
   pi.reads[3].resolve("installed");
   await settle();
 
-  // Quick successive triggers coalesce into one read after the quiet period.
   observation.refreshSoon(600);
   await clock.advance(400);
   observation.refreshSoon(600);
@@ -282,7 +275,6 @@ test("refresh triggers: focus, interval (skipped while hidden), a debounced trig
   pi.reads[4].resolve("installed");
   await settle();
 
-  // Disabled keeps the value but reads nothing; a pending trigger is dropped; enabling reads afresh.
   observation.refreshSoon(600);
   observation.observe("radius", false);
   clock.focus();

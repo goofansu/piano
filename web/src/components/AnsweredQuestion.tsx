@@ -13,7 +13,6 @@ import { Button } from "@/components/ui/button";
 import { Item, ItemContent, ItemHeader } from "@/components/ui/item";
 import { answerReceipt, dialogTitle } from "@/lib/piDialogs";
 
-/** The latest submitted reply and its delivery problem, never an addition to Pi’s history. */
 export function AnsweredQuestion({ resolution }: { resolution: DialogResolution }) {
   const { answer } = resolution;
   if (!answer) return null;

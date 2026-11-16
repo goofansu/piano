@@ -1,11 +1,3 @@
-/**
- * Each directory's model catalog as the picker uses it. Catalogs outlive reloads: the page seeds
- * them from this browser's storage, so the picker opens at once, and keeps storing each one Pi
- * sends unless it reports an error. A refresh re-probes Pi and stays pending until its own
- * terminal reply arrives or the connection drops. Saving Pi's defaults for new
- * sessions is one request at a time, a failure reported once, and stays pending until a catalog shows them. The client's store stays the source of the
- * server-pushed catalogs; nothing here depends on React.
- */
 import type { ClientCommand, ModelCatalog, ServerMessage, ThinkingLevel } from "@shared/wire";
 import type { Notify } from "./client.ts";
 import { machineMemory } from "./machineMemory.ts";
@@ -13,13 +5,11 @@ import { parseJson } from "./preference.ts";
 
 export type Catalogs = Readonly<Record<string, ModelCatalog>>;
 
-/** Where catalogs outlive a reload. */
 export interface CatalogStorage {
   read: () => Catalogs;
   write: (catalogs: Catalogs) => void;
 }
 
-/** This browser's storage for one machine's catalogs; without it the server's cache still answers. */
 export function browserCatalogStorage(machineId: string): CatalogStorage {
   const memory = machineMemory(machineId, "catalogs");
   return {
@@ -28,7 +18,6 @@ export function browserCatalogStorage(machineId: string): CatalogStorage {
   };
 }
 
-/** The connection to follow; the page's `Client` is one. */
 export interface CatalogSource {
   getState: () => { connected: boolean; catalogs: Catalogs };
   subscribe: (listener: () => void) => () => void;
@@ -39,26 +28,20 @@ export interface CatalogSource {
 export interface ModelCatalogsOptions {
   storage: CatalogStorage;
   notify: Notify;
-  /** Pi's saved defaults for new sessions; rejects when Pi did not save them. */
   saveDefaults: (model: string | undefined, effort: ThinkingLevel) => Promise<void>;
-  /** How long a saved default may take to reach a catalog before saving ends anyway. */
   confirmMs?: number;
 }
 
 export interface ModelCatalogsState {
   catalogs: Catalogs;
   connected: boolean;
-  /** Directories with a refresh in flight, each with its request ID. */
   refreshing: Readonly<Record<string, string>>;
   saving: boolean;
 }
 
-/** What one directory's picker shows and can do. */
 export interface ModelCatalogView {
-  /** `null` until Pi answers (or a stored catalog seeds it). */
   catalog: ModelCatalog | null;
   refreshing: boolean;
-  /** Re-probes Pi, e.g. after adding a provider or signing in; absent without a directory. */
   refresh?: () => void;
   saving: boolean;
   saveDefaults: (model: string | undefined, effort: ThinkingLevel) => Promise<void>;
@@ -67,13 +50,10 @@ export interface ModelCatalogView {
 export interface ModelCatalogs {
   getState: () => ModelCatalogsState;
   subscribe: (listener: () => void) => () => void;
-  /** The stored catalogs, for the client's initial state. */
   seed: () => Catalogs;
-  /** Tracks `source`'s catalogs and connection; returns the stop function. */
   follow: (source: CatalogSource) => () => void;
   refresh: (cwd: string) => void;
   saveDefaults: (model: string | undefined, effort: ThinkingLevel) => Promise<void>;
-  /** One directory's picker, from a state this module produced. */
   view: (state: ModelCatalogsState, cwd: string | undefined) => ModelCatalogView;
 }
 
@@ -94,7 +74,6 @@ export function createModelCatalogs({
     saving: false,
   };
   let source: CatalogSource | null = null;
-  /** Saved defaults no catalog shows yet, and the timer that stops waiting for them. */
   let confirming: {
     model?: string;
     effort: ThinkingLevel;
@@ -109,7 +88,6 @@ export function createModelCatalogs({
     for (const listener of listeners) listener();
   };
 
-  /** A background catalog or a late reply cannot finish a different explicit refresh. */
   const settle = (message: ServerMessage) => {
     if (message._tag !== "models" && message._tag !== "models_failed") return;
     const cwd = message._tag === "models" ? message.catalog.cwd : message.cwd;
@@ -124,7 +102,6 @@ export function createModelCatalogs({
     if (message._tag === "models_failed") notify(message.message, "error");
   };
 
-  /** A catalog Pi sent after `since` shows the defaults; a stored one may predate an older save. */
   const shown = (
     catalogs: Catalogs,
     since: Catalogs,
@@ -139,10 +116,6 @@ export function createModelCatalogs({
         c.defaultThinkingLevel === effort,
     );
 
-  /**
-   * Pi answers a save before its catalog does; the picker's default changes only with the latter,
-   * and that change is the confirmation, so success needs no toast.
-   */
   const confirmed = () => {
     if (confirming) clearTimeout(confirming.timer);
     confirming = null;
@@ -168,14 +141,12 @@ export function createModelCatalogs({
   };
 
   const refresh = (cwd: string) => {
-    // Offline, nothing will answer; the next connection asks again on its own.
     if (!source || !state.connected || state.refreshing[cwd] !== undefined) return;
     const requestId = crypto.randomUUID();
     set({ ...state, refreshing: { ...state.refreshing, [cwd]: requestId } });
     source.send({ _tag: "models", cwd, refresh: true, requestId });
   };
 
-  // Pi owns the saved defaults; its catalog invalidation updates every picker's default.
   const saveDefaults = async (model: string | undefined, effort: ThinkingLevel) => {
     if (state.saving) return;
     const since = state.catalogs;

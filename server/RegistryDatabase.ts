@@ -1,4 +1,3 @@
-/** SQLite implementation detail of Registry. Pi history and evidence never enter this store. */
 import { chmodSync, closeSync, lstatSync, mkdirSync, openSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from "node:sqlite";
@@ -50,11 +49,6 @@ type Stored = Record<string, SQLOutputValue>;
 type Collection = Exclude<keyof RegistryData, "version">;
 type Item<K extends Collection> = RegistryData[K][number];
 
-/**
- * One table's codec: its SQL table is named after the `RegistryData` collection it stores, and
- * `encode` and `decode` are inverses (`position` is the array index, implicit on decode). The first
- * `keys` columns are the primary key. Column names never come from user input.
- */
 interface Table<K extends Collection> {
   readonly name: K;
   readonly columns: ReadonlyArray<string>;
@@ -64,11 +58,9 @@ interface Table<K extends Collection> {
   decode(row: Stored): Item<K>;
 }
 
-/** A session's pull-request link: absent is discovery, null is removal, otherwise a linked URL. */
 const pullRequestState = (link: Item<"sessions">["pullRequest"]) =>
   link === undefined ? "discover" : link === null ? "removed" : "linked";
 
-/** Every collection has a codec, ordered parent-first; deletions run in reverse. */
 const codecs: { readonly [K in Collection]: Table<K> } = {
   projects: {
     name: "projects",
@@ -208,7 +200,6 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
   },
 };
 const tables: ReadonlyArray<Table<Collection>> = Object.values(codecs);
-/** Unchanged collections and rows are not encoded. Position is persisted data, not just identity. */
 function persist(db: DatabaseSync, before: RegistryData, after: RegistryData) {
   const changes = tables
     .filter((table) => before[table.name] !== after[table.name])
@@ -261,7 +252,6 @@ function snapshot(db: DatabaseSync): RegistryData {
       .all()
       .map((r) => table.decode(r)),
   ];
-  // `codecs` covers every collection, so the entries form a complete RegistryData.
   return { version: 2, ...Object.fromEntries(tables.map(read)) } as RegistryData;
 }
 
@@ -274,10 +264,8 @@ const empty: RegistryData = {
   projects: [],
 };
 
-/** `initial` populates a new database only; test fixtures use it to seed scratch registries. */
 export function openRegistryDatabase(path: string, initial: RegistryData = empty) {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  // Create privately before SQLite can create journal files. Never follow a DB symlink.
   try {
     closeSync(openSync(path, "wx", 0o600));
   } catch (error) {
@@ -289,8 +277,6 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
   const db = new DatabaseSync(path);
   try {
     db.exec("PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;");
-    // Version 2 retired the project goal. Keep a private copy of a version-1 file before dropping the
-    // column: it is the only way back to an older Piano, and the only place old goals survive.
     if (db.prepare("PRAGMA user_version").get()!.user_version === 1) {
       const backup = `${path}.v1-backup`;
       try {
@@ -341,8 +327,6 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
         throw new Error(
           `Unsupported registry database version ${version}; upgrade Piano rather than resetting the database.`,
         );
-      // Version 7 retires both historical notification stores. Older databases can skip
-      // preference conversion: no destination is read or used after this migration.
       if (Number(version) < 7)
         db.exec(
           "DROP TABLE IF EXISTS notification_webhooks; DROP TABLE IF EXISTS notification_settings; PRAGMA user_version = 7;",
@@ -353,8 +337,6 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
           events TEXT NOT NULL CHECK (json_valid(events)),
           active INTEGER NOT NULL CHECK (active IN (0, 1)), created_at TEXT NOT NULL
         ) STRICT; PRAGMA user_version = 8;`);
-      // Version 9 retires project archive: an archived project comes back as an ordinary one, its
-      // sessions still its members. A database created since never had the column.
       if (Number(version) < 9) {
         const archive = db
           .prepare("SELECT 1 FROM pragma_table_info('projects') WHERE name = 'archived'")
@@ -362,7 +344,6 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
         if (archive) db.exec("ALTER TABLE projects DROP COLUMN archived;");
         db.exec("PRAGMA user_version = 9;");
       }
-      // Version 10 adds project instructions; a database created since already has the column.
       if (Number(version) < 10) {
         const instructions = db
           .prepare("SELECT 1 FROM pragma_table_info('projects') WHERE name = 'instructions'")
@@ -370,9 +351,6 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
         if (!instructions) db.exec("ALTER TABLE projects ADD COLUMN instructions TEXT;");
         db.exec("PRAGMA user_version = 10;");
       }
-      // Version 11 adds the Changes comparison: a worktree's base branch at creation, the pull
-      // request's branch names, and the session's chosen scope. A database created since already
-      // has the columns.
       if (Number(version) < 11) {
         const has = (table: string, column: string) =>
           db.prepare(`SELECT 1 FROM pragma_table_info('${table}') WHERE name = ?`).get(column) !==
@@ -389,8 +367,6 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
           );
         db.exec("PRAGMA user_version = 11;");
       }
-      // Version 12 qualifies PR branches. Legacy links deliberately retain unknown repositories
-      // until GitHub refreshes them; a URL alone cannot prove a fork's head repository.
       if (Number(version) < 12) {
         for (const column of ["pull_request_head_repo", "pull_request_base_repo"]) {
           if (!db.prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name = ?").get(column))
@@ -398,15 +374,11 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
         }
         db.exec("PRAGMA user_version = 12;");
       }
-      // Version 13 adds project done, a reversible state unlike the archive version 9 retired; a
-      // database created since already has the column.
       if (Number(version) < 13) {
         if (!db.prepare("SELECT 1 FROM pragma_table_info('projects') WHERE name = 'done_at'").get())
           db.exec("ALTER TABLE projects ADD COLUMN done_at TEXT;");
         db.exec("PRAGMA user_version = 13;");
       }
-      // Version 14 adds preferences: one row, holding voice input and the OpenAI key only voice
-      // input uses. A database created since already has the table.
       if (Number(version) < 14)
         db.exec(`CREATE TABLE IF NOT EXISTS preferences (
           id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -414,14 +386,10 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
           openai_api_key TEXT,
           CHECK (voice_input = 0 OR openai_api_key IS NOT NULL)
         ) STRICT; INSERT OR IGNORE INTO preferences (id) VALUES (1); PRAGMA user_version = 14;`);
-      // Intent is retained independently of session retention. Never replay or expire it.
       if (Number(version) < 15)
         db.exec(`CREATE TABLE IF NOT EXISTS creation_attempts (
           id TEXT PRIMARY KEY NOT NULL, record TEXT NOT NULL CHECK (json_valid(record))
         ) STRICT; PRAGMA user_version = 15;`);
-      // Version 16 retires session sharing: the saved Radius link goes with it. Published
-      // artifacts stay in Radius; Piano no longer knows them. A database created since never had
-      // the column.
       if (Number(version) < 16) {
         const share = db
           .prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name = 'radius_share'")
@@ -429,7 +397,6 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
         if (share) db.exec("ALTER TABLE sessions DROP COLUMN radius_share;");
         db.exec("PRAGMA user_version = 16;");
       }
-      // Retention generations survive reversible archive and restart; old references start at zero.
       if (Number(version) < 17) {
         if (
           !db
@@ -447,8 +414,6 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
     db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL;");
     if (db.prepare("PRAGMA foreign_key_check").all().length)
       throw new Error("Registry database contains invalid references.");
-    // Read the revision and data from the same snapshot. Registry remains a single-backend cache;
-    // another writer is detected at commit, never silently overwritten with stale state.
     db.exec("BEGIN");
     let revision: number;
     let data: RegistryData;
@@ -465,8 +430,6 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
     const write = (change: () => void) => {
       db.exec("BEGIN IMMEDIATE");
       try {
-        // References are checked at commit: deleting a project unlinks its sessions in the same
-        // write, and rows are removed before the rows that pointed at them are updated.
         db.exec("PRAGMA defer_foreign_keys = ON");
         const updated = db
           .prepare("UPDATE registry_meta SET revision = revision + 1 WHERE id = 1 AND revision = ?")

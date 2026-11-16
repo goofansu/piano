@@ -1,5 +1,3 @@
-// Measurement, not a timing-sensitive CI test. Uses only a temporary registry and fake Pi.
-// node test/performance-folder-registry.mjs [output.json]
 import assert from "node:assert/strict";
 import { execFileSync, fork } from "node:child_process";
 import { once } from "node:events";
@@ -97,7 +95,6 @@ try {
       GIT_CONFIG_NOSYSTEM: "1",
     };
     execFileSync("git", ["init", "-q", "-b", "main", repo], { env });
-    // Real directories, rather than mocked fs: includes stat and absent-.git costs.
     for (let i = 0; i < entries; i++) mkdirSync(join(listing, `folder-${i}`));
     const paths = Array.from({ length: folders }, (_, i) => join(repo, `workspace-${i}`));
     for (const path of paths) mkdirSync(path);
@@ -131,7 +128,6 @@ try {
       },
       silent: true,
     });
-    // main logs its configured port, so discover the ephemeral listener without altering production.
     let logs = "";
     backend.stdout.on("data", (d) => (logs += d));
     backend.stderr.on("data", (d) => (logs += d));
@@ -177,7 +173,6 @@ try {
       await request(commandPath);
       await request("/api/ls", { path: listing });
       let nonce = 0;
-      // Let startup/session-settlement discovery finish before the idle window.
       await request("/api/folders");
       await delay(500);
       const scenario = {
@@ -269,8 +264,6 @@ try {
     } finally {
       saved.close();
     }
-    // Separate persistence/update work from SidebarView listeners and browser delivery.
-    // Backend is stopped: never open a competing live writer.
     const runtime = ManagedRuntime.make(
       RegistryLive.pipe(Layer.provide(Layer.succeed(RegistryDatabasePath, dbPath))),
     );

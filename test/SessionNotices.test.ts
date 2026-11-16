@@ -131,7 +131,6 @@ test("banners come before status lines, in a fixed order", () => {
 });
 
 test("a cancel or Stop Pi received leaves no status line; a pending, uncertain or unsent one does", () => {
-  // Stop ends an open dialog as "aborted": the user's own act, as a cancel is.
   for (const reason of ["cancelled", "aborted"] as const)
     for (const delivery of ["pending", "written", "accepted", "uncertain", "not-sent"] as const) {
       const line = find(
@@ -208,7 +207,6 @@ test("a first message that never reached Pi warns, whatever stopped it", () => {
     text: "hi",
     outcome: "starting",
   };
-  // The selection was rejected before Pi reported any submission.
   const rejected = find(
     at(
       {},
@@ -225,7 +223,6 @@ test("a first message that never reached Pi warns, whatever stopped it", () => {
   assert.equal(rejected?.title, "Message rejected.");
   assert.deepEqual(rejected?.details, ["Directory not trusted"]);
 
-  // The connection dropped while the first message was starting.
   const lost = find(
     at(
       {},
@@ -275,7 +272,6 @@ test("Pi's submission speaks once the browser's record is gone", () => {
   assert.equal(rejected?.tone, "warning");
   assert.equal(rejected?.title, "Message rejected.");
   assert.deepEqual(rejected?.details, ["busy"]);
-  // Refused before Pi saw it: not Pi's rejection, and the composer has the draft back.
   const notSent = find(
     at({ submission: { id: 2, outcome: "not_sent", detail: "Pi is stopping." } }),
     "submission",

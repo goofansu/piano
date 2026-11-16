@@ -25,16 +25,12 @@ import type { ModelControl } from "@/lib/useModelChoice";
 interface Props {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  /** Composers resume editing after Enter on effort or Escape; standalone pickers use their trigger. */
   returnFocusRef?: RefObject<HTMLTextAreaElement | null>;
-  /** The page's selection, its catalog and what a pick does (`useModelChoice`). */
   control: ModelControl;
   disabled?: boolean;
-  /** Bordered control for standalone forms; composers retain the quiet trigger. */
   variant?: "ghost" | "outline";
 }
 
-/** One settings trigger: the model label yields space before the effort or primary action does. */
 export function ModelSelect({
   open: controlledOpen,
   onOpenChange,
@@ -83,8 +79,6 @@ export function ModelSelect({
     saving,
   });
   const want = view.shown;
-  // Snapshot while closed, including externally controlled opens. Selection must not move rows
-  // under the pointer or reset keyboard navigation during this visit to the picker.
   if (!open && openingModel !== want) setOpeningModel(want);
   useEffect(() => {
     if (!open) {
@@ -92,7 +86,6 @@ export function ModelSelect({
       setQuery("");
       return;
     }
-    // Hosted selections arrive asynchronously from Pi. Never focus the previous model's efforts.
     if (focusModel === null || focusModel !== want) return;
     const panel = effortPanel.current;
     const current = panel?.querySelector<HTMLButtonElement>(
@@ -154,7 +147,6 @@ export function ModelSelect({
           {variant === "outline" && <ChevronDownIcon data-icon="inline-end" aria-hidden />}
         </Button>
       </PopoverTrigger>
-      {/* Mod+/ opens it many times a day: it appears at once. */}
       <PickerContent
         still
         aria-label="Model and effort"
@@ -176,7 +168,7 @@ export function ModelSelect({
           const input = search.current;
           if (!input || document.activeElement === input) return;
           event.preventDefault();
-          setFocusModel(null); // A later hosted selection must not steal focus back to effort.
+          setFocusModel(null);
           input.focus({ preventScroll: true });
           input.select();
         }}
@@ -199,7 +191,6 @@ export function ModelSelect({
           defaultValue={openingModel}
           shouldFilter={false}
           onKeyDown={(event) => {
-            // cmdk already ignores IME; holding Enter must not accept a second model.
             if (event.key === "Enter" && event.repeat && !isImeKey(event)) event.preventDefault();
           }}
         >
@@ -238,7 +229,6 @@ export function ModelSelect({
             defaultLevel={catalog?.defaultThinkingLevel}
             disabled={!view.effortEnabled}
           />
-          {/* Keep the description and action in place while selection and saving change. */}
           <div className="flex min-h-6 items-center justify-between gap-2 text-xs text-ink-3 pointer-coarse:min-h-11">
             <span className="min-w-0">
               <span className="block">New sessions</span>
@@ -253,8 +243,6 @@ export function ModelSelect({
                 label="Use default"
                 disabled={!view.canUseDefault}
                 onClick={() => {
-                  // Stay open to show the defaults taking effect; the button disables, so focus
-                  // moves to the default's effort once Pi shows that model.
                   setFocusModel(catalog?.defaultModel ?? null);
                   control.chooseDefaults();
                 }}

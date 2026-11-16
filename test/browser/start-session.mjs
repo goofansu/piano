@@ -1,6 +1,3 @@
-// Critical path 1: start a session. Choose a folder, a model and effort and a project, send the
-// first message, see Pi's reply; a reload keeps the session without sending the message again.
-// node test/browser/start-session.mjs [evidence-directory]
 import assert from "node:assert/strict";
 import { run } from "./harness.mjs";
 
@@ -11,9 +8,7 @@ await run(
     projects: [{ id: "launch", name: "Launch" }],
   }),
   async (page) => {
-    // Include the optional Mic in the composer's tightest layout. No recording/provider call.
     await page.open("/settings/preferences");
-    // find does not wait: the switch renders only after the voice input settings load.
     await page.see("Voice input");
     await page.click("switch", "Voice input");
     await page.ab("fill", 'input[type="password"]', "sk-fixture-no-provider-call");
@@ -25,8 +20,6 @@ await run(
     await page.until("!document.querySelector('[aria-label^=\"Model:\"]')?.disabled");
     await page.ab("fill", '[aria-label="First message"]', "Keep this draft");
 
-    // Wide touch screens used to inherit compact mouse targets from the viewport breakpoint.
-    // Measure the clickable elements, not their icons, and keep CDP attached during emulation.
     await page.cdp(async (call) => {
       const targets = () =>
         page.evaluate(`['[aria-label="Directory"]', '[aria-label="Project"]',
@@ -52,7 +45,6 @@ await run(
           );
         }
         await page.capture("wide-coarse-targets");
-        // Compact faces must not shrink the real hit areas or crowd out neighboring controls.
         for (const width of [390, 414]) {
           await page.ab("set", "viewport", String(width), "844");
           const controls = await page.evaluate(`(() => {
@@ -140,7 +132,7 @@ await run(
     await page.capture("3-after-reload");
   },
   {
-    // Headless Chromium can expose no pointer at all; this journey needs a known mouse baseline.
+    // Headless Chromium can expose no pointer; force a mouse for this journey.
     browserArgs:
       "--blink-settings=primaryPointerType=4,availablePointerTypes=4,primaryHoverType=2,availableHoverTypes=2",
   },

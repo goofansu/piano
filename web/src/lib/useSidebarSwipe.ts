@@ -9,13 +9,9 @@ import {
 } from "react";
 import { type SwipeEnd, type SwipeGesture, startSwipe } from "./swipeGesture.ts";
 
-/** The open sidebar's share of the viewport width: the page moves this far and the swipe spans it. */
 export const SIDEBAR_REVEAL_WIDTH = 0.75;
-/** The moved page's leading corner radius when fully open, in rem. */
 export const SIDEBAR_REVEAL_RADIUS = 2;
 
-// Do not animate an inherited CSS variable: that invalidates styles throughout the transcript
-// and sidebar on every frame. Update only the three moving/painted surfaces instead.
 function paintPosition(
   main: HTMLElement | null,
   reveal: HTMLElement | null,
@@ -40,7 +36,6 @@ function paintPosition(
   }
 }
 
-/** Owns only the transient swipe; the sidebar layout owns the committed open state and the breakpoint. */
 export function useSidebarSwipe({
   open,
   onOpenChange,
@@ -50,10 +45,8 @@ export function useSidebarSwipe({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onPreview: () => void;
-  /** Whether the sheet applies now; swipes do nothing above the breakpoint. */
   mobile: () => boolean;
 }) {
-  // React mounts the modal once per drag; pixel updates must not re-render its navigation.
   const [progress, setProgress] = useState<number | null>(null);
   const mainRef = useRef<HTMLElement | null>(null);
   const revealRef = useRef<HTMLDivElement | null>(null);
@@ -66,11 +59,8 @@ export function useSidebarSwipe({
   const cancelGesture = useRef<() => void>(() => {});
   const cancelDrag = useCallback(() => cancelGesture.current(), []);
   useLayoutEffect(() => {
-    // Hand the surfaces back to CSS settling only after React commits the endpoint.
     if (progress === null) paintPosition(mainRef.current, revealRef.current, null);
   }, [progress]);
-  // A command or navigation can change the committed state while a finger is still down.
-  // Extra dependency: open is the external cancellation signal.
   useEffect(cancelDrag, [open, cancelDrag]);
 
   useEffect(() => {
@@ -91,8 +81,6 @@ export function useSidebarSwipe({
       gesture = null;
       setProgress(null);
     };
-    // A long press creates its selection after touchstart. Once selection takes over,
-    // abandon the whole gesture, even if the range later collapses while dragging a handle.
     const hasSelection = () => window.getSelection()?.isCollapsed === false;
     const yieldToSelection = () => {
       suppressClickUntil = 0;
@@ -105,21 +93,19 @@ export function useSidebarSwipe({
     const start = (event: TouchEvent) => {
       cancel();
       setSettle(null);
-      suppressClickUntil = 0; // A new deliberate tap is not the preceding drag's compatibility click.
+      suppressClickUntil = 0;
       if (!current().mobile() || event.touches.length !== 1) return;
       const touch = event.touches[0];
       const target = event.target;
       if (!(target instanceof Element)) return;
       const surface = target.closest('[data-slot="layout-main"], [data-slot="mobile-sidebar"]');
-      if (!surface) return; // Never borrow gestures from portaled menus or other dialogs.
+      if (!surface) return;
       const { open } = current();
       if (open !== surface.matches('[data-slot="mobile-sidebar"]')) return;
       if (touch.clientX < 24 || touch.clientX > innerWidth - 24) return;
       const control = target.closest(
         'input, textarea, select, button, a, [contenteditable]:not([contenteditable="false"]), [role="slider"]',
       );
-      // Transcript disclosures act on click, so a claimed swipe can safely suppress the tap.
-      // Other controls (especially editors and pointer-down menus) retain their own gestures.
       if (control && !control.matches('[data-slot="sidebar-scrim"], button[data-sidebar-swipe]'))
         return;
       for (let element: Element | null = target; element; element = element.parentElement) {
@@ -150,7 +136,6 @@ export function useSidebarSwipe({
         touches: event.touches.length,
         time: event.timeStamp,
         cancelable: event.cancelable,
-        // selectionchange may not have been delivered yet when this touch event arrives.
         selecting: hasSelection(),
       });
       if (outcome.kind === "ignore") return;
@@ -160,8 +145,6 @@ export function useSidebarSwipe({
         if (outcome.opening) current().onPreview();
         setProgress(outcome.position);
       }
-      // A native, non-passive listener is necessary: React's touch listeners are passive.
-      // Only a claimed horizontal drag suppresses scrolling; the browser retains edge gestures.
       if (event.cancelable) event.preventDefault();
       g.position = outcome.position;
       if (frame === null) frame = requestAnimationFrame(paint);
@@ -216,14 +199,11 @@ export function useSidebarSwipe({
     dragging: progress !== null,
     mainRef,
     revealRef,
-    /** The page and the reveal settle together, so both take this one style. */
     style: {
       "--sidebar-progress": progress ?? (open ? 1 : 0),
-      // Constant during a drag, so the CSS settle reads the same geometry the drag paints.
       "--sidebar-reveal-width": `${SIDEBAR_REVEAL_WIDTH * 100}vw`,
       "--sidebar-reveal-radius": `${SIDEBAR_REVEAL_RADIUS}rem`,
       "--sidebar-duration": `${settling ? settle.duration : 300}ms`,
-      // A tap opens or closes it along the drawer curve; a release continues the finger's own speed.
       "--sidebar-easing": settling ? settle.easing : "var(--ease-drawer)",
     } as CSSProperties,
     cancelDrag,

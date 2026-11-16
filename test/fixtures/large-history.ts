@@ -1,6 +1,5 @@
 import { appendFileSync, writeFileSync } from "node:fs";
 
-/** ~35 MB of discarded branch, one tiny visible message; no real histories or credentials. */
 export const largeHistory = (file: string, sessionId: string, cwd: string) => {
   writeFileSync(
     file,

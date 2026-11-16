@@ -27,17 +27,12 @@ import { projectHome, stableOrder } from "@/lib/projectHome";
 import { useNavigation } from "@/lib/useNavigation";
 import { type AppState, sessionKey } from "@/store";
 
-/** Rows keep their place while the page is open: a new key appends, a gone one drops. */
 function useStableOrder(keys: readonly string[]): string[] {
   const order = useRef<string[]>([]);
   order.current = stableOrder(order.current, keys);
   return order.current;
 }
 
-/**
- * The home's geometry while the registry loads, like the sidebar's skeleton: hidden from screen
- * readers and late to appear, so a quick load shows the home without it and nothing is announced.
- */
 function ProjectHomeSkeleton() {
   return (
     <>
@@ -56,10 +51,6 @@ function ProjectHomeSkeleton() {
   );
 }
 
-/**
- * A project's home: its member sessions, newest activity first, each with its title, folder,
- * branch, saved pull request name and last activity. Everything comes from the session catalog the browser already holds.
- */
 export function ProjectHome({
   state,
   client,
@@ -108,7 +99,6 @@ export function ProjectHome({
           />
         }
       >
-        {/* The way up, as the session header's crumb is: Projects, then the home's name as the title. */}
         <Breadcrumb className="flex min-w-0 flex-1 items-center">
           <BreadcrumbList className="min-w-0 flex-nowrap gap-1.5 sm:gap-1.5">
             <BreadcrumbItem className="shrink-0">
@@ -127,7 +117,6 @@ export function ProjectHome({
               <h1 aria-current="page" className="min-w-0 truncate text-sm font-medium text-ink">
                 {project.name}
               </h1>
-              {/* The home's one statement of the project's state; the index says it by grouping. */}
               {isProjectDone(project) && (
                 <span className="flex shrink-0 items-center gap-1.5 text-xs text-ink-3">
                   <StatusDot tone="done" />
@@ -140,10 +129,7 @@ export function ProjectHome({
       </PaneHeader>
       <PaneBody>
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-8">
-          {/* A session started here joins this project. */}
           <NewSessionComposer state={state} client={client} chooseDirectory={chooseDirectory} />
-          {/* The sessions as one titled group, as a Settings page lists things: the count beside
-           * the name, and the empty line alone when it would be zero, so the fact is said once. */}
           <SettingsGroup
             id="project-sessions"
             title={
@@ -174,7 +160,6 @@ export function ProjectHome({
                       onOpen: () => select(s.cwd, s.sessionId),
                       disabled: s.disabled,
                       hint: s.hint,
-                      // Dim as the sidebar row does: a missing checkout, or a session with no title yet.
                       className: cn("disabled:text-ink-3", !s.title && "text-ink-3"),
                     }}
                     time={{ at: s.updatedAt, text: timeAgo(s.updatedAt, now) }}

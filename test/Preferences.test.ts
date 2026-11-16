@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createPreference, type PreferenceStorage, parseJson } from "../web/src/lib/preference.ts";
 
-/** One browser's storage, shared by tabs. `otherTab` writes as another tab would, then announces it. */
 function browser(stored: Record<string, string> = {}, { available = true } = {}) {
   const items = new Map(Object.entries(stored));
   const changeListeners = new Set<(key: string | null) => void>();
@@ -42,7 +41,6 @@ function browser(stored: Record<string, string> = {}, { available = true } = {})
   };
 }
 
-/** Shaped like the sidebar's pinned group: JSON, open unless the user closed it. */
 const pinnedOpen = (storage: PreferenceStorage) =>
   createPreference<boolean>({
     key: "piano.pinnedOpen",
@@ -50,7 +48,6 @@ const pinnedOpen = (storage: PreferenceStorage) =>
     storage,
   });
 
-/** Shaped like the composer's queue mode: plain text, one of two values. */
 const queueMode = (storage: PreferenceStorage) =>
   createPreference<"steering" | "follow-up">({
     key: "piano.queueMode",

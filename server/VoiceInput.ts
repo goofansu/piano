@@ -1,8 +1,3 @@
-/**
- * Voice input: the Preferences switch, the OpenAI key only voice input uses, and transcription.
- * The key lives in Piano's database (never Pi's credentials, so no model appears with it), reaches
- * only the request to OpenAI, and is never answered back or logged.
- */
 import { Context, Data, Effect, Layer, Schema, Semaphore } from "effect";
 import { readApiKey } from "../shared/literalSecret.ts";
 import {
@@ -19,7 +14,6 @@ import {
 } from "../shared/voiceInput.ts";
 import { Registry, type StoredVoiceInput } from "./Registry.ts";
 
-/** A refusal written for people; `field` is the editor field it belongs to. */
 export class VoiceInputError extends Data.TaggedError("VoiceInputError")<{
   readonly detail: string;
   readonly field?: "key";
@@ -54,7 +48,6 @@ const shown = (stored: StoredVoiceInput): VoiceInputState => ({
   hasKey: stored.key !== null,
 });
 
-/** The instruction every prompt opens with: the context steers spelling, never the words. */
 export const TRANSCRIPTION_INSTRUCTION =
   "Transcribe the speaker's words exactly. They are dictating a message to a coding agent in Piano. " +
   "Use the context below only to spell names, identifiers, file paths, commands and technical terms. " +
@@ -62,7 +55,6 @@ export const TRANSCRIPTION_INSTRUCTION =
 
 const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
 
-/** The prompt for one recording: the instruction, then where the speaker is dictating. */
 export function transcriptionPrompt(hints: VoiceHints): string {
   const facts = [
     hints.project && `Project: ${oneLine(hints.project)}`,
@@ -75,19 +67,16 @@ export function transcriptionPrompt(hints: VoiceHints): string {
     : TRANSCRIPTION_INSTRUCTION;
 }
 
-/** The media type without its parameters, lowercased: what OpenAI's file extension stands for. */
 const baseType = (mimeType: string) => mimeType.split(";")[0]!.trim().toLowerCase();
 
 const extensions = new Map(RECORDING_TYPES.map((r) => [baseType(r.mimeType), r.extension]));
 
-/** The media type and file name OpenAI recognizes a recording by: it reads the extension. */
 function upload(mimeType: string) {
   const type = baseType(mimeType);
   const ext = extensions.get(type);
   return ext ? { type, name: `recording.${ext}` } : undefined;
 }
 
-/** OpenAI's answer, as one sentence the composer's toast shows; never the response body. */
 const openAiRefusal = (status: number) =>
   status === 401
     ? refused("OpenAI rejected the API key. Replace it in Settings > Preferences.")
@@ -97,7 +86,6 @@ const openAiRefusal = (status: number) =>
         ? refused("The recording is too long. Record a shorter message.")
         : refused(`OpenAI could not transcribe the recording (${status}).`);
 
-/** Never retain an unbounded provider body (including error responses that may echo secrets). */
 async function transcriptBody(answer: Response, signal: AbortSignal) {
   if (!answer.body) throw refused("OpenAI answered without a transcript.");
   const reader = answer.body.getReader();
@@ -136,7 +124,6 @@ export const VoiceInputLive = Layer.effect(
     const fetch = yield* TranscriptionFetch;
     const url = yield* TranscriptionUrl;
     const timeout = yield* TranscriptionTimeoutMs;
-    // Saves are read-modify-write: one at a time, so an omitted key never restores a removed one.
     const lock = yield* Semaphore.make(1);
     const stored = registry.voiceInput.pipe(
       Effect.mapError(() => refused("Could not read voice input.")),
@@ -144,7 +131,6 @@ export const VoiceInputLive = Layer.effect(
     return VoiceInput.of({
       state: Effect.map(stored, shown),
       save: Effect.fn("VoiceInput.save")(function* (input) {
-        // The same rule as a provider key: the key is sent in an HTTP header to OpenAI.
         let key = input.key;
         if (typeof key === "string") {
           const read = readApiKey(key);
@@ -199,7 +185,6 @@ export const VoiceInputLive = Layer.effect(
               redirect: "error",
               signal,
             });
-            // Never keep OpenAI's error body: it can echo the request.
             if (!answer.ok) {
               await answer.body?.cancel();
               throw openAiRefusal(answer.status);

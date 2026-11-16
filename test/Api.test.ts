@@ -18,10 +18,8 @@ import {
 } from "../web/src/lib/api.ts";
 import { type RouterFixture, startRouter } from "./fixtures/router.ts";
 
-/** These read this Piano's own router. */
 const local = { machineId: LOCAL.id };
 
-// The browser adapter against the real router; only the Pi child is faked.
 let server: RouterFixture;
 let root = "",
   repo = "",
@@ -30,7 +28,6 @@ const realFetch = globalThis.fetch;
 before(async () => {
   server = await startRouter("piano-api-");
   ({ root, repo, workspaceId } = server);
-  // The browser resolves "/api/…" against its origin; tests resolve it against the handler.
   globalThis.fetch = (input, init) => server.handle(String(input), init);
 });
 after(async () => {
@@ -102,7 +99,6 @@ test("downloads are the file's exact bytes: text unredacted, binary intact, same
   const binary = await workspaceFileDownload(workspaceId, "sample.pdf", local);
   assert.equal(binary.mime, "application/pdf");
   assert.deepEqual(binary.bytes, new Uint8Array(pdf));
-  // A ZIP cannot be previewed, so it cannot be downloaded either.
   await writeFile(join(repo, "archive.zip"), Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0]));
   await assert.rejects(workspaceFileDownload(workspaceId, "archive.zip", local), /not supported/);
   await writeFile(join(root, "outside.pdf"), pdf);
@@ -133,7 +129,6 @@ test("a response outside the contract is rejected with the endpoint's message, n
   }
 });
 
-/** `count` filler paths named after `tag`, to push the interesting ones across a request boundary. */
 const workspace = () => ({ id: workspaceId, folder: repo, path: repo });
 const filler = (count: number, tag: string) =>
   Array.from({ length: count }, (_, i) => `src/${tag}${i}.ts`);
@@ -154,7 +149,6 @@ test("INV-01/07: more paths than one request carries are read in bounded batches
   t.after(() => {
     globalThis.fetch = direct;
   });
-  // Aliases of one file, an ignored path and an outside path on each side of the boundary.
   const paths = [
     "src/app.ts",
     `${repo}/src/app.ts`,
@@ -180,8 +174,6 @@ test("INV-01/07: more paths than one request carries are read in bounded batches
     files.filter((file) => file.verdict === verdict).map((file) => file.path);
   assert.deepEqual(byVerdict("outside"), ["/elsewhere/x.ts", "../sibling.ts"]);
   assert.deepEqual(byVerdict("ignored"), ["scratch/notes.md", "build.log"]);
-  // Each verdict and placed name stays with its path across the join, so spellings of one file
-  // are one file.
   const named = new Map(files.map((file) => [file.path, file]));
   for (const spelling of ["src/app.ts", `${repo}/src/app.ts`, "./src/app.ts"])
     assert.deepEqual(named.get(spelling), {
@@ -194,7 +186,6 @@ test("INV-01/07: more paths than one request carries are read in bounded batches
     verdict: "ignored",
     placed: "build.log",
   });
-  // The fillers were never written: removed, yet each still placed at its own name.
   assert.deepEqual(named.get("src/a0.ts"), {
     path: "src/a0.ts",
     verdict: "missing",
@@ -225,7 +216,6 @@ test("INV-07: a batched read stops at an abort and refuses a reply naming anothe
     (error: unknown) => error instanceof Error && error.name === "AbortError",
   );
   assert.equal(answered, 1, "no request after the abort");
-  // Whatever a later batch replies, the batches before it are never published as one ready answer.
   const reply = async (batch: number, change: (body: WorkspaceWrittenFiles) => Response) => {
     answered = 0;
     globalThis.fetch = async (input, init) => {
@@ -236,7 +226,6 @@ test("INV-07: a batched read stops at an abort and refuses a reply naming anothe
     };
   };
   const second = (change: (body: WorkspaceWrittenFiles) => Response) => reply(2, change);
-  // A single batch is held to the asked workspace as much as a later one.
   for (const [batch, asked] of [
     [1, filler(3, "d")],
     [2, paths],

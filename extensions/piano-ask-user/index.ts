@@ -1,4 +1,3 @@
-/** Model-initiated questions through Pi's supported dialogs; Piano owns the answer surface. */
 import { StringEnum } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { map, obj, type Static, str } from "@earendil-works/pi-schema";
@@ -26,8 +25,6 @@ export default function pianoAskUser(pi: ExtensionAPI) {
       outputSchema: Output,
       executionMode: "sequential",
       async execute(_id, { questions }: Static<typeof AskUserParameters>, signal, _update, ctx) {
-        // Validate the entire batch before collecting any answers: IDs must never overwrite one another.
-        // The same rule Piano reads the call's records by, so a batch it accepts is one Piano tracks.
         if (!questions.length) throw new Error("At least one question is required.");
         if (!askUserQuestions({ questions }))
           throw new Error(
@@ -37,20 +34,16 @@ export default function pianoAskUser(pi: ExtensionAPI) {
         const answers: Array<[string, string]> = [];
         for (const [index, { id }] of questions.entries()) {
           if (signal?.aborted) break;
-          // Piano tells this call's own question from any other dialog by this prompt.
           const prompt = askUserPrompt(questions, index);
           const answer =
             prompt.method === "select"
               ? await ctx.ui.select(prompt.title, [...prompt.options], { signal })
               : await ctx.ui.editor(prompt.title);
-          // editor has no signal option. Piano's Stop/Abort cancels pending dialogs (INV-04);
-          // never accept a reply racing abort or open the remaining questions after cancellation.
           if (signal?.aborted || answer === undefined) break;
           answers.push([id, answer]);
         }
         const result: Static<typeof Output> = {
           status: answers.length === questions.length ? "answered" : "cancelled",
-          // fromEntries keeps IDs such as __proto__ as own data properties, not setters.
           answers: Object.fromEntries(answers),
         };
         return {

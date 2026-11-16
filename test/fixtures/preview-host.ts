@@ -1,6 +1,3 @@
-// A fake supervisor host for preview contracts: systemd on Linux, launchd on macOS. The app's
-// lifecycle is set in neutral terms and rendered in each supervisor's own output format.
-// Listener ownership stays real: /proc on Linux, lsof and ps on macOS.
 import { execFile, execFileSync } from "node:child_process";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -8,28 +5,20 @@ import { PreviewAdapter } from "../../scripts/PreviewAdapter.ts";
 
 export type Platform = "linux" | "darwin";
 export interface FakeHost {
-  /** `gone` is a unit the supervisor no longer knows, as after a reboot. */
   phase: "failed" | "running" | "gone";
-  /** Supervisor run count; a change means someone else restarted the unit. */
   runs: number;
-  /** Whether the running unit's processes include this test process. */
   owner: "self" | "other";
   journal: string;
   unavailable: boolean;
   lostReply: boolean;
-  /** Blocks every submission forever, after reporting it on stdout. */
   hangOnSubmit: boolean;
-  /** Makes the supervisor unavailable once a submission succeeds. */
   unavailableAfterSubmit?: boolean;
-  /** Runs once the supervisor accepts a submission, as the app's process would start. */
   afterSubmit?: () => void | Promise<void>;
-  /** Runs when the supervisor is asked to stop a unit, before it reports the unit's state. */
   onStop?: () => void | Promise<void>;
 }
 
 const failure = (text: string, status: number) => Object.assign(new Error(text), { status });
 
-/** Runs a real host command, rejecting with its exit status like the adapter's own runner. */
 function real(args: string[]) {
   return new Promise<string>((resolve, reject) => {
     execFile(args[0], args.slice(1), (error, stdout) => {
@@ -47,18 +36,15 @@ async function selfGroup(platform: Platform) {
       }).trim();
 }
 
-/** `launched` holds each submission as text: systemd-run argv or the launchd plist. */
 export function fakeAdapter(
   platform: Platform,
   stateRoot: string,
   host: FakeHost,
-  /** Shortens the account-wide lock wait, so a busy lock is reached in test time. */
   lockWait?: number,
 ) {
   const launched: string[] = [];
   const stops: string[][] = [];
   const submitted = async (unitInArgs: (unit: string) => boolean) => {
-    // Durable intent must precede even an uncertain external submission.
     const files = (await readdir(stateRoot)).filter((file) => file.endsWith(".json"));
     if (!files.length) throw new Error("submission before durable intent");
     const records = await Promise.all(
@@ -107,7 +93,6 @@ export function fakeAdapter(
     }
     return "";
   };
-  // launchd forgets a job as soon as it is booted out; a reboot or logout forgets them all.
   const loaded = new Set<string>();
   const launchd = async (args: string[]) => {
     if (args[0] === "/usr/sbin/lsof" || args[0] === "/bin/ps") return real(args);
@@ -145,7 +130,6 @@ export function fakeAdapter(
     platform,
     uid: 1000,
     callerGroup: async () => "/caller",
-    // The fake job has no real processes, so a stopped job's process group is always gone.
     groupAlive: () => false,
     run: platform === "linux" ? systemd : launchd,
     lockWait,

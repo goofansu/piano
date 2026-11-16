@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { type SwipeEnd, type SwipeMove, startSwipe } from "../web/src/lib/swipeGesture.ts";
 
-/** A 300px-wide sheet, so position 0.1 is 30px. Touches start 30px from the edge at y=200. */
 const WIDTH = 300;
 type Step = [x: number, t: number, y?: number];
 
@@ -227,7 +226,6 @@ test("release follows a deliberate flick, otherwise the nearer end", () => {
 });
 
 test("the settle carries the finger's speed into a stop, within 120-420ms", () => {
-  // 1.5px/ms released 45px in: 255px remain, crossed at the finger's speed then easing out.
   const steady = swipe();
   steady.drag([
     [45, 10],
@@ -237,11 +235,10 @@ test("the settle carries the finger's speed into a stop, within 120-420ms", () =
   const s = settled(steady.end(40));
   assert.equal(s.open, true);
   assert.ok(s.duration > 120 && s.duration < 420, `duration ${s.duration}`);
-  const handoff = ((s.y1 / s.x1) * 255) / s.duration; // px/ms at the first frame
+  const handoff = ((s.y1 / s.x1) * 255) / s.duration;
   assert.ok(Math.abs(handoff - 1.5) < 0.01, `handoff ${handoff}px/ms`);
   assert.deepEqual([s.x2, s.y2], [0.5, 1], "ends with zero velocity");
 
-  // A very fast flick is capped at the shortest settle and the steepest monotonic curve.
   const flick = swipe();
   flick.drag([
     [40, 1],
@@ -251,7 +248,6 @@ test("the settle carries the finger's speed into a stop, within 120-420ms", () =
   assert.equal(fast.duration, 120);
   assert.equal(fast.y1, 1);
 
-  // A release from rest just past halfway glides the remaining 135px over the longest settle.
   const rest = swipe();
   rest.drag([
     [90, 300],
@@ -262,7 +258,6 @@ test("the settle carries the finger's speed into a stop, within 120-420ms", () =
   assert.equal(slow.duration, 420);
   assert.equal(slow.y1, 0, "starts from rest");
 
-  // Nothing left to travel: the shortest settle, from rest.
   const full = swipe();
   full.drag([
     [100, 300],
@@ -277,14 +272,12 @@ test("text selection takes over the touch and the swipe never resumes", () => {
   assert.deepEqual(beforeClaim.move([36, 16], { selecting: true }), { kind: "yield" });
   assert.equal(beforeClaim.move([90, 32]).kind, "cancel");
 
-  // A long press selects mid-drag; the range collapsing while a handle moves does not revive it.
   const midDrag = swipe();
   assert.equal(midDrag.move([90, 16]).kind, "claim");
   assert.deepEqual(midDrag.move([150, 32], { selecting: true }), { kind: "yield" });
   assert.equal(midDrag.move([210, 48]).kind, "cancel");
   assert.equal(midDrag.end(56).kind, "cancel");
 
-  // Selection that arrives only by release still keeps the sheet where it was.
   const atRelease = swipe();
   atRelease.drag([
     [90, 10],

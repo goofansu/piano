@@ -1,4 +1,3 @@
-/** Real-CLI fixture extension: Pi's supported session-control calls, never loaded by production. */
 import { appendFileSync } from "node:fs";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 

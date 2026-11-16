@@ -1,6 +1,3 @@
-/** Radius's official MCP transport, independent of Piano and its sharing policy.
- * Tokens and transfer URLs stay inside this adapter. No mutation is retried.
- */
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { z } from "zod";
@@ -62,7 +59,6 @@ export class RadiusClient {
         reconnectionDelayGrowFactor: 1,
       },
       fetch: async (url, init) => {
-        // Also cover the SDK's optional GET stream; never forward a bearer on redirect.
         const response = await fetch(url, {
           ...init,
           redirect: "error",
@@ -94,11 +90,9 @@ export class RadiusClient {
   }
 
   async close() {
-    // A cleanup failure must not erase a confirmed result or expose a provider error.
     await this.client.close().catch(() => {});
   }
 
-  /** Radius's name for an advertised operation. Throwing here proves nothing was sent. */
   operation(name: string): string {
     const actual = this.names.get(name);
     if (!actual)
@@ -161,8 +155,6 @@ export class RadiusClient {
       );
     if (!transfer.success) throw invalid();
     const url = new URL(transfer.data.url);
-    // Radius issues the one-use credential. Only Radius-hosted transfers are supported; fail
-    // closed if the service introduces a new storage host instead of sending secrets elsewhere.
     if (
       url.protocol !== "https:" ||
       url.username ||

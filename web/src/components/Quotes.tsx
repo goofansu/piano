@@ -7,16 +7,11 @@ import { Button } from "@/components/ui/button";
 import { type DraftKey } from "@/lib/messageDraft";
 import { useDrafts } from "@/lib/useMachine";
 
-/** A draft's quotes and the chips' remove move; messageDraft owns them and how they join the message. */
 export interface QuoteDraft {
   items: readonly string[];
   remove: (index: number) => void;
 }
 
-/**
- * The draft's quotes as a row of chips: the start of each quote, the whole of it on hover, and a
- * remove button. Hand-written: no shadcn component is a removable inline token.
- */
 export function QuoteChips({ draft, disabled }: { draft: QuoteDraft; disabled: boolean }) {
   if (!draft.items.length) return null;
   return (
@@ -30,7 +25,6 @@ export function QuoteChips({ draft, disabled }: { draft: QuoteDraft; disabled: b
             <TooltipTrigger asChild>
               <span className="flex min-w-0 items-center gap-1.5 py-1 pl-2">
                 <MessageSquareQuoteIcon className="size-3.5 shrink-0 text-ink-3" aria-hidden />
-                {/* The whole quote is in the DOM for screen readers; CSS shows its start. */}
                 <span className="max-w-[12rem] truncate">“{quote}</span>
               </span>
             </TooltipTrigger>
@@ -59,17 +53,11 @@ export function QuoteChips({ draft, disabled }: { draft: QuoteDraft; disabled: b
   );
 }
 
-/** The first line box of a selection with any width, so the pill sits over where it starts. */
 function firstLine(range: Range): DOMRect {
   for (const rect of range.getClientRects()) if (rect.width > 0) return rect;
   return range.getBoundingClientRect();
 }
 
-/**
- * Text selected with desktop input inside `children` offers "Add to chat" just above it, which
- * adds the selection to `draftKey`'s quotes. Touch devices keep their native selection menu.
- * The pill waits until the pointer is released, and keeps the selection while it is pressed.
- */
 export function AddToChat({
   draftKey,
   className,
@@ -112,7 +100,6 @@ export function AddToChat({
     };
     const press = (e: PointerEvent) => {
       if (e.target instanceof Node && pill.current?.contains(e.target)) return;
-      // Menus can preserve a transcript selection. An outside click must not revive its pill.
       selectionEnabled = e.target instanceof Node && !!area.current?.contains(e.target);
       pressed = true;
       read();
@@ -140,12 +127,10 @@ export function AddToChat({
       document.removeEventListener("pointercancel", release, true);
     };
   }, []);
-  // Measured on every frame while open, so the pill follows the text as the transcript scrolls.
   const anchor = useMemo(
     () => ({
       current: range && {
         getBoundingClientRect: () => firstLine(range),
-        // Lets the pill hide once the selection scrolls out of the transcript.
         contextElement: range.startContainer.parentElement ?? undefined,
       },
     }),
@@ -170,7 +155,6 @@ export function AddToChat({
           updatePositionStrategy="always"
           hideWhenDetached
           className="w-auto p-1"
-          // Focus stays where it is, or the selection would go with it.
           onOpenAutoFocus={(e) => e.preventDefault()}
           onCloseAutoFocus={(e) => e.preventDefault()}
         >

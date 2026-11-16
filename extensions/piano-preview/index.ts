@@ -4,19 +4,16 @@ import { START_TIMEOUT_SECONDS } from "../../scripts/PreviewReadiness.ts";
 import { PreviewParameters, type PreviewArguments } from "../../scripts/PreviewRequest.ts";
 import { PREVIEW_OWNER_ENV } from "../../shared/dispatch.ts";
 
-/** Bundled Pi extension: one managed app preview per workspace, run for this session. */
 export default function pianoPreview(pi: ExtensionAPI) {
   registerPreview(pi);
 }
 
-/** A short-lived observation client; the trusted server endpoint fixes workspace and owner. */
 export function previewRequest(request: PreviewArguments, signal?: AbortSignal): Promise<string> {
   const endpoint = process.env[PREVIEW_OWNER_ENV];
   if (!endpoint) return Promise.reject(new Error("Preview requires a live Piano session owner."));
   return ownerRequest(endpoint, request, signal);
 }
 
-/** How previews reach the browser here: a private exe.dev origin on Linux, localhost on a Mac. */
 function previewHost(platform: NodeJS.Platform, env: NodeJS.ProcessEnv) {
   if (platform === "darwin")
     return {
@@ -24,7 +21,6 @@ function previewHost(platform: NodeJS.Platform, env: NodeJS.ProcessEnv) {
       access:
         "The link opens on this Mac, where readiness was observed; check hot reload separately.",
     };
-  // Linux launches need the configured origin; without it every start would only fail.
   if (platform === "linux" && env.PIANO_PREVIEW_CONFIG)
     return {
       supervisor: "the lingering systemd user manager",
@@ -34,7 +30,6 @@ function previewHost(platform: NodeJS.Platform, env: NodeJS.ProcessEnv) {
   return undefined;
 }
 
-/** Offered only to a live hosted generation on a supported executor. */
 export function registerPreview(
   pi: ExtensionAPI,
   platform: NodeJS.Platform = process.platform,

@@ -9,11 +9,6 @@ import {
   type FormPage,
 } from "./commandForms.ts";
 
-/**
- * The command host's forms, answered against the latest render's state. `state`,
- * `send` and `openPage` may change between renders. Each rendered state settles the
- * page a submit waits on before it is painted, and `listen` hands every server frame to the forms.
- */
 export function useCommandForms(deps: {
   state: AppState;
   send: (command: ClientCommand) => SendDisposition;
@@ -31,8 +26,6 @@ export function useCommandForms(deps: {
   );
   const { listen } = deps;
   useEffect(() => listen(forms.hear), [listen, forms]);
-  // Before paint, so a deleted project's home never shows "Project not found" on its way out.
-  // Extra dependency: settle reads the rendered state through getState; each new state is its signal.
   useLayoutEffect(() => forms.settle(), [deps.state, forms]);
   const state = useSyncExternalStore(forms.subscribe, forms.getState);
   return { ...forms, ...state };

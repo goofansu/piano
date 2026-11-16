@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { inputBytes } from "../server/InputBytes.ts";
 
-// JSON.stringify is the admission contract, not a second implementation of its rules.
 test("input bytes match JSON for image envelopes, omissions, arrays and escaped UTF-8", () => {
   const sparse: unknown[] = [];
   sparse.length = 2;
@@ -40,8 +39,6 @@ test("input bytes match JSON for image envelopes, omissions, arrays and escaped 
       },
     },
   ];
-  // Every ASCII code (especially escapes and a final newline), multibyte characters and
-  // isolated surrogates: invalid direct actions must not receive an underestimated lease.
   for (let code = 0; code < 128; code++) values.push({ data: `abcd${String.fromCharCode(code)}` });
   for (const data of ["é", "€", "😀", "\ud800", "\udc00", "abc\n", 'a"b', "\\"])
     values.push({ data, text: data, [data]: { data: "abcd" } });

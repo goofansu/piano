@@ -1,6 +1,3 @@
-/** Bounded live browsing (INV-01/07/09), deliberately independent of exact capture.
- * Only a disposable index is written. No hooks, clean filters, textconv or external diff.
- */
 import { copyFile, lstat, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -30,10 +27,8 @@ import { place, spell } from "./WorkspaceFiles.ts";
 type Ready = Extract<Observation["result"], { readonly status: "ready" }>;
 type Unavailable = Extract<Observation["result"], { readonly status: "unavailable" }>;
 type Summary = Omit<Ready, "diff" | "truncated">;
-/** A preview's facts without its patch: what a status read carries. */
 export type ChangesSummary = CheckoutObservation<Summary | Unavailable>;
 
-/** What to compare, and for which file. Without `scope`, use `uncommitted`. */
 export interface PreviewOptions {
   readonly scope?: ChangesScope;
   readonly hints?: TargetHints;
@@ -46,14 +41,10 @@ export class WorkspaceChanges extends Context.Service<
       workspace: Workspace,
       options?: PreviewOptions & { readonly path?: string },
     ) => Effect.Effect<Observation>;
-    /** The branch and changed files `preview` would show, read without rendering any patch. */
     readonly summary: (
       workspace: Workspace,
       options?: PreviewOptions,
     ) => Effect.Effect<ChangesSummary>;
-    /** Where each of `paths` (as a session's tool calls named them: relative to the workspace, or
-     * absolute) stands: outside the workspace, ignored by Git, no longer existing, or listed. A
-     * tracked file is never ignored. */
     readonly written: (
       workspace: Workspace,
       paths: readonly string[],
@@ -61,7 +52,6 @@ export class WorkspaceChanges extends Context.Service<
   }
 >()("piano/WorkspaceChanges") {}
 
-/** The checkout's changes against the scope's base, with the patch only when asked for. */
 function preview(
   checkout: Checkout,
   options: PreviewOptions,
@@ -97,7 +87,6 @@ async function preview(
   });
   if ("unavailable" in resolved) return unavailable(resolved.unavailable);
   const pathArgs = path === undefined ? [] : [`:(top,literal)${path}`];
-  // A merge in progress leaves no single diff to browse, yet the scopes and local work still hold.
   if ((await checkout.run(["ls-files", "--unmerged", "-z", "--", ...pathArgs])).stdout.length)
     return unavailable("Unresolved merge conflicts; resolve them before browsing this diff.");
   const { comparison } = resolved;
@@ -183,8 +172,6 @@ async function preview(
   }
 }
 
-/** The observation unless its answer, as sent, exceeds CHANGES_ANSWER_BYTES: then an error, never
- * a partial list, so a remote's gateway relays it as it would Local's. */
 const bounded = (observation: Observation): Observation =>
   Buffer.byteLength(answerJson(observation)) <= CHANGES_ANSWER_BYTES
     ? observation
@@ -196,8 +183,6 @@ const bounded = (observation: Observation): Observation =>
         },
       };
 
-/** What is still only here, whatever the scope and whether it can be read: edits HEAD lacks
- * (untracked, non-ignored files included) and commits the remote-tracking ref lacks. */
 async function localWork(checkout: Checkout, comparisons: Comparisons): Promise<LocalWork> {
   const untracked = await checkout.records(["ls-files", "--others", "--exclude-standard", "-z"]);
   const uncommitted =
@@ -219,8 +204,6 @@ async function localWork(checkout: Checkout, comparisons: Comparisons): Promise<
   return { commitsNotPushed: await commitsNotPushed(checkout, comparisons), uncommitted };
 }
 
-/** Whether `path` (relative to the workspace, or absolute) names something on disk; a dangling
- * symlink does. Fails on anything but the path's absence. */
 const exists = (workspace: Workspace, path: string): Promise<boolean> =>
   lstat(spell(workspace, path)).then(
     () => true,
@@ -230,9 +213,6 @@ const exists = (workspace: Workspace, path: string): Promise<boolean> =>
     },
   );
 
-/** Each path placed as the Files list places it, then `git check-ignore` over the placed names of
- * those inside (it exits 1 when none is ignored). A path inside that names nothing on disk (a file a
- * later command removed) is missing; a dangling symlink still exists. */
 async function written(
   checkout: Checkout,
   workspace: Workspace,
@@ -267,7 +247,6 @@ async function written(
 export const WorkspaceChangesLive = Layer.effect(
   WorkspaceChanges,
   Effect.gen(function* () {
-    // Expanding many files must not spawn an unbounded number of Git processes/index copies.
     const slots = yield* Semaphore.make(4);
     const changes = {
       slots,

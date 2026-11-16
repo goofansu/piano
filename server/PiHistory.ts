@@ -1,15 +1,3 @@
-/**
- * Internal to PiSessions, which exposes it as `history`: Pi's on-disk session history, read
- * without starting an agent. Pi owns history (INV-01): this module only reads it, through the SDK's
- * SessionManager and Pi's session-directory rules (PiEnv), and never moves, merges or repairs a
- * file. It reads a file's facts; PiRecords alone turns them into a Snapshot, as it does a live
- * session's readbacks.
- *
- * A checkout can be named by more than one spelling (a symlink, an older registry path), and Pi
- * records each file under the spelling its CLI was started in. `locate` searches every spelling a
- * caller knows and reports the one file, no file, or a conflict: distinct physical files claiming
- * the same session ID. A conflict is never resolved by choosing one.
- */
 import { createReadStream } from "node:fs";
 import { readdir, realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -24,32 +12,19 @@ import { PiHistoryJobs } from "./PiHistoryJobs.ts";
 import type { HistoryMetadata } from "./PiHistoryWorker.ts";
 import { PiSessionError } from "./PiTransport.ts";
 
-/** Where a session's Pi history is, across the spellings of its checkout. */
 export type HistoryLocation =
   | { readonly _tag: "file"; readonly path: string }
   | { readonly _tag: "missing" }
-  /** Distinct physical files with the same session ID, as Pi listed them. */
   | { readonly _tag: "conflict"; readonly paths: ReadonlyArray<string> };
 
-/** Saved sessions, read without starting Pi. */
 export interface PiHistory {
-  /** Find a session's file under these checkout spellings. `confirmAbsent` refuses unreadable
-   * stores/headers and keeps even unattributed matching IDs in a shared store; only that strict
-   * missing answer can support removing a fresh failed reference. Never moves or copies files. */
   readonly locate: (
     sessionId: string,
     checkouts: Iterable<string>,
     options?: { readonly confirmAbsent?: boolean },
   ) => Effect.Effect<HistoryLocation, PiSessionError>;
-  /** The session IDs Pi has history for in this directory. An unreadable store has none. */
   readonly sessionIds: (cwd: string) => Effect.Effect<ReadonlySet<string>>;
-  /** The active branch of a session file as a Snapshot, with Run usage from every entry, or an empty
-   * one without a file. Safe while Pi writes it. */
   readonly peek: (sessionId: string, file: string | undefined) => Effect.Effect<Snapshot>;
-  /** The dispatcher (any branch) and confirmed artifacts (active branch, before compaction too). Pi's
-   * `get_entries` answers in one RPC line, which a long compacted history can push past the line
-   * limit; the file has none. Read off the server thread; fails when the file is unreadable or
-   * the history worker is unavailable or overloaded. */
   readonly metadata: (
     sessionId: string,
     file: string,
@@ -58,17 +33,11 @@ export interface PiHistory {
 
 const rejected = (detail: string) => new PiSessionError({ reason: "rejected", detail });
 
-// Pi's list() builds searchable text from every transcript. Discovery needs only headers, but
-// findById() returns the first match and would hide conflicting files. Read every header instead,
-// without opening a persistent manager. Stop at the first parsed entry, as Pi's list() does;
-// do not cap valid headers, which Pi may still open beyond findById()'s discovery limit.
 const readHeader = async (file: string): Promise<SessionHeader | undefined> => {
   const input = createReadStream(file, { highWaterMark: 4096 });
   const decoder = new StringDecoder("utf8");
   let pending = "";
   const header = (line: string) => {
-    // Pi parses physical lines without trimming them. parseSessionEntries() trims its input,
-    // accepting e.g. a BOM-prefixed header that Pi's persistent file loader cannot open.
     let entry: FileEntry;
     try {
       entry = JSON.parse(line);
@@ -81,7 +50,6 @@ const readHeader = async (file: string): Promise<SessionHeader | undefined> => {
         : null
       : undefined;
   };
-  // Exiting the iterator closes the stream, including errors and an early header match.
   for await (const chunk of input) {
     pending += decoder.write(chunk);
     let newline = pending.indexOf("\n");
@@ -95,13 +63,8 @@ const readHeader = async (file: string): Promise<SessionHeader | undefined> => {
   return header(pending + decoder.end()) ?? undefined;
 };
 
-// Only discovery metadata is retained, never transcripts or arbitrary header metadata. Every
-// lookup still enumerates the store and stats each candidate: directory mtime alone cannot detect
-// in-place rewrites. Do not cache recent writes until their clock tick is safely past (see
-// `fileVersion`); this also keeps active/partial histories on the real-read path.
 const HEADER_CACHE_LIMIT = 4096;
 
-/** A disposable, bounded header cache owned by one PiSessions service. */
 export const makePiHistory = Effect.fn("PiHistory.make")(function* (): Effect.fn.Return<
   PiHistory,
   never,
@@ -143,7 +106,6 @@ export const makePiHistory = Effect.fn("PiHistory.make")(function* (): Effect.fn
       const before = await stat(path, { bigint: true });
       const version = fileVersion(before);
       const cached = headers.get(path) ?? scanHeaders.get(path);
-      // Refresh insertion order for LRU eviction. A failed/unstable read never enters the cache.
       headers.delete(path);
       if (cached?.version === version) {
         headers.set(path, cached);
@@ -167,8 +129,6 @@ export const makePiHistory = Effect.fn("PiHistory.make")(function* (): Effect.fn
   };
 
   const listed = Effect.fn("PiHistory.listed")(function* (cwd: string, strict = false) {
-    // Match Pi's default directory encoding. Only a non-default shared store filters by header cwd;
-    // old headers in a checkout's own store may omit cwd. Never create a store while inspecting it.
     const defaultDir = join(
       directoryPath(agentDir()),
       "sessions",
@@ -186,9 +146,6 @@ export const makePiHistory = Effect.fn("PiHistory.make")(function* (): Effect.fn
       },
       catch: (error) => rejected(`Cannot inspect Pi history ${dir}: ${String(error)}`),
     });
-    // Keep this scan's bounded starting cache available even when earlier misses evict its
-    // entries. Otherwise a store larger than the LRU capacity rereads every header on every
-    // scan. Each reused entry still requires the current file version, including across scans.
     const scanHeaders = new Map(headers);
     const infos = yield* Effect.forEach(
       names.filter((name) => name.endsWith(".jsonl")),
@@ -223,12 +180,10 @@ export const makePiHistory = Effect.fn("PiHistory.make")(function* (): Effect.fn
     checkouts: Iterable<string>,
     options?: { readonly confirmAbsent?: boolean },
   ): Effect.fn.Return<HistoryLocation, PiSessionError> {
-    // One physical file can be listed through several spellings; count it once.
     const files = new Map<string, string>();
     for (const cwd of new Set([...checkouts].map(directoryPath))) {
       for (const info of yield* listed(cwd, options?.confirmAbsent)) {
         if (info.id !== sessionId) continue;
-        // A listed file must resolve; unlike a checkout it has no missing state to fall back on.
         const physical = yield* Effect.tryPromise({
           try: () => realpath(info.path),
           catch: (error) => rejected(`Cannot resolve Pi history ${info.path}: ${String(error)}`),

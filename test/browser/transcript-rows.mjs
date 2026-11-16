@@ -1,8 +1,3 @@
-// Transcript rows: every row kind sits beside a gutter glyph that centres on its first text line.
-// A session with each kind is seeded, and every gutter on the page is measured, with the folds as
-// they start and again with every fold open (docs/testing.md §Alignment). A new row kind is added
-// to `messages` here when it is added to the transcript.
-// node test/browser/transcript-rows.mjs [evidence-directory]
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -43,8 +38,6 @@ const skill =
   '<skill name="review" location="/home/someone/.pi/skills/review/SKILL.md">\n' +
   "References are relative to /home/someone/.pi/skills/review.\n\n# Review\n\nRead the diff.\n</skill>";
 
-/** One of each row kind, each with a distinct first line to find it by. The compaction comes
- * first: Pi's projection shows the summary and what follows it, not what it summarized. */
 const messages = [
   { custom: { customType: "piano.dispatch", data: { parentSessionId: "rows-parent" } } },
   user("Earlier question, summarized away."),
@@ -56,7 +49,6 @@ const messages = [
   result("run", "bash", "ok"),
   assistant([call("read", "read", { path: ".agents/skills/verify-piano/SKILL.md" })]),
   result("read", "read", "# Verify Piano"),
-  // A codemode call whose script made more nested calls than its fold shows.
   assistant([
     call("script", "codemode", { code: "for (const f of files) await bash(`wc -l ${f}`);" }),
   ]),
@@ -151,7 +143,6 @@ const messages = [
   assistant([{ type: "text", text: "Done: every row kind is above." }]),
 ];
 
-/** Every expected row, by the first text its gutter sits beside. */
 const expected = [
   "Dispatched from",
   "Compaction summary",
@@ -199,8 +190,6 @@ await run(
     };
   },
   async (page) => {
-    // Alignment measures every fixture together; a tall viewport keeps them all in the window.
-    // Bounded mounting and offscreen remounting are covered by open-session and session-perf.
     await page.ab("set", "viewport", "1280", "4000");
     await page.open("/");
     await page.see("Every row kind");
@@ -220,7 +209,6 @@ await run(
           markup: [],
           answer: "Keep the API\nChange the layout",
         },
-        // The question is Markdown here as when it was asked: no literal ** or - is left.
         {
           question: "Deploy one:\n\nstaging\nproduction",
           markup: ["strong:one", "li:staging", "li:production"],
@@ -247,9 +235,6 @@ await run(
       `glyphs off their first line by more than 1px: ${JSON.stringify(off)}`,
     );
 
-    // Every folding row opens the same way: its whole body, a tool's output included, sits in
-    // the fold's animated content, and the glyphs stay on their lines while open.
-    // Opening a codemode call reveals its nested calls' folds, so open in rounds until none is left.
     const opened = [];
     for (let round = 0; round < 3; round++) {
       const closed = await page.evaluate(`[...document.querySelectorAll(
@@ -260,13 +245,11 @@ await run(
       if (!closed.length) break;
       opened.push(...closed);
       for (const [i] of closed.entries()) {
-        // Centred, so the scroll-to-bottom button never covers the header.
         await page.ab(
           "eval",
           `document.querySelector('[data-fold-probe="${round}-${i}"]').scrollIntoView({ block: "center" })`,
         );
         await page.ab("click", `[data-fold-probe="${round}-${i}"]`);
-        // An opening fold moves the rows below it; click the next one once they have settled.
         await page.until(`!document.getAnimations().length`);
       }
     }
@@ -304,14 +287,10 @@ await run(
     const offOpen = openRows.filter((row) => Math.abs(row.offset) > 1);
     assert.deepEqual(offOpen, [], `open glyphs off their line: ${JSON.stringify(offOpen)}`);
     const tool = '[role="group"][aria-label="bash tool call"]';
-    // Tool edges align optically: measure the painted SVG path (including its round stroke),
-    // not just its viewBox. Equal CSS padding would leave the chevron farther in than the dot.
     const edges = [];
     const summaryGaps = [];
     for (const width of [1280, 390]) {
       await page.ab("set", "viewport", String(width), "4000");
-      // Measure the text boundary, not literal spaces: generic names and specialized details
-      // use different markup but must leave the same horizontal gap after their verb.
       const gaps = await page.evaluate(`(() => ['codemode', 'read', 'bash'].map(name => {
         const header = document.querySelector('[aria-label="' + name + ' tool call"] [data-slot="tool-header"]');
         const walker = document.createTreeWalker(header, NodeFilter.SHOW_TEXT, {
@@ -383,7 +362,6 @@ await run(
       `!document.querySelector('${tool} [data-slot="collapsible-content"]').textContent`,
     );
 
-    // Cancelling a question dismisses it: no "Question cancelled" line stays under the transcript.
     await page.ab("fill", '[aria-label="Message"]', "question");
     await page.press("Enter");
     await page.see("Which checks?");

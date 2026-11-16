@@ -1,5 +1,3 @@
-// Opt-in sidebar benchmark, not a timing gate. Uses the real app and isolated browser harness.
-// node test/performance-sidebar-sessions.mjs <evidence-directory> [100 500 1000 2000]
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -30,7 +28,6 @@ const report = {
 };
 const rows = '[data-slot="session-sidebar"] li[data-row]';
 
-// CDP is already exposed by agent-browser; no extra browser framework/dependency.
 async function connect(page) {
   const socket = new WebSocket(await page.ab("get", "cdp-url"));
   await new Promise((done, fail) => {
@@ -99,7 +96,6 @@ for (const n of sizes) {
       await page.until(ready);
       const cdp = await connect(page);
       try {
-        // Run before application code. No automation-process/CLI startup time in these clocks.
         await cdp.call("Page.enable");
         await cdp.call("Page.addScriptToEvaluateOnNewDocument", {
           source: `(() => {
@@ -137,7 +133,6 @@ for (const n of sizes) {
           assert.ok(await page.evaluate(ready), "only the initial window mounts");
         }
         report.environment.browser = await page.evaluate("navigator.userAgent");
-        // Default Date grouping: every fixture is Today. Closing must unmount every windowed row.
         for (let repeat = 0; repeat < 3; repeat++) {
           await page.click("button", "Today");
           await page.until(`document.querySelectorAll('${rows}').length === 0`);
@@ -160,8 +155,6 @@ for (const n of sizes) {
           await page.until("window.sidebarOpen !== null");
           result.reopen.push(await page.evaluate("window.sidebarOpen"));
         }
-        // Main-thread frame cadence during a deterministic scroll sweep, NOT compositor FPS
-        // or wheel-to-pixel latency. Each frame advances 120px; enough to exercise new rows.
         result.scroll = [];
         for (let repeat = 0; repeat < 3; repeat++) {
           const scroll = await page.evaluate(`new Promise(resolve => {
@@ -196,7 +189,6 @@ for (const n of sizes) {
           result.scrolledDomRows <= 50,
           "scrolling keeps a bounded window, not N mounted rows",
         );
-        // Jump beyond the sweep: the middle and very last session must remain reachable.
         for (const fraction of [0.5, 1, 0]) {
           await page.evaluate(`(() => {
             const viewport = document.querySelector('[data-slot="session-sidebar"] [data-radix-scroll-area-viewport]');
@@ -216,13 +208,11 @@ for (const n of sizes) {
         result.sidebarElements = await page.evaluate(
           "document.querySelector('[data-slot=\"session-sidebar\"]').querySelectorAll('*').length",
         );
-        // Whole-page retained JS heap after explicit GC; not browser RSS or sidebar-only memory.
         await cdp.call("HeapProfiler.collectGarbage");
         result.heap = await cdp.call("Runtime.getHeapUsage");
         result.dom = await cdp.call("Memory.getDOMCounters");
         await page.capture(`sidebar-${n}`);
         if (n >= 100) {
-          // Retaining a row means retaining its actual node, not a replacement with the same ID.
           await page.evaluate(`(() => {
             const row = document.querySelectorAll('${rows}')[10];
             window.sidebarRetainedRow = row;
@@ -274,7 +264,6 @@ for (const n of sizes) {
             return true;
           })()`);
           await page.until("!window.sidebarRetainedRow.isConnected");
-          // Shrink a window currently at the end: stale range bounds must not address a removed row.
           await page.evaluate(`(() => {
             const viewport = document.querySelector('[data-slot="session-sidebar"] [data-radix-scroll-area-viewport]');
             viewport.scrollTop = viewport.scrollHeight;

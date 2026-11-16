@@ -231,8 +231,6 @@ for (const mode of ["clean", "abnormal", "truncated", "stuck", "descendant"]) {
     const releaseOutput = Deferred.makeUnsafe<void>();
     const processExited = Deferred.makeUnsafe<void>();
     let holdOutput = false;
-    // Keep the real process, pipes, transport and session projection. Control only
-    // the OS-reader scheduling: final bytes cannot reach Piano until exit resolves.
     const delayedReader = Layer.effect(
       ChildProcessSpawner.ChildProcessSpawner,
       Effect.gen(function* () {
@@ -252,7 +250,6 @@ for (const mode of ["clean", "abnormal", "truncated", "stuck", "descendant"]) {
                     ? Deferred.await(releaseOutput).pipe(Effect.as(chunk))
                     : Effect.succeed(chunk),
                 ),
-                // An inherited stdout can remain open after its process exits.
                 Stream.concat(mode === "stuck" ? Stream.never : Stream.empty),
               ),
             };
@@ -274,7 +271,6 @@ for (const mode of ["clean", "abnormal", "truncated", "stuck", "descendant"]) {
           .act({ _tag: "prompt", text: `exit tail ${mode}` })
           .pipe(Effect.result, Effect.forkChild);
         yield* Deferred.await(processExited);
-        // Let the transport's exit observer run before releasing the held bytes.
         yield* Effect.yieldNow;
         const stoppedInput = yield* session.commands.pipe(
           Effect.flip,
@@ -558,7 +554,6 @@ test("snapshot first, then a streamed turn", async () => {
   const reply = seen.find((e) => e._tag === "message_end" && e.message.role === "assistant");
   assert.ok(reply && reply._tag === "message_end");
   assert.equal(reply.message.text, "echo: hello");
-  // The browser keys a reply by its id: a partial that changed id on its end would remount it.
   assert.deepEqual(
     [...new Set(seen.flatMap((e) => (e._tag === "message_update" ? [e.message.id] : [])))],
     [reply.message.id],
@@ -587,8 +582,6 @@ test("the readback that settles a turn keeps the ids its live messages carried",
       return yield* Fiber.join(collector);
     }).pipe(Effect.timeout("5 seconds"), Effect.scoped),
   );
-  // The browser keys transcript rows by id: a readback that renumbered the run's messages would
-  // remount every row it showed live, closing its folds.
   const live = seen.flatMap((e) =>
     e._tag === "message_end" ? [[e.message.id, e.message.text] as const] : [],
   );
@@ -621,7 +614,6 @@ for (const separator of [" ", "\n\n", "\r\n", "\t"]) {
           text: `/skill:research${separator}the Effect 4 RC changelog`,
         });
         const events = yield* Fiber.join(collector);
-        // A fresh subscriber reads the same split from Pi's retained history, not from the live event.
         const snapshot = yield* collectUntil(t.events, (e) => e._tag === "snapshot");
         return { events, snapshot };
       }).pipe(Effect.timeout("5 seconds"), Effect.scoped),
@@ -660,7 +652,6 @@ test("image-only prompts reach Pi and survive authoritative refresh and late sna
   await run(
     Effect.gen(function* () {
       const t = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: "images" });
-      // Pi acknowledges a prompt before it sends the user message, so wait for the run to settle.
       const ready = yield* Deferred.make<void>();
       const settled = yield* collectUntil(
         t.events.pipe(
@@ -673,7 +664,6 @@ test("image-only prompts reach Pi and survive authoritative refresh and late sna
       yield* Deferred.await(ready);
       yield* t.act({ _tag: "prompt", text: "", attachments: [image] });
       yield* Fiber.join(settled);
-      // A late subscriber reads the image-only prompt from Pi's retained history.
       const events = yield* collectUntil(t.events, (e) => e._tag === "snapshot");
       const event = events[0];
       assert.ok(event._tag === "snapshot");
@@ -791,7 +781,6 @@ test("handled input acknowledges consumption without starting work or inventing 
 test("a dispatched session's first live snapshot names its parent while usage is still unread", async () => {
   await run(
     Effect.gen(function* () {
-      // Cached statistics: open does not wait for usage, which this Pi never answers.
       const session = yield* (yield* PiSessions).open({
         cwd: process.cwd(),
         sessionId: "held-usage-dispatched",
@@ -819,7 +808,6 @@ test("a session whose entries Pi refuses still opens, without its parent", async
 });
 
 test("opening a large saved history reads its dispatching session off the server thread", async (t) => {
-  // Fake Pi reports /tmp/<id>.jsonl as its session file; its get_entries names no dispatcher.
   const sessionId = `large-dispatched-${process.pid}`;
   const file = `/tmp/${sessionId}.jsonl`;
   largeHistory(file, sessionId, process.cwd());
@@ -836,7 +824,6 @@ test("opening a large saved history reads its dispatching session off the server
     await run(
       Effect.gen(function* () {
         const sessions = yield* PiSessions;
-        // Warm the child spawn path and history worker separately from the measured open.
         yield* sessions.open({
           cwd: process.cwd(),
           sessionId: `large-dispatched-warm-${process.pid}`,
@@ -959,7 +946,6 @@ test("late subscriber sees transcript and a retained dialog; answering resolves 
       yield* Deferred.await(ready);
       yield* t.act({ _tag: "prompt", text: "ask me" });
       yield* Fiber.join(first);
-      // A second client attaches after the dialog was raised.
       const late = yield* collectUntil(t.events, (e) => e._tag === "snapshot").pipe(
         Effect.map((es) => es[0]),
       );
@@ -1055,7 +1041,6 @@ test("a write failing as Pi crashes closes with the exit, not a transport failur
         Effect.forkChild,
       );
       yield* t.act({ _tag: "prompt", text: "close stdin then crash" });
-      // Pi has closed its stdin; this write fails while the process is still exiting.
       yield* t.act({ _tag: "set_thinking_level", level: "high" }).pipe(Effect.ignore);
       const events = yield* Fiber.join(closed);
       return (events[events.length - 1] as Extract<SessionEvent, { _tag: "closed" }>).closure;
@@ -1235,10 +1220,9 @@ for (const mode of ["success", "abort-failure", "abort-exit", "clear-failure", "
           ] as const) {
             const refused = yield* session.act(action).pipe(Effect.flip);
             assert.equal(refused.reason, "rejected");
-            // Refused before Pi saw it, so a sender may take its input back (PIN-132).
             assert.equal(refused.notSent, true, action._tag);
           }
-          yield* session.commands; // release the held clear acknowledgement
+          yield* session.commands;
         }
         const result = yield* Fiber.join(stop);
         assert.equal(result?._tag, "queue_restored");
@@ -1274,7 +1258,6 @@ test("only one Stop runs at a time; input sent alongside it is refused unsent", 
         cwd: process.cwd(),
         sessionId: "one-stop-at-a-time",
       });
-      // Sent together, as two tabs or a double-click would: admission alone decides.
       const results = yield* Effect.all(
         [
           session.act({ _tag: "stop" }),
@@ -1301,7 +1284,6 @@ test("busy input preserves extension commands and retry/compaction remain active
   await run(
     Effect.gen(function* () {
       const t = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: "activity" });
-      // Each observation is installed before its action, including immediate transitions.
       const actUntil = (text: string, pred: (e: SessionEvent) => boolean) =>
         Effect.gen(function* () {
           const ready = yield* Deferred.make<void>();
@@ -1425,7 +1407,6 @@ test("a timed-out readback leaves no pending work; a timed-out command does", as
       });
       const read = yield* t.commands.pipe(Effect.flip);
       assert.equal(read.reason, "timeout");
-      // Quiescence also waits for projected output, so poll rather than read once.
       for (let n = 0; n < 200 && !(yield* t.state).isQuiescent; n++)
         yield* Effect.sleep("10 millis");
       assert.equal((yield* t.state).isQuiescent, true, "a query changes nothing in Pi");
@@ -1439,7 +1420,6 @@ test("a timed-out readback leaves no pending work; a timed-out command does", as
         "an unacknowledged command may still be running",
       );
     }).pipe(
-      // Open's own readbacks share this deadline; leave a loaded machine room to answer them.
       Effect.provideService(PiRequestTimeoutMs, 1000),
       Effect.timeout("10 seconds"),
       Effect.scoped,
@@ -1535,8 +1515,6 @@ test("open and probe return a typed readiness timeout even while the child stays
           "timeout",
           `${operation} must not wait for child exit after its readiness deadline`,
         );
-        // Probe also reads models, which the fake answers; on a loaded machine that reply can
-        // miss the 200ms deadline first. Either is the readiness timeout this test is about.
         assert.match(
           error.detail,
           operation === "open" ? /get_state/ : /get_state|get_available_models/,
@@ -1562,8 +1540,6 @@ test("probe reports models and default", async () => {
 });
 
 test("INV-02: releasing a session tells subscribers it closed, and whether that interrupted work", async () => {
-  // A stop the person asked for (archive, delete) is told apart from one they did not, and a
-  // settled session's stays a plain release either way.
   for (const [sessionId, prompt, requested, expected] of [
     ["s4", undefined, false, "released"],
     ["s4-working", "ask first", false, "released_during_work"],

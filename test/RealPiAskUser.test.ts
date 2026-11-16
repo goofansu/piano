@@ -1,4 +1,3 @@
-// INV-01/04/12: one real tool call collects a batch through Piano's dialogs and persists one result.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { NodeServices } from "@effect/platform-node";

@@ -1,4 +1,3 @@
-/** Fault only the optional SDK import in the real history worker. Never modify installed Pi. */
 import { registerHooks } from "node:module";
 import { workerData } from "node:worker_threads";
 

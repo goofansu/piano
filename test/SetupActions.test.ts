@@ -3,14 +3,12 @@ import { test } from "node:test";
 import { toast } from "sonner";
 import { createSetupActions } from "../web/src/lib/setupActions.ts";
 
-/** The error toasts sonner has shown since `from`, read from its own history (no Toaster needed). */
 const errorToasts = (from: number) =>
   toast
     .getHistory()
     .slice(from)
     .flatMap((t) => ("type" in t && t.type === "error" ? [t.title] : []));
 
-/** A change the test settles by hand. */
 function deferred<T>() {
   let resolve!: (value: T) => void, reject!: (error: Error) => void;
   const promise = new Promise<T>((res, rej) => {

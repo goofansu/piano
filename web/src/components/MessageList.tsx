@@ -74,26 +74,13 @@ import {
 import { useNewTranscriptViewport, useTranscriptViewport } from "@/lib/useTranscriptViewport";
 import { useVirtualTranscript } from "@/lib/useVirtualTranscript";
 
-/**
- * Where a session the transcript names opens, from the session catalog (`sessionDestination`):
- * a dispatch row offers a session the sidebar and palette list (not archived) whose history is
- * there. Without a provider, as in module tests, no session is offered.
- */
 export const SessionDestinationContext = createContext<
   (sessionId: string) => SessionDestination | "unlisted"
 >(() => "unlisted");
 
-// Initial prompt measurements run together in the parent's layout effect, after every
-// Markdown child has finished writing its DOM and before initial scroll pinning.
 const PromptMeasurementsContext = createContext<Set<() => void> | null>(null);
-/** Re-measures a transcript row now, so a fold that changed its height in this commit moves the
- * rows below it before the browser paints; the virtualizer's own ResizeObserver lands a frame
- * later, which paints the old spacing once: a gap under a collapsed tool, an overlap under an
- * opened one. */
 const TranscriptMeasure = createContext<((row: HTMLElement) => void) | null>(null);
 
-/** Re-measures the transcript row holding `inside` when `value` changes, before the paint: for a
- * fold whose height changes at once, without an animation the virtualizer could follow. */
 function useRowRemeasure(
   inside: React.RefObject<HTMLElement | null>,
   value: unknown,
@@ -113,27 +100,16 @@ interface Props {
   workspaceId?: string;
   messages: ReadonlyArray<RenderMsg>;
   pending: RenderMsg | null;
-  /** Local first input awaiting authoritative history; not a transcript message. */
   submittedInput?: Pick<RenderMsg, "text" | "attachments"> | null;
   tools: Record<string, ToolExecution>;
-  /** Startup or Pi work awaiting reply text: the keys play in the reply area. */
   activity?: "starting" | "working";
-  /** Agent lifecycle, independent of whether the working indicator is visible. */
   working?: boolean;
-  /** Shown above an empty transcript; the caller decides when (see `sessionPane`). */
   placeholder?: string;
   className?: string;
-  /** Show only jump-list messages and errors without changing authoritative history. */
   showTools?: boolean;
-  /** The session that dispatched this one; "unlisted" when the catalog cannot open it. */
   dispatchedFrom?: SessionDestination | "unlisted";
 }
 
-/**
- * The transcript. Every row is a glyph in a narrow gutter followed by its content:
- * `›` for what you said, `•` for what Pi said, a dot for each tool call whose colour is its outcome.
- * Tool results are folded under the call that produced them.
- */
 export function MessageList({
   workspaceId,
   messages,
@@ -169,10 +145,7 @@ export function MessageList({
   const { virtual, jumping } = useVirtualTranscript(projection, ref, list, viewport);
   const measureRow = useCallback(
     (row: HTMLElement) => {
-      // After the commit that asked: Radix removes closed content in a nested commit right after
-      // it. flushSync re-renders the rows' positions in this task, before the browser paints.
-      // `resizeItem`, not `measureElement`: without a ResizeObserver entry the latter answers
-      // from its cache.
+      // Radix unmounts closed content in a nested commit; measure in the next microtask.
       queueMicrotask(() => {
         if (!row.isConnected) return;
         flushSync(() => virtual.resizeItem(virtual.indexFromElement(row), row.offsetHeight));
@@ -181,8 +154,6 @@ export function MessageList({
     [virtual],
   );
   const window = virtual.getVirtualItems();
-  // Geometry stays urgent; mounting fresh Markdown can yield between rows. During a fast
-  // thumb drag, height-preserving placeholders cover the new window rather than blank space.
   const deferredWindow = useDeferredValue(window);
   const readyKeys = new Set(deferredWindow.map((item) => item.key));
 
@@ -190,7 +161,6 @@ export function MessageList({
     <div className={cn("relative min-h-0 flex-1", className)}>
       <div
         ref={ref}
-        // Read intent before the virtualizer's native scroll listener can synchronously render.
         onScrollCapture={viewport.scrolled}
         data-slot="transcript"
         data-message-count={messages.length}
@@ -199,7 +169,6 @@ export function MessageList({
             ? ""
             : undefined
         }
-        // The scroller spans the area, so its scrollbar keeps the pane's edge beside the rail.
         className="h-full overflow-y-auto pl-(--gutter) pr-[calc(var(--gutter)+var(--rail-inset))] [overflow-anchor:none]"
       >
         <div className="mx-auto w-full max-w-3xl py-6 md:py-8">
@@ -222,12 +191,7 @@ export function MessageList({
               )}
               <TranscriptDisclosures value={disclosures}>
                 <TranscriptMeasure value={measureRow}>
-                  {/* Custom geometry hosts: shadcn has no variable-height virtual transcript.
-                    A row taller than its estimate is clipped until measured: its overflow would
-                    grow the scroll height, a pinned view would follow it, and the scroll would
-                    unmount the row again, a loop Firefox never leaves. The margin keeps focus
-                    rings and the jump highlight (6px) whole; Chromium honours it only when both
-                    axes clip. */}
+                  {/* Clip unmeasured rows to avoid Firefox's scroll/unmount loop. Chromium needs both axes clipped for overflow-clip-margin. */}
                   <div
                     ref={list}
                     className="relative overflow-clip [overflow-clip-margin:6px]"
@@ -251,8 +215,6 @@ export function MessageList({
                           data-index={item.index}
                           className="absolute left-0 top-0 flex w-full flex-col gap-6"
                           style={{
-                            // Layout coordinates keep a tool's sticky top at the scrollport;
-                            // a transform would translate the sticky header's pinning line too.
                             top: item.start - virtual.options.scrollMargin,
                             paddingBottom: gap,
                           }}
@@ -271,8 +233,6 @@ export function MessageList({
                                 className="h-full"
                                 glyph={<Skeleton className="size-1.5 rounded-full" />}
                               >
-                                {/* Fill even a measured, very tall row: its first lines may already
-                                  be above the viewport during a fast scroll. */}
                                 <Skeleton className="h-full w-[88%] rounded-none [mask-image:repeating-linear-gradient(to_bottom,black_0,black_1rem,transparent_1rem,transparent_1.75rem)]" />
                               </Row>
                             </div>
@@ -321,14 +281,10 @@ function Row({
   glyph: React.ReactNode;
   children: React.ReactNode;
   className?: string;
-  /** Phrasing content when the whole row sits inside a disclosure button. */
   as?: "div" | "span";
 }) {
   return (
     <Tag className={cn("flex gap-3", className)}>
-      {/* Exactly one line tall, so the glyph centres on the first line of text beside it. Content
-          must not pad its first line (a folding row keeps its padding out of flow); the
-          transcript-rows journey measures every row kind. */}
       <span
         data-slot="gutter"
         className="flex h-[1lh] w-4 shrink-0 items-center justify-center select-none"
@@ -351,8 +307,6 @@ const TranscriptRowView = memo(function TranscriptRowView({
   workspaceId?: string;
 }) {
   const images = useMarkdownImages(workspaceId, row.kind === "reply" ? row.text : "");
-  // Saved replies parse once rather than mounting a parser per streaming block. A live reply
-  // retains its streaming block identities when it completes, until this window unmounts it.
   const [mode] = useState<"streaming" | "static">(() =>
     row.kind === "reply" && row.streaming ? "streaming" : "static",
   );
@@ -388,7 +342,6 @@ const TranscriptRowView = memo(function TranscriptRowView({
                 )
               }
             >
-              {/* Labels and controls are select-none, so copied or quoted text is only what was said. */}
               <span className="sr-only select-none">Pi said</span>
               <Markdown
                 images={images}
@@ -426,14 +379,6 @@ const CONTEXT_ICON: Record<ContextFacts["kind"], typeof HistoryIcon> = {
   extension: PuzzleIcon,
 };
 
-/**
- * A transcript row that folds: a gutter glyph, a header that opens and closes it, and a body under
- * the header. Context rows, tool calls, dispatched sessions and skill expansions all fold through it,
- * so the disclosure, chevron and body indent are decided here once. Tool headers include their
- * gutter and in-flow padding in the button; other disclosures keep padding out of flow to align
- * with their outer gutter. Without a glyph the row sits inside another
- * row's content (a skill in its prompt bubble), so neither header nor body takes a gutter.
- */
 function FoldRow({
   stateKey,
   glyph,
@@ -452,24 +397,16 @@ function FoldRow({
 }: {
   stateKey?: string;
   glyph?: React.ReactNode;
-  /** What the row is: its title, a quiet note, a badge. The chevron follows it. A function
-   * answers for the row's state, for what only a closed row shows. */
   header: React.ReactNode | ((open: boolean) => React.ReactNode);
-  /** The group's accessible name. */
   label: string;
   defaultOpen?: boolean;
-  /** False when there is nothing to show: the header stays, without a chevron or a body. */
   canOpen?: boolean;
   headerClassName?: string;
-  /** The body sits under a rule; a tool call's body draws its own boxes instead. */
   ruled?: boolean;
   bodyClassName?: string;
-  /** `data-*` attributes for tests and evidence scripts. */
   data?: Record<`data-${string}`, string | undefined>;
   onClick?: React.MouseEventHandler<HTMLDivElement>;
-  /** A control beside the header, outside the button that folds the row. */
   action?: React.ReactNode;
-  /** One disclosure for a tool's entire output; only tall, top-level tools pin their header. */
   toolOutput?: boolean;
   children?: React.ReactNode;
 }) {
@@ -479,7 +416,6 @@ function FoldRow({
   const restoreFocus = useRef(false);
   const [tall, setTall] = useState(false);
   const viewport = useTranscriptViewport();
-  // A tool fold changes height without an animation.
   useRowRemeasure(root, open, toolOutput);
   useLayoutEffect(() => {
     const el = root.current;
@@ -498,8 +434,6 @@ function FoldRow({
     heading.current?.querySelector("button")?.focus({ preventScroll: true });
   });
   const changeOpen = (next: boolean) => {
-    // Opening holds the view on the header the reader clicked; collapsing keeps that header where
-    // they see it. The viewport decides both, before the fold changes height.
     if (toolOutput && open !== next) {
       viewport?.fold(next, () => {
         const el = root.current;
@@ -507,10 +441,7 @@ function FoldRow({
         return el && head ? domFoldEdges(el, head) : undefined;
       });
     }
-    // Closing removes the bottom shortcut: when it held focus, move focus to the persistent
-    // header disclosure, without a browser scrollIntoView. A header that was activated keeps
-    // the focus it has; focusing it again from script would paint a focus ring in browsers
-    // whose clicks do not focus buttons (WebKit).
+    // Refocusing a clicked header paints a spurious ring in WebKit, where clicks do not focus buttons.
     const active = document.activeElement;
     if (
       toolOutput &&
@@ -522,14 +453,10 @@ function FoldRow({
     }
     setOpen(next);
   };
-  // A horizontal drag that starts on a header still opens the mobile sidebar; a tap folds.
   const title = (
     <>
       {typeof header === "function" ? header(open) : header}
       {canOpen && (
-        // The 14px chevron's painted right inset is 4.67px closed, 2.92px open. Nudge the
-        // open tool chevron inward 2px to match the 6px StatusDot's 5px inset in the 16px
-        // gutter, not its SVG box.
         <DisclosureChevron open={open} className={cn("ml-auto", toolOutput && open && "mr-0.5")} />
       )}
     </>
@@ -541,8 +468,6 @@ function FoldRow({
         data-sidebar-swipe="true"
         className={cn(
           disclosureRow,
-          // Keep vertical padding in flow, including while pinned, and the full-width target.
-          // The gutter and chevron supply their own optical insets; no horizontal padding.
           toolOutput && "m-0 w-full px-0 py-1",
           action && "w-auto flex-1",
           !toolOutput && headerClassName,
@@ -591,8 +516,6 @@ function FoldRow({
       {...data}
     >
       {toolOutput ? (
-        // A normal-flow header bounded by this Collapsible, not a floating overlay. Nested
-        // tool details are plain content and never acquire their own sticky header.
         <div
           ref={heading}
           data-slot="tool-header"
@@ -604,12 +527,10 @@ function FoldRow({
         headerRow
       )}
       {canOpen && (
-        // Tool collapse is immediate so virtual-row measurement cannot chase an exit animation.
         <CollapsibleContent className={toolOutput ? undefined : "disclosure-content"}>
           {glyph === undefined ? (
             <div className="pt-2">{body}</div>
           ) : (
-            // Match the tool header's visible right edge without moving its text-aligned left.
             <Row glyph={null} className={cn("pt-2", toolOutput && "pr-1")}>
               {body}
             </Row>
@@ -620,8 +541,6 @@ function FoldRow({
   );
 }
 
-/** Context Pi inserted rather than said: a compaction or branch summary, shell output, or an
- * extension's note. It starts open: after a compaction it is the transcript's only earlier record. */
 function ContextCard({ msg }: { msg: RenderMsg }) {
   const facts = contextFacts(msg.label);
   const Icon = CONTEXT_ICON[facts.kind];
@@ -652,7 +571,6 @@ function ContextCard({ msg }: { msg: RenderMsg }) {
 function ErrorMessage({ error, id }: { error: MessageError; id?: string }) {
   const [open, setOpen] = useTranscriptDisclosure("error");
   return (
-    // A transcript error is a standalone row, not a boxed callout inside an assistant message.
     <div id={id}>
       <Row glyph={<span className="text-err">!</span>}>
         <p role="alert" className="break-words text-err">
@@ -678,7 +596,6 @@ function ErrorMessage({ error, id }: { error: MessageError; id?: string }) {
   );
 }
 
-/** A prompt shows at most this many lines until opened; pasted logs and long briefs stay out of the way. */
 const USER_LINES = 6;
 
 function CopyResponse({ text }: { text: string }) {
@@ -718,10 +635,6 @@ function UserMessage({
   const [open, setOpen] = useTranscriptDisclosure("prompt");
   const [overflows, setOverflows] = useState(false);
   const measurements = useContext(PromptMeasurementsContext);
-  // A read here would interleave with adjacent Markdown layout effects' writes, forcing a
-  // transcript layout per prompt. The parent batches these reads; ResizeObserver handles local
-  // expansion and column resizing, including changes that don't render the parent.
-  // Extra dependencies: text and expansion change the measured DOM; a capped element may gain overflow without resizing.
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -740,7 +653,6 @@ function UserMessage({
   const clamped = !open && overflows;
   const long = overflows || open;
   const toggle = () => setOpen((o) => !o);
-  // A long prompt opens and closes from its toggle button, or by clicking anywhere on it.
   return (
     // oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- the click is a pointer shortcut for the toggle button below, which keyboard users reach.
     <article
@@ -798,11 +710,6 @@ function UserMessage({
   );
 }
 
-/**
- * A `/skill:name` prompt. It is part of what was said, so it sits inside the prompt bubble; the
- * row names the command the way it was typed, and the skill file Pi put in its place is reference
- * material, so it stays folded until the reader asks for it.
- */
 function SkillExpansion({ skill }: { skill: NonNullable<RenderMsg["skill"]> }) {
   return (
     <FoldRow
@@ -813,9 +720,7 @@ function SkillExpansion({ skill }: { skill: NonNullable<RenderMsg["skill"]> }) {
         </>
       }
       label={`${skill.name} skill`}
-      // The bubble's line height, so the prompt's › glyph centres on this first line.
       headerClassName="leading-6"
-      // Clicks here open the skill, never the prompt's own long-text disclosure around it.
       onClick={(e) => e.stopPropagation()}
     >
       <p className="mb-2 truncate font-mono text-xs text-ink-3">{abbrevHome(skill.location)}</p>
@@ -824,8 +729,6 @@ function SkillExpansion({ skill }: { skill: NonNullable<RenderMsg["skill"]> }) {
   );
 }
 
-/** A session a dispatch tool started or waited on: the call's arguments, what the parent observed, and a way
- * to open it beside the header, so reaching the session never needs the row unfolded. */
 function DispatchRow({
   session,
   outcome,
@@ -858,8 +761,7 @@ function DispatchRow({
     >
       {detail && <p className="text-xs text-ink-3">{detail}</p>}
       {params && (
-        // The scroll container wraps the <pre>, as in PreviewDetailsDialog, where a scrollable
-        // <pre> broke drag selection in Firefox.
+        // A scrollable <pre> breaks drag selection in Firefox; scroll its wrapper instead.
         <div className="overflow-x-auto rounded-lg bg-fill">
           <pre className="whitespace-pre-wrap break-words px-3 py-2 text-ink-2">
             {clamp(params, 8000)}
@@ -871,9 +773,7 @@ function DispatchRow({
   );
 }
 
-/** A link that opens a session in place; its address keeps a new tab or a copied link working. */
 function useSessionLink(cwd: string, sessionId: string) {
-  // Absent where the transcript renders outside the app, as in module tests.
   const navigation = useContext(NavigationContext);
   return {
     href: routePath({ kind: "session", sessionId }),
@@ -891,17 +791,14 @@ function OpenSession({ cwd, sessionId }: SessionDestination) {
   return (
     <IconButton asChild label="Open session" size="inline" className="-my-1 shrink-0 text-ink-3">
       <a {...link}>
-        {/* Go there, beside the chevron's expand here: its size, and no box, unlike leaving Piano. */}
         <ArrowUpRightIcon className="size-3.5" />
       </a>
     </IconButton>
   );
 }
 
-/** The dispatched session's way back: the session that started it, above the brief it was sent. */
 function DispatchedFrom({ parent }: { parent: NonNullable<Props["dispatchedFrom"]> }) {
   return (
-    // The row, not the line, takes the size: the gutter is one of the row's own lines tall.
     <Row
       glyph={<CornerDownRightIcon className="size-3.5 text-ink-3" aria-hidden />}
       className="text-sm"
@@ -915,7 +812,6 @@ function DispatchedFrom({ parent }: { parent: NonNullable<Props["dispatchedFrom"
 
 function ParentLink({ sessionId, cwd, label }: SessionDestination) {
   const link = useSessionLink(cwd, sessionId);
-  // An inline link inside a sentence: no shadcn component reads as running text.
   return (
     <a
       {...link}
@@ -934,7 +830,6 @@ const TONE: Record<ToolOutcome, StatusTone> = {
   pending: "muted",
 };
 
-/** Human replies belong in the transcript, paired with their questions rather than raw tool JSON. */
 function QuestionAnswersRow({ answers, stateKey }: { answers: QuestionAnswers; stateKey: string }) {
   return (
     <FoldRow
@@ -968,7 +863,6 @@ function QuestionAnswersRow({ answers, stateKey }: { answers: QuestionAnswers; s
   );
 }
 
-/** A save of a skill or a prompt: what became of it, with View for a saved one, as Settings shows it. */
 function LibraryRow({ result, stateKey }: { result: LibraryResult; stateKey: string }) {
   const [viewing, setViewing] = useState(false);
   const { Noun: Kind } = LIBRARY_KINDS[result.kind];
@@ -1017,7 +911,6 @@ function LibraryRow({ result, stateKey }: { result: LibraryResult; stateKey: str
   );
 }
 
-/** A tool call's arguments and output, as its opened row shows them. */
 function ToolDetails({
   args,
   output,
@@ -1033,8 +926,7 @@ function ToolDetails({
   return (
     <>
       {details && (
-        // The scroll container wraps the <pre>, as in PreviewDetailsDialog, where a scrollable
-        // <pre> broke drag selection in Firefox.
+        // A scrollable <pre> breaks drag selection in Firefox; scroll its wrapper instead.
         <div className="overflow-x-auto rounded-lg bg-fill">
           <pre className="whitespace-pre px-3 py-2 text-ink-2">{clamp(details, 4000)}</pre>
         </div>
@@ -1055,17 +947,9 @@ function ToolDetails({
   );
 }
 
-/**
- * The calls a script made (codemode), inside its opened tool row. A long run folds to its last
- * few behind one line that counts them all; `transcriptRows` decides which stay in view. The fold
- * line is a full-width disclosure row, not a ghost Button, so its chevron sits in the column of
- * the calls' dots and its text in the column of their names.
- */
 function NestedCalls({ parentId, nested }: { parentId: string; nested: NestedView }) {
-  // Kept per parent call while the transcript is open: new calls arriving leave it as it was.
   const [all, setAll] = useTranscriptDisclosure(`${parentId}:nested`);
   const root = useRef<HTMLDivElement>(null);
-  // Showing every call changes the row's height at once.
   useRowRemeasure(root, all);
   const { fold } = nested;
   const shown = all || !fold ? nested.calls : nested.folded;
@@ -1092,7 +976,6 @@ function NestedCalls({ parentId, nested }: { parentId: string; nested: NestedVie
   );
 }
 
-/** One call a script made: its dot, name and what it acted on, opening to its arguments and output. */
 function NestedCall({ line: { call, outcome, summary, inputNote } }: { line: NestedCallLine }) {
   return (
     <FoldRow
@@ -1113,7 +996,6 @@ function NestedCall({ line: { call, outcome, summary, inputNote } }: { line: Nes
       stateKey={call.id}
       ruled={false}
     >
-      {/* Plain input-retention state, not an Alert; it belongs only in these details. */}
       {inputNote && <p className="text-ink-3">{inputNote}</p>}
       <ToolDetails
         args={call.args}
@@ -1167,7 +1049,6 @@ function Tool({
             <span className="min-w-0 flex-1 truncate font-mono text-ink-2">{summary}</span>
           )}
           {knownTool && !summary && <span className="font-mono text-ink-2">{call.name}</span>}
-          {/* Closed only: an open row lists the calls and counts them on its fold line. */}
           {calls.length > 0 && !open && (
             <>
               {!summary && latest && (

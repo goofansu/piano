@@ -1,10 +1,3 @@
-/**
- * The selected session's Changes: the checkout it inspects (its own), the comparison it reads
- * (the session's saved scope, else Uncommitted) and the identities that name a branch's
- * target: the session's pull request branches as GitHub last reported them, and the base branch
- * Worktrunk reported when Piano created the worktree. Git owns the facts through
- * WorkspaceChanges; the registry holds only the session's choice (INV-01).
- */
 import { Context, Effect, Layer } from "effect";
 import { pullRequestBranches } from "../shared/pullRequestBranches.ts";
 import type { ChangesScope, WorkspaceChanges as Observation, Workspace } from "../shared/wire.ts";
@@ -13,13 +6,10 @@ import { Registry, type RegistryError, type SessionEntry } from "./Registry.ts";
 import { WorkspaceChanges } from "./WorkspaceChanges.ts";
 
 export interface SessionChangesOptions {
-  /** The comparison for this read; without it, the session's saved scope, else Uncommitted. */
   readonly scope?: ChangesScope;
-  /** One file's fresh patch instead of the whole change. */
   readonly path?: string;
 }
 
-/** Callers pass the workspace and session entry the router resolved by ID. */
 export class SessionChanges extends Context.Service<
   SessionChanges,
   {
@@ -28,7 +18,6 @@ export class SessionChanges extends Context.Service<
       session: SessionEntry,
       options?: SessionChangesOptions,
     ) => Effect.Effect<Observation>;
-    /** Save the session's scope (`null` restores the Uncommitted default) and read with it. */
     readonly setScope: (
       workspace: Workspace,
       session: SessionEntry,
@@ -43,7 +32,6 @@ export const SessionChangesLive = Layer.effect(
     const registry = yield* Registry;
     const changes = yield* WorkspaceChanges;
 
-    /** The identities Piano holds for the session's checkout. */
     const hintsFor = Effect.fn("SessionChanges.hintsFor")(function* (session: SessionEntry) {
       const data = yield* registry.get;
       const worktree = data.worktrees.find((w) => w.path === session.cwd);

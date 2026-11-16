@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { constants } from "node:os";
 
-/** The first terminal cause, before supervisor cleanup can replace it with a group signal. */
 export interface PreviewOutcome {
   instanceId: string;
   generation: string;
@@ -39,10 +38,6 @@ export async function readOutcome(
   return value;
 }
 
-/**
- * The runner's exit status for an outcome. On Linux systemd reports a non-zero status as `failed`,
- * so this one rule decides failure there and, through `outcomeFailed`, everywhere else.
- */
 export const outcomeStatus = ({
   reason,
   exitCode,

@@ -28,7 +28,7 @@ test("revision identifies dirty bytes, index, untracked inputs, deletion, modes,
       previous = next;
     };
     changed(() => put("source.ts", "dirty one"));
-    changed(() => put("source.ts", "dirty two")); // Same dirty path, different bytes.
+    changed(() => put("source.ts", "dirty two"));
     changed(() => git("add", "source.ts"));
     changed(() => git("reset", "--", "source.ts"));
     changed(() => put("untracked.ts", "new input"));

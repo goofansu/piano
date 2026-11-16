@@ -59,7 +59,6 @@ test("Enter picks the single prefix match, else the listed directory", () => {
   assert.equal(pickTarget("/home/u", one, "pia"), "/home/u/piano");
   assert.equal(pickTarget("/home/u", two, "pi"), "/home/u");
   assert.equal(pickTarget("/home/u", [], "zz"), "/home/u");
-  // Browsing a directory with one subfolder picks the directory, not the subfolder.
   assert.equal(pickTarget("/home/u", one, ""), "/home/u");
 });
 

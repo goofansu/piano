@@ -149,7 +149,6 @@ test("context replacement releases obsolete execution trees, not current or unco
     },
   ];
   const tools: NonNullable<Snapshot["tools"]> = [
-    // Deliberately before its parent: explicit ancestry need not follow arrival order.
     { id: "grandchild", parentId: "child" },
     { id: "child", parentId: "old" },
     { id: "old/path/leaf" },
@@ -183,10 +182,9 @@ const fakeCli = {
   cli: new URL("./fake-pi.mjs", import.meta.url).pathname,
   extraArgs: [],
 };
-/** Wire form: what a browser decodes. */
 const wire = (snapshot: Snapshot) => {
   const json = JSON.parse(JSON.stringify(snapshot));
-  delete json.state.isQuiescent; // A host observation sent with snapshots only, never folded.
+  delete json.state.isQuiescent;
   return json;
 };
 
@@ -206,7 +204,6 @@ test("INV-05: a snapshot folded forward with its events equals the snapshot a la
         ),
         Effect.forkScoped,
       );
-      // Streamed text, a user message, state and submission changes, a notice and an open dialog.
       yield* session.act({ _tag: "prompt", text: "hello" });
       yield* session.act({ _tag: "prompt", text: "ask now" });
       while (!seen.some((f) => f._tag === "dialog")) yield* Effect.sleep("10 millis");

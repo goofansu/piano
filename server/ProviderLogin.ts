@@ -1,10 +1,3 @@
-/** Global provider credential orchestration. Pi's SDK owns provider configuration, token
- * exchange and locked credential persistence; no agent/session is embedded here.
- * SignInAttempts owns the attempt itself; this module is its provider source.
- * It is Piano's only reader of Pi credentials, so one signed-in rule serves the Providers UI,
- * sign-out and features such as sharing that act on the user's behalf.
- * A completed sign-in or sign-out changes the usable models, so this service
- * invalidates the model catalogs itself rather than relying on a client to poll. */
 import {
   CredentialSynchronizationError,
   ModelRuntime,
@@ -42,8 +35,6 @@ export const ProviderLoginRuntime = Context.Reference<{
   }),
 });
 
-/** Pi's providers could not be read; `detail` is the text shown to the person. Pi's own error may
- * name local files, so it never reaches the detail; the user can only retry. */
 export class ProvidersError extends Data.TaggedError("ProvidersError")<{
   readonly detail: string;
 }> {}
@@ -52,7 +43,6 @@ export class ProviderLogin extends Context.Service<
   ProviderLogin,
   {
     readonly providers: Effect.Effect<readonly OAuthProvider[], ProvidersError>;
-    /** Sign-in to a provider, by its id. */
     readonly signIn: SignInLane;
     readonly signOut: (provider: string) => Effect.Effect<void, SignInError>;
     readonly apiKeys: Effect.Effect<readonly ApiKeyProvider[], ProvidersError>;
@@ -60,8 +50,6 @@ export class ProviderLogin extends Context.Service<
   }
 >()("piano/ProviderLogin") {}
 
-/** Piano's one signed-in rule: Pi holds an OAuth credential for the provider. Reads Pi's
- * credential metadata, not tokens or the availability cache. */
 const signedIn = async (runtime: Runtime, signal?: AbortSignal) =>
   new Set(
     (await runtime.listCredentials({ signal }))
@@ -69,19 +57,13 @@ const signedIn = async (runtime: Runtime, signal?: AbortSignal) =>
       .map((c) => c.providerId),
   );
 
-/** Piano's OAuth providers: those Pi signs in to with OAuth, except openai-codex. The one rule
- * behind the Providers list, sign-in and sign-out, so none accepts a provider another refuses. */
 const oauthProvider = (runtime: Runtime, id: string) =>
   id !== "openai-codex" && runtime.getProviders().some((p) => p.id === id && p.auth.oauth);
 
-/** Piano's API-key providers: Pi's single-key providers that the setup catalog names. */
 const apiKeyProvider = (runtime: Runtime, id: string) =>
   API_KEY_PROVIDERS.some((p) => p.id === id) &&
   runtime.getProviders().some((p) => p.id === id && p.auth.apiKey);
 
-/** A credential write through Pi. Pi persists the credential before refreshing its local
- * snapshot, so a `CredentialSynchronizationError` for this `operation` means the write succeeded
- * and only the refresh did not: `false`, never a failed write. Anything else is rethrown. */
 const persisted = async (
   operation: "login" | "logout",
   write: () => Promise<unknown>,
@@ -101,15 +83,11 @@ export const ProviderLoginLive = Layer.effect(
   Effect.gen(function* () {
     const factory = yield* ProviderLoginRuntime;
     const facts = yield* DirectoryFacts;
-    // One lane for every provider: several providers bind the same loopback callback port, and a
-    // sign-out must not race a sign-in. A completed sign-in changes the usable models, so the model
-    // catalogs are invalidated before success is reported and a client that sees it re-probes fresh models.
     const attempts = yield* SignInAttempts.make({
       busy: "A provider operation is already in progress. Finish it before signing in.",
       afterSuccess: facts.invalidate,
     });
     const source = (provider: string): SignInSource => ({
-      // Provider errors may include token response bodies. Never deliver or log them.
       failure: "Sign-in failed. Check the provider authorization and try again.",
       run: async ({ signal, show, ask }) => {
         const interaction: Interaction = {
@@ -160,12 +138,6 @@ export const ProviderLoginLive = Layer.effect(
         };
       },
     });
-    /** A credential write through Pi, on the sign-in lane so no attempt overlaps it. The whole
-     * operation runs uninterruptible: a Promise cannot be stopped once Pi is asked, releasing the
-     * lane early would let another write race Pi's promise, and a credential Pi persisted must
-     * change the usable models (INV-02), so persistence, catalog invalidation and `after` finish
-     * even if the HTTP client disconnects. `run` refuses by throwing; `failure` is all the person
-     * sees of why (INV-11), and `busy` when the lane is taken. */
     const write = Effect.fn("ProviderLogin.write")(function* (
       {
         busy,
@@ -214,9 +186,7 @@ export const ProviderLoginLive = Layer.effect(
         },
         catch: () => new ProvidersError({ detail: "Could not load API keys." }),
       }),
-      // The router has decoded the body against ProviderApiKeyChange; the change trusts its type.
       changeApiKey: Effect.fn("ProviderLogin.changeApiKey")(function* (change) {
-        // Pi stores the key and sends it in every model request's headers: refuse what cannot go.
         const read = change.action === "save" ? readApiKey(change.key) : undefined;
         if (read?.refusal !== undefined) return yield* new SignInError({ detail: read.refusal });
         const key = read?.value ?? "";
@@ -231,7 +201,6 @@ export const ProviderLoginLive = Layer.effect(
             const credential = (await runtime.listCredentials()).find(
               (c) => c.providerId === change.provider,
             );
-            // Never overwrite/remove an OAuth credential through the API Keys surface.
             if (credential && credential.type !== "api_key") throw new Error("Not an API key.");
             if (change.action === "remove" && !credential) throw new Error("No saved key.");
             if (change.action === "remove")
@@ -250,13 +219,11 @@ export const ProviderLoginLive = Layer.effect(
           },
         );
       }),
-      // The flow itself reports a provider without OAuth sign-in, so the attempt shows why.
       signIn: attempts.lane((provider) => Effect.succeed(source(provider))),
       signOut: Effect.fn("ProviderLogin.signOut")(function* (provider) {
         yield* write(
           {
             busy: "Could not sign out. Finish any sign-in in progress and try again.",
-            // No OAuth credential (signed out elsewhere) or Pi refused: the list shows what holds.
             failure: "Could not sign out. Refresh and try again.",
             after: attempts.forget(provider),
           },

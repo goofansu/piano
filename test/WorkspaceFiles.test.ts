@@ -18,8 +18,6 @@ import { downloadWorkspaceFile, place, readWorkspaceFile } from "../server/Works
 import { previewKindByName, previewKindsByExtension } from "../shared/files.ts";
 
 test("file reads accept explicit external paths, stay bounded and never guess another workspace", async () => {
-  // macOS's temporary directory can be an alias (/var -> /private/var).
-  // Keep this fixture canonical; directory/leaf alias behavior is exercised below.
   const root = await realpath(await mkdtemp(join(tmpdir(), "piano-files-")));
   try {
     const a = join(root, "a"),
@@ -96,14 +94,12 @@ test("file reads accept explicit external paths, stay bounded and never guess an
       await writeFile(join(a, name), content);
       assert.deepEqual(await read(name), { workspaceId: "a", path: name, kind, language, content });
     }
-    // SVG remains bounded UTF-8 text; only its presentation changes.
     await writeFile(join(a, "invalid.svg"), Buffer.from([255]));
     await assert.rejects(read("invalid.svg"), /UTF-8 text/);
     await writeFile(join(a, "large.svg"), "a".repeat(1024 * 1024 + 1));
     await assert.rejects(read("large.svg"), /too large/);
     await writeFile(join(a, "fake.png"), "not an image");
     await assert.rejects(read("fake.png"), /malformed/);
-    // PNG bytes, not the extension, establish the binary type. The binary payload is lossless.
     const png = Buffer.from(
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
       "base64",
@@ -213,8 +209,6 @@ test("a symlink before `..` is followed as the OS follows it, for preview, downl
       (await Effect.runPromise(downloadWorkspaceFile(workspace, path))).bytes,
     );
 
-  // What the OS opens is the sibling's file, so Piano previews and downloads that and names it.
-  // Spelled by hand: `join` and `resolve` would collapse `alias/..` themselves.
   const absolute = `${repo}/alias/../report.md`;
   assert.equal(await readFile(absolute, "utf8"), "sibling copy\n");
   for (const path of ["alias/../report.md", absolute]) {
@@ -225,14 +219,12 @@ test("a symlink before `..` is followed as the OS follows it, for preview, downl
     assert.equal(preview.content, "sibling copy\n");
     assert.equal(await download(path), "sibling copy\n");
   }
-  // An alias that climbs back into the checkout stays inside, under the real name.
   assert.equal(await place(workspace, "inner/../a.ts"), "src/a.ts");
   assert.equal(await download("inner/../a.ts"), "export const a = 1;\n");
   assert.equal(await place(workspace, "inner/../leaf.ts"), "src/leaf.ts");
   assert.equal((await read("inner/../leaf.ts")).path, "src/leaf.ts");
   assert.equal(await place(workspace, "inner/../not-yet.ts"), "src/not-yet.ts");
   assert.equal(await place(workspace, "inner/.."), "src");
-  // Without a symlink, `..` stays lexical; the explicit external path still reads.
   assert.equal(await place(workspace, "src/../report.md"), "report.md");
   assert.equal(await download("src/../report.md"), "checkout copy\n");
   assert.equal(await download("../sibling/report.md"), "sibling copy\n");
@@ -248,13 +240,11 @@ test("formats the previews promise are accepted under the detector's MIME varian
           Effect.mapError((error) => new Error(error.detail)),
         ),
       );
-    // An ISO media file whose major brand is `M4A `, as iTunes and ffmpeg write it.
     const m4a = Buffer.concat([
       Buffer.from([0, 0, 0, 0x18]),
       Buffer.from("ftypM4A \0\0\0\0M4A isom", "latin1"),
       Buffer.alloc(32),
     ]);
-    // An Ogg page whose first packet is an Opus identification header.
     const opus = Buffer.concat([
       Buffer.from("OggS", "latin1"),
       Buffer.alloc(22),
@@ -273,7 +263,6 @@ test("formats the previews promise are accepted under the detector's MIME varian
       assert.ok("mime" in audio);
       assert.equal(audio.mime, mime, name);
     }
-    // Detected text formats are UTF-8 text, not unsupported binaries.
     for (const [name, content] of [
       ["captions.vtt", "WEBVTT\n\n00:00.000 --> 00:01.000\nHello\n"],
       ["meeting.ics", "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n"],
@@ -316,7 +305,6 @@ test("every name that claims a preview kind previews as that kind, so its icon m
         Buffer.from([1, packet.length]),
         Buffer.from(packet),
       ]);
-    // The smallest header the detector recognizes for each format a name may claim.
     const samples: Record<string, Buffer> = {
       md: Buffer.from("# Notes\n"),
       markdown: Buffer.from("# Notes\n"),
@@ -347,11 +335,9 @@ test("every name that claims a preview kind previews as that kind, so its icon m
         assert.equal((await read(name)).kind, previewKindByName(name), name);
       }
     }
-    // QuickTime is not a preview format, so its name claims nothing and its bytes are refused.
     await writeFile(join(a, "clip.mov"), Buffer.concat([ftyp("qt  "), Buffer.alloc(64)]));
     assert.equal(previewKindByName("clip.mov"), undefined);
     await assert.rejects(read("clip.mov"), /not supported/);
-    // Neither a dotfile's name nor an inherited property claims a kind.
     for (const name of [".md", "notes.constructor", "Makefile", "a.b/README"])
       assert.equal(previewKindByName(name), undefined, name);
   } finally {
@@ -369,19 +355,16 @@ test("UTF-8 text whose first bytes match a short binary signature stays text", a
           Effect.mapError((error) => new Error(error.detail)),
         ),
       );
-    // BMP, DOS executable, MP3 and PDF signatures are two to five printable bytes.
     for (const [name, kind, language, content] of [
       ["bm25.md", "markdown", "markdown", "BM25 is a ranking function used by search engines.\n"],
       ["dos.txt", "text", "", "MZ is the DOS header of an executable.\n"],
       ["id3.md", "markdown", "markdown", "ID3 tags carry an MP3's title and artist.\n"],
       ["pdf.md", "markdown", "markdown", "%PDF-1.7 notes: the version line starts every PDF.\n"],
-      // A multibyte character split by the 8 KiB header boundary is still UTF-8.
       ["split.md", "markdown", "markdown", `BM${"a".repeat(8191 - 2)}é\n`],
     ]) {
       await writeFile(join(a, name), content);
       assert.deepEqual(await read(name), { workspaceId: "a", path: name, kind, language, content });
     }
-    // A real MP3 under a text name keeps its binary classification: its header holds NULs.
     const mp3 = Buffer.concat([
       Buffer.from("ID3", "latin1"),
       Buffer.from([4, 0, 0, 0, 0, 0, 0, 0xff, 0xfb, 0x90, 0x64]),

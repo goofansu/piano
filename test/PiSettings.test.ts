@@ -17,7 +17,6 @@ test("INV-01/12: machine defaults persist in Pi, invalidate cached startup choic
   const project = fixture.project("overridden");
   const path = join(fixture.agentDir, "settings.json");
   writeFileSync(path, JSON.stringify({ cacheWarming: "off", theme: "dark" }));
-  // What a save left in Pi's settings file, which Pi reads for every new session.
   const saved = () => {
     const { defaultProvider, defaultModel, defaultThinkingLevel } = JSON.parse(
       readFileSync(path, "utf8"),
@@ -38,7 +37,6 @@ test("INV-01/12: machine defaults persist in Pi, invalidate cached startup choic
         const settings = yield* PiSettings,
           catalogs = yield* DirectoryFacts,
           sessions = yield* PiSessions;
-        // Global discovery must ignore project configuration, even for a trusted checkout.
         const globalProbe = yield* sessions.probe(project, { globalSettingsOnly: true });
         assert.notEqual(globalProbe.defaultModel, "piano-phase0/project");
         const initial = yield* catalogs.catalog(fixture.root);
@@ -75,7 +73,6 @@ test("INV-01/12: machine defaults persist in Pi, invalidate cached startup choic
           }).getDefaultModel(),
           "project",
         );
-        // Validation must not persist an arbitrary or malformed model reference.
         assert.equal(
           (yield* Effect.result(
             settings.saveDefaults({ model: "missing/model", thinkingLevel: "low" }),
@@ -83,10 +80,8 @@ test("INV-01/12: machine defaults persist in Pi, invalidate cached startup choic
           "Failure",
         );
         assert.deepEqual(saved(), written);
-        // Effort can be updated independently, retaining the selected model.
         yield* settings.saveDefaults({ thinkingLevel: "medium" });
         assert.deepEqual(saved(), { ...written, defaultThinkingLevel: "medium" });
-        // flush() resolves even on I/O failure; Piano must not report success.
         chmodSync(path, 0o400);
         assert.equal(
           (yield* Effect.result(settings.saveDefaults({ thinkingLevel: "low" })))._tag,
@@ -94,7 +89,6 @@ test("INV-01/12: machine defaults persist in Pi, invalidate cached startup choic
         );
         chmodSync(path, 0o600);
         assert.deepEqual(saved(), { ...written, defaultThinkingLevel: "medium" });
-        // An unreadable settings file is refused, never overwritten.
         writeFileSync(path, "{broken");
         assert.equal(
           (yield* Effect.result(settings.saveDefaults({ thinkingLevel: "low" })))._tag,

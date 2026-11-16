@@ -1,13 +1,4 @@
-/**
- * The browser's side of the wire: one client per page owns the projected state, the connection,
- * selection correlation, re-selection after reconnect or resync (INV-02/05), which server
- * messages and connection losses become notifications, the New page's and project home's default
- * directory, and
- * asking Pi about the focused directory's models and trust. React only subscribes and sends;
- * nothing here depends on render timing.
- */
 import type { ClientCommand, ServerMessage } from "@shared/wire";
-// Relative, not @shared: module tests load this file directly in Node.
 import { refusedAttempt } from "../../../shared/creationVerdict.ts";
 import { closureNeedsAttention } from "../../../shared/sessionStatus.ts";
 import { type Action, type AppState, reduce, sessionDelivery } from "../store.ts";
@@ -23,19 +14,16 @@ import type { Connection, ConnectionHandlers, DisconnectReason, SendDisposition 
 export type NotifyLevel = "success" | "info" | "warning" | "error";
 export type Notify = (message: string, level?: NotifyLevel) => void;
 
-/** Browser-local changes; connection status, server frames and selection correlation stay with the client. */
 export type LocalAction = Exclude<
   Action,
   { type: "connected" | "server" | "selecting" | "trust_pending" }
 >;
 
-/** The directory the last session was created in, offered first on a fresh New page. */
 export interface LastDirectory {
   read: () => string | null;
   write: (cwd: string) => void;
 }
 
-/** What the person is told when the connection closes for a reason they should know. */
 const disconnectNotices: Record<DisconnectReason, [string, NotifyLevel]> = {
   behind: [
     "Connection fell behind. Reconnecting for a current view; some live notices may have been missed.",
@@ -50,7 +38,6 @@ const disconnectNotices: Record<DisconnectReason, [string, NotifyLevel]> = {
 const NOT_SENT = "Message not sent. Your draft is kept; retry when the session reconnects.";
 const TOO_LARGE = "Message too large to send to this machine. Your draft is kept.";
 
-/** The input a creation carries, shown as the new session's first message until Pi records it. */
 const firstMessage = (m: Extract<ClientCommand, { _tag: "create_session" }>) =>
   m.text?.trim() || m.attachments?.length
     ? {
@@ -62,7 +49,6 @@ const firstMessage = (m: Extract<ClientCommand, { _tag: "create_session" }>) =>
       }
     : undefined;
 
-/** The last directory a session started in on one machine, in this browser's storage. */
 export function storedLastDirectory(machineId: string): LastDirectory {
   const memory = machineMemory(machineId, "lastDir");
   return { read: memory.read, write: memory.write };
@@ -70,44 +56,26 @@ export function storedLastDirectory(machineId: string): LastDirectory {
 
 export interface ClientOptions {
   initial: AppState;
-  /** Opens the auto-reconnecting transport (`openConnection` in the browser). */
   connect: (handlers: ConnectionHandlers) => Connection;
   notify: Notify;
   newSelectionId?: () => string;
-  /**
-   * The machine's own memory (`storedLastDirectory`). Without one nothing is remembered: never
-   * another machine's, which may list the same paths.
-   */
   lastDirectory?: LastDirectory;
-  /**
-   * Where the machine starts a new session (`MachineOffers.startsSessionIn`); Local's rule when
-   * none is given. A New page directory it would refuse, such as a remembered one in a folder
-   * closed since or a folder whose root checkout is gone, gives way to a startable one once the
-   * registry says so.
-   */
   startsSessionIn?: (state: AppState, cwd: string) => boolean;
 }
 
-/** Live projections may share a paint; input and connection changes must render immediately. */
 export type ClientUpdate = "live" | "immediate";
 
 export interface Client {
   getState: () => AppState;
-  /** Called synchronously after projection; render subscribers may defer only live updates. */
   subscribe: (listener: (update: ClientUpdate) => void) => () => void;
-  /** Opens the connection; the returned function closes it. */
   start: () => () => void;
-  /** Sends a command, correlating `select`, `create_session` and `act` with the current attachment. */
   send: (command: ClientCommand) => SendDisposition;
-  /** Capture navigation and connection identity before async preparation; never retarget a late send. */
   captureSend: () => (
     command: ClientCommand,
     preview?: ReturnType<typeof firstMessage>,
   ) => SendDisposition;
-  /** Selects a session unless it is already the one on screen or being fetched. */
   select: (cwd: string, sessionId: string | null) => void;
   dispatch: (action: LocalAction) => void;
-  /** Hears each server frame after it is projected, for a caller correlating its own requests; returns the unsubscribe function. */
   listen: (listener: (message: ServerMessage) => void) => () => void;
 }
 
@@ -119,13 +87,6 @@ export function createClient({
   lastDirectory = { read: () => null, write: () => {} },
   startsSessionIn = machineOffers(LOCAL).startsSessionIn,
 }: ClientOptions): Client {
-  /**
-   * A New page opened without a directory or project starts in the last one used, else the first
-   * folder; a project's home starts in its most recent member's folder once the registry says which.
-   * Each is taken only where a session may start (`startsSessionIn`), so a directory the machine
-   * refuses or whose checkout is gone gives way to the next; until the registry loads, nothing is
-   * known to refuse.
-   */
   const withNewPageDirectory = (s: AppState) => {
     const page = startPage(s.view);
     if (!page) return s;
@@ -145,21 +106,11 @@ export function createClient({
   let state = withNewPageDirectory(initial);
   let connection: Connection | null = null;
   let navigationEpoch = 0;
-  /** The focused directory and catalog revision last asked about on this connection. */
   let asked: string | null = null;
   let observing: string | null = null;
   const listeners = new Set<(update: ClientUpdate) => void>();
   const messageListeners = new Set<(message: ServerMessage) => void>();
 
-  /**
-   * One automatic directory observation in flight per connection. While it runs, the state
-   * itself holds the latest intent: no per-key queue, debounce or cancellation of accepted work.
-   * Its terminal reply rechecks the current focus/revision, so A → B → A does not repeat A and
-   * invalidation is not lost. Explicit refreshes and trust decisions bypass this coordinator.
-   * Nothing is observed until the registry loads: the socket opens before its first frame, and
-   * until then the focus may be a remembered directory this machine no longer has (a remote
-   * refuses to read one it has not registered).
-   */
   const askAboutFocus = () => {
     if (!state.connected) {
       asked = null;
@@ -176,8 +127,6 @@ export function createClient({
     observing = requestId;
     const disposition =
       connection?.send({ _tag: "directory", cwd: focus.cwd, requestId }) ?? "not-sent";
-    // A known-unsent read must not wedge later focus changes. Do not retry this intent in a
-    // loop; a new focus, invalidation or reconnect can ask again, as with a server refusal.
     if (disposition === "not-sent" && observing === requestId) observing = null;
   };
 
@@ -196,8 +145,6 @@ export function createClient({
     for (const listener of listeners) listener(action.type === "server" ? "live" : "immediate");
   };
 
-  /** Why a send the connection declined was not sent. A lost socket reports itself before `send`
-   * returns, so one still connected afterwards refused the message itself: it can never fit. */
   const notSent = () => (state.connected ? TOO_LARGE : NOT_SENT);
 
   const send = (m: ClientCommand, preview?: ReturnType<typeof firstMessage>): SendDisposition => {
@@ -215,14 +162,10 @@ export function createClient({
           options: m._tag === "create_session" ? m.options : undefined,
           reconciling: m._tag === "select" && !!m.attemptId,
         });
-      // A select is navigation: the pane switches at once and a reconnect re-sends it (INV-02/05).
       if (m._tag === "select") {
         selecting();
         return connection?.send({ ...m, selectionId }) ?? "not-sent";
       }
-      // A creation carries the person's input and never replays, so one known not sent leaves them
-      // on the New page with their draft. Any other outcome opens the session; a connection lost
-      // during the send has already been applied, so its first message shows as uncertain.
       const disposition = connection?.send({ ...m, selectionId }) ?? "not-sent";
       if (disposition === "not-sent") {
         if (firstMessage(m)) notify(notSent(), "warning");
@@ -232,7 +175,6 @@ export function createClient({
       }
       return disposition;
     } else if (m._tag === "act") {
-      // An action belongs to the attachment it was aimed at; never send it on a stale or pending one.
       const ready = sessionReady(state) && state.selectionId;
       const disposition = ready
         ? (connection?.send({ ...m, selectionId: state.selectionId! }) ?? "not-sent")
@@ -255,7 +197,6 @@ export function createClient({
     }
   };
 
-  /** A fresh attachment for the session on screen, so the server re-attaches this socket. */
   const reselect = (current: { cwd: string; sessionId: string | null } | null) => {
     if (current) send({ _tag: "select", cwd: current.cwd, sessionId: current.sessionId });
   };
@@ -272,9 +213,6 @@ export function createClient({
 
   const onMessage = (m: ServerMessage) => {
     if (m._tag === "directory") {
-      // Reconnect abandons the old connection's observation; other request outcomes cannot
-      // release this one. Project through the existing catalog/trust rules (including notices
-      // and pending trust decisions), then let only the latest focus ask next.
       if (m.requestId !== observing) return;
       if (m.result.status === "ready") {
         const trust = { _tag: "trust" as const, cwd: m.cwd, trust: m.result.trust };
@@ -288,10 +226,8 @@ export function createClient({
         askAboutFocus();
       }
     }
-    // Decide before applying: a frame the projection rejects must not notify either.
     const notifySession = m._tag === "session" && sessionDelivery(state, m) === "apply";
     const wasResync = state.resync;
-    // A creation's verdict arriving after the person moved on changes nothing on screen.
     const elsewhere =
       m._tag === "selection_rejected" &&
       refusedAttempt(m) !== undefined &&

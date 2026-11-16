@@ -1,7 +1,3 @@
-/** Discovery reads Git through GitCheckout's observation and hardened reads, so inherited GIT_*
- * state cannot redirect it (INV-06); creation goes through Worktrunk (0.80.0 or later) for its paths and hooks. Git and
- * CLI details stay behind this module.
- */
 import { realpath } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import { Context, Data, Effect, Schema } from "effect";
@@ -18,13 +14,11 @@ import { run as runProcess } from "./Subprocess.ts";
 
 export class WorktreeError extends Data.TaggedError("WorktreeError")<{
   readonly detail: string;
-  /** Worktrunk ran, so a checkout may exist even though creation failed. */
   readonly unconfirmed?: boolean;
 }> {}
 export const WorktrunkCommand = Context.Reference<string>("piano/WorktrunkCommand", {
   defaultValue: () => process.env.PIANO_WT_CLI ?? "wt",
 });
-/** Oldest supported Worktrunk; newer releases are supported and CI tests the latest. */
 export const MINIMUM_WORKTRUNK_VERSION = "0.80.0";
 
 const run = (
@@ -44,7 +38,6 @@ const run = (
   );
 const git = (cwd: string, args: string[]): Effect.Effect<string, WorktreeError> =>
   gitText(cwd, args).pipe(Effect.mapError((e) => new WorktreeError({ detail: e.detail })));
-/** A Git working checkout, or false for a non-Git directory; broken metadata fails. */
 const checkoutOf = (path: string) =>
   observeGit(path).pipe(
     Effect.flatMap((observed) =>
@@ -69,9 +62,6 @@ const compatible = Effect.gen(function* () {
     });
 });
 
-/** Lightweight optional hints for the directory browser, not repository health: the root of the
- * checkout `path` is in, and its HEAD subject; `subjectOnly` skips the root lookup (one Git read)
- * for a path already known to hold `.git`. Never fails; a hint Git cannot give is absent. */
 export const checkoutHint = Effect.fn("Worktrees.checkoutHint")(function* (
   path: string,
   options: { readonly subjectOnly?: boolean } = {},
@@ -106,7 +96,6 @@ const json = <T, E>(schema: Schema.Codec<T, E>, text: string) =>
       }),
   });
 
-/** One `git worktree list --porcelain -z` record. Unknown attributes are ignored. */
 function parseWorktrees(out: string): WorktreeFacts[] | undefined {
   const worktrees: WorktreeFacts[] = [];
   let current:
@@ -163,7 +152,6 @@ function parseWorktrees(out: string): WorktreeFacts[] | undefined {
   return finish() ? worktrees : undefined;
 }
 
-/** No healthy fallback and no registry writes. Each call is a fresh point-in-time observation. */
 export const listWorktrees = Effect.fn("Worktrees.listWorktrees")(function* (
   folder: string,
 ): Effect.fn.Return<WorktreeDiscovery> {
@@ -183,15 +171,10 @@ export const listWorktrees = Effect.fn("Worktrees.listWorktrees")(function* (
         detail:
           "Git listed no worktree for this checkout. Refresh after checking git worktree list.",
       });
-    // A missing/unreadable remote must not hide healthy local worktrees. Only the parsed
-    // repository name crosses the wire, never credentials or a private remote URL.
     const remote = yield* gitText(folder, ["remote", "get-url", "origin"], {
       userConfig: true,
     }).pipe(Effect.orElseSucceed(() => ""));
     const githubRepo = githubRemote(remote.trim())?.repo;
-    // Where each worktree's branch lives on GitHub, as pull request discovery and Changes read it
-    // in that worktree, linked only once Git holds the pushed ref; an unreadable answer only
-    // leaves the branches unlinked.
     const homes = yield* branchHomes(
       folder,
       worktrees.flatMap((w) => (w.branch ? [{ path: w.path, branch: w.branch }] : [])),
@@ -221,10 +204,6 @@ export const listWorktrees = Effect.fn("Worktrees.listWorktrees")(function* (
   );
 });
 
-/** The main checkout a linked worktree belongs to, so a session started in the worktree can be
- * listed under that folder. Git's spelling of both paths is returned. `null` for anything that is
- * not the root of a linked worktree: a main checkout, a subdirectory, a non-Git directory, or a
- * worktree of a bare repository, which has no main checkout. Metadata Git cannot read fails. */
 export const worktreeOwner = Effect.fn("Worktrees.worktreeOwner")(function* (
   path: string,
 ): Effect.fn.Return<
@@ -240,7 +219,6 @@ export const worktreeOwner = Effect.fn("Worktrees.worktreeOwner")(function* (
   });
   if (physical !== root) return null;
   const out = yield* git(root, ["worktree", "list", "--porcelain", "-z"]);
-  // Git lists the main worktree first; parseWorktrees drops a bare one, so read it from the raw record.
   const first = out.split("\0\0")[0]?.split("\0") ?? [];
   const main = first[0]?.startsWith("worktree ") ? first[0].slice("worktree ".length) : undefined;
   const worktrees = parseWorktrees(out);
@@ -253,10 +231,6 @@ export const worktreeOwner = Effect.fn("Worktrees.worktreeOwner")(function* (
   return { root, main, branch: current.branch };
 });
 
-/** The main checkout that owns the repository containing `path`, in Git's spelling: from anywhere
- * in a linked worktree, its main checkout; otherwise the checkout's own root (a main checkout, or
- * a worktree of a bare repository, which has no main checkout). `null` for a non-Git directory.
- * Metadata Git cannot read fails. */
 export const mainCheckoutOf = Effect.fn("Worktrees.mainCheckoutOf")(function* (
   path: string,
 ): Effect.fn.Return<string | null, WorktreeError> {
@@ -266,7 +240,6 @@ export const mainCheckoutOf = Effect.fn("Worktrees.mainCheckoutOf")(function* (
   return owner?.main ?? checkout.toplevel;
 });
 
-/** New branches only. No prose-based retry of a possibly partially completed operation. */
 export const createWorktree = Effect.fn("Worktrees.createWorktree")(function* (
   folder: string,
   branch: string,
@@ -277,7 +250,6 @@ export const createWorktree = Effect.fn("Worktrees.createWorktree")(function* (
     return yield* new WorktreeError({
       detail: "This folder is non-Git. Create a Git repository before creating a worktree.",
     });
-  // Reject shortcuts/options before passing a branch name to Worktrunk.
   if (!branch || branch.startsWith("-") || branch !== branch.trim())
     return yield* new WorktreeError({ detail: "Enter a valid new branch name." });
   if (
@@ -288,12 +260,10 @@ export const createWorktree = Effect.fn("Worktrees.createWorktree")(function* (
       detail: "Enter a literal new branch name, not a checkout shortcut.",
     });
   }
-  // Worktrunk would refuse it too, but only after it ran, which leaves creation unconfirmed.
   if ((yield* git(folder, ["branch", "--list", branch])).trim())
     return yield* new WorktreeError({
       detail: `Branch ${branch} already exists. Enter a new branch name.`,
     });
-  // Only a failure from here on may leave a checkout behind; the checks above create nothing.
   return yield* Effect.gen(function* () {
     const result = yield* json(
       Created,

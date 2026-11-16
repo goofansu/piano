@@ -1,11 +1,3 @@
-/**
- * Same-origin attachment to a configured Piano: an authenticated, bounded pipe. The remote's
- * `/ws/peer` decides what another machine may ask (PeerScope there) and answers refusals in its
- * own delivery sequence. Besides that socket, the gateway relays `RemoteRequests` (shared/http.ts)
- * and the fixed binary image routes in PeerImageGateway, each checked before dialing.
- * No Pi protocol, request policy, local registry lookup, mutation retry, delivery renumbering or
- * remote process ownership lives here (INV-01/02/05).
- */
 import { WebSocket } from "@effect/platform-node/NodeWS";
 import { Data, Duration, Effect, Redacted, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
@@ -24,26 +16,13 @@ const imagePaths: ReadonlySet<string> = new Set(IMAGE_PATHS);
 
 const limits = {
   connectMs: 5_000,
-  /** A remote request the remote does not bound itself (`RemoteRequest.requestMs` says otherwise). */
   requestMs: 10_000,
-  /** The browser's own frames (`machineFrameBytes`, which the browser checks before sending). */
   clientBytes: PEER_FRAME_BYTES,
-  /**
-   * The remote's frames and its window of unacknowledged ones are the remote socket's own
-   * (`socketLimits`): the remote sees each acknowledgement after this pipe does, so it never has
-   * fewer frames pending, and its close arrives first. These bounds only stop a remote that
-   * ignores its own. The deadline adds a margin for the same reason.
-   */
   serverBytes: socketLimits.frameBytes,
   window: socketLimits.window,
   ackMs: Duration.toMillis(socketLimits.ackTimeout) + 5_000,
   closeGraceMs: 1_000,
-  /** A remote request body carries one folder path or one model reference, unless it says more. */
   bodyBytes: 16 * 1024,
-  /**
-   * File answers held at once for one remote, each up to its own `answerBytes`: a file is read
-   * whole before it is passed on, so this bounds the memory one remote's files take here.
-   */
   fileTransfers: 2,
 };
 class PeerFailure extends Data.TaggedError("PeerFailure")<{
@@ -65,13 +44,11 @@ const overflow = () =>
     message: "Remote connection capacity exceeded; reconnect for a snapshot.",
     code: CloseCode.tryAgainLater,
   });
-/** The browser stays closed on `tooLarge` rather than refetching a view it can never receive. */
 const tooLarge = () =>
   new PeerFailure({
     message: "Remote session view exceeds the delivery limit.",
     code: CloseCode.tooLarge,
   });
-/** Keep the remote's own close meaning: every code the browser reads (`disconnectReason`). */
 function peerFailure(error: unknown): PeerFailure {
   if (error instanceof PeerFailure) return error;
   if (Socket.SocketError.is(error)) {
@@ -81,7 +58,6 @@ function peerFailure(error: unknown): PeerFailure {
       if (meaning === "too-large") return tooLarge();
       if (meaning === "behind") return overflow();
     }
-    // ws reports a frame above maxPayload as an error before closing with `tooLarge`.
     if (
       reason._tag === "SocketReadError" &&
       (reason.cause as { code?: unknown } | undefined)?.code === "WS_ERR_UNSUPPORTED_MESSAGE_LENGTH"
@@ -102,11 +78,6 @@ const envelope = Schema.decodeUnknownSync(
 const decodePayload = Schema.decodeUnknownSync(ServerMessage);
 const decodeInput = Schema.decodeUnknownSync(ClientMessageJson);
 
-/**
- * Keep raw text intact, including fields this version does not interpret. Only the delivery ID is
- * read, to bound unacknowledged frames, and the first registry is decoded once as the remote's
- * compatibility check (INV-12).
- */
 function inspectFrame(text: string, checkRegistry = false) {
   const value: unknown = JSON.parse(text);
   const frame = envelope(value);
@@ -119,7 +90,6 @@ function inspectFrame(text: string, checkRegistry = false) {
   return { deliveryId: frame.deliveryId, registry: frame._tag === "registry" };
 }
 
-/** Only startup configuration can supply upstream authentication. Never forward caller headers. */
 const upstreamHeaders = (peer: PeerConfig) => ({
   Origin: peer.origin,
   ...(peer.vmToken ? { "X-Exedev-Authorization": `Bearer ${Redacted.value(peer.vmToken)}` } : {}),
@@ -142,7 +112,6 @@ const connect = Effect.fn("PeerGateway.connect")(
       ),
       (ws) =>
         Effect.sync(() => {
-          // End only this attachment, even during a failed handshake. Never send stop/abort.
           ws.on("error", () => {});
           ws.terminate();
         }),
@@ -152,8 +121,6 @@ const connect = Effect.fn("PeerGateway.connect")(
     const initial: { text: string; frame: ReturnType<typeof inspectFrame> }[] = [];
     let initialBytes = 0;
     let registry = false;
-    // The remote may send hosts before registry. Hold that bounded prelude, not a second
-    // delivery stream: the browser will acknowledge the original IDs after admission.
     while (!registry) {
       for (const chunk of yield* reader.pull) {
         if (typeof chunk !== "string") return yield* Effect.fail(unavailable());
@@ -165,12 +132,9 @@ const connect = Effect.fn("PeerGateway.connect")(
           catch: unavailable,
         });
         if (frame.registry) registry = true;
-        // Retain only the envelope beside the original bytes, not the decoded registry.
         initial.push({ text: chunk, frame });
       }
     }
-    // `tryAgainLater` when this pipe's outgoing buffer is full; `ended` when the remote is closing
-    // or silent.
     const send = (text: string) =>
       Effect.callback<void, PeerFailure>((resume) => {
         if (ws.readyState !== WebSocket.OPEN) {
@@ -232,8 +196,6 @@ const bridge = Effect.fn("PeerGateway.bridge")(function* (
     for (const chunk of yield* reader.pull) {
       if (typeof chunk !== "string" || Buffer.byteLength(chunk) > limits.clientBytes)
         return yield* Effect.fail(refused());
-      // The remote decides what this connection may do and answers refusals itself. Only
-      // acknowledgements are read here, to release this pipe's window of unacknowledged frames.
       const message = yield* Effect.try({ try: () => decodeInput(chunk), catch: refused });
       if (message._tag === "ack") {
         if (!pending.has(message.deliveryId)) return yield* Effect.fail(refused());
@@ -244,7 +206,6 @@ const bridge = Effect.fn("PeerGateway.bridge")(function* (
           }
         }
       }
-      // A send fails when the remote is closing; let its own close code reach the browser first.
       yield* upstream
         .send(chunk)
         .pipe(
@@ -271,7 +232,6 @@ const bridge = Effect.fn("PeerGateway.bridge")(function* (
   );
 });
 
-/** A remote's answer, read up to `maximum`; a larger or missing body is unavailable. */
 async function readBounded(response: Response, maximum: number): Promise<Buffer> {
   if (!response.body) throw unavailable();
   const reader = response.body.getReader();
@@ -300,11 +260,6 @@ const json = (body: unknown, status = 200) =>
 
 const Refusal = Schema.Struct({ error: Schema.String, field: Schema.optional(Schema.String) });
 
-/**
- * Ask the remote's upstream endpoint once, without redirect or retry, for at most `requestMs`. Its
- * answer must decode as that endpoint's response; its refusal comes back re-encoded only where the
- * request passes it.
- */
 const relay = Effect.fn("PeerGateway.relay")(function* (
   peer: PeerConfig,
   { browser, upstream, passRefusal, answer, answerBytes, requestMs }: RemoteRequest,
@@ -333,15 +288,12 @@ const relay = Effect.fn("PeerGateway.relay")(function* (
       if (refusal) {
         const text = (await readBounded(response, limits.clientBytes)).toString("utf8");
         const { error, field } = Schema.decodeUnknownSync(Schema.fromJsonString(Refusal))(text);
-        // At the browser's own refusal status: a peer-only upstream may declare another.
         return json(
           field === undefined ? { error } : { error, field },
           browser.refused ?? response.status,
         );
       }
       if (answer === "bytes") {
-        // A file as the remote sent it. Only its type and attachment name come with it: no
-        // cookie, redirect or compressed body, and the browser never guesses another type.
         const contentType = response.headers.get("content-type");
         const disposition = response.headers.get("content-disposition");
         if (!contentType || response.headers.has("content-encoding")) {
@@ -372,7 +324,6 @@ const relay = Effect.fn("PeerGateway.relay")(function* (
   });
 });
 
-/** A path names one request per method: Changes reads with POST and saves its comparison with PUT. */
 const remoteRequests = new Map<string, RemoteRequest[]>();
 for (const request of RemoteRequests)
   remoteRequests.set(request.browser.path, [
@@ -380,7 +331,6 @@ for (const request of RemoteRequests)
     request,
   ]);
 
-/** Installed after Router's global Host/Origin middleware, including unsupported paths. */
 export const addPeerRoutes = Effect.fn("PeerGateway.routes")(function* (
   router: HttpRouter.HttpRouter,
 ) {
@@ -388,13 +338,11 @@ export const addPeerRoutes = Effect.fn("PeerGateway.routes")(function* (
   const allowedOrigins = yield* AllowedOrigins;
   const byId = new Map(peers.map((peer) => [peer.id, peer]));
   const relayImages = makePeerImageRelay();
-  /** File answers in flight, by remote. */
   const files = new Map<string, number>();
   const handler = Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
     const url = new URL(request.url, "http://localhost");
     const match = /^\/peer\/([^/]+)(\/.*)$/.exec(url.pathname);
-    // The request owns this immutable destination, including credentials, through completion.
     const peer = match ? byId.get(match[1]) : undefined;
     const known = match ? remoteRequests.get(match[2]) : undefined;
     const remote = known?.find(({ browser }) => browser.method === request.method);
@@ -403,8 +351,6 @@ export const addPeerRoutes = Effect.fn("PeerGateway.routes")(function* (
       return json({ error: "Unknown remote machine or unsupported remote request." }, 404);
     if (!imagePath && (known ? !remote : request.method !== "GET"))
       return json({ error: "Remote request method is not supported." }, 405);
-    // Every remote request spends the peer's credential, so another site's page must not make the
-    // browser send one.
     if (!fromOwnPage(request.headers, allowedOrigins))
       return json({ error: "Remote requests must come from this Piano's own page." }, 403);
     if (imagePath) return yield* relayImages(peer, imagePath, request, upstreamHeaders(peer));
@@ -428,7 +374,6 @@ export const addPeerRoutes = Effect.fn("PeerGateway.routes")(function* (
       return invalid;
     let body: string | undefined;
     if (browser.body !== undefined) {
-      // A folder or file path travels only in this bounded body, never in a URL.
       const maximum = remote.bodyBytes ?? limits.bodyBytes;
       const length = Number(request.headers["content-length"]);
       if (!Number.isSafeInteger(length) || length > maximum) return invalid;
@@ -440,7 +385,6 @@ export const addPeerRoutes = Effect.fn("PeerGateway.routes")(function* (
       body = JSON.stringify(decoded.value);
     }
     if (remote.answer !== "bytes") return yield* relay(peer, remote, query, body);
-    // A busy remote refuses another file rather than queueing it here.
     if ((files.get(peer.id) ?? 0) >= limits.fileTransfers)
       return json({ error: "Remote files are busy. Try again." }, 429);
     files.set(peer.id, (files.get(peer.id) ?? 0) + 1);
@@ -461,6 +405,5 @@ export const addPeerRoutes = Effect.fn("PeerGateway.routes")(function* (
     ),
     Effect.scoped,
   );
-  // HttpRouter's terminal wildcard also matches the bare /peer prefix.
   yield* router.add("*", "/peer/*", handler);
 });

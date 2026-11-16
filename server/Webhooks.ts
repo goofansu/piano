@@ -1,4 +1,3 @@
-/** Best-effort integration delivery. One bounded owner; no history, retries or Git reads. */
 import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
 import { Clock, Context, Data, Deferred, Effect, Layer, Queue, Semaphore } from "effect";
@@ -27,14 +26,12 @@ import {
   webhookReceiver,
 } from "./WebhookReceiver.ts";
 
-/** A refusal written for people; `field` names the editor field it belongs to, if any. */
 export class WebhookError extends Data.TaggedError("WebhookError")<{
   readonly detail: string;
   readonly field?: WebhookField;
 }> {}
 const refused = (detail: string, field?: WebhookField) =>
   new WebhookError(field ? { detail, field } : { detail });
-/** A request that got no HTTP answer, with the one sentence the delivery row shows for it. */
 class DeliveryFailure extends Data.TaggedError("DeliveryFailure")<{ readonly detail: string }> {}
 export const WebhookFetch = Context.Reference<typeof fetch>("piano/WebhookFetch", {
   defaultValue: () => webhookFetch,
@@ -49,12 +46,6 @@ export class Webhooks extends Context.Service<
     readonly save: (input: WebhookSave) => Effect.Effect<Webhook, WebhookError>;
     readonly remove: (id: string) => Effect.Effect<void, WebhookError>;
     readonly test: (id: string) => Effect.Effect<WebhookDelivery, WebhookError>;
-    /** Admission only, from a running session's live events: `observed` is its view after
-     * `event` and `previous` its view before, never a history read. Webhooks alone decide which
-     * events are sent: a completed response is `session.completed`; a dialog Pi newly asks, told
-     * from a resent frame by id and generation, is `session.needs_input`; a stop the browser
-     * would flag as needing attention is `session.failed`. A snapshot is an attachment, never a
-     * trigger, so opening history replays nothing. */
     readonly observe: (
       cwd: string,
       sessionId: string,
@@ -65,7 +56,6 @@ export class Webhooks extends Context.Service<
   }
 >()("piano/Webhooks") {}
 
-/** Configured hooks, and pending jobs each may queue behind its in-flight request. */
 const maxHooks = 32;
 const perHook = 32;
 
@@ -118,8 +108,6 @@ export const WebhooksLive = Layer.effect(
         pullRequest: null,
       };
     });
-    /** The stored URL under today's rule, or undefined: a hook saved under an older rule is never
-     * sent, and its delivery says why, so the user knows to replace it. */
     const receiverOf = (hook: StoredWebhook): string | undefined => {
       try {
         return webhookReceiver(hook.url).href;
@@ -155,8 +143,6 @@ export const WebhooksLive = Layer.effect(
             detail: response.ok ? null : "Receiver returned a non-2xx status.",
           };
         },
-        // Never retain fetch errors, response bodies or URLs: receivers can echo credentials.
-        // A refusal the transport itself made is Piano's own wording, and the row shows it.
         catch: (error) =>
           new DeliveryFailure({
             detail:
@@ -187,10 +173,6 @@ export const WebhooksLive = Layer.effect(
       if (job.result) yield* Deferred.succeed(job.result, result);
       if ((yield* stored).some((h) => h.id === hook.id)) last.set(hook.id, result);
     });
-    // One owner schedules at most one request per hook. Each hook queues up to `perHook` jobs
-    // behind its own request, so a slow receiver fills only its own queue and never another's;
-    // with at most `maxHooks` hooks, pending work stays bounded. Wakeups coalesce, never
-    // retaining event data in the queue.
     yield* Effect.gen(function* () {
       const index = pending.findIndex((job) => !active.has(job.hook.id));
       if (index < 0) {
@@ -198,8 +180,6 @@ export const WebhooksLive = Layer.effect(
         return;
       }
       const job = pending.splice(index, 1)[0]!;
-      // The hook as stored now, not as admitted: it may have been changed or deleted while the
-      // job waited. A test is answered either way, never left waiting or sent to a deleted hook.
       const current = yield* stored.pipe(
         Effect.tapError((error) => (job.result ? Deferred.fail(job.result, error) : Effect.void)),
       );
@@ -227,8 +207,6 @@ export const WebhooksLive = Layer.effect(
       Effect.forkScoped,
     );
 
-    // A Test checks the receiver, often one that is failing: it waits only for the request in
-    // flight, ahead of its hook's backlog, and Tests are bounded apart from live deliveries.
     const admit = Effect.fn("Webhooks.admit")(function* (job: Job) {
       const lane = pending.filter((queued) => queued.hook.id === job.hook.id);
       if (lane.filter((queued) => !queued.result === !job.result).length >= perHook) {
@@ -241,12 +219,6 @@ export const WebhooksLive = Layer.effect(
       yield* Queue.offer(wake, undefined);
       return true;
     });
-    /**
-     * The webhook events one live session event is, in the order they are sent. An attachment's
-     * snapshot replays nothing; a snapshot with a view before it is the observer catching up
-     * after it fell behind, and sends what changed in the gap as any frame would. A completion in
-     * that gap cannot be told from a snapshot, so it is not sent.
-     */
     const triggered = (
       previous: Snapshot | undefined,
       event: SessionEvent,
@@ -259,7 +231,6 @@ export const WebhooksLive = Layer.effect(
       const before = previous && dispositionOf(previous, true).dialog;
       if (dialog && (dialog.id !== before?.id || dialog.generation !== before?.generation))
         events.push("session.needs_input");
-      // Webhooks decide from the closure, by the rule the browser follows.
       const stopped =
         event._tag === "closed" || (event._tag === "snapshot" && !previous?.state.closure);
       if (stopped && closureNeedsAttention(observed.state.closure)) events.push("session.failed");
@@ -282,12 +253,9 @@ export const WebhooksLive = Layer.effect(
         if (!workspace || !entry) return;
         const url = origin ? sessionLink(origin, sessionId) : null;
         const pr = entry.pullRequest ? pullRequestIdentity(entry.pullRequest.url) : null;
-        // Free-form Pi text is display-projected and strips filesystem paths, including known
-        // credentials. This is best-effort redaction, not a security boundary for conversation text.
         const clean = (value: string | undefined | null): string | null => {
           if (value == null) return null;
           let text = projectDisplay(value);
-          // A token saved before the minimum existed is too short to tell from ordinary words.
           for (const h of configured)
             if (h.token && h.token.length >= KNOWN_SECRET_MIN)
               text = text.replaceAll(h.token, "[redacted]");
@@ -299,7 +267,6 @@ export const WebhooksLive = Layer.effect(
               "$1[path]",
             );
         };
-        // Redact whole values, then cut: a token straddling the cut would survive as a fragment.
         const full = clean(lastAnswerOf(snapshot, Infinity));
         const answer = full == null ? null : cutText(full, LAST_ANSWER_CHARS);
         const { dialog } = dispositionOf(snapshot, true);
@@ -351,12 +318,8 @@ export const WebhooksLive = Layer.effect(
     );
     return Webhooks.of({
       list,
-      // Read-modify-write under one lock, removal included, so a save never acts on a row read
-      // before another change: what it omits keeps the stored value, and a removed hook stays gone.
-      // The router has decoded the body against WebhookSave; the save trusts its type.
       save: Effect.fn("Webhooks.save")(function* (input) {
         const url = input.url === undefined ? undefined : yield* receiverUrl(input.url);
-        // Sent as a bearer header: the same literal rule as an API key, and empty clears it.
         let token = input.token;
         if (typeof token === "string") {
           const read = readLiteralSecret(token);

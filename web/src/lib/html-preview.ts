@@ -9,7 +9,6 @@ import {
 } from "./html-preview-bridge.ts";
 import { mayPreviewAsImage, previewImageBytes } from "./previewImage.ts";
 
-/** The existing workspace file reader, already bound to the selected workspace. */
 export type HtmlPreviewReadFile = (path: string, signal: AbortSignal) => Promise<FilePreview>;
 
 const maxHtml = 1024 * 1024;
@@ -31,8 +30,6 @@ const attributes = new Set(
   ),
 );
 const groups = new Set(["media", "supports", "layer", "container"]);
-// Functions whose arguments cannot implicitly load a string as a URL. In particular, image-set,
-// image, paint, element and src are NOT admitted; escaped names are decoded before this check.
 const functions = new Set(
   "var calc min max clamp round mod rem abs sign pow sqrt hypot log exp sin cos tan asin acos atan atan2 rgb rgba hsl hsla hwb lab lch oklab oklch color color-mix light-dark linear-gradient radial-gradient conic-gradient repeating-linear-gradient repeating-radial-gradient repeating-conic-gradient translate translatex translatey translatez translate3d scale scalex scaley scalez scale3d rotate rotatex rotatey rotatez rotate3d skew skewx skewy matrix matrix3d perspective blur brightness contrast drop-shadow grayscale hue-rotate invert opacity saturate sepia cubic-bezier steps counter counters attr fit-content repeat minmax env".split(
     " ",
@@ -61,19 +58,6 @@ function dataUrl(bytes: Uint8Array, mime: string): string {
   return `data:${mime};base64,${btoa(binary)}`;
 }
 
-/**
- * Prepare a static, network-free HTML document. Browser-only; never attaches source nodes to the
- * live DOM. MUST be consumed as iframe srcdoc with sandbox="allow-scripts" ONLY, never innerHTML.
- * Only the fixed, CSP-hashed bridge runs; all authored code and hrefs are removed. The caller
- * owns a validated click listener and resolves indices against the returned destination table.
- * Fragments scroll without navigation. Details/summary remain native and interactive.
- *
- * Reads are sequential, cached per preparation, limited to 32 files / 20 MiB and ten seconds.
- * CSS imports have an eight-level bound; HTML has 20k-node / 64-level bounds. Unavailable or
- * disallowed resources disappear; cancellation and whole-document limits reject. No Blob URLs
- * or persistent resources are owned by this function. The caller owns workspace/stale-result
- * identity and must abort when that owner changes (INV-07, INV-11).
- */
 export async function prepareHtmlPreview(
   content: string,
   path: string,
@@ -109,7 +93,6 @@ export async function prepareHtmlPreview(
   const files = new Map<string, FilePreview | undefined>();
   const images = new Map<string, string | undefined>();
 
-  // A caller that ignores cancellation must not keep preparation pending or return a stale result.
   const read = async (resource: string): Promise<FilePreview | undefined> => {
     active.throwIfAborted();
     if (files.has(resource)) return files.get(resource);
@@ -140,11 +123,9 @@ export async function prepareHtmlPreview(
 
   const image = async (reference: string, base: string): Promise<string | undefined> => {
     const resource = automaticReference(base, reference);
-    // A name that claims another format (`demo.mp4`) is neither read nor counted, as in Markdown.
     if (!resource || !mayPreviewAsImage(resource)) return undefined;
     if (!images.has(resource)) {
       const file = await read(resource);
-      // The file tab's notion of an image; SVG becomes an image-mode data URL, never inline.
       const shown = file && previewImageBytes(file);
       images.set(resource, shown && dataUrl(shown.bytes, shown.mime));
     }
@@ -174,7 +155,6 @@ export async function prepareHtmlPreview(
     } catch {
       return "";
     }
-    // Bound parsed structure; recovered Raw nodes are rejected at their rule/declaration below.
     let count = 0;
     let depth = 0;
     let invalid = false;
@@ -219,7 +199,6 @@ export async function prepareHtmlPreview(
           if (ancestors.size >= 8) return "";
           const [url, media, ...extra] = node.prelude.children.toArray();
           if (!url || (url.type !== "Url" && url.type !== "String") || extra.length) return "";
-          // Simple imports and media-qualified imports; layer()/supports() imports fail closed.
           if (media && media.type !== "MediaQueryList") return "";
           const resource = automaticReference(base, url.value);
           if (!resource || ancestors.has(resource)) return "";
@@ -231,7 +210,6 @@ export async function prepareHtmlPreview(
           return media ? `@media ${css.generate(media)}{${imported}}` : imported;
         }
         if (!groups.has(name) || !node.block) return "";
-        // Group conditions never need URLs or arbitrary functions that could later become loads.
         if (
           node.prelude &&
           css.find(node.prelude, (part) => part.type === "Url" || part.type === "Raw")
@@ -253,7 +231,6 @@ export async function prepareHtmlPreview(
       if (unsafe) return "";
       for (const url of urls) {
         const bundled = await image(url.value, base);
-        // Drop the complete declaration; keeping a partially rewritten fallback risks a load.
         if (!bundled) return "";
         url.value = bundled;
       }
@@ -263,8 +240,6 @@ export async function prepareHtmlPreview(
   };
 
   try {
-    // A non-browser parser preserves document-root attributes without ever activating resources.
-    // Only rebuilt allowlisted nodes enter a detached template's inert owner document.
     const source = parse(content);
     const output = document.createElement("template");
     const owner = output.content.ownerDocument;
@@ -308,13 +283,11 @@ export async function prepareHtmlPreview(
           const style = owner.createElement("style");
           const media = attributeValue("media");
           if (media && media.length <= 4096) style.setAttribute("media", media);
-          // HTML raw-text serialization does not escape </style>, even inside a CSS string.
           style.textContent = text.replaceAll("<", "\\3c ");
           parent.appendChild(style);
         }
         return;
       }
-      // Form prose and picture fallback images remain; forms, controls and remote sources do not.
       if (tag === "form" || tag === "picture") {
         for (const child of element.childNodes) await append(child, parent, depth + 1);
         return;
@@ -337,20 +310,15 @@ export async function prepareHtmlPreview(
           if (href.startsWith("#")) {
             try {
               clean.setAttribute("data-piano-fragment", decodeURIComponent(href.slice(1)));
-            } catch {
-              /* An invalid fragment remains text. */
-            }
+            } catch {}
           } else {
             let link: HtmlPreviewLink | undefined;
-            // Match explicit Markdown web links: HTTP(S), a new tab, no opener or referrer.
             if (/^https?:\/\//i.test(href)) {
               try {
                 const url = new URL(href);
                 if (url.protocol === "http:" || url.protocol === "https:")
                   link = { kind: "web", url: url.href };
-              } catch {
-                /* Invalid web URLs remain text, never local paths. */
-              }
+              } catch {}
             } else {
               const file = documentReference(path, href);
               if (file) link = { kind: "file", path: file };

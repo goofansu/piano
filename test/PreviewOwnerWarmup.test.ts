@@ -11,8 +11,6 @@ import { ownerFixture } from "./fixtures/preview-owner-fixture.ts";
 
 for (const platform of ["linux", "darwin"] as Platform[]) {
   const fixture = (t: TestContext, lockWait?: number) => ownerFixture(t, platform, lockWait);
-  // A running app's ownership is discovered from the real host (/proc on Linux, ps and lsof on
-  // macOS), so cases that observe one run only on their native platform.
   const foreign = process.platform !== platform;
 
   test(`[${platform}] keeps checking a warming app after the start's deadline and shows it once it answers`, async (t) => {
@@ -52,7 +50,6 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
     assert.equal(shown?.warming, true, "the session shows it warming up, not failed");
     assert.equal(shown?.url, null);
 
-    // Nobody asks again: the owner's own checks find it ready.
     warm = true;
     const deadline = Date.now() + 10000;
     while (!shown?.ready && Date.now() < deadline)
@@ -62,7 +59,6 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
     assert.equal(shown?.instanceId, cold.instanceId);
     assert.equal(shown?.url, `http://localhost:${port}/`);
 
-    // Once it answered, checking stops.
     const answered = requests;
     await new Promise((resolve) => setTimeout(resolve, 2500));
     assert.equal(requests, answered);
@@ -100,7 +96,6 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
     });
     assert.equal(shown?.warming, true);
 
-    // Requests naming an instance that is no longer current observe nothing about this app.
     assert.equal(
       (await f.call(f.owner, { action: "stop", instanceId: "stale" })).status,
       "not-current",
@@ -151,14 +146,12 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
     });
     assert.equal(cold.warming, true);
 
-    // The supervisor stops answering: each check fails and is shown, and checking goes on.
     f.host.unavailable = true;
     const deadline = Date.now() + 10000;
     while (failures < 2 && Date.now() < deadline)
       await new Promise((resolve) => setTimeout(resolve, 50));
     assert.ok(failures >= 2, "the owner checks again after a failed check");
 
-    // Past the warm-up window, a failing check is the last one.
     mock.timers.enable({ apis: ["Date"], now: Date.now() + (WARMUP_SECONDS + 1) * 1000 });
     t.after(() => mock.timers.reset());
     const seen = failures;

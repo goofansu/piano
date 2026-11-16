@@ -1,5 +1,3 @@
-// Compatibility check through PiSessions against the locked, real Pi CLI.
-// The only fake is a loopback OpenAI-compatible stream; no model credits or credentials.
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
@@ -22,7 +20,6 @@ for (const finish of ["restore", "consume"] as const) {
     let finishHeld: (() => void) | undefined;
     const modelServer = createServer(async (request, response) => {
       for await (const _chunk of request) {
-        /* consume only the scratch request */
       }
       requests++;
       response.writeHead(200, { "content-type": "text/event-stream" });
@@ -148,7 +145,6 @@ await import(${JSON.stringify(cli)});`,
             attachments: [...attachments, ...attachments],
           });
           yield* session.act({ _tag: "steer", text: "duplicate", attachments });
-          // Pi 1.5.1 removes delivered image-only entries from the pending queue too.
           const lastText = "";
           yield* session.act({ _tag: "prompt", text: lastText, attachments });
           assert.equal((yield* session.state).submission?.outcome, "queued");

@@ -1,8 +1,3 @@
-/** A linked worktree whose own config pushes its branch to a fork: remotes `origin` (up/repo) and
- * `fork` (me/fork), `extensions.worktreeConfig`, and in worktree `w` on `feat`,
- * `git config --worktree remote.pushDefault fork`. Git holds `feat` on both remotes, so only the
- * worktree's own config says which is the branch's home: me/fork, as `feat`. From the main
- * checkout Git would push `feat` to origin. */
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

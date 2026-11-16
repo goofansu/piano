@@ -4,7 +4,6 @@ import type { OAuthProvider, ServerMessage } from "../shared/wire.ts";
 import type { ObservationEnvironment } from "../web/src/lib/observation.ts";
 import { createProviderAccounts } from "../web/src/lib/providerAccounts.ts";
 
-/** Timers that never fire on their own and a focus nobody gives, so every read here is one the test caused. */
 const environment: ObservationEnvironment = {
   setTimeout: () => undefined,
   clearTimeout: () => {},
@@ -14,7 +13,6 @@ const environment: ObservationEnvironment = {
 
 const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 
-/** Whether the accounts, as last read, show Radius signed in. */
 const radiusSignedIn = (accounts: { getState: () => { value?: readonly OAuthProvider[] } }) =>
   !!accounts.getState().value?.some((provider) => provider.id === "radius" && provider.signedIn);
 const radius = (signedIn: boolean): OAuthProvider[] => [
@@ -22,7 +20,6 @@ const radius = (signedIn: boolean): OAuthProvider[] => [
   { id: "radius", name: "Radius", signedIn },
 ];
 
-/** Pi's provider endpoint, answered by the test one read at a time; it ignores aborts, like a response already on the wire. */
 function pi() {
   const reads: ((providers: OAuthProvider[]) => void)[] = [];
   const logouts: { provider: string; done: () => void }[] = [];
@@ -34,7 +31,6 @@ function pi() {
   };
 }
 
-/** The socket as the page's client exposes it: connection status and server frames. */
 function socket() {
   let connected = false;
   const listeners = new Set<() => void>();
@@ -96,7 +92,6 @@ test("a sign-out supersedes a read that started before it, so the old sign-in ne
   );
   server.logouts[0]!.done();
   await settle();
-  // The read the sign-out made, then the late answer to the one it superseded.
   server.reads[2]!(radius(false));
   server.reads[1]!(radius(true));
   await signingOut;

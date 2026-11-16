@@ -6,10 +6,8 @@ import type { DraftMessage } from "./messageDraft.ts";
 import { preparedImageCommand } from "./remoteImages.ts";
 import type { SendDisposition } from "./ws.ts";
 
-/** The draft a send takes its message from; `useDraftEditor`'s result is one. */
 export interface ImageSendEditor {
   attachments: { readonly items: readonly Attachment[] };
-  /** The message whose images are being prepared, if any. */
   preparing?: DraftMessage;
   submit: (deliver: (message: DraftMessage, inputId: string) => SendDisposition) => boolean;
   prepareSubmit: (
@@ -17,35 +15,20 @@ export interface ImageSendEditor {
   ) => Promise<boolean>;
 }
 
-/** Everything one send reads when it starts; nothing it reads later changes where it goes. */
 export interface ImageSend {
   machineId: string;
   target: { cwd: string; sessionId?: string | null };
   editor: ImageSendEditor;
   captureSend: Client["captureSend"];
-  /**
-   * The model choice as the draft is sent: its start options travel with the input, not ones picked
-   * during the upload, and a send that consumed its input clears the pick it carried.
-   */
   choice: { start: StartOptions; consume: () => void };
 }
 
 export interface ImageSender {
-  /**
-   * Sends the draft's message as `command` builds it. On Local, or without images, at once.
-   * Otherwise prepares the images on the remote first, then sends a reference to them; a send while
-   * one is preparing is ignored. Resolves once the send is settled or ignored.
-   */
   send: (
     context: ImageSend,
     command: (message: DraftMessage, inputId: string, start: StartOptions) => ClientCommand,
   ) => Promise<void>;
-  /** Stop: abandons the upload in flight; the draft comes back and the choice stays. */
   cancel: () => void;
-  /**
-   * The machine, directory, session or selection changed: abandons the upload in flight and forgets
-   * it, so its outcome is never reported. A send never moves to the new target.
-   */
   abandon: () => void;
 }
 
@@ -56,11 +39,9 @@ export interface ImageSenderOptions {
     images: readonly Attachment[],
     signal: AbortSignal,
   ) => Promise<PreparedImages>;
-  /** Best-effort disposal of prepared images no input will use. */
   discard: (machineId: string, reference: PreparedImages) => void;
 }
 
-/** One upload at a time, owned by the machine, draft and navigation it started on. */
 export function createImageSender({ prepare, discard }: ImageSenderOptions): ImageSender {
   let active: AbortController | null = null;
   return {
@@ -99,7 +80,7 @@ export function createImageSender({ prepare, discard }: ImageSenderOptions): Ima
               url: `data:${i.mimeType};base64,${i.data}`,
             })),
           });
-          if (disposition !== "not-sent") reference = undefined; // Consumed or uncertain: never reuse or resubmit.
+          if (disposition !== "not-sent") reference = undefined;
           return disposition;
         } catch (error) {
           if (controller.signal.aborted) return "not-sent";

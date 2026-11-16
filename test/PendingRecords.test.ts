@@ -26,7 +26,6 @@ test("INV-03: once taking, an offer over the byte budget waits for a take instea
   await run(
     Effect.gen(function* () {
       const records = yield* makePendingRecords<string>(limits);
-      // Start taking; the queue then holds "b" (8 of 10 bytes).
       const first = yield* records.items.pipe(Stream.runHead, Effect.forkChild);
       assert.equal(yield* records.offer("a", 8), true);
       assert.equal(Option.getOrThrow(yield* Fiber.join(first)), "a");
@@ -45,7 +44,6 @@ test("INV-03: ending wakes a waiting offer without admitting it and keeps accept
   await run(
     Effect.gen(function* () {
       const records = yield* makePendingRecords<string>(limits);
-      // Start taking, then leave the queue full while nothing takes.
       const first = yield* records.items.pipe(Stream.runHead, Effect.forkChild);
       assert.equal(yield* records.offer("a", 1), true);
       yield* Fiber.join(first);

@@ -1,4 +1,3 @@
-/** Discovered user extension for the real-CLI checkpoint, never loaded by production. */
 import { appendFileSync } from "node:fs";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
@@ -24,8 +23,6 @@ export default function (pi: ExtensionAPI) {
     record("session-start", ctx);
     if (pi.getFlag("phase0-startup-dialog")) {
       record("startup-dialog", ctx, { keepAlive: !!pi.getFlag("phase0-startup-keepalive") });
-      // A real extension may own a watcher/socket. Without any live handle, Node can exit
-      // rather than hang on an unresolved startup promise. Exercise both outcomes.
       const timer = pi.getFlag("phase0-startup-keepalive")
         ? setInterval(() => {}, 1000)
         : undefined;

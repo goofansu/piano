@@ -1,5 +1,3 @@
-/** Durable creation intent, not Pi history or a retry queue. Retained tombstones prevent an
- * old request from creating again after its reference was removed. No prompt/attachments stored. */
 import { Schema } from "effect";
 
 export const CreationAttempt = Schema.Struct({

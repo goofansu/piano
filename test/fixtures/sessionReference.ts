@@ -1,6 +1,5 @@
 import type { SessionReference } from "../../shared/wire.ts";
 
-/** A registry session reference as the sidebar view sends it; branch unknown unless given. */
 export const sessionReference = (
   cwd: string,
   sessionId: string,

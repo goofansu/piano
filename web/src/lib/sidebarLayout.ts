@@ -1,11 +1,3 @@
-/**
- * The page's sidebar: on wide viewports a collapsible, resizable column with remembered state;
- * below the viewport breakpoint a modal reveal under the translated page. One controller owns
- * the committed state (collapsed, remembered width, reveal open), the transient resize drag,
- * and where focus returns when the reveal closes. Show, hide and toggle dispatch by viewport, so
- * pages, the palette and keyboard shortcuts call them without knowing which applies. Pointer and
- * touch handling stay in the DOM; nothing here depends on React or the browser.
- */
 import { readStorage, writeStorage } from "./storage.ts";
 import { isWideViewport, subscribeViewport } from "./viewportLayout.ts";
 
@@ -15,25 +7,18 @@ const COLLAPSED_KEY = "piano.sidebar";
 const WIDTH_KEY = "piano.sidebarWidth";
 
 export interface SidebarLayoutState {
-  /** The desktop column is hidden; each pane's header shows the control that brings it back. */
   collapsed: boolean;
-  /** The expanded column's width: the remembered one, or the drag's while resizing. */
   width: number;
-  /** A resize drag is in progress. */
   resizing: boolean;
-  /** The modal reveal is open below the viewport breakpoint; not a device/input classification. */
   mobileOpen: boolean;
 }
 
-/** The breakpoint, storage and focus, behind a seam so the policy runs in Node. */
 export interface SidebarEnvironment<T> {
   desktop: () => boolean;
-  /** Subscribes to crossing the breakpoint; returns the unsubscribe function. */
   onBreakpoint: (listener: () => void) => () => void;
   read: (key: string) => string | null;
   write: (key: string, value: string) => void;
   focused: () => T | null;
-  /** The target is still on the page and visible. */
   canFocus: (target: T) => boolean;
   focus: (target: T) => void;
 }
@@ -41,28 +26,19 @@ export interface SidebarEnvironment<T> {
 export interface SidebarLayout<T = HTMLElement> {
   getState: () => SidebarLayoutState;
   subscribe: (listener: () => void) => () => void;
-  /** Follows the breakpoint; returns the stop function, which also cancels a resize. */
   start: () => () => void;
   desktop: () => boolean;
   show: () => void;
   hide: () => void;
   toggle: () => void;
-  /** Sets the desktop column's state independently of the reveal; ignored while narrow. */
   setCollapsed: (collapsed: boolean) => void;
-  /** The sheet's committed state, as a swipe or its own dismissal sets it. */
   setMobileOpen: (open: boolean) => void;
   closeMobile: () => void;
-  /** A swipe has started revealing the sheet: remember where focus was. */
   previewMobile: () => void;
-  /** The sheet closed: focus where it was before it opened, else a visible show-sidebar control. */
   restoreFocus: () => void;
-  /** A show-sidebar control offers itself as the focus fallback; returns the unregister function. */
   registerFocusFallback: (target: T) => () => void;
-  /** Starts a resize from the column's current width; `release` runs when the drag ends either way. */
   startResize: (startWidth: number, release?: () => void) => void;
-  /** The pointer's width, unclamped; the column follows it within bounds. */
   resizeTo: (width: number) => void;
-  /** Commits the drag: below the collapse threshold it collapses and keeps the remembered width. */
   finishResize: () => void;
   cancelResize: () => void;
   resetWidth: () => void;
@@ -73,7 +49,6 @@ const clampWidth = (width: number) =>
 
 export function createSidebarLayout<T>(env: SidebarEnvironment<T>): SidebarLayout<T> {
   const saved = Number(env.read(WIDTH_KEY));
-  /** The committed width; the drag's lives in `drag`. */
   let width =
     saved >= SIDEBAR_WIDTH.min && saved <= SIDEBAR_WIDTH.max ? saved : SIDEBAR_WIDTH.default;
   let collapsed = env.read(COLLAPSED_KEY) === "hidden";
@@ -115,8 +90,6 @@ export function createSidebarLayout<T>(env: SidebarEnvironment<T>): SidebarLayou
   };
 
   const setCollapsed = (value: boolean) => {
-    // The column is hidden while narrow; even a direct caller must not change
-    // the desktop preference the user cannot see.
     if (!env.desktop()) return;
     if (drag) endDrag();
     collapsed = value;
@@ -162,7 +135,6 @@ export function createSidebarLayout<T>(env: SidebarEnvironment<T>): SidebarLayou
     },
     start: () => {
       const stop = env.onBreakpoint(() => {
-        // Neither a drag nor an open sheet carries across the breakpoint.
         if (drag) endDrag();
         mobileOpen = false;
         publish();
@@ -214,7 +186,6 @@ export function createSidebarLayout<T>(env: SidebarEnvironment<T>): SidebarLayou
       if (!drag) return;
       const { last } = drag;
       endDrag();
-      // Dragged nearly shut: collapse, and expand again later at the width it had before.
       if (last < SIDEBAR_WIDTH.collapseBelow) setCollapsed(true);
       else {
         setWidth(clampWidth(last));
@@ -229,7 +200,6 @@ export function createSidebarLayout<T>(env: SidebarEnvironment<T>): SidebarLayou
   };
 }
 
-/** The real breakpoint, storage and focus. Globals are read only when called, so this module loads in Node. */
 export const browserSidebarEnvironment: SidebarEnvironment<HTMLElement> = {
   desktop: isWideViewport,
   onBreakpoint: subscribeViewport,

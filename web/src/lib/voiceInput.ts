@@ -1,8 +1,3 @@
-/**
- * Voice input in the composer: the hints a recording carries, and where its transcript lands in
- * the draft. The server turns the hints into OpenAI's prompt.
- */
-// Relative, not @shared: module tests load this file directly in Node.
 import { MAX_HINT_LENGTH, RECORDING_TYPES, type VoiceHints } from "../../../shared/voiceInput.ts";
 
 const named = (value: string | undefined) =>
@@ -10,7 +5,6 @@ const named = (value: string | undefined) =>
 
 const FIELDS = ["project", "folder", "branch", "session"] as const;
 
-/** What a recording sends: each name trimmed and clipped to what the server accepts, blanks left out. */
 export function voiceHints(place: VoiceHints): VoiceHints {
   return Object.fromEntries(
     FIELDS.flatMap((field) => {
@@ -20,10 +14,6 @@ export function voiceHints(place: VoiceHints): VoiceHints {
   );
 }
 
-/**
- * The draft with a transcript put in place of the selection, a space apart from the words beside
- * it, and where the caret goes after it.
- */
 export function insertDictation(
   draft: string,
   selection: { start: number; end: number },
@@ -41,7 +31,6 @@ export function insertDictation(
   return { text: before + inserted + after, caret: before.length + lead.length + spoken.length };
 }
 
-/** The first recording format this browser makes that OpenAI reads; undefined lets it choose. */
 export function recordingType(isSupported: (type: string) => boolean): string | undefined {
   return RECORDING_TYPES.find((r) => r.requested && isSupported(r.mimeType))?.mimeType;
 }

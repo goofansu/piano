@@ -1,11 +1,3 @@
-/**
- * The commands that apply wherever the user is, described once: navigation, what the open page's
- * header offers (`pageCommands`), directory trust, the sidebar and its view, and appearance. The
- * command palette's Global commands group, the sidebar's View menu, the Projects index's and
- * Settings pages' headers and the New session page's trust toggle render these instead of each
- * deciding.
- */
-// Relative, not @shared: module tests load this file directly in Node.
 import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import { type RadioChoice, radioChoiceOf } from "./commands.ts";
@@ -26,7 +18,6 @@ import { checkoutMissingAt, focusedDirectory } from "./sessionContext.ts";
 import { GROUP_BY, type GroupBy, type SidebarView, SORT_BY, type SortBy } from "./sidebarView.ts";
 
 export type Appearance = "light" | "dark" | "system";
-/** The appearance choices, in menu order; the palette and the View menu both list these. */
 export const APPEARANCES = [
   { value: "light", label: "Light" },
   { value: "dark", label: "Dark" },
@@ -52,7 +43,6 @@ export type GlobalCommandId =
   | `sort-${SortBy}`
   | "folder-and-branch";
 
-/** Sections a menu separates; the palette lists them in this order under Global commands. */
 export type GlobalCommandGroup =
   | "navigate"
   | "trust"
@@ -82,17 +72,11 @@ export type GlobalCommandIcon =
 export type GlobalCommandIntent =
   | { kind: "machine"; id: string }
   | { kind: "home" }
-  /** Open Settings, at `section` when given. */
   | { kind: "settings"; section?: SettingsSection }
-  /** Open the New session page. */
   | { kind: "new-session" }
-  /** Open the Projects index. */
   | { kind: "projects" }
-  /** The open page's header action (New project, a project's menu row), as the page runs it. */
   | ProjectCommandIntent
-  /** Open the Settings page's editor on a new entry, as the page's header does. */
   | { kind: "page-editor"; page: EditorPage }
-  /** Send this registry or Pi change. */
   | { kind: "send"; command: ClientCommand }
   | { kind: "toggle-sidebar" }
   | { kind: "appearance"; appearance: Appearance }
@@ -100,38 +84,25 @@ export type GlobalCommandIntent =
 
 export interface GlobalCommand {
   id: GlobalCommandId;
-  /** The palette row's name. */
   label: string;
-  /** The name of a choice inside the View menu's submenu, where the submenu already says what it chooses. */
   menuLabel?: string;
   icon: GlobalCommandIcon;
   group: GlobalCommandGroup;
   enabled: boolean;
-  /** The command is awaiting its server decision. */
   pending?: boolean;
-  /** The current choice of its group. */
   checked?: boolean;
-  /** A toggle that is on: the directory is trusted. Its label already names what running it does. */
   pressed?: boolean;
-  /** Direct synonyms of the label, for palette search; not topics or what the command touches. */
   keywords?: readonly string[];
   intent: GlobalCommandIntent;
 }
 
 export interface GlobalCommandContext {
-  /**
-   * The open Settings section, or `null` when none is: the palette then offers the way back instead
-   * of Settings, and that page's header actions instead of the page beneath it.
-   */
   settings: SettingsSection | null;
   view: SidebarView;
-  /** The chosen appearance, for a surface that marks it; without it no appearance is checked. */
   theme?: string;
-  /** The sidebar is out of sight (collapsed, or a closed sheet), so its toggle reads Show sidebar. */
   sidebarHidden?: boolean;
 }
 
-/** One of the View menu's choices (appearance, grouping or sorting) as a radio group. */
 export function radioChoice(
   commands: readonly GlobalCommand[],
   group: "appearance" | "group-by" | "sort-by",
@@ -139,11 +110,6 @@ export function radioChoice(
   return radioChoiceOf(commands.filter((c) => c.group === group));
 }
 
-/**
- * Trust or untrust `cwd`, when Pi says the directory has resources it loads only when trusted.
- * There is no command without that requirement, nor for the selected session's missing checkout,
- * which Pi cannot be asked about. It changes Pi's settings, so it waits for a connection.
- */
 export function trustCommand(state: AppState, cwd: string | undefined): GlobalCommand | undefined {
   if (!cwd) return undefined;
   if (checkoutMissingAt(state, cwd)) return undefined;
@@ -162,22 +128,12 @@ export function trustCommand(state: AppState, cwd: string | undefined): GlobalCo
   };
 }
 
-/** Each row a project's menu lists, by its palette ID; a row the menu adds fails here until named. */
 const PROJECT_MENU_IDS = {
   settings: "project-settings",
   done: "project-done",
   delete: "delete-project",
 } as const satisfies Record<ProjectMenuCommandId, GlobalCommandId>;
 
-/**
- * What the open page offers in its header, as the page's own commands describe it: on a Settings
- * page with an editor (`PAGE_EDITORS`), its creation, such as New webhook; on the Projects index,
- * New project; on a project's home, its menu
- * (`projectMenu`), manage rows then destructive (the home itself starts sessions). An open Settings
- * page covers the page beneath it, so only its own actions count. The palette lists exactly these,
- * so a page or menu that adds a header action gets its row, named as its button is, by construction;
- * a page whose creation cannot run reports it to its editor (`useAvailable`), never to its button.
- */
 export function pageCommands(
   state: AppState,
   settings: SettingsSection | null = null,
@@ -212,11 +168,6 @@ export function pageCommands(
   return [...menu.manage, ...menu.destructive].map((c) => row(PROJECT_MENU_IDS[c.id], c));
 }
 
-/**
- * Global commands, in the palette's order: Home or Settings (whichever is not open), each Settings
- * page, New session, Projects, the open page's header actions (`pageCommands`), trust for the
- * directory the main pane is about, Hide or Show sidebar, the appearances, then each sidebar grouping and sort, with the current one of each checked.
- */
 export function globalCommands(state: AppState, ctx: GlobalCommandContext): GlobalCommand[] {
   const trust = trustCommand(state, focusedDirectory(state)?.cwd);
   const theme = ctx.theme;
@@ -267,7 +218,6 @@ export function globalCommands(state: AppState, ctx: GlobalCommandContext): Glob
     ...(trust ? [trust] : []),
     {
       id: "toggle-sidebar",
-      // Named as the button that does the same is: Hide sidebar in its header, Show sidebar in a pane's.
       label: ctx.sidebarHidden ? "Show sidebar" : "Hide sidebar",
       icon: ctx.sidebarHidden ? "show-sidebar" : "hide-sidebar",
       group: "sidebar",

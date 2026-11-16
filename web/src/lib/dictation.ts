@@ -1,8 +1,3 @@
-/**
- * Page-lifetime dictation. The source draft store AND key own every operation, even when machines
- * share IDs. Navigation cancels a live microphone, but Stop commits transcription to that source.
- * Only explicit cancellation/page teardown aborts a committed recording. Nothing auto-sends.
- */
 import { MAX_AUDIO_BYTES, MAX_RECORDING_MS, type VoiceHints } from "../../../shared/voiceInput.ts";
 import type { DraftKey, Drafts } from "./messageDraft.ts";
 import { insertDictation, voiceHints } from "./voiceInput.ts";
@@ -23,7 +18,6 @@ export interface DictationField {
   focus: () => void;
   setSelectionRange: (start: number, end: number) => void;
 }
-/** A machine's page-memory store is its identity, not an unqualified session ID or cwd. */
 export interface DictationTarget {
   drafts: Pick<Drafts, "get" | "setText">;
   key: DraftKey | null;
@@ -43,7 +37,6 @@ export interface DictationOptions {
   clearTimeout?: (handle: unknown) => void;
 }
 export interface DictationStart {
-  /** Snapshot at Stop, before asynchronous recorder events or navigation can change context. */
   session: () => VoiceHints;
   field: () => DictationField | null;
 }
@@ -52,7 +45,6 @@ export interface Dictation {
   subscribe: (listener: () => void) => () => void;
   start: (target: DictationTarget, start: DictationStart) => Promise<void>;
   stop: (target: DictationTarget) => void;
-  /** Navigation cancels only uncommitted recording; explicit cancellation also aborts transcription. */
   cancel: (target: DictationTarget, includingTranscription?: boolean) => void;
   cancelRecording: () => void;
   dispose: () => void;
@@ -104,13 +96,11 @@ export function createDictation(options: DictationOptions): Dictation {
     entry.stream = undefined;
   };
   const cancel = (entry: Entry) => {
-    // Invalidate BEFORE stop/release: recorder callbacks and promises may still arrive.
     entry.abort.abort();
     end(entry);
     try {
       if (entry.recorder && entry.recorder.state !== "inactive") entry.recorder.stop();
     } catch {
-      // Cancellation must still release tracks if a broken recorder refuses Stop.
     } finally {
       letGo(entry);
     }
@@ -188,7 +178,6 @@ export function createDictation(options: DictationOptions): Dictation {
     async start(target, start) {
       if (!target.key || find(target)) return;
       if (!options.supported()) return notify.error(UNSUPPORTED);
-      // At most one permission request/active microphone per page, across all machine stores.
       cancelRecording();
       const entry: Entry = { target, start, phase: "starting", abort: new AbortController() };
       entries.add(entry);
@@ -217,7 +206,6 @@ export function createDictation(options: DictationOptions): Dictation {
           stop: () => {
             letGo(entry);
             if (!entries.has(entry)) return;
-            // Unexpected track termination is a failure, not implicit consent to upload.
             if (entry.phase !== "transcribing") return fail(entry, "Recording ended unexpectedly.");
             const audio = new Blob(chunks, { type: recorder.mimeType });
             chunks.length = 0;

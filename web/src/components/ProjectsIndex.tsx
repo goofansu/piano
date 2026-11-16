@@ -17,11 +17,6 @@ import { type ProjectsIndexRow, projectsIndex, projectsIndexContext } from "@/li
 import { useNavigation } from "@/lib/useNavigation";
 import type { AppState } from "@/store";
 
-/**
- * One project's row: the way to its home, its context line, a time at the end and the sidebar's
- * project menu revealed as there (`ListRow`), the time stepping aside for it. `time` is the
- * newest member activity for an open project and when it was marked done under Done.
- */
 function ProjectRow({
   state,
   row,
@@ -58,13 +53,6 @@ function ProjectRow({
   );
 }
 
-/**
- * The Projects index: a listing page shaped as a Settings page is, with its one primary action,
- * New project, from `pageCommands`, which the palette lists too. Open projects are the list; done
- * ones sit under a Done group at the bottom, folded until opened, so the index stays the list of
- * what is going on. A row carries no state otherwise, as the index is for scanning. Everything
- * comes from what the browser already holds.
- */
 export function ProjectsIndex({ state }: { state: AppState }) {
   const index = projectsIndex(state);
   const now = Date.now();
@@ -113,7 +101,6 @@ export function ProjectsIndex({ state }: { state: AppState }) {
                   onOpenChange={setDoneOpen}
                   className="flex flex-col gap-3"
                 >
-                  {/* The group's name folds it, as a sidebar group's does; the count is the one fact beside it. */}
                   <CollapsibleTrigger asChild>
                     <button
                       type="button"

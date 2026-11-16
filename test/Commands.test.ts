@@ -25,7 +25,6 @@ const online: AppState = {
   trusts: { "/repo": { required: true, trusted: false } },
 };
 const other = { cwd: "/repo", sessionId: "s2", title: "Other" };
-/** A selected session in the registered folder, whose Changes and session rail both open. */
 const selected: AppState = {
   ...online,
   view: { kind: "session" },
@@ -58,7 +57,6 @@ const selected: AppState = {
   },
 };
 
-/** `selected`, linked to a pull request: it is read in Changes. */
 const linked: AppState = {
   ...selected,
   sessionReferences: [
@@ -75,7 +73,6 @@ const linked: AppState = {
   ],
 };
 
-/** Runs `command` against effects that record each call by name. */
 function effectsOf(command: Command) {
   const calls: unknown[][] = [];
   const effects = new Proxy({} as CommandEffects, {

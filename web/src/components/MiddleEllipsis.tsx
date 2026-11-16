@@ -1,9 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { middleEllipsis } from "@/lib/middleEllipsis";
 
-/** No shadcn primitive fits both ends of a name to the available width. Inherit the row's
- * typography; measure in the DOM so proportional fonts, spacing and font loading count too.
- * The full text is read by screen readers; its tooltip belongs to the enclosing element. */
 export function MiddleEllipsis({ text }: { text: string }) {
   const container = useRef<HTMLSpanElement>(null);
   const ruler = useRef<HTMLSpanElement>(null);
@@ -17,7 +14,6 @@ export function MiddleEllipsis({ text }: { text: string }) {
         probe.textContent = value;
         return probe.getBoundingClientRect().width;
       });
-      // Observing the full text also catches a font loading or a typography change.
       probe.textContent = text;
       setDisplay(fitted);
     };

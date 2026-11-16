@@ -1,4 +1,3 @@
-// Real locked CLI check for --session reopening of an old alias-based reference.
 import assert from "node:assert/strict";
 import { readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

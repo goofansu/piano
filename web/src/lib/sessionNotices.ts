@@ -1,10 +1,3 @@
-/**
- * The selected session's notices, decided once: the banners above the transcript, the status
- * lines below it, the extension block and the read-only notice that replaces the composer.
- * The session view renders these descriptors in order; which ones appear, and in what words,
- * lives here so it can be checked without a browser.
- */
-// Relative, not @shared: module tests load this file directly in Node.
 import { closureNeedsAttention } from "../../../shared/sessionStatus.ts";
 import type { ClientCommand, ExtensionState } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
@@ -12,10 +5,8 @@ import { answerReceipt } from "./piDialogs.ts";
 import { sessionContext } from "./sessionContext.ts";
 import { submissionReceipt } from "./submissionReceipt.ts";
 
-/** Where a notice sits: above the transcript, below it, or in place of the composer. */
 export type SessionNoticePlacement = "banner" | "status" | "composer";
 
-/** `quiet` is secondary text; the rest name the alert or text variant. */
 export type SessionNoticeTone = "destructive" | "warning" | "quiet" | "neutral";
 
 export type SessionNoticeId =
@@ -34,11 +25,8 @@ export interface SessionNotice {
   placement: SessionNoticePlacement;
   tone: SessionNoticeTone;
   title: string;
-  /** Supporting lines: folded under a banner, shown beneath a status line. */
   details: string[];
-  /** A command the notice offers beside its title. */
   action?: { label: string; command: ClientCommand };
-  /** Only the extension block: what Pi's extensions report, rendered as their own lines. */
   extension?: ExtensionState;
 }
 
@@ -58,8 +46,6 @@ const notice = (
   ...rest,
 });
 
-/** The selected session's notices, in display order. No notice depends on Messages only today;
- * callers pass it so one that does need not change them. */
 export function sessionNotices(state: AppState, _messagesOnly: boolean): SessionNotice[] {
   const t = state.session;
   const { folder, checkoutMissing } = sessionContext(state);
@@ -129,7 +115,6 @@ export function sessionNotices(state: AppState, _messagesOnly: boolean): Session
   }
 
   const resolution = t?.state.dialogResolution;
-  // The answer card owns its receipt and delivery details; never repeat them as a status line.
   const answerNotice = resolution && answerReceipt(resolution).notice;
   if (answerNotice)
     notices.push(notice("dialog-resolution", "status", answerNotice.tone, answerNotice.title));
@@ -160,7 +145,6 @@ export function sessionNotices(state: AppState, _messagesOnly: boolean): Session
     );
   }
   const extension = t?.state.extension;
-  // Pi reports an extension block for every session; only one that says something is shown.
   if (
     extension &&
     (extension.title ||

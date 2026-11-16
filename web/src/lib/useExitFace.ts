@@ -1,13 +1,9 @@
 import { type Ref, type RefCallback, useCallback, useRef } from "react";
 
-/** A copy of an overlay's face: its root (the popper wrapper, or the content itself), the copy of
- * the content in it, and where its scrolled elements stood. */
 type Face = { root: HTMLElement; content: HTMLElement; scrolled: [number, number, number][] };
 
-// Long enough for any exit (reduced motion included); a ghost normally leaves on animationend.
 const LINGER_MS = 5000;
 
-/** What moves on screen: the popper wrapper that positions anchored content, or the content. */
 function rootOf(content: HTMLElement): HTMLElement {
   const parent = content.parentElement;
   return parent?.hasAttribute("data-radix-popper-content-wrapper") ? parent : content;
@@ -23,7 +19,6 @@ function copy(content: HTMLElement): Face {
     const twin = to[i];
     if (element.scrollTop || element.scrollLeft)
       scrolled.push([i, element.scrollTop, element.scrollLeft]);
-    // What a person typed or ticked lives in properties, which cloning drops.
     if (element instanceof HTMLTextAreaElement) twin.textContent = element.value;
     else if (element instanceof HTMLInputElement) {
       twin.setAttribute("value", element.value);
@@ -54,12 +49,6 @@ function play({ root, content, scrolled }: Face, after: HTMLElement): () => void
   return leave;
 }
 
-/**
- * An overlay animates closed after its state closes, and whatever it renders meanwhile reads state
- * that closing has already changed. So the content keeps a copy of the face it last showed open and
- * plays the exit on that copy, inert, while the live content hides and unmounts as usual. Returns
- * the ref for the overlay's content element, merged with the caller's.
- */
 export function useExitFace<T extends HTMLElement>(ref?: Ref<T>): RefCallback<T> {
   const leave = useRef<() => void>(undefined);
   return useCallback(
@@ -71,12 +60,9 @@ export function useExitFace<T extends HTMLElement>(ref?: Ref<T>): RefCallback<T>
       leave.current = undefined;
       let face = copy(content);
       let pending = 0;
-      // Mutations arrive after the commit that caused them, so a batch that closes the overlay
-      // leaves `face` as it was before that batch: the last open face.
       const observe = () => {
         if (content.dataset.state === "closed") {
           if (leave.current) return;
-          // A transition on the content would hold `visibility` until it ends.
           content.style.transition = "none";
           content.style.visibility = "hidden";
           leave.current = play(face, rootOf(content));
@@ -97,7 +83,6 @@ export function useExitFace<T extends HTMLElement>(ref?: Ref<T>): RefCallback<T>
         attributes: true,
         characterData: true,
       });
-      // Typing into an uncontrolled field and scrolling change no markup.
       const later = () => {
         cancelAnimationFrame(pending);
         pending = requestAnimationFrame(observe);

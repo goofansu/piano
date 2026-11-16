@@ -3,18 +3,10 @@ import { request } from "node:https";
 import { isIP } from "node:net";
 import ipaddr from "ipaddr.js";
 
-/** The receiver rule as the user reads it: in the editor's refusal and in a failed delivery's detail. */
 export const RECEIVER_RULE = "Use a public HTTPS URL without credentials or a fragment.";
-/** A redirect is never followed: it could lead to a destination the rule refuses. */
 export const REDIRECT_REFUSED = "Receiver redirected.";
-/** A status outside 200-599 is not an HTTP answer Piano can report. */
 export const INVALID_STATUS = "Receiver returned an invalid HTTP status.";
 
-/**
- * A refusal the transport itself makes, as opposed to a failure of the network or the receiver:
- * its message is one of Piano's own fixed sentences, never the URL, the response or an underlying
- * error, so a delivery row may show it.
- */
 export class ReceiverRefusal extends Error {
   override readonly name = "ReceiverRefusal";
 }
@@ -22,14 +14,12 @@ export class ReceiverRefusal extends Error {
 function publicAddress(address: string): boolean {
   if (!ipaddr.isValid(address)) return false;
   const parsed = ipaddr.parse(address);
-  // Reject mapped IPv4 and transition mechanisms as well as special-use ranges.
   return (
     parsed.range() === "unicast" &&
     (parsed.kind() === "ipv4" || parsed.match(ipaddr.parse("2000::"), 3))
   );
 }
 
-/** Syntactic checks at save time; DNS is checked at connection time, never trusted from a save. */
 export function webhookReceiver(text: string): URL {
   const url = new URL(text);
   const hostname = url.hostname.replace(/^\[|\]$/g, "");
@@ -47,9 +37,6 @@ export function webhookReceiver(text: string): URL {
   return url;
 }
 
-/** Webhook-only transport. No proxy, redirect, pooled socket, or second DNS lookup can bypass
- * destination validation. TLS still verifies the original hostname, not the resolved IP.
- * The response body is discarded immediately rather than buffered. */
 export const webhookFetch: typeof fetch = async (input, init) => {
   const url = webhookReceiver(String(input));
   return new Promise<Response>((resolve, reject) => {
@@ -65,7 +52,6 @@ export const webhookFetch: typeof fetch = async (input, init) => {
             if (error) return callback(error, [], undefined);
             if (!addresses.length || addresses.some(({ address }) => !publicAddress(address)))
               return callback(new ReceiverRefusal(RECEIVER_RULE), [], undefined);
-            // Return the checked answers directly to the socket connector (DNS rebinding safe).
             if (options.all) callback(null, addresses);
             else callback(null, addresses[0]!.address, addresses[0]!.family);
           });

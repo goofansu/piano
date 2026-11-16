@@ -1,4 +1,3 @@
-/** Opt-in CPU/latency evidence, not a wall-clock CI gate. Run uncontended with Node 24. */
 import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";

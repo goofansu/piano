@@ -1,5 +1,3 @@
-/** Nonblocking delivery. Overflow fails the consumer instead of dropping facts or
- * backpressuring the producer. Limits count serialized bytes, not just frames. */
 import { Data, Deferred, type Duration, Effect, Queue, Stream } from "effect";
 import { CloseCode } from "../shared/wire.ts";
 
@@ -16,7 +14,6 @@ export const makeDelivery = Effect.fnUntraced(function* <A>(
   let bytes = 0,
     stopped = false;
   return {
-    /** Also race a consumer's blocked external write/ack, not only its next pull. */
     failure: Deferred.await(failed),
     offer: (value: A) =>
       Effect.sync(() => {
@@ -42,8 +39,6 @@ export const makeDelivery = Effect.fnUntraced(function* <A>(
             : Effect.void,
         ),
       ),
-    // fromQueue drains a whole chunk; one-at-a-time pulls keep only one frame
-    // outside the accounted queue when the consumer waits for socket credit.
     stream: Stream.fromEffectRepeat(Queue.take(queue)).pipe(
       Stream.map((item) => {
         bytes -= item.bytes;
@@ -60,25 +55,12 @@ export interface SocketClose {
 }
 
 export const socketLimits = {
-  /** Retained frames waiting for the socket window. */
   queue: { messages: 256, bytes: 8 * 1024 * 1024 },
-  /** Written but unacknowledged frames. */
   window: { frames: 32, bytes: 8 * 1024 * 1024 },
-  /** Largest single encoded frame. */
   frameBytes: 8 * 1024 * 1024,
-  /** Deadline for each written frame's acknowledgement. */
   ackTimeout: "10 seconds" as Duration.Input,
 };
 
-/**
- * Socket delivery: the bounded queue plus a credit window of written, unacknowledged
- * frames. ws.send itself has no backpressure, so frames carry increasing delivery IDs
- * and the browser acknowledges cumulatively, avoiding stop-and-wait RTT per token.
- * Holds at most queue limits + one staging frame waiting for credit + the window.
- * Overflow, write failure and missed acknowledgements request closure through `closed`;
- * the first reason wins. The caller must close the socket and end the owning Scope:
- * resolving `closed` alone does not stop the writer or its acknowledgement timers.
- */
 export const makeSocketDelivery = Effect.fnUntraced(function* <A, E>(
   write: (text: string) => Effect.Effect<void, E>,
   encode: (value: A, deliveryId: number) => string,
@@ -107,8 +89,7 @@ export const makeSocketDelivery = Effect.fnUntraced(function* <A, E>(
         const done = yield* Deferred.make<void>();
         pending.set(deliveryId, { bytes, done });
         pendingBytes += bytes;
-        yield* Effect.orDie(write(text)); // a failed write ends delivery below, like any defect
-        // A tail shorter than the window also has a deadline; never retain it forever.
+        yield* Effect.orDie(write(text));
         yield* Deferred.await(done).pipe(
           Effect.timeout(limits.ackTimeout),
           Effect.catchCause(() =>
@@ -126,9 +107,7 @@ export const makeSocketDelivery = Effect.fnUntraced(function* <A, E>(
     Effect.forkScoped,
   );
   return {
-    /** Never waits for socket credit; overflow requests closure through `closed`. */
     offer: outbox.offer,
-    /** Cumulative: acknowledges every pending frame up to `id`. Unknown or stale IDs are ignored. */
     ack: Effect.fnUntraced(function* (id: number) {
       if (!pending.has(id)) return;
       for (const [pendingId, item] of pending)
@@ -141,7 +120,6 @@ export const makeSocketDelivery = Effect.fnUntraced(function* <A, E>(
       credit = yield* Deferred.make<void>();
       yield* Deferred.succeed(available, undefined);
     }),
-    /** Request closure; the first reason wins. */
     close,
     closed: Deferred.await(closedWith),
   };

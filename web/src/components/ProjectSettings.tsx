@@ -12,11 +12,6 @@ import {
   type ProjectDraftCheck,
 } from "@/lib/projectCommands";
 
-/**
- * A project's settings: its name and instructions, saved together. A view over the command host's
- * Project settings form, which seeds the draft from the saved project and owns submitting; the
- * server answers the save with a toast.
- */
 export function ProjectSettingsDialog({
   open,
   draft,
@@ -61,11 +56,6 @@ export function ProjectSettingsDialog({
   );
 }
 
-/**
- * A project's two fields, Name and Instructions, as the New project and Project settings dialogs
- * both show them: one shape for creating and editing a project. Each field's count and invalid state
- * come from the save decision. Without a settings decision, check the full draft for creation.
- */
 export function ProjectFields({
   id,
   draft,
@@ -103,7 +93,6 @@ export function ProjectFields({
           onChange={(e) => setDraft({ ...draft, instructions: e.target.value })}
           className="max-h-[50dvh] min-h-48 font-mono"
         />
-        {/* The count, not a maxLength: a paste over the limit stays visible and the count says so, and Save stays off. It counts what saving saves: the trimmed text. */}
         <FieldDescription
           id={`${id}-instructions-count`}
           className={cn(
@@ -118,5 +107,4 @@ export function ProjectFields({
   );
 }
 
-/** Characters as the browser counts them (UTF-16 code units), grouped for reading: "20,000". */
 const count = new Intl.NumberFormat();

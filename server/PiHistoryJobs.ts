@@ -1,4 +1,3 @@
-/** Internal to PiHistory: one lazy worker, bounded distinct jobs, in-flight reuse only. */
 import { stat } from "node:fs/promises";
 import { SHARE_ENV, Worker } from "node:worker_threads";
 import { retainImagePreview } from "./ImagePreviews.ts";
@@ -21,8 +20,6 @@ export class PiHistoryJobs {
   private closed = false;
 
   async read(request: HistoryRequest): Promise<HistoryReply> {
-    // Stat on every observation, even while another projection is running. A mutation gets a
-    // distinct job. No completed result is retained: subsequent reads always consult Pi again.
     let version: string;
     try {
       version = fileVersion(await stat(request.path, { bigint: true }));
@@ -33,8 +30,6 @@ export class PiHistoryJobs {
     const key = JSON.stringify([request.operation, request.path, request.sessionId, version]);
     const existing = this.jobs.get(key);
     if (existing) return existing.promise;
-    // Bound both CPU parallelism and queued file identities. Overload uses the existing
-    // unreadable-history result rather than spawning more workers or retaining arbitrary work.
     if (this.jobs.size >= 64) return failed;
     let resolve!: (reply: HistoryReply) => void;
     const promise = new Promise<HistoryReply>((done) => {
@@ -50,11 +45,8 @@ export class PiHistoryJobs {
     this.active = this.jobs.values().next().value!;
     try {
       if (!this.worker) {
-        // Redaction reads the current environment, including secrets added after worker startup.
-        // This worker only reads environment/history; it never starts Pi or writes either.
         const worker = new Worker(new URL("./PiHistoryWorker.ts", import.meta.url), {
           env: SHARE_ENV,
-          // The worker has its own entry point; do not rerun server/test --import preloads.
           execArgv: [],
         });
         this.worker = worker;
@@ -86,7 +78,6 @@ export class PiHistoryJobs {
     this.active = undefined;
     for (const job of this.jobs.values()) job.resolve(failed);
     this.jobs.clear();
-    // Error/exit/deadline never leaves pending readers hanging. A later read starts afresh.
     if (worker) void worker.terminate();
   }
 

@@ -86,7 +86,6 @@ test("INV-01/11/12: live writes and nested edits retain file identity across eve
       assert.equal(tools.at(-1)?.writtenPath, "keys/ghp_nested123456789.ts");
       assert.equal(tools.at(-1)?.status, "success");
       assert.ok(!JSON.stringify(events).includes(secret));
-      // A handled command triggers Pi's authoritative context readback, not only the live fold.
       yield* session.act({ _tag: "prompt", text: "handled input" });
       const [snapshot] = yield* session.events.pipe(Stream.take(1), Stream.runCollect);
       assert.equal(snapshot._tag, "snapshot");

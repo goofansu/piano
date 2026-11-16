@@ -57,11 +57,9 @@ const host = (url: string) => {
   }
 };
 
-/** What a delivery's receiver answered: its HTTP status, or the transport failure. */
 const deliveryDetail = (result: WebhookDelivery) =>
   result.httpStatus === null ? result.detail : `HTTP ${result.httpStatus}`;
 
-/** The last delivery as one line: its outcome, the HTTP status or the failure, and when. */
 export function deliveryFace(
   result: WebhookDelivery | null,
   now: number,
@@ -75,10 +73,6 @@ export function deliveryFace(
   };
 }
 
-/**
- * A test's outcome as a toast: the HTTP status, or the transport failure. A failed delivery is the
- * test's result, so it answers here rather than as the change's failure.
- */
 const testToast = (result: WebhookDelivery) => {
   const detail = deliveryDetail(result);
   if (result.status === "delivered") toast.success(`Test delivered${detail ? ` · ${detail}` : ""}`);
@@ -87,16 +81,13 @@ const testToast = (result: WebhookDelivery) => {
 
 export function WebhookSettings() {
   const observed = useObservation("webhooks", (signal) => listWebhooks({ signal }));
-  // New webhook comes from `pageCommands` (the header and the palette); both open this editor.
   const editing = webhookEditor.useEditing();
-  // Row changes answer with a toast, failures included; only a failed load stays on the page.
   const actions = useSetupActions<Webhook>({
     refresh: () => void observed.refresh(),
     success: (text) => toast.success(text),
   });
   const removing = actions.confirmation;
   const busy = actions.running !== undefined;
-  // The last-delivery line changes as sessions finish; a short poll keeps it current while open.
   useEffect(() => {
     const timer = setInterval(() => void observed.refresh(), 3000);
     return () => clearInterval(timer);
@@ -156,7 +147,6 @@ export function WebhookSettings() {
                 setActive={(active) =>
                   void actions.run({
                     id: `active:${hook.id}`,
-                    // Only what the switch changes: the row may predate an edit made elsewhere.
                     run: () => saveWebhook({ id: hook.id, active }),
                     done: active ? "Webhook turned on" : "Webhook turned off",
                     fallback: "Could not save webhook.",
@@ -180,7 +170,6 @@ export function WebhookSettings() {
   );
 }
 
-/** One receiver: its host, what it subscribes to, its last delivery, and whether it is on. */
 function WebhookRow({
   hook,
   now,
@@ -205,7 +194,6 @@ function WebhookRow({
       data-active={hook.active}
       title={<span className="truncate">{name}</span>}
       titleClassName={hook.active ? undefined : "text-ink-2"}
-      // Interactive controls keep their own hit targets beside the menu.
       actions={
         <Switch
           size="sm"
@@ -245,7 +233,6 @@ function WebhookEditor({
 }: {
   hook?: Webhook;
   close: () => void;
-  /** Re-reads the list once a save settles. */
   refresh: () => void;
 }) {
   const [url, setUrl] = useState(hook?.url ?? "");
@@ -254,18 +241,15 @@ function WebhookEditor({
     hook?.events ?? ["session.completed"],
   );
   const [active, setActive] = useState(hook?.active ?? true);
-  // A failed save stays in the open dialog, on its fields; a saved one closes it with a toast.
   const actions = useSetupActions({
     refresh,
     success: (text) => toast.success(text),
     failure: "keep",
   });
   const busy = actions.running !== undefined;
-  // The server names the field a refusal belongs to; one without a field shows below the form.
   const refusal = useFieldRefusal(WEBHOOK_FIELDS, actions.error);
   const urlError = refusal.at("url");
   const tokenError = refusal.at("token");
-  // Create and Save wait for a URL and at least one event, as New skill waits for its draft.
   const ready = url.trim() !== "" && events.length > 0;
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -325,7 +309,6 @@ function WebhookEditor({
           </Field>
           <FieldSet>
             <FieldLegend variant="label">Events</FieldLegend>
-            {/* A compact checklist, as Linear lists resource types: name only, two columns when they fit. */}
             <div className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
               {WEBHOOK_EVENTS.map((event) => (
                 <Field key={event} orientation="horizontal" className="items-center gap-2.5">

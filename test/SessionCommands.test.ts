@@ -117,7 +117,6 @@ test("session command availability: settled, disconnected, resyncing, unavailabl
   assert.equal(disconnected.changes, true, "Changes reads the registry workspace, not the socket");
   assert.equal(enabled({ ...base, connected: false }, other).archive, false);
 
-  // A resync holds the selected session's registry changes but not another row's.
   const resync = { ...base, resync: true };
   for (const id of ["rename", "archive", "delete"] as const)
     assert.equal(enabled(resync)[id], false, id);
@@ -128,7 +127,6 @@ test("session command availability: settled, disconnected, resyncing, unavailabl
     delete: true,
   });
   assert.equal(enabled(resync).pin, true, "pinning only changes registry preferences");
-  // The same holds while a selection is in flight.
   assert.equal(
     enabled({ ...base, selecting: { cwd: "/work/repo.feature", sessionId: "s1" } }).delete,
     false,
@@ -150,7 +148,6 @@ test("session command availability: settled, disconnected, resyncing, unavailabl
     "unavailable Changes says why, never No changes",
   );
   assert.equal(changesOf(base), undefined);
-  // Recovery belongs to the unselected row even when its history cannot be opened.
   for (const unavailable of ["checkout", "history"] as const) {
     const missingRow = enabled(
       {
@@ -169,7 +166,6 @@ test("session command availability: settled, disconnected, resyncing, unavailabl
   assert.equal(noWorkspace["pull-request"], false);
   assert.equal(changesOf({ ...base, workspaces: [] }), "Changes unavailable");
 
-  // Starting a session: no Pi session ID yet, so nothing names it.
   const unnamed = enabled({
     ...base,
     session: { ...session("/work/repo.feature"), sessionId: null },
@@ -185,7 +181,6 @@ test("session command availability: settled, disconnected, resyncing, unavailabl
     [false, false, false, false, false],
   );
 
-  // The New page: no selection, and sidebar rows stay actionable.
   assert.deepEqual(
     enabled({ ...base, session: null, selectionId: null, view: { kind: "new" } }, other),
     { rename: true, pin: true, archive: true, delete: true },
@@ -249,7 +244,6 @@ test("Wrap reflects the code wrap preference and is available whatever Changes c
   assert.deepEqual(command(base).intent, { kind: "wrap-code", on: true });
   assert.equal(command(base, true).checked, true);
   assert.deepEqual(command(base, true).intent, { kind: "wrap-code", on: false });
-  // A file's source wraps too, so Wrap stays available where Changes cannot open.
   const noWorkspace = { ...base, workspaces: [] };
   const missing = { ...base, session: session("/work/repo.feature", { checkoutMissing: true }) };
   for (const state of [noWorkspace, missing]) {
@@ -278,7 +272,6 @@ test("the palette offers every command the session header and the sidebar row me
     assert.ok(palette.has(id), `header ${id}`);
   for (const id of rowCommands(sessionRowMenu(commands)).map((c) => c.id))
     assert.ok(palette.has(id), `row ${id}`);
-  // The selected session's own row menu resolves to the same commands, with the same enablement.
   const row = rowCommands(
     sessionRowMenu(sessionCommands(base, { cwd: "/work/repo.feature", sessionId: "s1" })),
   );
@@ -292,7 +285,6 @@ test("the palette offers every command the session header and the sidebar row me
 test("each session menu places its project section after the manage commands and before Archive and Delete", () => {
   const row = ids(sessionRowMenu(sessionCommands(base, other)).sections);
   assert.deepEqual(row, [["rename", "pin"], "project", ["archive", "delete"]]);
-  // In the declared order, whatever order the descriptors come in.
   const reversed = sessionCommands(base, other).reverse();
   assert.deepEqual(ids(sessionRowMenu(reversed).sections), row);
   assert.deepEqual(ids(sessionHeaderMenu(sessionCommands(base)).sections), [
@@ -321,7 +313,6 @@ test("the header menu: copy beside the details, manage, a Messages only switch, 
     assert.equal(menu.display?.label, "Messages only");
     assert.equal(menu.display?.checked, messagesOnly);
   }
-  // Another session's commands carry no header: nothing to open or switch, only management.
   const other = sessionHeaderMenu(sessionCommands(base, { cwd: "/work/other", sessionId: "s9" }));
   assert.deepEqual(other.details, []);
   assert.equal(other.display, undefined);
@@ -341,7 +332,6 @@ const app = (preview: Partial<SessionPreview> = {}): SessionPreview => ({
   observedAt: 0,
   ...preview,
 });
-/** This page has observed nothing that withholds the app's status. */
 const seen = { previewObservation: { unconfirmed: null } };
 const previewIds = (state: AppState) =>
   sessionCommands(state, undefined, seen)
@@ -373,14 +363,12 @@ test("preview commands exist only while the selected session's live Pi owns an a
       host: "localhost:5173",
     },
   );
-  // Preview has dedicated controls, not general session action descriptors.
   assert.ok(
     !headerIds(sessionHeaderMenu(sessionCommands(running, undefined, seen))).some((id) =>
       id.includes("preview"),
     ),
   );
 
-  // An app that is not answering has nothing to open, but can still be inspected and stopped.
   const failed = {
     ...base,
     session: session("/work/repo.feature", {
@@ -398,7 +386,6 @@ test("preview commands exist only while the selected session's live Pi owns an a
     "stop waits for resync",
   );
 
-  // A closed or peeked session's last state is not a running app.
   const closed = session("/work/repo.feature", {
     preview: app(),
     closure: { _tag: "released", detail: "" },
@@ -406,7 +393,6 @@ test("preview commands exist only while the selected session's live Pi owns an a
   assert.deepEqual(previewIds({ ...base, session: closed }), []);
   const peek = { ...session("/work/repo.feature", { preview: app() }), hosted: false };
   assert.deepEqual(previewIds({ ...base, session: peek }), []);
-  // Another session's commands never offer this session's app.
   assert.deepEqual(
     sessionCommands(running, other, seen).filter((c) => c.id.includes("preview")),
     [],
@@ -445,7 +431,6 @@ test("view commands offer the rail side by side, Agent one at a time beside an o
     ofLayout({ single: true, agent: false, surface: true, rail: false, agentTab: true }),
     { changes: true, "session-rail": false, agent: true },
   );
-  // Nothing open: Agent needs no tab.
   assert.deepEqual(
     ofLayout({ single: true, agent: true, surface: false, rail: false, agentTab: false }),
     { changes: true, "session-rail": false, agent: false },
@@ -483,7 +468,6 @@ test("a pull request, linked or not, opens only where Changes can, and says why 
   assert.equal(removed.command.enabled, false);
   assert.equal(removed.command.detail, removed.changes.detail);
 
-  // A link made where Changes cannot open would show nowhere it can be changed or removed.
   const unlinked = at({ unavailable: "checkout" });
   assert.equal(unlinked.command.enabled, false);
   assert.equal(unlinked.command.detail, unlinked.changes.detail);
@@ -538,7 +522,6 @@ test("the rail's Environment rows offer the session's copy commands for their fa
   assert.deepEqual(menu(detached, "branch"), []);
 
   assert.deepEqual(menu(onBranch, "pull request"), []);
-  // A saved association needs neither a matching repository nor a present checkout/GitHub read.
   const linked = at(worktree(path, "feature"), "feature", {
     pullRequest: { url: "https://github.com/other/repo/pull/222", source: "manual" },
     unavailable: "checkout",

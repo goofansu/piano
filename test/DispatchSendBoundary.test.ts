@@ -1,10 +1,3 @@
-/**
- * The start's send boundary through the real transport: the extension's Node socket and the shared
- * auto-reconnecting connection, against a running `server/main.ts` with the fake Pi. A socket that
- * never opens sent nothing, so the start is `refused` / `not_sent`. A send that throws after the
- * socket took the creation frame may have started a child. Read-only reconciliation can find
- * that child, but missed input observations stay uncertain and creation is never resent (PIN-137).
- */
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
@@ -35,7 +28,6 @@ test(
     timeout: 30_000,
   },
   async () => {
-    // Nothing listens on this port: the real socket is refused before it opens.
     const port = await freePort();
     const base = `http://127.0.0.1:${port}`;
     const result = await startSession(
@@ -85,7 +77,6 @@ test(
     piano.stderr.on("data", (chunk) => {
       logs += chunk;
     });
-    /** Pi processes Piano started: one per session it created. */
     const children = () => {
       try {
         return execFileSync("pgrep", ["-P", String(piano.pid), "-f", "fake-pi.mjs"], {
@@ -106,16 +97,11 @@ test(
       for (;;) {
         try {
           if ((await fetch(`${base}/api/folders`)).ok) break;
-        } catch {
-          /* startup */
-        }
+        } catch {}
         assert.ok(Date.now() < deadline && piano.exitCode === null, logs);
         await delay(50);
       }
 
-      // Enqueue creation, then throw and hide its replies. Keep the underlying connection alive
-      // until Pi receives the input: closing after a fixed delay races startup/attachment, and a
-      // disconnect before attachment legitimately sends no prompt (covered in ClientSessions).
       const real = nodeSocketEnvironment({ url: wsUrl, origin: base });
       let opened = 0;
       let creations = 0;
@@ -153,8 +139,6 @@ test(
         controller.signal,
       );
 
-      // The fake Pi writes synchronously on receiving this prompt, before acknowledging it.
-      // This is the delivery barrier, not an assumption about how fast the child starts.
       const marker = join(repo, "child.txt");
       const until = Date.now() + 15_000;
       while (!existsSync(marker)) {
@@ -172,7 +156,6 @@ test(
       assert.ok(result.handle?.sessionId, "reconciliation identifies the original child");
       assert.equal(readFileSync(marker, "utf8").trim(), result.handle.sessionId);
       assert.equal(result.handle.inputFingerprint, "", "missed observations remain unattributable");
-      // Longer than the transport's reconnect delay: nothing sends creation again.
       await delay(3_000);
       assert.equal(creations, 1, "the creation was sent once");
       assert.equal(opened, 2, "one read-only reconnect finds the original start");

@@ -8,7 +8,6 @@ import {
   paletteItemValue,
 } from "./paletteSearch.ts";
 
-/** Browser worker in production; a controlled message transport in contract tests. */
 export interface PaletteSearchWorker {
   postMessage(request: PaletteSearchRequest): void;
   terminate(): void;
@@ -24,11 +23,6 @@ type Job = {
   accept: (pages: PalettePage[]) => void;
 };
 
-/**
- * Own the worker lifecycle and catalog protocol: one scan in flight, one replaceable next query,
- * and only the current request may deliver results. Callers see their original rows, never wire
- * documents. Cancellation discards delivery, not the active scan's backpressure slot.
- */
 export function createPaletteSearchClient(
   createWorker: () => PaletteSearchWorker,
   failed: () => void,
@@ -74,7 +68,6 @@ export function createPaletteSearchClient(
           ...("searchOnly" in row && row.searchOnly ? { searchOnly: true } : {}),
         })),
       }));
-      // The filters page is the lib's own, so its rows come back as the same objects too.
       rows = new Map(
         [...job.groups, PALETTE_FILTER_GROUP].flatMap((group) =>
           group.rows.map((row) => [paletteItemValue(group.id, row.key), row] as const),

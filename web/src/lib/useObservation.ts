@@ -2,19 +2,12 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createObservation, type Observation } from "./observation.ts";
 
 export interface UseObservationOptions {
-  /** `false` keeps the value but stops reading; becoming `true` reads afresh. Default `true`. */
   enabled?: boolean;
-  /** Read again when the window regains focus. Fixed for the component's lifetime. */
   focus?: boolean;
-  /** Any change reads again after `debounce` milliseconds (default 0), coalescing quick changes. */
   trigger?: unknown;
   debounce?: number;
 }
 
-/**
- * A live observation of `key` while mounted; `null` is idle. The returned value is only ever the
- * current key's, even during the render in which the key changes (INV-07).
- */
 export function useObservation<T>(
   key: string | null,
   load: (signal: AbortSignal, key: string) => Promise<T>,

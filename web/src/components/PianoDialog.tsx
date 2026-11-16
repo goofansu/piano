@@ -13,8 +13,6 @@ export {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-/** A dialog scales in from the centre and exits on its last open face; `still` drops that for
- * one opened by a shortcut. */
 export function DialogContent({
   className,
   still = false,

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { FileNotice as Notice } from "@/components/FileNotice";
 
-/** Native media only: shadcn has no media decoder. No autoplay or executable SVG. */
 export function NativeFile({
   kind,
   url,
@@ -42,13 +41,11 @@ export function NativeFile({
           src={url}
           alt={name}
           className="max-h-full max-w-full rounded-lg shadow-1"
-          // SVG currentColor is isolated from the app theme in image mode.
           style={svg ? { backgroundColor: "white" } : undefined}
           onError={() => setFailed(true)}
         />
       </div>
     );
-  // Local read-only media can have no caption track; the viewer must still expose the original.
   return kind === "audio" ? (
     <div className="p-4">
       {/* oxlint-disable-next-line jsx-a11y/media-has-caption -- arbitrary local audio has no supplied caption track. */}

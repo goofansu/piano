@@ -171,7 +171,6 @@ test("Esc returns queued messages to the draft first, then stops Pi, and does no
 
 const start: StartOptions = { model: "fake/alpha", thinkingLevel: "high" };
 const message = { text: "hi", attachments: [image] };
-/** The command a send-key press sends in situation `over`, or null. */
 const sent = (over: Partial<ComposerSituation>, alt: boolean) => {
   const kind = at(over).delivery(alt);
   return kind && messageCommand(kind, message, start);

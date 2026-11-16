@@ -1,4 +1,3 @@
-// Local-only MCP stdio sentinel. Reports identity; the checkpoint never calls its tool.
 import { appendFileSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 

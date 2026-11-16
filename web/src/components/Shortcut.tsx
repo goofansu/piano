@@ -2,7 +2,6 @@ import { cn } from "cn";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { isMac, keys } from "@/lib/keys";
 
-/** A keyboard hint. On a Mac the symbols sit together in one key cap, as the menu bar writes them. */
 export function Shortcut({
   of,
   className,
@@ -24,7 +23,6 @@ export function Shortcut({
   );
 }
 
-/** A tooltip line with its shortcut at the end. */
 export function Hint({
   children,
   of,

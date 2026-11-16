@@ -1,15 +1,3 @@
-/**
- * What another machine's Piano may ask of this one through `/ws/peer` (ADR 0004). This Piano owns
- * the sessions, so it decides here, and answers a refusal with the request's ordinary reply in
- * the delivery sequence: the gateway in front stays a pipe that never injects or renumbers frames.
- *
- * The slice lists registered sessions, opens them, starts a session in an open folder or one of
- * its worktrees, sends text/prepared raster images, answers dialogs and stops. It also manages this
- * machine's projects: create, rename, instruct, mark done, delete, and file a listed session in
- * one; a listed session's own life: rename, pin, archive and delete; and Pi's trust decision for
- * a directory registered here, which lets its project extensions run on this machine. Worktree
- * creation, registering folders and other settings are not offered.
- */
 import { type ClientMessage, sameSession } from "../shared/wire.ts";
 import type { Selection } from "./ClientSessions.ts";
 import type { RegistryData } from "./Registry.ts";
@@ -18,36 +6,19 @@ type Request = Exclude<ClientMessage, { _tag: "ack" }>;
 type Act = Extract<Request, { _tag: "act" }>;
 type Create = Extract<Request, { _tag: "create_session" }>;
 
-/**
- * - `admit`: run as for a browser on this machine;
- * - `refuse`: answer with the request's ordinary unanswered reply.
- */
 export type PeerVerdict = "admit" | "refuse";
 
-/**
- * A folder or worktree registered on this machine: the only directories a peer may ask about.
- * Closing a folder keeps its workspaces, so this includes the sessions of closed folders.
- */
 export const registered = (data: RegistryData, cwd: string) =>
   data.workspaces.some((workspace) => workspace.path === cwd);
-/**
- * Where a peer may start a session: an open folder or one of its worktrees. Starting a session in
- * a closed folder's directory reopens the folder, and registering folders stays with this machine.
- */
 const openDirectory = (data: RegistryData, cwd: string) =>
   data.workspaces.some(
     (workspace) => workspace.path === cwd && data.folders.includes(workspace.folder),
   );
 const listed = (data: RegistryData, cwd: string, sessionId: string) =>
   registered(data, cwd) && data.sessions.some((entry) => sameSession(entry, { cwd, sessionId }));
-/**
- * Where a peer's input may go: a listed session, or, before Pi names a session, an open
- * directory. Its actions and the images it prepares and claims for them are held to this one rule.
- */
 export const inputTarget = (data: RegistryData, cwd: string, sessionId: string | null) =>
   sessionId === null ? openDirectory(data, cwd) : listed(data, cwd, sessionId);
 
-/** Inline remote images stay forbidden: ClientDispatch resolves prepared references after this check. */
 function actionAllowed({ action, start }: Act): boolean {
   if (start?.name !== undefined || start?.dispatchedFrom !== undefined) return false;
   switch (action._tag) {
@@ -66,12 +37,6 @@ function actionAllowed({ action, start }: Act): boolean {
   }
 }
 
-/**
- * A new session starts where it is asked, as this machine's own browser would start it, joining
- * the project it names (the registry refuses one it does not hold), but adds nothing else here:
- * no worktree, name, ancestry, inherited membership (dispatch's, which has a parent) or inline
- * attachments.
- */
 function creationAllowed({ inheritProject, worktree, attachments, options }: Create) {
   return (
     !inheritProject &&
@@ -82,10 +47,6 @@ function creationAllowed({ inheritProject, worktree, attachments, options }: Cre
   );
 }
 
-/**
- * `selection` is the connection's own (ClientSessions'), checked for its actions. A creation has
- * no session ID until Pi names it; until then its actions are checked against its folder.
- */
 export function peerVerdict(
   data: RegistryData,
   request: Request,
@@ -98,7 +59,6 @@ export function peerVerdict(
     case "models":
     case "directory":
       return registered(data, request.cwd) ? "admit" : "refuse";
-    // Trusting a directory runs its project extensions here: only one this machine registered.
     case "set_trust":
       return registered(data, request.path) ? "admit" : "refuse";
     case "select":
@@ -109,8 +69,6 @@ export function peerVerdict(
         : request.sessionId !== null && listed(data, request.cwd, request.sessionId)
           ? "admit"
           : "refuse";
-    // This machine's projects, which the registry checks as it does for its own browser: an
-    // unknown project is refused there. Membership changes only for a session listed here.
     case "update_project":
     case "delete_project":
     case "set_project_done":
@@ -120,8 +78,6 @@ export function peerVerdict(
         ? "admit"
         : "refuse";
     case "assign_project":
-    // A listed session's own life, as this machine's browser changes it: archive and delete stop
-    // its Pi, and delete removes its history.
     case "rename_session":
     case "pin_session":
     case "archive_session":

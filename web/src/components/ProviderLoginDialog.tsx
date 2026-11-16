@@ -34,7 +34,6 @@ import { canSubmitAnswer, type SignInApi, signInDialogView } from "@/lib/signInA
 import { useLastShown } from "@/lib/useLastShown";
 import { useSignInAttempt } from "@/lib/useSignInAttempt";
 
-/** `url` is already checked safe by `signInDialogView`. */
 function SignInLink({ url, variant }: { url: string; variant?: "outline" }) {
   return (
     <Button asChild variant={variant}>
@@ -46,17 +45,11 @@ function SignInLink({ url, variant }: { url: string; variant?: "outline" }) {
   );
 }
 
-/** The sign-in a Settings section has open: `key` names this opening, so each one is a fresh
- * attempt. */
 interface OpenSignIn {
   key: string;
   provider: string;
 }
 
-/** The sign-in dialog for `signIn`, or closed while it is undefined. Closing keeps the last
- * sign-in's attempt mounted while the dialog animates closed; reopening mounts a new attempt by its
- * new key. Explicit dismissal cancels pending sign-in; browser disconnect still preserves it.
- * `api` runs another sign-in of the same shape, such as an MCP server's. */
 export function ProviderLoginDialog({
   signIn,
   providers,
@@ -84,7 +77,6 @@ export function ProviderLoginDialog({
   ) : null;
 }
 
-/** One opening's attempt; it polls only while `open`, so the closing face stays quiet. */
 function SignInDialog({
   open,
   provider,
@@ -124,7 +116,6 @@ function SignInDialog({
         className="max-h-[85dvh] overflow-y-auto"
         showCloseButton={!busy}
         onInteractOutside={(event) => event.preventDefault()}
-        // Without a description line, nothing describes the dialog but its fields.
         {...(view.description ? {} : { "aria-describedby": undefined })}
       >
         <DialogHeader>
@@ -205,11 +196,9 @@ function SignInDialog({
     </Dialog>
   );
 }
-/** Copies the device code, its icon turning to a check while the copy is confirmed. */
 function CopyDeviceCode({ code }: { code: string }) {
   const { copied, copy } = useCopy(code, "Could not copy. Select the code to copy it.");
   const label = copied ? "Device code copied" : "Copy device code";
-  // A field's own button, not an `IconButton`, so it composes the tooltip every copy control shows.
   return (
     <Tooltip>
       <TooltipTrigger asChild>

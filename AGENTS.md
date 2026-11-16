@@ -10,6 +10,13 @@ truth for folder, worktree, workspace, project, session, registry and the planne
 terms. When talking to the user, name what they see in the UI ("Piano's database", not "the
 registry").
 
+## Code comments
+
+Keep authored source comments to concise notes about concrete hacks, workarounds or compatibility
+patches, naming the trigger or known removal condition. Preserve legal notices and tooling directives.
+Keep explanations in the owning docs, not module headers, API narration or test commentary. Leave
+upstream/vendor comments intact.
+
 ## Verification
 
 Follow [evidence-based development and testing](docs/testing.md): before changing behavior, name

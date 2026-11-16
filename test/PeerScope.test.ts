@@ -1,8 +1,3 @@
-/**
- * ADR 0004: a Piano serving another machine's gateway at /ws/peer decides that connection's
- * scope itself and answers refusals with ordinary replies, without ending the connection.
- * Driven against a real backend (fake Pi) whose registry lists one session.
- */
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import test from "node:test";
@@ -43,7 +38,6 @@ async function attach(base: string, path: "/ws" | "/ws/peer") {
       events.addEventListener("frame", check);
       check();
     });
-  /** Frames the server sent in answer to `message`, up to a ping that follows it. */
   const answers = async (message: object) => {
     const from = frames.length;
     const marker = `after-${++nonce}`;
@@ -160,7 +154,7 @@ test(
       (await peer.answers({ ...create, selectionId: "duplicate" })).find(
         (m) => m.selectionId === "duplicate",
       )?._tag,
-      "error", // Expired capability cannot claim the original attempt was never sent.
+      "error",
     );
     assert.equal(
       (await readRegistry("unused", f.database)).sessions.length,
@@ -172,7 +166,6 @@ test(
       ).some((m) => m._tag === "error"),
       "a refused preparation cannot steal the current selection",
     );
-    // Re-select the created session: a small reference on act is resolved only for that selection.
     peer.ws.send(
       JSON.stringify({
         _tag: "select",
@@ -278,7 +271,6 @@ test(
     );
 
     await t.test("settings and unselected actions are refused with their replies", async () => {
-      // Trusting a directory this machine never registered would run that directory's extensions.
       const [trust] = await peer.answers({ _tag: "set_trust", path: "/different", trusted: true });
       assert.equal(trust?._tag, "trust_failed");
       assert.equal(trust?.cwd, "/different");
@@ -328,7 +320,6 @@ test(
           (frame._tag === "trust" || frame._tag === "trust_failed") && frame.cwd === f.checkout,
         from,
       );
-      // Pi holds the decision; the reply is the one this machine's own browser gets.
       assert.equal(answer._tag, "trust", JSON.stringify(answer));
       assert.equal(answer.requested, true);
       await peer.next(
@@ -411,18 +402,15 @@ test(
           body: JSON.stringify({ cwd }),
         });
       const notRegistered = /not a registered folder/i;
-      // The fixture's registered folder is not on disk: reaching discovery shows as its own error.
       const listed = await read("/api/peer/commands", identity.cwd);
       assert.doesNotMatch((await listed.json()).error ?? "", notRegistered);
       const unlisted = await read("/api/peer/commands", "/different");
       assert.equal(unlisted.status, 409);
       assert.match((await unlisted.json()).error, notRegistered);
-      // This machine's own browser read is not limited to registered folders.
       const own = await read("/api/commands", "/different");
       assert.doesNotMatch((await own.json()).error ?? "", notRegistered);
     });
 
-    // Last but one: the started session keeps streaming frames the subtests above would read.
     await t.test(
       "a text session starts in a registered folder, and its selection takes actions",
       async () => {
@@ -445,7 +433,6 @@ test(
         assert.equal(selected._tag, "selected", JSON.stringify(selected));
         assert.equal(selected.cwd, f.checkout);
         const sessionId = String(selected.sessionId);
-        // The remote registers the session it started, so the main Piano lists it.
         await peer.next(
           (frame) =>
             frame._tag === "registry" &&
@@ -473,12 +460,9 @@ test(
         sessionReferences: { sessionId: string; projectId?: string }[];
       };
       const listed = { cwd: identity.cwd, sessionId: identity.sessionId };
-      /** Send a change, then the toast that confirms it and the sidebar that shows it. */
       const change = async (message: object, shown: (listing: Listing) => boolean) => {
         const from = peer.frames.length;
         peer.ws.send(JSON.stringify(message));
-        // A change is confirmed by its toast. An earlier subtest's session may still be reporting
-        // (a Stop settling answers with an error): that is not this request's reply.
         const answer = await peer.next((frame) => frame._tag === "toast", from);
         await peer.next(
           (frame) => frame._tag === "registry" && shown(frame as unknown as Listing),
@@ -532,7 +516,6 @@ test(
         "Project marked done",
       );
 
-      // A new session joins the project it names, as one started on this machine does.
       const from = peer.frames.length;
       peer.ws.send(
         JSON.stringify({
@@ -558,7 +541,6 @@ test(
         from,
       );
 
-      // Membership changes only for a session listed here; nothing is created on the way.
       for (const refused of [
         { _tag: "assign_project", cwd: "/different", sessionId: "s", projectId: "p-peer" },
         {
@@ -567,8 +549,6 @@ test(
           assign: { cwd: "/different", sessionId: "s" },
         },
       ]) {
-        // A session created earlier may still be reporting; only this request's replies count:
-        // its refusal, and no confirmation.
         const answers = (await peer.answers(refused)).filter(
           (frame) =>
             frame._tag === "toast" ||
@@ -596,7 +576,6 @@ test(
       async () => {
         type Entry = { sessionId: string; title?: string; pinned?: boolean; archived: boolean };
         const entries = (frame: Frame) => frame.sessionReferences as Entry[];
-        /** Send a change and wait for the sidebar that shows it; the toast that confirms it, if any. */
         const change = async (message: object, shown: (entries: Entry[]) => boolean) => {
           const from = peer.frames.length;
           peer.ws.send(JSON.stringify(message));
@@ -617,7 +596,6 @@ test(
           assert.equal(answer.message, toast);
         };
 
-        // Rename and Delete act on a session whose checkout exists: Pi starts there for the name.
         const from = peer.frames.length;
         peer.ws.send(
           JSON.stringify({
@@ -668,7 +646,6 @@ test(
           (list) => find(list, identity.sessionId)?.archived === true,
         );
 
-        // Only a session listed here: nothing else on this machine is named, started or removed.
         for (const _tag of ["rename_session", "pin_session", "archive_session", "delete_session"]) {
           const answers = (
             await peer.answers({
@@ -692,7 +669,6 @@ test(
       },
     );
 
-    // After the creation above: closing its folder here is what this subtest needs.
     await t.test("a folder closed here cannot be reopened by a peer's new session", async () => {
       const folderPaths = (frame: Frame) =>
         (frame.folders as { path: string }[]).map((folder) => folder.path);
@@ -721,7 +697,6 @@ test(
       );
       assert.equal(answer._tag, "selection_rejected", JSON.stringify(answer));
       assert.match(String(answer.message), notAvailable);
-      // The models read for an existing session in the closed folder is still answered.
       const [models] = await peer.answers({
         _tag: "models",
         cwd: f.checkout,

@@ -1,5 +1,3 @@
-// A compacted ~1 MiB context followed by provider/tool boundaries. Pacing belongs to the
-// provider/tool fixture, never to how often Piano asks for state or messages.
 import { writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { setTimeout as delay } from "node:timers/promises";
@@ -38,7 +36,6 @@ async function prompt(command) {
   prompted = true;
   active = true;
   writeFileSync(metricsPath, JSON.stringify(metrics));
-  // Pi compacts in preparation, before agent_start. get_state already knows it is active.
   out({ type: "compaction_start", reason: "threshold" });
   messages = [{ role: "compactionSummary", summary: "x".repeat(1024 * 1024) }];
   out({ type: "compaction_end" });

@@ -1,7 +1,6 @@
 import { useRef, useState, useSyncExternalStore } from "react";
 import { createSetupActions, type SetupActions, type SetupActionsOptions } from "./setupActions.ts";
 
-/** One section's setup actions while mounted; the latest `options` are used for each change. */
 export function useSetupActions<C = never, S = never>(options: SetupActionsOptions) {
   const latest = useRef(options);
   latest.current = options;
@@ -9,7 +8,6 @@ export function useSetupActions<C = never, S = never>(options: SetupActionsOptio
     createSetupActions<C, S>({
       refresh: () => latest.current.refresh(),
       success: (text, id) => latest.current.success(text, id),
-      // Where failures go is fixed when the section mounts; a reporter is read when it is called.
       failure:
         typeof options.failure === "function"
           ? (text) => {

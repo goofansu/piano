@@ -14,10 +14,6 @@ export {
   SelectValue,
 } from "@/components/ui/select";
 
-/**
- * Piano's overlay policy: the list drops below the trigger like the other menus, instead of
- * upstream's item-aligned overlay that covers the trigger and whatever sits above it.
- */
 export function SelectContent({
   className,
   position = "popper",

@@ -98,7 +98,6 @@ export function SettingsPage({
   state: AppState;
   client: Client;
 }) {
-  // Each page; a page named in SETTINGS_SECTIONS without one here fails to typecheck.
   const pages: Record<SettingsSection, () => React.ReactNode> = {
     providers: () => <ProvidersSettings />,
     mcp: () => <McpSettings />,
@@ -113,9 +112,7 @@ export function SettingsPage({
 
 function ProvidersSettings() {
   const observed = useProviderAccounts();
-  // Opening the page reads again, as returning to it from another page always has.
   useEffect(() => void providerAccounts.refresh(), []);
-  // Signing in or out changes the usable models; the server invalidates every catalog itself.
   const actions = useSetupActions<OAuthProvider, string>({
     refresh: () => void providerAccounts.refresh(),
     success: (text) => toast.success(text),
@@ -124,7 +121,6 @@ function ProvidersSettings() {
   const signingOut = actions.running;
   const { body, providers } = providersSettingsView({
     value: observed.value,
-    // The failure stays while Retry reads again, so the alert does not flicker into a skeleton.
     failure: !!observed.error,
     signingOut,
   });

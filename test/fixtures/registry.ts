@@ -1,4 +1,3 @@
-/** Seed and read scratch SQLite registries through the production store. */
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { Effect } from "effect";
@@ -16,7 +15,6 @@ type Seed = Partial<Omit<RegistryData, "sessions">> & {
   >;
 };
 
-/** Populate a new database; fills defaults and missing workspace identities like a fresh registry would. */
 export function seedRegistry(database: string, seed: Seed) {
   const data: RegistryData = {
     version: 2,
@@ -42,7 +40,6 @@ export function seedRegistry(database: string, seed: Seed) {
   openRegistryDatabase(database, data).close();
 }
 
-/** Browser fixtures describe their registry as JSON at `config`; seed `<config>.sqlite` from it once. */
 export function registryEnv(config: string) {
   readRegistry(config);
   return { PIANO_DB_PATH: `${config}.sqlite` };

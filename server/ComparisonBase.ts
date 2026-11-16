@@ -1,9 +1,3 @@
-/**
- * What Changes compares a checkout's working tree with. Git alone answers, plus two identities
- * Piano holds: the base of the session's pull request and the base branch Worktrunk reported when
- * Piano created the worktree. Nothing is fetched: a target is whatever Git holds locally, and a
- * scope Git cannot answer for is unavailable with its reason, never another comparison (INV-06).
- */
 import type { PullRequestBranches } from "../shared/pullRequestBranches.ts";
 import type {
   ChangesScope,
@@ -14,30 +8,21 @@ import type {
 import type { BranchHome, Checkout, Upstream } from "./GitCheckout.ts";
 import { type BranchHead, branchRemote, githubRemote, isFromBranch } from "./GitHubPullRequests.ts";
 
-/** Identities Piano holds that name a branch's target, in the order they are tried. */
 export interface TargetHints {
-  /** GitHub's qualified branches. Unqualified legacy hints are accepted but cannot retarget. */
   readonly pullRequest?: PullRequestBranches;
-  /** The base branch Worktrunk reported when Piano created this worktree. */
   readonly worktreeBase?: string;
 }
 
-/** Every scope resolved for one checkout: what each would compare with, or why it cannot. */
 export interface Comparisons {
   readonly head: string | null;
   readonly branch: string | null;
-  /** The remote-tracking ref the branch's push updates, when Git holds it (`BranchHome.pushed`);
-   * commits not pushed count against it. */
   readonly pushed: string | null;
-  /** The hinted pull request was opened from this branch: its head, on the branch's remote. */
   readonly pullRequestFromBranch: boolean;
   readonly scopes: ScopeAvailability[];
-  /** The comparison for `scope`, or the reason it is unavailable; `uncommitted` always has one. */
   readonly of: ((scope: "uncommitted") => { comparison: Comparison }) &
     ((scope: ChangesScope) => { comparison: Comparison } | { unavailable: string });
 }
 
-/** The commit `ref` names, or null when Git holds no such ref. */
 const commitOf = async (checkout: Checkout, ref: string): Promise<string | null> => {
   const result = await checkout.run(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], {
     okCodes: [0, 1],
@@ -45,7 +30,6 @@ const commitOf = async (checkout: Checkout, ref: string): Promise<string | null>
   return result.code === 0 ? result.stdout.toString("utf8").trim() || null : null;
 };
 
-/** The first of the named branch's refs Git holds: its remote-tracking ref, else the local one. */
 async function namedTarget(
   checkout: Checkout,
   remote: string,
@@ -59,8 +43,6 @@ async function namedTarget(
   return null;
 }
 
-/** The branch as GitHub knows it when `pr` was opened from it, else null: no PR came from a
- * branch whose remote is not on GitHub. Pushed or not: the PR's head is proof enough. */
 function fromBranch(
   home: BranchHome,
   pr: NonNullable<TargetHints["pullRequest"]>,
@@ -70,23 +52,18 @@ function fromBranch(
   return head && isFromBranch(pr, head) ? head : null;
 }
 
-/** The base of a PR opened from this branch, held under a remote naming the base repository,
- * not a same-named local branch or fork ref. Missing proof falls through to the existing target
- * order; nothing is fetched. */
 async function pullRequestTarget(
   checkout: Checkout,
   { remote }: Upstream,
   pr: NonNullable<TargetHints["pullRequest"]>,
 ): Promise<ComparisonTarget | null> {
   if (!pr.baseRepo || !pr.base) return null;
-  // Hints can come from older/untrusted callers. A branch name must not become a rev expression.
   if (
     (await checkout.run(["check-ref-format", `refs/heads/${pr.base}`], { okCodes: [0, 1] }))
       .code !== 0
   )
     return null;
   const remotes = (await checkout.text(["remote"])).trim().split("\n").filter(Boolean);
-  // Git fetched the base's ref, so the remote's fetch URL names its repository.
   for (const name of new Set([remote, ...remotes])) {
     if (githubRemote((await checkout.remoteUrl(name)) ?? "")?.repo !== pr.baseRepo) continue;
     const ref = `refs/remotes/${name}/${pr.base}`;
@@ -96,7 +73,6 @@ async function pullRequestTarget(
   return null;
 }
 
-/** The remote's default branch as Git holds it locally (`refs/remotes/<remote>/HEAD`). */
 async function remoteDefault(checkout: Checkout, remote: string): Promise<ComparisonTarget | null> {
   const result = await checkout.run(["symbolic-ref", "--quiet", `refs/remotes/${remote}/HEAD`], {
     okCodes: [0, 1],
@@ -109,18 +85,12 @@ async function remoteDefault(checkout: Checkout, remote: string): Promise<Compar
   return commit ? { name: ref.slice(prefix.length), ref, commit, from: "remote-default" } : null;
 }
 
-/**
- * The target a branch is compared with, the first of these that Git holds: the pull request's
- * repository-qualified base when its head is this checkout's branch on its remote; the worktree's base at creation; the
- * remote's default branch; a local `main` or `master`, assumed.
- */
 async function resolveTarget(
   checkout: Checkout,
   upstream: Upstream,
   head: BranchHead | null,
   hints: TargetHints,
 ): Promise<ComparisonTarget | null> {
-  // The base lives where the branch started, which a fork's branch does not push to.
   const { tracked } = upstream;
   if (head && hints.pullRequest) {
     const target = await pullRequestTarget(checkout, upstream, hints.pullRequest);
@@ -139,8 +109,6 @@ async function resolveTarget(
   return null;
 }
 
-/** The `branch` scope for a checkout on `branch` at `head`: its comparison, or why there is none.
- * `pullRequestHead` is the branch as GitHub knows it when the hinted PR was opened from it. */
 async function branchScope(
   checkout: Checkout,
   head: string | null,
@@ -152,8 +120,6 @@ async function branchScope(
   if (!branch) return { unavailable: "Detached HEAD." };
   const target = await resolveTarget(checkout, branch.upstream, pullRequestHead, hints);
   if (!target) return { unavailable: "No base branch known." };
-  // This branch by ref, not name: a fork's PR into a same-named base is another branch, and a
-  // branch that pushes to its target under another name (`push.default=upstream`) is not it.
   const { upstream } = branch;
   if (
     target.ref === `refs/heads/${branch.name}` ||
@@ -170,10 +136,6 @@ async function branchScope(
   return { comparison: { scope: "branch", base: found[0]!, target } };
 }
 
-/**
- * What of the branch is still only here: commits the remote-tracking ref its push updates does
- * not have, as Git holds that ref locally (no fetch), or null when there is no such ref.
- */
 export async function commitsNotPushed(
   checkout: Checkout,
   { head, pushed }: Pick<Comparisons, "head" | "pushed">,
@@ -183,7 +145,6 @@ export async function commitsNotPushed(
   return Number(count) || 0;
 }
 
-/** Resolve every scope for the checkout once; `of` then answers for the one asked for. */
 export async function resolveComparisons(
   checkout: Checkout,
   hints: TargetHints = {},

@@ -4,12 +4,6 @@ import type { SessionEntry } from "./sessionCatalog.ts";
 
 const buffer = 5;
 
-/** Internal geometry/focus implementation of SidebarSessionList; callers render that list rather
- * than wiring its ruler, positioned rows and menu-release lifecycle separately.
- * Fixed-height rows use the sidebar's ONE scroll viewport, not one viewport per group.
- * Measure the list's row CSS so touch, phone and rem sizing stay owned by SidebarSessionList.
- * Group headers remain ordinary flow; observing the nav catches groups above opening/closing.
- */
 export function useSidebarWindow(sessions: readonly SessionEntry[], selectionId: string | null) {
   const list = useRef<HTMLUListElement>(null);
   const measure = useRef<HTMLLIElement>(null);
@@ -29,7 +23,6 @@ export function useSidebarWindow(sessions: readonly SessionEntry[], selectionId:
     [sessions],
   );
 
-  // Re-read after a parent render too: a reorder can move this group without resizing the nav.
   const update = useCallback(() => {
     const ul = list.current;
     const probe = measure.current;
@@ -42,9 +35,6 @@ export function useSidebarWindow(sessions: readonly SessionEntry[], selectionId:
     if (!step) return;
     if (!selectedKey) revealed.current = undefined;
     const index = selectedKey === undefined ? undefined : positions.get(selectedKey);
-    // The model chooses/opens the destination. Geometry reveals it even before its row mounts.
-    // Wait for the measured list height to commit; an initial ruler or expanded group may have
-    // changed the available scroll range. Hidden sidebars keep this intent until shown.
     const height = Math.max(0, sessions.length * step - gap) + 2 * padding;
     const box = viewport.getBoundingClientRect();
     if (
@@ -87,8 +77,6 @@ export function useSidebarWindow(sessions: readonly SessionEntry[], selectionId:
     observer.observe(viewport);
     observer.observe(nav);
     observer.observe(measure.current);
-    // Desktop hiding preserves the inner viewport's dimensions and scroll. Its outer column,
-    // not the viewport, changes size when the user shows it again.
     const column = ul?.closest('[data-slot="layout-sidebar"]');
     if (column) observer.observe(column);
     viewport.addEventListener("scroll", update, { passive: true });
@@ -109,14 +97,10 @@ export function useSidebarWindow(sessions: readonly SessionEntry[], selectionId:
   }, []);
 
   const indices = new Set<number>();
-  // Registry changes can shorten the list before the layout effect recalculates its window.
   for (let i = window.start; i < Math.min(window.end, sessions.length); i++) indices.add(i);
-  // Keep both ends keyboard-reachable, even when an entire group is outside the viewport.
-  // A focused row's neighbours let native Tab/Shift+Tab advance into the next window.
   if (sessions.length) {
     indices.add(0);
     indices.add(sessions.length - 1);
-    // On phones row menus are hidden, so unavailable sessions are not Tab stops.
     if (firstEnabled !== -1) indices.add(firstEnabled);
     if (lastEnabled !== -1) indices.add(lastEnabled);
   }
@@ -148,9 +132,6 @@ export function useSidebarWindow(sessions: readonly SessionEntry[], selectionId:
       clearTimeout(blurTimer.current);
       retainFocus(event.target);
     },
-    // Wait a TASK, not a microtask: native Tab has not focused its destination during blur.
-    // Removing nodes in that gap can also make the phone sheet's focus trap steal focus.
-    // A focus inside this list cancels the release; Radix's portal is retained by menu.
     onBlurCapture: () => {
       clearTimeout(blurTimer.current);
       blurTimer.current = setTimeout(() => retainFocus(document.activeElement), 0);

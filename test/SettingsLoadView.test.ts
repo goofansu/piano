@@ -20,7 +20,6 @@ test("the first read shows the placeholder, then the rows or the empty line", ()
     retrying: false,
   });
   assert.equal(view({ value: [] }).body, "empty");
-  // A page that is never empty shows what it read, whatever it holds.
   assert.equal(view({ value: [], isEmpty: undefined }).body, "rows");
 });
 

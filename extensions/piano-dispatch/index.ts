@@ -1,4 +1,3 @@
-/** Bundled Pi extension: dispatch work through Piano, never launch or own another Pi process. */
 import { isAbsolute, resolve } from "node:path";
 import { type JsonValue, StringEnum } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -34,11 +33,6 @@ import { sessionLink } from "../../shared/sessionLink.ts";
 import { dispatchConfiguration, nodeSocketEnvironment } from "./NodeSocket.ts";
 import { readStatus, startSession, waitSessions, withLinks } from "./SessionDispatch.ts";
 
-/**
- * The directory a start names, read from the parent session's checkout: Piano's server runs
- * elsewhere, so a relative path it resolved would land in the server's own checkout. Absolute and
- * home-relative paths pass through unchanged for Piano to spell.
- */
 const dispatchDirectory = (requested: string | undefined, parent: string): string =>
   requested === undefined || isAbsolute(requested) || /^~(?=$|\/)/.test(requested)
     ? (requested ?? parent)
@@ -122,11 +116,6 @@ const StatusOutput = obj({
   link: str(),
 });
 
-/**
- * The schemas describe shared/dispatch.ts's shapes to Pi; these fail the type check when they
- * drift apart. A schema may be looser than its shape (the start output's submission is any
- * string), but every value of the shape must fit it and both must name the same fields.
- */
 type Describes<S extends Schema, Shape> = [Shape] extends [Static<S>]
   ? [keyof Shape] extends [keyof Static<S>]
     ? [keyof Static<S>] extends [keyof Shape]
@@ -151,14 +140,12 @@ const INPUT_GUIDELINE =
   "If piano_start_session, piano_session_status or piano_wait_sessions reports needs_input, link to that session so the user answers there rather than repeating its question here.";
 
 export default function pianoDispatch(pi: ExtensionAPI) {
-  // Registered before the configuration check, so Pi always knows the flag Piano may pass.
   pi.registerFlag(DISPATCHED_FROM_FLAG, {
     type: "string",
     description: "Session that dispatched this one (set by Piano)",
   });
   pi.on("session_start", (_event, ctx) => {
     const parent = pi.getFlag(DISPATCHED_FROM_FLAG);
-    // Recorded once, before the brief; a relaunch with the flag finds it already there.
     if (
       typeof parent === "string" &&
       parent &&
@@ -169,7 +156,6 @@ export default function pianoDispatch(pi: ExtensionAPI) {
       pi.appendEntry(DISPATCH_ENTRY, { parentSessionId: parent });
   });
   const config = dispatchConfiguration();
-  // No sockets at factory time: Pi also loads extensions for catalog probes and discovery.
   if (!config) return;
   const environment = nodeSocketEnvironment(config);
   const active = new Set<AbortController>();
@@ -184,7 +170,6 @@ export default function pianoDispatch(pi: ExtensionAPI) {
       const result = await run(
         signal ? AbortSignal.any([signal, controller.signal]) : controller.signal,
       );
-      // The model and codemode callers must receive the same reference and outcome as details.
       const text = JSON.stringify(result);
       return {
         content: [{ type: "text" as const, text }],

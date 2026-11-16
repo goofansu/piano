@@ -149,7 +149,6 @@ const result: RenderMsg = {
   isError: true,
 };
 const abort = failure("This operation was aborted");
-/** The error shown for the message with id "error", if any. */
 const errorOf = (messages: RenderMsg[], options: TranscriptOptions = {}) => {
   const row = transcriptRows(messages, options).find((r) => r.msg.id === "error");
   return row?.kind === "reply" ? row.error?.summary : undefined;
@@ -419,8 +418,6 @@ const script = (statuses: ReadonlyArray<ToolExecution["status"]>): ToolExecution
     status,
     outputKind: "unavailable",
   }));
-/** The nested calls of one codemode call, as its row shows them: recorded with the call's result
- * once it finished, else streaming in while it runs. */
 const nestedOf = (
   statuses: ReadonlyArray<ToolExecution["status"]>,
   { running = false }: { running?: boolean } = {},
@@ -472,7 +469,6 @@ test("a nested call's dot reads as a top-level tool's would, beside what it acte
 });
 
 test("a script's nested calls fold to its last 8, with the rest counted on the fold line", () => {
-  // Failures both among the folded calls (3, 10) and in the tail (38).
   const statuses = Array.from({ length: 40 }, (_, i) =>
     [3, 10, 38].includes(i + 1) ? ("error" as const) : ("success" as const),
   );
@@ -502,7 +498,6 @@ test("a nested call still running stays in view however old, and folding back sa
   );
   const nested = nestedOf(statuses, { running: true });
   assert.deepEqual(numbers(nested.folded), [2, 13, 14, 15, 16, 17, 18, 19, 20]);
-  // Nine calls stay in view, not the last eight.
   assert.equal(nested.fold?.showFewer, "Show 9 tool calls");
 });
 
@@ -511,9 +506,7 @@ test("a running script's closed row names the call it is on and counts its calls
   assert.equal(nested.latest?.call.id, "code/4");
   assert.equal(nested.latest?.summary, "step 4");
   assert.deepEqual([nested.calls.length, nested.failed], [4, 1]);
-  // Between two calls nothing runs: the newest call stands for where the script is.
   assert.equal(nestedOf(["success", "success"], { running: true }).latest?.call.id, "code/2");
-  // Calls in parallel: the newest running one, not a later one that already ended.
   assert.equal(
     nestedOf(["running", "running", "success"], { running: true }).latest?.call.id,
     "code/2",
@@ -587,12 +580,10 @@ test("messages-only keeps prompts, final replies and errors, and hides activity 
   const pending = { ...call, id: "pending", text: "Streaming reply" };
   const rows = transcriptRows(history, { pending, showTools: false });
   assert.deepEqual(ids(rows), ["user", "abort", "error"]);
-  // The tool activity that would explain the abort is hidden, so the abort itself shows.
   assert.equal(reply(rows, "abort").error?.summary, "This operation was aborted");
   for (const row of rows)
     if (row.kind === "reply") assert.deepEqual([row.text, row.tools], ["", []]);
   assert.deepEqual(transcriptRows([call], { pending: call, showTools: false }), []);
-  // With tools shown, the failed call already says it was aborted.
   assert.deepEqual(ids(transcriptRows(history, { pending })), [
     "user",
     "call",
@@ -720,7 +711,6 @@ test("a tool's output shows as text: terminal colours, hyperlink escapes and \\r
 });
 
 test("a dispatch names each session it started or waited on, with the parent's observation", () => {
-  // Typed against the shared shapes, so a field the extension renames breaks this fixture too.
   const handle: SessionHandle = {
     cwd: "/repo",
     sessionId: "child-1",

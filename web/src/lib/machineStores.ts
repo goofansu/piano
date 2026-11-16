@@ -15,19 +15,9 @@ export interface MachineStores {
   drafts: Drafts;
   questions: QuestionReplies;
   catalogs: ModelCatalogs;
-  /**
-   * The selected session's app, observed for the rail, Preview and its commands. Local's only: a
-   * remote's apps stay on its own Piano (ADR 0004), so its sessions show no app and no Open or Stop,
-   * though their snapshots carry the peer's preview.
-   */
   previews?: PreviewObservation;
 }
 
-/**
- * One partition per configured identity, Local's built like any other: identical cwd/IDs on two
- * machines never share stores. Drafts and question replies last for this page; each machine's
- * catalogs outlive a reload in its own storage. Only Local observes previews.
- */
 export function createMachineStores(
   notify: Notify,
   catalogStorage: (machineId: string) => CatalogStorage = browserCatalogStorage,
@@ -39,11 +29,9 @@ export function createMachineStores(
       current = {
         drafts: createDrafts(),
         questions: createQuestionReplies(),
-        // The machine's own storage: its catalogs never seed from another machine's cwd cache.
         catalogs: createModelCatalogs({
           storage: catalogStorage(id),
           notify,
-          // The machine's own Pi settings; its catalogs then show the new default.
           saveDefaults: (model, effort) => saveDefaults(model, effort, { machineId: id }),
         }),
         ...(isLocalId(id) && { previews: createPreviewObservation() }),

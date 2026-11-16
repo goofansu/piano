@@ -49,7 +49,6 @@ function browser(overrides: Partial<DictationOptions> = {}) {
         },
         stop: () => {
           state = "inactive";
-          // Final audio and stop are asynchronous, as in MediaRecorder.
           setImmediate(() => {
             events.data(new Blob(["final"]));
             events.stop();
@@ -133,7 +132,6 @@ test("Local and two peers with identical session and New keys never share a resu
       p.dictation.cancel(target);
       await settle();
     }
-    // Out-of-order completions still address their original store and key.
     for (const i of [2, 0, 1]) p.requests[i].answer(`spoken-${i}`);
     await settle();
     owners.forEach((drafts, i) => assert.equal(drafts.get(key).text, `draft-${i} spoken-${i}`));

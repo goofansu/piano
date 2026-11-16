@@ -1,10 +1,3 @@
-/**
- * The sidebar's session list: the Pinned section, then the chosen grouping's sections, each with
- * the key it is opened by and whether it is open. One model owns what is listed, which groups are
- * open (remembered per browser), the selection's group opening, and the clock that rolls date
- * groups over at local midnight, so the Sidebar only renders what `list` returns and calls
- * `toggle`. Relative, not @/: module tests load this file directly in Node.
- */
 import type { FolderView, Project } from "@shared/wire";
 import type { AppState } from "../store.ts";
 import { machineMemory } from "./machineMemory.ts";
@@ -27,43 +20,27 @@ import {
   sortSessions,
 } from "./sidebarView.ts";
 
-/** The Pinned section's key, the same under every grouping. */
 export const PINNED = "pinned";
 
-/**
- * The line beneath each title when View options shows folder and branch: the branch, and the
- * folder too unless the row's group already names it.
- */
 export type SessionRowDetails = "branch" | "folder-and-branch";
 
 export interface PinnedSection {
   key: typeof PINNED;
   open: boolean;
-  /** Pinned sessions in the chosen order, wherever their folder is. */
   sessions: SessionEntry[];
   details: SessionRowDetails | undefined;
 }
 
-/**
- * One section of the grouping. Folder, project and date groups open and close; their keys stay the
- * same whichever grouping is chosen, so switching away and back keeps them as the user left them.
- */
 export type SidebarSection = { details: SessionRowDetails | undefined } & (
   | { kind: "folder"; key: string; open: boolean; folder: FolderView; sessions: SessionEntry[] }
-  /**
-   * Open projects A–Z, then always the No project group (`project: null`); done projects A–Z
-   * follow in the body's `done` part.
-   */
   | {
       kind: "project";
       key: string;
       open: boolean;
       project: Project | null;
-      /** A done project's group: listed under Done, set apart as No project is. */
       done: boolean;
       sessions: SessionEntry[];
     }
-  /** Date groups start open; the rest start closed. */
   | { kind: "date"; key: string; open: boolean; label: string; sessions: SessionEntry[] }
 );
 
@@ -72,21 +49,13 @@ export type ProjectSection = Extract<SidebarSection, { kind: "project" }>;
 export type SidebarBody =
   | { kind: "loading" }
   | { kind: "empty"; text: string }
-  /** `done` holds done projects' groups, shown last under one Done label; empty for any other grouping. */
   | { kind: "sections"; sections: SidebarSection[]; done: ProjectSection[] };
 
 export interface SidebarList {
-  /** Null while nothing is pinned, and before the registry arrives. */
   pinned: PinnedSection | null;
-  /** Null when pinned rows stand in for the empty state, so nothing shows below them. */
   body: SidebarBody | null;
 }
 
-/**
- * Adjacent openable row in the displayed order, including virtualized rows but not collapsed
- * groups. No wrap: without a displayed selection, Down starts at the first row and Up at the last.
- * The caller supplies the live selection so repeated keys need not wait for a render or an open.
- */
 export function adjacentSidebarSession(
   list: SidebarList,
   current: { cwd: string; sessionId: string | null } | null,
@@ -108,22 +77,15 @@ export function adjacentSidebarSession(
   return undefined;
 }
 
-/** Local time and its wake-ups, behind a seam so the date rollover runs in Node. */
 export interface SidebarClock {
   now: () => Date;
-  /** Calls `wake` once after `ms`; returns the cancel function. */
   wakeAfter: (ms: number, wake: () => void) => () => void;
-  /** Calls `wake` when the page comes back, which also catches sleep and clock changes; returns the unsubscribe function. */
   onResume: (wake: () => void) => () => void;
 }
 
-/** What the sidebar list remembers: its open folder and project groups per machine, the rest per browser. */
 export interface SidebarPreferences {
-  /** Folder and project groups left open, named by one machine's paths and project IDs. */
   openGroups: Preference<readonly string[]>;
-  /** Date groups left closed. */
   closedGroups: Preference<readonly string[]>;
-  /** Pinned starts open and stays as the user leaves it. */
   pinnedOpen: Preference<boolean>;
 }
 
@@ -159,30 +121,20 @@ export interface SidebarListEnvironment {
 }
 
 export interface SidebarListModel {
-  /** The same list until sidebar facts, the view, today's date or open groups change; transcript updates reuse it. */
   list: (state: AppState, view: SidebarView) => SidebarList;
-  /**
-   * After a render: a new selection, grouping or owning group opens the group holding the selected
-   * session (Pinned for a pinned one); the same one again does not, so a registry refresh never
-   * undoes a collapse. A project that appears after the registry loaded opens.
-   */
   sync: (state: AppState, view: SidebarView) => void;
-  /** The user opened or collapsed the section with this key; kept until the user changes it. */
   toggle: (key: string, open: boolean) => void;
   subscribe: (listener: () => void) => () => void;
-  /** Follows the clock so date groups roll over at local midnight; returns the stop function. */
   start: () => () => void;
 }
 
 const NO_FOLDERS = "No folders yet. Start a session in any folder and it appears here.";
 const NO_SESSIONS = "No sessions yet. Start one and it appears here.";
 
-/** Project groups share the open set with folders, keyed apart from paths; the empty id is the No project group. */
 const projectKey = (id: string) => `project:${id}`;
 const dateKey = (group: string) => `date:${group}`;
 const isDateKey = (key: string) => key.startsWith("date:");
 
-/** The section listing the selected session, the one `list` built: Pinned for a pinned one. */
 function selectedKey(list: SidebarList): string | undefined {
   if (list.pinned?.sessions.some((s) => s.selected)) return PINNED;
   if (list.body?.kind !== "sections") return undefined;
@@ -192,10 +144,6 @@ function selectedKey(list: SidebarList): string | undefined {
   return section?.key;
 }
 
-/**
- * The section a session without a reference yet (one being started) will list under: its folder,
- * or Today. Its project arrives with its reference, so until then no project group opens.
- */
 function startingKey(state: AppState, cwd: string, view: SidebarView, today: Date) {
   switch (view.groupBy) {
     case "folder":
@@ -207,11 +155,6 @@ function startingKey(state: AppState, cwd: string, view: SidebarView, today: Dat
   }
 }
 
-/**
- * What a section's rows show beneath their titles. A folder group names the folder, so its rows
- * add only the branch, and none at all when no row has one (a non-Git folder): an empty line
- * would only make every row taller.
- */
 function rowDetails(
   view: SidebarView,
   sessions: readonly SessionEntry[],
@@ -222,10 +165,6 @@ function rowDetails(
   return sessions.some((s) => s.branch) ? "branch" : undefined;
 }
 
-/**
- * One catalog for every grouping, so switching the grouping never changes which sessions are
- * listed. A pinned session shows only under Pinned; the groupings take the listed rest.
- */
 function buildList(
   state: AppState,
   view: SidebarView,
@@ -304,11 +243,8 @@ export function createSidebarList({
   let open: ReadonlySet<string> = new Set(preferences.openGroups.get());
   let closed: ReadonlySet<string> = new Set(preferences.closedGroups.get());
   let today = localMidnight(clock.now());
-  /** The last selection, grouping and owning section opened. */
   let revealed: string | null = null;
-  /** Project ids already seen once the registry loaded; null before then. */
   let projects: ReadonlySet<string> | null = null;
-  /** Of those, the ones marked done at the last sync; null before the registry loaded. */
   let doneProjects: ReadonlySet<string> | null = null;
   const listeners = new Set<() => void>();
   let cache: {
@@ -329,7 +265,6 @@ export function createSidebarList({
   const notify = () => {
     for (const listener of listeners) listener();
   };
-  /** Pinned and date groups remember being closed; folders and projects remember being open. */
   const isOpen = (key: string, pinnedOpen: boolean) =>
     key === PINNED ? pinnedOpen : isDateKey(key) ? !closed.has(key) : open.has(key);
   const setOpen = (keys: readonly string[], value: boolean) => {
@@ -363,8 +298,6 @@ export function createSidebarList({
 
   const list: SidebarListModel["list"] = (state, view) => {
     const pinnedOpen = preferences.pinnedOpen.get();
-    // These are buildList/sessionCatalog's inputs. The reducer replaces session snapshots on
-    // every streaming event, but only the current identity contributes to sidebar rows.
     const current = state.session ?? state.selecting;
     const { registryLoaded, folders, sessionReferences, projects, hosts, done } = state;
     if (
@@ -406,7 +339,6 @@ export function createSidebarList({
         const sessionId = current.sessionId ?? null;
         const referenced =
           sessionId && sessionReference(state, { cwd: current.cwd, sessionId }) !== undefined;
-        // A listed session opens the section that lists it, so an archived or unlisted one opens none.
         const key = referenced
           ? selectedKey(list(state, view))
           : startingKey(state, current.cwd, view, today);
@@ -425,8 +357,6 @@ export function createSidebarList({
           projects = new Set(ids);
           if (seen) setOpen(ids.filter((id) => !seen.has(id)).map(projectKey), true);
         }
-        // A project marked done folds its group once; reopened, it unfolds once. Either way the
-        // user's later choice stands, as for any folder or project.
         const nowDone = new Set(state.projects.filter(isProjectDone).map((p) => p.id));
         const wasDone = doneProjects;
         if (wasDone) {
@@ -467,7 +397,6 @@ export function createSidebarList({
   };
 }
 
-/** The real clock: timers and window focus. Globals are read only when called, so this module loads in Node. */
 export const browserSidebarClock: SidebarClock = {
   now: () => new Date(),
   wakeAfter: (ms, wake) => {

@@ -1,4 +1,3 @@
-/** The owning peer's image HTTP boundary. Global Host/Origin policy runs before these routes. */
 import { Effect, Schema, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { IMAGE_PREVIEW_HEADERS } from "../shared/imagePreviews.ts";

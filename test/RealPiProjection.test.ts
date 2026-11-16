@@ -1,4 +1,3 @@
-// Locked CLI discovery/UI compatibility without model calls or developer resources.
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -145,7 +144,6 @@ test("INV-01/05/12: real Pi startup emits exactly 100 unique rows across history
           Array.from({ length: 100 }, (_, i) => `STARTUP-${i}`),
         );
         assert.equal(new Set(final.messages.map((message) => message.id)).size, 100);
-        // A later authoritative refresh must not shift the live IDs.
         const ready = yield* Deferred.make<void>();
         const refresh = yield* session.events.pipe(
           Stream.tap((event) =>
@@ -179,7 +177,6 @@ test("INV-01/12: a saved peek is the Snapshot real Pi opens the same file with",
   fixture.configureSentinel("disabled");
   const cwd = fixture.project("saved-peek");
   const secret = "sk-file-canary-123456789";
-  // Compaction, a context edit and an abandoned branch: Pi's context rules decide both views.
   const manager = SessionManager.create(cwd, fixture.sessionDir);
   manager.appendModelChange("piano-phase0", "global");
   manager.appendThinkingLevelChange("low");
@@ -222,7 +219,6 @@ test("INV-01/12: a saved peek is the Snapshot real Pi opens the same file with",
   manager.appendCompaction("summary", reply, 30);
   const sessionId = manager.getSessionId();
   const sessionFile = manager.getSessionFile()!;
-  // The facts both views establish from Pi; live run, host and statistics fields are the open's own.
   const facts = ({ state, messages, dialogs }: Snapshot) => ({
     state: {
       sessionId: state.sessionId,

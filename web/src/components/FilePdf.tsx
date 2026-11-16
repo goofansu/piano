@@ -20,10 +20,7 @@ const options = {
   canvasMaxAreaInBytes: 32 * 1024 * 1024,
 };
 
-/** One page at a time; no annotation layer, links, forms, scripting or external resources.
- * shadcn has no PDF renderer. React-PDF destroys its loading task/worker when released. */
 export default function FilePdf({ bytes }: { bytes: Uint8Array }) {
-  // PDF.js transfers its input to the worker; never detach the owner's acquired bytes.
   const file = useMemo(() => ({ data: new Uint8Array(bytes) }), [bytes]);
   const loadedPage = useRef<pdfjs.PDFPageProxy | undefined>(undefined);
   const [pages, setPages] = useState(0);
@@ -51,7 +48,6 @@ export default function FilePdf({ bytes }: { bytes: Uint8Array }) {
     );
     return () => clearTimeout(timer);
   }, [pages, error]);
-  // Extra dependencies: page/error mark release of the current Page, even before the next Page loads.
   useEffect(() => {
     return () => {
       loadedPage.current?.cleanup();
@@ -130,7 +126,6 @@ export default function FilePdf({ bytes }: { bytes: Uint8Array }) {
                 devicePixelRatio={1}
                 renderAnnotationLayer={false}
                 renderForms={false}
-                // Measure before creating a canvas: the previous page's aspect ratio is not a bound.
                 renderMode={measured ? "canvas" : "none"}
                 renderTextLayer={measured}
                 loading={<Notice>Opening page…</Notice>}

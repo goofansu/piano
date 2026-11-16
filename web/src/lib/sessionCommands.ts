@@ -1,8 +1,3 @@
-/**
- * The per-session commands the sidebar row menu, the session header and the command palette offer,
- * described once: label, icon, whether it is available now, and what running it means.
- * Surfaces render these descriptors and hand them to the one `CommandHost` (see `commands.ts`).
- */
 import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import { LOCAL } from "./machine.ts";
@@ -29,7 +24,6 @@ import {
 
 export type SessionTarget = { cwd: string; sessionId: string; title?: string };
 
-/** Side by side with only the Agent area and the session rail off. */
 const AGENT_ONLY: SessionLayout = {
   single: false,
   agent: true,
@@ -85,27 +79,15 @@ export type SessionCommandIntent =
   | { kind: "send"; command: ClientCommand }
   | { kind: "copy"; value: string; label: string }
   | { kind: "changes" }
-  /** Open the session header's Artifacts menu. */
   | { kind: "artifacts" }
-  /**
-   * Turn the session rail (the session's folder, branch and directory, and its outputs) on or off
-   * beside the Agent area.
-   */
   | { kind: "session-rail" }
-  /** Show the Agent area in a single-view layout. */
   | { kind: "agent" }
-  /** Turn wrapping of long code lines, in Changes and a file's source alike, on or off. */
   | { kind: "wrap-code"; on: boolean }
-  /** Read a linked pull request in Changes, or link one in its dialog. */
   | { kind: "pull-request"; linked: boolean }
-  /** Open the app in a new tab. */
   | { kind: "open-url"; url: string }
-  /** Stop the app it claims, only while that app is still the one on screen. */
   | ({ kind: "stop-preview"; host: string } & PreviewClaim)
   | { kind: "preview-details" }
-  /** Turn Messages only on or off. */
   | { kind: "messages-only"; on: boolean }
-  /** Without a target the selected session has no Pi session ID yet; such a command is never enabled. */
   | { kind: "rename" | "delete"; target: SessionTarget | undefined }
   | { kind: "archive"; target: SessionTarget | undefined; confirm: boolean }
   | { kind: "new-session"; cwd: string };
@@ -115,47 +97,26 @@ export interface SessionCommand {
   label: string;
   icon: SessionCommandIcon;
   enabled: boolean;
-  /** Shown in the destructive style: Delete. */
   destructive?: true;
-  /**
-   * Not offered on this screen at all, so the palette leaves it out instead of greying it: a
-   * command only one layout has (Agent one area at a time). Always with `enabled` false; a command disabled for a reason the user can act on stays.
-   */
   hidden?: boolean;
-  /** A display toggle that is currently on. */
   checked?: boolean;
-  /** Direct synonyms of the label, for palette search; not topics or what the command touches. */
   keywords?: readonly string[];
-  /** Secondary text the palette shows after the label. */
   detail?: string;
   intent: SessionCommandIntent;
 }
 
-/**
- * A session menu's separated section: its commands, or `"project"`, the slot where the surface
- * places the session's project section (`sessionProjectMenu`).
- */
 export type SessionMenuSection = SessionCommand[] | "project";
 
-/** The sidebar row's menu: separated sections in order, an empty one left out. */
 export interface SessionRowMenu {
   sections: SessionMenuSection[];
 }
 
-/**
- * The session header's menu, which the desktop dropdown and the phone sheet lay out alike: the
- * details with their copy action, then its separated sections in order.
- */
 export interface SessionHeaderMenu {
-  /** Icon actions beside the session's details. */
   details: SessionCommand[];
-  /** In order; `"display"` stands for the Messages only switch, present only with `display`. */
   sections: (SessionMenuSection | "display")[];
-  /** The Messages only switch: `checked` while on; running it toggles. */
   display?: SessionCommand;
 }
 
-/** The session rail's Environment rows, each with the copy commands its menu offers. */
 export type EnvironmentRowKind = "repository" | "folder" | "commit" | "branch" | "pull request";
 const ENVIRONMENT_ROWS = {
   repository: ["copy-repository", "copy-working-directory"],
@@ -165,8 +126,6 @@ const ENVIRONMENT_ROWS = {
   "pull request": ["copy-pull-request-reference"],
 } as const satisfies Record<EnvironmentRowKind, readonly SessionCommandId[]>;
 
-/** The session rail's Environment row menu, from `sessionCommands`' descriptors: the row's own
- * fact first. */
 export function environmentRowMenu(
   commands: readonly SessionCommand[],
   row: EnvironmentRowKind,
@@ -174,22 +133,14 @@ export function environmentRowMenu(
   return ENVIRONMENT_ROWS[row].flatMap((id) => commands.filter((c) => c.id === id));
 }
 
-/**
- * Every session menu's order (and the palette's, which places the row menu's): the manage
- * commands, then the project section, then the commands that end the session's life. Archive sits
- * beside Delete, though only Delete is destructive: both end the session's life.
- */
 const END_OF_LIFE = ["archive", "delete"] as const;
 const ROW_SECTIONS = [["rename", "pin"], "project", END_OF_LIFE] as const;
-// Preview and Changes have their own controls; PR linking lives in Changes.
 const HEADER_SECTIONS = [["rename", "pin"], "project", "display", END_OF_LIFE] as const;
 const HEADER_DETAILS = ["copy-session-path"] as const;
 
-/** The commands with these IDs, in the IDs' order rather than the descriptors'. */
 const pick = (commands: readonly SessionCommand[], ids: readonly SessionCommandId[]) =>
   ids.flatMap((id) => commands.filter((c) => c.id === id));
 
-/** A layout's sections from the descriptors, an empty one and an absent slot left out. */
 function lay<Slot extends string>(
   commands: readonly SessionCommand[],
   layout: readonly (readonly SessionCommandId[] | Slot)[],
@@ -202,12 +153,10 @@ function lay<Slot extends string>(
   });
 }
 
-/** The sidebar row's menu, from `sessionCommands`' descriptors. */
 export function sessionRowMenu(commands: readonly SessionCommand[]): SessionRowMenu {
   return { sections: lay<"project">(commands, ROW_SECTIONS, () => true) };
 }
 
-/** The session header's menu, from `sessionCommands`' descriptors. */
 export function sessionHeaderMenu(commands: readonly SessionCommand[]): SessionHeaderMenu {
   const display = commands.find((c) => c.id === "messages-only");
   return {
@@ -221,58 +170,24 @@ export function sessionHeaderMenu(commands: readonly SessionCommand[]): SessionH
   };
 }
 
-/**
- * Rename's rule, for its descriptor and for the answer to its form: the session is mutable and its
- * checkout is present, since renaming starts Pi there.
- */
 export function canRenameSession(state: AppState, target: SessionTarget): boolean {
   return sessionMutable(state, target) && !sessionCheckoutMissing(state, target);
 }
 
-/**
- * Commands for `target`, or for the selected session when it is omitted. The selected session gets
- * every command; any other session only the management actions (rename, pin, archive, delete).
- *
- * Enablement, one rule per command:
- * - rename, archive, delete: `sessionMutable` (connected, and a settled attachment for the selected
- *   session); rename also needs the checkout, since renaming starts Pi there.
- * - pin: connected with an active registry reference; independent of Pi attachment or activity.
- * - changes: a Git workspace whose checkout is present (`canOpenChanges`); otherwise it says why.
- * - artifacts: listed only once the session published a Radius artifact (`sessionArtifacts`).
- * - session rail: side by side only (its facts need neither Git nor a live Pi); "Hide session
- *   rail" while the column shows, else "Show session rail". One area at a time it is not listed:
- *   the session menu holds the same facts.
- * - agent: the session is laid out one area at a time and the Agent tab shows, beside an open
- *   Surface tab.
- * - pull request, copy session ID: the selected session has a Pi session ID; a pull request is
- *   linked, read and unlinked in Changes, so it also follows Changes' rule and says why not.
- * - open, stop and details of the preview: listed only with the page's preview observation and
- *   while the selected session's live Pi owns an app (`seenPreview`); open needs its link, which
- *   an unanswered status read withholds, stop needs the attachment (`sessionReady`).
- * - new session here: the checkout is present.
- * - copy session path: saved history has supplied its file path; no live Pi needed.
- * - copy branch, commit SHA, repository name: listed only while the session has one.
- * - other copy commands, Wrap and Messages only: always (session ID requires an ID). Wrap is one
- *   remembered preference for Changes and a file's source, so it never depends on what is shown.
- */
 export function sessionCommands(
   state: AppState,
   target?: SessionTarget,
   options: {
     messagesOnly?: boolean;
     codeWrap?: boolean;
-    /** The session's layout as navigation has it; by default side by side with only Agent. */
     layout?: SessionLayout;
-    /** The page's preview observation (`seenPreview`); without it no preview command is listed. */
     previewObservation?: Pick<PreviewObservationState, "unconfirmed">;
-    /** Where the machine starts a new session (`MachineOffers.startsSessionIn`); Local's by default. */
     startsSessionIn?: (state: AppState, cwd: string) => boolean;
   } = {},
 ): SessionCommand[] {
   const session = state.session;
   const ctx = sessionContext(state);
   const selected = !!session && (!target || isSelectedSession(state, target));
-  // The registry title, as a sidebar row hands over; "Untitled" is display copy, not a title.
   const ref = session?.sessionId ? { cwd: session.cwd, sessionId: session.sessionId } : undefined;
   const subject = target ?? (ref && { ...ref, title: sessionReference(state, ref)?.title });
   const commands: SessionCommand[] = [];
@@ -371,7 +286,6 @@ export function sessionCommands(
         label: "Artifacts",
         icon: "artifacts",
         enabled: hasArtifacts,
-        // The header's control appears with the first artifact; until then there is nothing to grey.
         hidden: !hasArtifacts,
         intent: { kind: "artifacts" },
       },
@@ -380,7 +294,6 @@ export function sessionCommands(
         label: rail ? "Hide session rail" : "Show session rail",
         icon: "list",
         enabled: !single,
-        // One area at a time there is no rail: the header says where the session runs.
         hidden: single,
         keywords: ["details", "info", "outputs", "files", "branch"],
         intent: { kind: "session-rail" },
@@ -390,7 +303,6 @@ export function sessionCommands(
         label: "Agent",
         icon: "agent",
         enabled: agentTab,
-        // Agent exists only as a tab, so without one there is nothing to grey.
         hidden: !agentTab,
         keywords: ["conversation"],
         intent: { kind: "agent" },
@@ -494,7 +406,6 @@ export function sessionCommands(
   return commands;
 }
 
-/** The selected session's app commands; none unless its live Pi owns one. */
 function previewCommands(
   state: AppState,
   observed: Pick<PreviewObservationState, "unconfirmed">,

@@ -12,14 +12,6 @@ import { type ReactNode, use, useLayoutEffect, useMemo } from "react";
 import { ScrollRootContext } from "@/lib/scrollRoot";
 import { useCodeWrap } from "@/lib/useCodeWrap";
 
-/**
- * Read-only code, rendered by `@pierre/diffs`: a file's source and a file's patch. This seam keeps
- * the library's options in one place. Shiki highlights off the main thread in a small worker pool
- * that lives while any code is on screen. Inside a pane, every code view shares one library
- * `Virtualizer` on the pane's scroller, so only lines in view are in the document.
- */
-
-/** Piano's sheet, ink and diff tints instead of the Shiki theme's own; tokens keep their colours. */
 const PIANO_CSS = `
 :host {
   --diffs-light-bg: var(--conversation);
@@ -48,7 +40,6 @@ function useOptions() {
   } satisfies FileOptions<undefined, undefined>;
 }
 
-/** One virtualizer per scroller, set up while any code view uses it. */
 const virtualizers = new WeakMap<HTMLElement, { virtualizer: Virtualizer; users: number }>();
 
 function useScrollVirtualizer(root: HTMLElement | null | undefined) {
@@ -71,8 +62,6 @@ function useScrollVirtualizer(root: HTMLElement | null | undefined) {
   return entry?.virtualizer;
 }
 
-/** The worker pool and, inside a pane, its virtualizer. The library picks virtualized rendering
- * when a view mounts, so a pane's code waits for its scroller to mount first. */
 function Pool({ children }: { children: ReactNode }) {
   const root = use(ScrollRootContext);
   const virtualizer = useScrollVirtualizer(root);
@@ -93,7 +82,6 @@ function Pool({ children }: { children: ReactNode }) {
   );
 }
 
-/** A file's text with line numbers, highlighted as `language` (or as its name suggests). */
 export function CodeFile({
   name,
   content,
@@ -112,7 +100,6 @@ export function CodeFile({
   );
 }
 
-/** One file's unified Git patch, as Changes reads it. */
 export function CodePatch({ patch, label }: { patch: string; label: string }) {
   const options = useOptions();
   return (
@@ -124,7 +111,6 @@ export function CodePatch({ patch, label }: { patch: string; label: string }) {
   );
 }
 
-/** Two versions of one text, diffed by the library: a proposal against the saved file. */
 export function CodeTextDiff({
   name,
   before,

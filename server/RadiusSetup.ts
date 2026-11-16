@@ -1,6 +1,3 @@
-/** Machine-wide Radius onboarding, not an MCP client. Pi owns auth, configuration
- * parsing and package installation. Nothing here mutates running sessions; a change to
- * Pi's packages or MCP configuration invalidates every directory's model catalog and commands. */
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -33,8 +30,6 @@ const isWebSearch = (source: string) => source === PACKAGE || source.startsWith(
 const removalKey = (value: unknown) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
-/** No shell interpolation, arbitrary package input, installer output or credentials
- * cross the HTTP boundary. A disconnected browser does not cancel the install. */
 async function runPackage(
   action: "install" | "remove",
   source: string,
@@ -45,7 +40,6 @@ async function runPackage(
     new URL("./bundle/cli.js", import.meta.resolve("@earendil-works/pi-coding-agent")),
   );
   mkdirSync(directory, { recursive: true });
-  // Its own process group: cancellation also stops npm children.
   await runAsync(
     {
       command: process.execPath,
@@ -111,7 +105,6 @@ export const RadiusSetupLive = Layer.effect(
       if (manager.drainErrors().length) throw new Error("Could not read Pi settings.");
       return manager;
     };
-    /** Radius's policy: Pi sends the `radius` provider token, never OAuth or a fixed Authorization header. */
     const configured = (config: McpServerConfig) => {
       const auth = authOf(config);
       return auth._tag === "provider" && auth.provider === "radius" && !auth.competing;
@@ -145,9 +138,7 @@ export const RadiusSetupLive = Layer.effect(
           installed =
             JSON.parse(readFileSync(join(path, "package.json"), "utf8")).name ===
             "@earendil-works/pi-radius-web-search";
-        } catch {
-          /* Incomplete installation: offer repair, not a success label. */
-        }
+        } catch {}
       }
       return {
         source,
@@ -189,7 +180,6 @@ export const RadiusSetupLive = Layer.effect(
     const changePackage = (action: "install" | "uninstall", key?: string) =>
       Effect.try({
         try: () => {
-          // Duplicate requests reattach; opposing operations must never race on disk.
           if (pending) {
             if (pending.action !== action || pending.key !== key)
               throw new Error("Package operation in progress.");
@@ -213,7 +203,6 @@ export const RadiusSetupLive = Layer.effect(
           const timer = setTimeout(() => abort.abort(), 120_000);
           const done = (async () => {
             try {
-              // Even a failed operation may have changed Pi's packages; invalidate before reporting either outcome.
               try {
                 await Promise.resolve().then(() =>
                   environment[action](source, directory, abort.signal),

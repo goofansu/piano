@@ -103,8 +103,6 @@ test("cancelled baseline retains diagnostics and never runs remaining gates", as
       { cwd: f.root, stdio: "ignore" },
     );
     const closed = new Promise((done) => child!.once("close", done));
-    // The PID marker precedes stdout. Cancel only after the wrapper has retained the
-    // diagnostic we assert below, not merely when the fixture has started.
     const lintLog = join(f.temp, "cancelled", "2-lint.log");
     for (let attempt = 0; ; attempt++) {
       if (

@@ -1,9 +1,3 @@
-/**
- * What a Pi child is launched with: Piano's own extensions, resolved from this installation, and
- * the endpoint they need to reach the Piano that spawned it. The second test runs the real
- * `server/main.ts`, because the launch is only correct if the configuration survives the service
- * graph and the handed origin actually passes the origin check (INV-11).
- */
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
@@ -33,7 +27,6 @@ test("Piano's extensions are resolved from the installation, never from the sess
     ),
   ];
   assert.deepEqual(defaultPiCli().extensions, expected);
-  // A session runs in the user's repository, so the launch must not follow the process cwd there.
   const installation = process.cwd();
   try {
     process.chdir(tmpdir());
@@ -51,20 +44,16 @@ test("the session endpoint addresses the listener and borrows an already-allowed
     origin: "http://127.0.0.1:7070",
   });
 
-  // Behind a proxy the child still reaches the loopback listener, and presents an allowed origin
-  // rather than inventing one for itself.
   assert.deepEqual(sessionEndpoint(listener, new Set(["https://piano.example"])), {
     wsUrl: "ws://127.0.0.1:7070/ws",
     origin: "https://piano.example",
   });
 
-  // Development: the backend is on 7070 and the only allowed origin is Vite's.
   assert.deepEqual(sessionEndpoint(listener, new Set(["http://localhost:5173"])), {
     wsUrl: "ws://127.0.0.1:7070/ws",
     origin: "http://localhost:5173",
   });
 
-  // Wildcard bind addresses are not connectable.
   for (const [host, authority] of [
     ["0.0.0.0", "127.0.0.1:7070"],
     ["", "127.0.0.1:7070"],
@@ -79,7 +68,6 @@ test("the session endpoint addresses the listener and borrows an already-allowed
   }
   assert.equal(sessionEndpoint({ host: "::", port: 7070 }, loopback)?.origin, "http://[::1]:7070");
 
-  // No configured origin means no endpoint: a child cannot be handed one that would widen policy.
   assert.equal(sessionEndpoint(listener, new Set()), undefined);
   assert.equal(sessionEndpoint({ host: "192.0.2.1", port: 7070 }, loopback), undefined);
 
@@ -92,8 +80,6 @@ test("the session endpoint addresses the listener and borrows an already-allowed
   );
 });
 
-// Webhooks and the session endpoint both link by this rule; without the listener, a webhook named
-// 127.0.0.1 for a Piano listening only on [::1] (docs/configuration.md#session-link-origin).
 test("a session link opens from the listener's own origin unless an HTTPS one is configured", () => {
   const loopback = configuredOrigins(7070);
   for (const [host, origin] of [
@@ -104,7 +90,6 @@ test("a session link opens from the listener's own origin unless an HTTPS one is
     ["::", "http://[::1]:7070"],
   ] as const)
     assert.equal(sessionLinkOrigin(loopback, { host, port: 7070 }), origin, host);
-  // A listener no origin names falls back to the first; an HTTPS origin wins over all.
   const listener = { host: "192.0.2.1", port: 7070 };
   assert.equal(sessionLinkOrigin(loopback, listener), "http://127.0.0.1:7070");
   const proxied = configuredOrigins(7070, "http://[::1]:7070,https://piano.example");
@@ -122,7 +107,6 @@ test(
     const base = `http://127.0.0.1:${port}`;
     const proxy = "https://piano.example";
 
-    // Records how Piano launched Pi, then behaves as the fake Pi the probe talks to.
     const captured = join(root, "launch.jsonl");
     const shim = join(root, "pi-cli.mjs");
     writeFileSync(
@@ -146,7 +130,6 @@ await import(${JSON.stringify(pathToFileURL(new URL("fake-pi.mjs", import.meta.u
         PIANO_DB_PATH: join(root, "registry.db"),
         PI_CODING_AGENT_DIR: join(root, "agent"),
         PI_CODING_AGENT_SESSION_DIR: join(root, "sessions"),
-        // The listener's origin is listed first to show the HTTPS origin a link opens from wins.
         PIANO_ALLOWED_ORIGINS: `${base},${proxy}`,
         PIANO_PI_CLI: shim,
       },
@@ -164,14 +147,11 @@ await import(${JSON.stringify(pathToFileURL(new URL("fake-pi.mjs", import.meta.u
       for (;;) {
         try {
           if ((await fetch(`${base}/api/folders`)).ok) break;
-        } catch {
-          /* startup */
-        }
+        } catch {}
         assert.ok(Date.now() < deadline && child.exitCode === null, logs);
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
 
-      // Any request that needs Pi's facts spawns a child; the commands probe is the cheapest.
       const commands = await fetch(`${base}/api/commands`, {
         method: "POST",
         headers: { origin: base, "content-type": "application/json" },
@@ -198,8 +178,6 @@ await import(${JSON.stringify(pathToFileURL(new URL("fake-pi.mjs", import.meta.u
       assert.equal(launch.wsUrl, `ws://127.0.0.1:${port}/ws`);
       assert.equal(launch.origin, proxy, "a `/s/<id>` link must open from a remote browser");
 
-      // The handed values must actually work: Node's built-in WebSocket can set Origin through
-      // undici's `headers` option, which the installed types do not describe.
       const socket = new WebSocket(launch.wsUrl, {
         headers: { Origin: launch.origin },
       } as unknown as string[]);
@@ -210,7 +188,6 @@ await import(${JSON.stringify(pathToFileURL(new URL("fake-pi.mjs", import.meta.u
       socket.close();
       assert.equal(opened, "open", "the endpoint Piano hands a child passes its own origin check");
 
-      // And the policy is still closed: the endpoint borrows an origin, it does not add one.
       const rejected = new WebSocket(launch.wsUrl, {
         headers: { Origin: "https://evil.example" },
       } as unknown as string[]);

@@ -1,68 +1,31 @@
-/**
- * Piano's library: the skills and prompts it keeps in its own folders, which every Pi child it
- * starts loads last (`--skill`, `--prompt-template`, main.ts). This module decides every save and
- * delete once, for both kinds; a `Layout` says only how its kind sits on disk.
- *
- * What a save of a name meets decides what it does:
- * - Piano's own entry of that name: a proposal or an update replaces its file, only as the person
- *   saw it (`LibraryFile.replace`); a create is refused, never overwritten.
- * - Anything else of that name in Piano's folder, or a name Pi loads from another folder first
- *   (`PiLoads.ts`): refused as taken, and an update as not found.
- * - Piano's entry while Pi loads another of that name first: a proposal or update is refused, since
- *   the change would never reach a session; a delete still removes Piano's.
- * - Nothing: a proposal or a create makes a new entry; an update is refused as not found.
- *
- * Pi owns loading (INV-01, INV-12): a layout lists its folder with Pi's own rules, and skills or
- * prompts anywhere else are read only to tell whether Pi loads a name first. Nothing here changes a
- * running session: one started from now loads the new set.
- */
 import { Data, Effect } from "effect";
 import { checkDraft, type Draft, type DraftField } from "../shared/drafts.ts";
 import { LIBRARY_KINDS, type LibraryChange, type LibraryKind } from "../shared/library.ts";
 import * as LibraryFile from "./LibraryFile.ts";
 import { loadedBeforePiano } from "./PiLoads.ts";
 
-/** A refusal written for people; `field` names the editor field it belongs to, if any. */
 export class LibraryError extends Data.TaggedError("LibraryError")<{
   readonly detail: string;
   readonly field?: DraftField;
 }> {}
 
-/** One of Piano's entries as Pi loads it from Piano's folder, with the file a replace writes. */
 export interface Shelved<Entry> {
   readonly entry: Entry;
   readonly path: string;
 }
 
-/** How one kind of entry sits in Piano's folder. */
 export interface Layout<Entry extends { readonly name: string; readonly file: string }, Request> {
   readonly kind: LibraryKind;
-  /** Piano's folder for this kind. */
   readonly folder: () => string;
-  /** Pi's agent folder, whose settings, packages and folders Pi loads before Piano's. */
   readonly agentDir: () => string;
-  /** Piano's entries by the name Pi loads each as, only those in Piano's layout and not links, so
-   * nothing here reaches outside the folder. An entry it cannot read is left out, so it fails only
-   * when the folder cannot be read. */
   readonly shelf: () => Promise<ReadonlyMap<string, Shelved<Entry>>>;
-  /** Piano's entry of `name`, any name, as `shelf` would list it, or undefined; nothing outside the
-   * folder is reached, since a delete passes the name as asked. It reads no other entry, so one
-   * unreadable entry never refuses a save or delete of another, and throws when its own entry is
-   * there but cannot be read. */
   readonly find: (name: string) => Promise<Shelved<Entry> | undefined>;
-  /** Whether anything at all of `name` is in Piano's folder or loaded from it, entry or not. */
   readonly occupied: (name: string) => boolean;
-  /** The entry a save of `saved` writes. `kept` is the entry the save replaces, whose settings
-   * the draft does not set are kept. */
   readonly render: (saved: Draft, request: Request, kept: Entry | undefined) => Entry;
-  /** Write a new entry's file, never over anything: throws an `EEXIST` error only when the name is
-   * taken. */
   readonly create: (entry: Entry) => Promise<void>;
-  /** Delete one of Piano's entries. */
   readonly remove: (shelved: Shelved<Entry>) => Promise<void>;
 }
 
-/** What a save does: make a new entry, or replace Piano's `current` one. */
 type Decision<Entry> =
   | { readonly change: "create" }
   | { readonly change: "update"; readonly current: Shelved<Entry> };
@@ -85,7 +48,6 @@ export const makeLibrary = <
   const shadowed = (name: string) =>
     refused(`Pi loads another ${noun} named ${name} instead of this one.`, "name");
 
-  /** The draft as it would be saved, or the refusal of the first field that cannot be. */
   const draft = (request: Request) => {
     const check = checkDraft(request);
     return check.saved
@@ -93,10 +55,6 @@ export const makeLibrary = <
       : Effect.fail(new LibraryError(check.problem ?? { detail: `Could not save ${noun}.` }));
   };
 
-  /**
-   * What a save of `name` meets: Piano's entry of that name, if any; whether anything else holds
-   * the name in Piano's folder; and whether Pi loads that name from another folder first.
-   */
   const placeOf = Effect.fn("Library.placeOf")(function* (name: string) {
     const current = yield* Effect.tryPromise({ try: () => layout.find(name), catch: couldNotSave });
     const elsewhere = yield* Effect.tryPromise({
@@ -107,8 +65,6 @@ export const makeLibrary = <
     return { current, occupied, elsewhere: elsewhere.has(name) };
   });
 
-  /** The one decision: what a save of the name does, given what it meets; an update names the
-   * entry it replaces. */
   const decide = (
     intent: LibraryChange | "propose",
     name: string,
@@ -125,19 +81,12 @@ export const makeLibrary = <
     return Effect.succeed({ change: "create" });
   };
 
-  /** Piano's entries by name. A folder that cannot be read is a defect, not a refusal: nothing the
-   * person asked for was wrong, so the server logs its cause and answers its fallback. */
   const list = Effect.promise(layout.shelf).pipe(
     Effect.map((entries) =>
       [...entries.values()].map(({ entry }) => entry).sort((a, b) => a.name.localeCompare(b.name)),
     ),
   );
 
-  /**
-   * The one place a save's file is decided: what a save of `request` does and the entry it writes.
-   * An update renders over the entry it replaces, keeping the settings the draft does not set, so
-   * a proposal and the update that follows it write the same file from the same draft.
-   */
   const plan = Effect.fn("Library.plan")(function* (
     intent: LibraryChange | "propose",
     request: Request,
@@ -148,7 +97,6 @@ export const makeLibrary = <
     return { saved, decision, entry: layout.render(saved, request, kept) };
   });
 
-  /** What saving `request` would do, refused as the save would refuse it; writes nothing. */
   const propose = Effect.fn("Library.propose")(function* (request: Request) {
     const { decision, entry } = yield* plan("propose", request);
     return decision.change === "update"
@@ -156,7 +104,6 @@ export const makeLibrary = <
       : { change: decision.change, entry };
   });
 
-  /** Save a new entry; a name already taken is refused, never overwritten. */
   const create = Effect.fn("Library.create")(function* (request: Request) {
     const { saved, entry } = yield* plan("create", request);
     yield* Effect.tryPromise({
@@ -166,13 +113,10 @@ export const makeLibrary = <
     return entry;
   });
 
-  /** Replace Piano's entry, only while its file is still `previous`, the text the person saw, with
-   * the file a proposal of the same draft showed. */
   const update = Effect.fn("Library.update")(function* (request: Request & { previous: string }) {
     const changed = () => refused(`This ${noun} changed since it was shown. Review it again.`);
     const { decision, entry } = yield* plan("update", request);
     if (decision.change !== "update") return yield* notFound("name");
-    // The kept settings come from the file read now: it must be the one the person saw.
     if (decision.current.entry.file !== request.previous) return yield* changed();
     yield* LibraryFile.replace(decision.current.path, request.previous, entry.file).pipe(
       Effect.mapError(({ reason }) =>
@@ -182,8 +126,6 @@ export const makeLibrary = <
     return entry;
   });
 
-  /** Delete Piano's entry by the name Pi loads it as, even one Pi loads another of first. Reads
-   * only that entry, as a save does. */
   const remove = Effect.fn("Library.remove")(function* (name: string) {
     const couldNotDelete = () => refused(`Could not delete ${noun}.`);
     const current = yield* Effect.tryPromise({

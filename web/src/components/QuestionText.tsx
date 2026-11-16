@@ -1,9 +1,6 @@
 import { cn } from "cn";
 import { Markdown } from "@/components/Markdown";
 
-/** A question's text as the asking and answered views show it: Markdown in the transcript's prose,
- * keeping the single line breaks a model writes between `Field: value` lines, which Markdown
- * alone would join into one paragraph. */
 export function QuestionText({
   id,
   text,

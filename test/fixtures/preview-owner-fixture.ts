@@ -8,10 +8,6 @@ import { ownerRequest } from "../../scripts/PreviewClient.ts";
 import { PreviewOwner } from "../../scripts/PreviewOwner.ts";
 import { type FakeHost, fakeAdapter, type Platform } from "./preview-host.ts";
 
-/**
- * A preview owner over a fake supervisor for `platform`, in its own scratch checkout and state.
- * Shared by the PreviewOwner test files, which are split so Node runs them in parallel.
- */
 export async function ownerFixture(t: TestContext, platform: Platform, lockWait?: number) {
   const root = await mkdtemp(join(tmpdir(), "preview-owner-test-"));
   const workspace = join(root, "checkout");
@@ -58,7 +54,6 @@ export async function ownerFixture(t: TestContext, platform: Platform, lockWait?
   return { root, workspace, state, host, adapter, launched, stops, open, owner, call, config };
 }
 
-/** The status a loopback listener on `port` answers `/` with. */
 export function statusAt(port: number) {
   return new Promise<number | undefined>((resolve, reject) => {
     get({ host: "127.0.0.1", port, path: "/" }, (response) => {

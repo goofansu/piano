@@ -7,17 +7,10 @@ import { displayPath, type SessionFile, splitPath } from "@/lib/sessionFiles";
 import { useNavigation } from "@/lib/useNavigation";
 
 interface Props {
-  /** In conversation order, already filtered by the workspace's `.gitignore` (`useSessionFiles`). */
   files: readonly SessionFile[];
-  /** The session's directory, which paths inside it are shown relative to. */
   cwd?: string;
 }
 
-/**
- * Outputs: the files Pi wrote or edited in this session, listed in the session rail once there is one.
- * Each row is the file's name after its kind's icon, and opens the file as a Surface tab, as a
- * local file link in the transcript does; the tab and its toolbar carry the path.
- */
 export function SessionOutputs({ files, cwd }: Props) {
   const { openFile } = useNavigation();
   return (

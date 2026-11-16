@@ -1,8 +1,3 @@
-/**
- * Real locked CLI: a discovered extension's newSession, switchSession and fork must not replace a
- * hosted session behind its ID (INV-02, INV-07). With Piano's `piano-session` extension Pi cancels them;
- * without it, Piano closes the child rather than publish another session under this one's identity.
- */
 import assert from "node:assert/strict";
 import { copyFileSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -38,7 +33,6 @@ const saved = (fixture: Fixture, id: string, cwd: string, text: string) => {
   return file;
 };
 
-/** Two saved sessions in two checkouts, the replacement extension installed, run under hosts. */
 const withHosts = async (
   cli: (fixture: Fixture) => PiCliConfig,
   body: (context: {
@@ -179,7 +173,6 @@ test(
   },
   () =>
     withHosts(
-      // Without `piano-session` nothing cancels the replacement: the host is the last guard.
       (fixture) => fixture.cli(),
       ({ fixture, a, b }) =>
         Effect.gen(function* () {
@@ -187,7 +180,6 @@ test(
           const sessionB = yield* hosts.open({ cwd: b.cwd, sessionId: "session-b" });
           const sessionA = yield* hosts.open({ cwd: a.cwd, sessionId: "session-a" });
 
-          // Closing the child ends the prompt's session-owned work, as any child exit does.
           yield* Effect.exit(prompt(sessionA, `/review-switch-session ${b.file}`));
           yield* Stream.runDrain(sessionA.events);
           const closed = yield* sessionA.state;
@@ -203,7 +195,6 @@ test(
             "B has one live owner",
           );
 
-          // Reopen resumes A's own history; B's is untouched.
           const reopened = yield* hosts.open({ cwd: a.cwd, sessionId: "session-a" });
           assert.notEqual(reopened, sessionA);
           assert.equal(yield* firstText(reopened), "HISTORY_A");

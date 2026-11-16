@@ -28,9 +28,7 @@ test("a prompt created in Piano is listed alone and offered by Pi as a / command
   const dir = join(root, "data", "prompts");
   const agent = join(root, "agent");
   mkdirSync(join(agent, "prompts"), { recursive: true });
-  // Pi's own personal prompt: Pi offers it, but Piano did not create it.
   writeFileSync(join(agent, "prompts", "personal.md"), "Personal prompt\n");
-  // A Pi isolated from this machine's settings, credentials and network.
   const shim = join(root, "cli.mjs");
   writeFileSync(
     shim,
@@ -48,7 +46,6 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
       const sessions = yield* PiSessions;
       assert.deepEqual(yield* prompts.list, [], "no folder yet reads as no prompts");
 
-      // `${...}` here is Pi's argument syntax, not a JavaScript template.
       const instructions =
         "Review the staged changes. Focus on ${1:-correctness, security, and error handling}.";
       const review = yield* prompts.create({
@@ -59,18 +56,14 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
       const expected = {
         name: "review",
         description: "Review staged git changes",
-        // The file as saved, front matter included, as View shows and copies it.
         file: `---\ndescription: "Review staged git changes"\n---\n${instructions}\n`,
       };
       assert.deepEqual(review, expected);
-      // Instructions that start like front matter stay the instructions: the description keeps them out of the header.
       yield* prompts.create({
         name: "rule",
         description: "House rule",
         instructions: "---\nKeep it short.",
       });
-      // A file put in the folder by hand, without a description: Pi cuts the first line at 60
-      // characters, and the list says the same.
       const long = `${"Summarize the open pull requests ".repeat(3)}by risk.`;
       const triage = `${long}\nThen list the next steps.\n`;
       writeFileSync(join(dir, "triage.md"), triage);
@@ -138,7 +131,6 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
         "Prompt not found.",
       );
 
-      // An update replaces a prompt Piano created, and a new Pi offers the new description.
       const updated = yield* prompts.update({
         name: "review",
         description: "Review the branch",
@@ -149,7 +141,6 @@ await import(${JSON.stringify(pathToFileURL(defaultPiCli().cli).href)});`,
       assert.equal(updated.description, "Review the branch");
       const offered = (yield* sessions.probe(root)).commands.find((c) => c.name === "review");
       assert.equal(offered?.description, "Review the branch", "a new Pi loads the update");
-      // Pi's own prompt, an unknown name and a path are refused, and nothing is created.
       for (const name of ["personal", "missing", "../agent/prompts/personal"]) {
         const refused = yield* failure(
           prompts.update({ name, description: "D.", instructions: "x", previous: "" }),
@@ -211,7 +202,6 @@ test("an update replaces only the prompt the person saw, and of two from one fil
       const matching = yield* update("Two.", shown);
       assert.equal(readFileSync(path, "utf8"), matching.file, "an update from the file on disk");
 
-      // Two sessions proposed from the same file: the second no longer replaces what it showed.
       const [a, b] = yield* Effect.all(
         [
           Effect.result(update("Three.", matching.file)),
@@ -246,11 +236,9 @@ test("a name Pi already loads from another prompts folder is refused, so Piano's
   const dir = join(root, "taken", "piano", "prompts");
   const theirs = join(root, "taken", "agent", "prompts");
   mkdirSync(theirs, { recursive: true });
-  // Pi merges Piano's folder after its own and keeps the first prompt of each name.
   writeFileSync(join(theirs, "review.md"), "Theirs\n");
   writeFileSync(join(theirs, "target.md"), "Linked\n");
   symlinkSync(join(theirs, "target.md"), join(theirs, "linked.md"));
-  // Pi skips a file whose front matter does not parse, so its name is free.
   writeFileSync(join(theirs, "broken.md"), "---\ndescription: [\n---\nBroken\n");
   await Effect.runPromise(
     Effect.gen(function* () {
@@ -272,8 +260,6 @@ test("a name Pi already loads from another prompts folder is refused, so Piano's
         ["broken"],
       );
 
-      // Piano's prompt came first, then Pi's folder gained one of its name: Pi runs that one, so
-      // a change to Piano's would never reach a session. It is refused, and deleting still works.
       yield* prompts.create({ name: "deploy", description: "Mine", instructions: "Mine" });
       const mine = readFileSync(join(dir, "deploy.md"), "utf8");
       writeFileSync(join(theirs, "deploy.md"), "Theirs\n");
@@ -347,7 +333,6 @@ test("a name Pi loads from a folder its settings list is refused; one it turns o
 test("a prompt placed by hand under a name Piano would not create is listed and deleted as Pi loads it", async () => {
   const dir = join(root, "by-hand", "prompts");
   mkdirSync(dir, { recursive: true });
-  // Pi offers this as /Review; New prompt would refuse the name, but the file is Piano's to delete.
   writeFileSync(join(dir, "Review.md"), "Review by hand\n");
   writeFileSync(join(dir, "elsewhere-target.md"), "Linked\n");
   symlinkSync(join(dir, "elsewhere-target.md"), join(dir, "link.md"));
@@ -438,7 +423,6 @@ test("a prompt Piano cannot read is not listed, and never blocks deleting anothe
       );
       yield* prompts.remove("a");
       assert.equal(existsSync(join(dir, "a.md")), false);
-      // Not listed, so the person was never offered it; Piano says it cannot, and keeps the file.
       assert.equal((yield* failure(prompts.remove("b"))).detail, "Could not delete prompt.");
       assert.ok(existsSync(join(dir, "b.md")));
     }).pipe(

@@ -8,7 +8,6 @@ import { Redacted } from "effect";
 import { loadPeerConfigs } from "../server/PeerConfig.ts";
 import { gatewayFixture, identity } from "./fixtures/peer-gateway.ts";
 
-// Dummy credentials only: no account, token provisioning or real exe.dev request in routine tests.
 const token = "exe1.test-only-private-vm-token";
 
 test("VM token configuration stays startup-owned and redacted, with a private bounded file and an explicit VM destination", (t) => {
@@ -147,7 +146,6 @@ test(
       "closing the observer does not stop authenticated remote work",
     );
 
-    // Revocation/expiry: the next connection is refused rather than reconnecting without auth.
     f.state.requiredToken = "rotated-or-revoked";
     let before = f.state.requests.length;
     assert.equal(await f.handshake(), 502);

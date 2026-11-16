@@ -1,6 +1,3 @@
-// Opt-in critical path on Linux/systemd or macOS/launchd. Real installed Pi + scripted loopback
-// model (no credentials).
-// node test/browser/preview.mjs [evidence-directory]
 import assert from "node:assert/strict";
 import { execFile, execFileSync } from "node:child_process";
 import {
@@ -22,15 +19,12 @@ import { PreviewAdapter } from "../../scripts/PreviewAdapter.ts";
 import { run } from "./harness.mjs";
 
 const ROOT = resolve(import.meta.dirname, "../..");
-// Reuse the deployment origin override, but keep ports and state isolated for this journey.
 const previewConfig = process.env.PIANO_PREVIEW_CONFIG
   ? JSON.parse(readFileSync(process.env.PIANO_PREVIEW_CONFIG, "utf8"))
   : {};
-// A Mac previews on localhost; a Linux VM on its private exe.dev origin.
 const local = process.platform === "darwin";
 const origin =
   previewConfig.origin ?? (local ? "http://localhost" : `https://${hostname()}.exe.xyz`);
-// Vite allows localhost already; a remote origin's hostname must be allowed explicitly.
 const appEnv = local ? {} : { __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: new URL(origin).hostname };
 const externalLocal = ["localhost", "127.0.0.1"].includes(new URL(origin).hostname);
 if (!externalLocal)
@@ -82,7 +76,6 @@ const request = (args, ownerPreview) =>
       input: JSON.stringify({ ...args, workspace: repo }),
     }),
   );
-/** The same request, without blocking the journey while the owner works on it. */
 const requestLater = async (args, ownerPreview) => {
   const pending = promisify(execFile)(
     process.execPath,
@@ -137,7 +130,6 @@ const model = createServer(async (req, res) => {
   const tool = body.messages.slice(lastUser).find((message) => message.role === "tool");
   let delta;
   if (prompt === "Revise the app heading") {
-    // Deterministic revision through the ordinary composer; no paid model or new feedback path.
     writeFileSync(join(repo, "heading.js"), 'export default "Preview journey v2 HMR";');
     delta = { role: "assistant", content: "APP_UPDATED" };
   } else if (!tool) {
@@ -205,9 +197,6 @@ try {
     ({ repository, root }) => {
       repo = repository("app");
       canonicalRepo = realpathSync(repo);
-      // A checkout-native frontend application with an inspected dev entry point, not a
-      // generated report hosted just to obtain a URL. The scripted model tests tool plumbing,
-      // not whether an arbitrary model follows launch guidance.
       writeFileSync(
         join(repo, "package.json"),
         JSON.stringify({
@@ -301,14 +290,12 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
       try {
         await page.open("/new");
         await page.ab("fill", '[aria-label="First message"]', "Run this app so I can try it.");
-        // Send enables once real Pi has reported its models; a click before that is ignored.
         await page.until("document.querySelector('[aria-label=Send]')?.disabled === false");
         await page.click("button", "Send");
         await page.see("PREVIEW_READY");
         await page.until(
           "!!document.querySelector('[aria-label=Message]') && !document.querySelector('[aria-label=Stop]')",
         );
-        // The helper records the canonical path (macOS's /var is /private/var).
         assert.equal(app.workspace, realpathSync(repo));
         assert.equal(app.url, `${origin}:${app.port}/`);
         const identity = app.instanceId;
@@ -340,7 +327,6 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           page.until(
             "!document.querySelector('iframe[title=\"App preview\"], [data-slot=surface-area] section[aria-label=Preview], button[aria-label=\"Show preview\"]') && ![...document.querySelectorAll('[role=tab]')].some(t => t.textContent.trim().startsWith('Preview'))",
           );
-        // A closing dialog hides the rest of the page from accessibility until it has closed.
         const dialogClosed = () =>
           page.until(
             "!document.querySelector('[role=dialog],[role=alertdialog],[data-aria-hidden]')",
@@ -365,8 +351,6 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           await page.click("button", "Refresh");
           await detailsReady();
         };
-        // Opening the actual UI link proves the tab destination. Only loopback runs can also
-        // prove interaction: exe.dev authentication is intentionally not bypassed.
         const externalAnswer = async (name, heading = "Preview journey v1") => {
           if (externalLocal) {
             await page.see(heading);
@@ -435,7 +419,6 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await page.click("button", "App");
         await page.capture("1b-app-folded");
         await page.click("button", "App");
-        // File/Changes inspection remains independent of external preview and composer state.
         await page.click("button", "Changes");
         await page.click("button", "App source");
         await page.until("!!document.querySelector('[aria-label=\"Close app.mjs\"]')");
@@ -623,8 +606,6 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           await noEmbeddedPreview();
         };
 
-        // An unreadable scratch intent is an observation/stop error, not absence. The service
-        // still belongs to its live owner. Restore the external boundary before any cleanup.
         const intentPath = join(state, first.serviceId + ".json");
         const intent = readFileSync(intentPath, "utf8");
         try {
@@ -657,14 +638,12 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await dialogClosed();
         await page.until(`!!document.querySelector(${JSON.stringify(headerLink)})`);
 
-        // Another session in this same checkout cannot discover or adopt the owner's app.
         await page.open("/new");
         await noEmbeddedPreview();
         await page.ab("fill", '[aria-label="First message"]', "status");
         await page.until("document.querySelector('[aria-label=Send]')?.disabled === false");
         await page.click("button", "Send");
         await page.see("PREVIEW_READY");
-        // The transcript can link the workspace app; it is still not this session's live row.
         assert.equal(await railPreview(), false);
         assert.equal(
           await page.evaluate(`!!document.querySelector(${JSON.stringify(headerLink)})`),
@@ -672,8 +651,6 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         );
         await page.capture("1i-non-owning-session");
         const otherSessionPath = new URL(await page.ab("get", "url")).pathname;
-        // Select through the sidebar, then use browser Back while the pane is open. This is
-        // same-document navigation: a full reload would discard the claim rather than fence it.
         const ownerRow = `li[data-session-key*=${JSON.stringify(sessionPath.split("/").at(-1))}] > button`;
         await page.until(`!!document.querySelector(${JSON.stringify(ownerRow)})`);
         await page.ab("click", ownerRow);
@@ -682,7 +659,6 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await openPreviewPane();
         await page.ab("back");
         await page.until(`location.pathname === ${JSON.stringify(otherSessionPath)}`);
-        // The sheet is keyed by session: selection replaces it with the new session's actions.
         await page.until(
           "!!document.querySelector('[role=dialog]') && !document.querySelector('[role=dialog] button[aria-label=Preview], [role=dialog] button[aria-label=Back]')",
         );
@@ -702,8 +678,6 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await showRail();
         app = first;
 
-        // Keep the external app tab alive while the ordinary composer deterministically edits
-        // its source. The counter proves HMR, rather than a fresh navigation to revised output.
         const pianoUrl = await page.ab("get", "url");
         const pianoTarget = await page.cdp(async (call) => {
           const { targetInfos } = await call("Target.getTargets");
@@ -738,15 +712,13 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         assert.equal(request({ action: "status" }).instanceId, identity);
         await page.ab("close");
         assert.equal(request({ action: "status" }).ready, true);
-        // Wait beyond the scratch idle deadline with no browser attached.
         await delay(4000);
         assert.ok(running(firstPi.pid), "preview pins an otherwise idle Pi");
         assert.equal(request({ action: "status" }).instanceId, identity);
-        await page.open("/new"); // switching away does not release the owner
+        await page.open("/new");
         assert.equal(request({ action: "status" }).ready, true);
         await page.open(sessionPath);
         await page.until("!!document.querySelector('[aria-label=Message]')");
-        // A reload while the owner lives finds the same instance, without launching another.
         await showRail();
         assert.equal(request({ action: "status" }).instanceId, identity);
         await page.capture("2b-reload-same-preview");
@@ -769,7 +741,6 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           1,
           "Stop never relaunches",
         );
-        // Pi stays available: the composer is still live and the session still answers.
         await page.ab("fill", '[aria-label="Message"]', "status");
         await page.click("button", "Send");
         await page.see("PREVIEW_FAILED");
@@ -785,7 +756,6 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           const before = observations.length;
           await page.open(sessionPath);
           await page.until("!!document.querySelector('[aria-label=Message]')");
-          // A reopened page may restore its saved draft over an early fill; fill until it holds.
           for (let i = 0; ; i++) {
             await page.ab("fill", '[aria-label="Message"]', "Run again");
             if (
@@ -810,8 +780,6 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await more();
         await page.click("menuitem", "Stop preview");
         await page.see("Stop preview?");
-        // A concurrent owner request replaces the app while confirmation is open. Its 503
-        // keeps readiness pending: neither the old confirmation nor a stale URL may act on it.
         writeFileSync(browserMode, "warming");
         let replacementSettled = false;
         const pendingReplacement = requestLater(
@@ -860,7 +828,6 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           ports: [replacing.port, replacement.port],
         });
 
-        // The pushed pane has its own exact-instance fence, not just the stop confirmation's.
         await page.ab("set", "viewport", "390", "844");
         await openPreviewPane();
         const paneOld = replacement;
@@ -903,12 +870,9 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
           replaced: paneOld.instanceId,
           paneFenced: true,
         });
-        // Keep this owner active while inspecting a terminal app: this scratch instance's
-        // two-second idle retirement deliberately releases failed/exited apps as well.
         await page.ab("fill", '[aria-label="Message"]', "hold");
         await page.click("button", "Send");
         await page.until("!!document.querySelector('[aria-label=Stop]')");
-        // Native nonzero app termination remains inspectable rather than disappearing.
         process.kill(replacement.testPids[0], "SIGKILL");
         await gone(replacement, "application failure cleans its children");
         request({ action: "status" }, replacement);
@@ -1019,11 +983,9 @@ writeFileSync('app-processes.json', JSON.stringify([process.pid, vite.pid, stubb
         await page.click("button", "Stop and archive");
         await gone(missing, "Archive after checkout removal uses retained ownership");
       } finally {
-        // Clean up even when a launch succeeded but its reply never reached the scripted model.
         for (const file of existsSync(state)
           ? readdirSync(state).filter((file) => file.endsWith(".json"))
           : []) {
-          // Stop first: an assertion must never leave a scratch app running.
           const record = JSON.parse(readFileSync(join(state, file), "utf8"));
           await new PreviewAdapter().retire(record.owner, state);
           observations.push({ cleanup: record.instanceId });

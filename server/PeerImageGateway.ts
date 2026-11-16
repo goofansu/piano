@@ -1,4 +1,3 @@
-/** Fixed binary image routes. The main streams uploads; only the owning peer retains them. */
 import { Effect, Option, Schema, Stream } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { IMAGE_TYPES } from "../shared/attachments.ts";
@@ -17,7 +16,6 @@ import { imageJson } from "./PeerImages.ts";
 
 const Refusal = Schema.Struct({ error: Schema.NonEmptyString });
 
-/** Per-gateway-instance, per-peer caps, independent of conversation/control traffic. */
 export function makePeerImageRelay() {
   const active = new Map<string, number>();
   return Effect.fn("PeerImageGateway.relay")(function* (
@@ -31,7 +29,6 @@ export function makePeerImageRelay() {
     if (route instanceof ImageTransferError)
       return imageJson({ error: route.detail }, route.status);
     const preview = route.kind === "preview";
-    // Cancellation has a tiny independent lane, so saturated uploads can still be discarded.
     const key = `${peer.id}:${preview ? "read" : route.kind}`;
     if ((active.get(key) ?? 0) >= remoteImageLimits.laneTransfers)
       return imageJson({ error: "Image transfer is busy. Try again after the pending send." }, 429);
@@ -85,7 +82,6 @@ export function makePeerImageRelay() {
             await response.body?.cancel();
             throw unavailable;
           }
-          // The owning peer knows why it refused; its bounded sentence is the user's to read.
           const text = await readImageResponse(response, combined).catch(() => "");
           const refusal = Schema.decodeUnknownOption(Schema.fromJsonString(Refusal))(text);
           throw imageFailure(

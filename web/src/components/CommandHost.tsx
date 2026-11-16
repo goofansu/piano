@@ -75,7 +75,6 @@ async function copySessionValue(value: string, label: string) {
   if (await copyText(value, failure)) toast.success(`${label} copied`);
 }
 
-/** A menu row disappears on handoff; return keyboard focus to its surviving trigger. */
 function previewFocusReturn() {
   const source = document.activeElement as HTMLElement | null;
   const fallback = document.querySelector<HTMLElement>(
@@ -111,7 +110,6 @@ const ICONS: Record<SessionCommandIcon, LucideIcon> = {
 
 export function CommandIcon({ icon }: { icon: SessionCommandIcon }) {
   const Icon = ICONS[icon];
-  // Stop is the filled square the composer's Stop shows; hollow, it reads as a checkbox.
   return <Icon className={icon === "stop" ? "fill-current" : undefined} />;
 }
 
@@ -125,14 +123,12 @@ interface CommandsValue {
 }
 const CommandsContext = createContext<CommandsValue | null>(null);
 
-/** The host's runner: every surface hands its global, project, folder and session commands here. */
 export function useCommands() {
   const value = useContext(CommandsContext);
   if (!value) throw new Error("useCommands needs a CommandHost");
   return value;
 }
 
-/** Session commands for `target`, or for the selected session, with the host's runner. */
 export function useSessionCommands(target?: SessionTarget) {
   const offers = useOffers();
   const { state, run, messagesOnly, codeWrap, layout } = useCommands();
@@ -150,10 +146,6 @@ export function useSessionCommands(target?: SessionTarget) {
   };
 }
 
-/**
- * The selected session's project membership (`sessionProjectMenu`), for the header's phone sheet
- * and the palette; none until the session has a Pi session ID.
- */
 export function useSessionProjectMenu() {
   const { state } = useCommands();
   const session = state.session;
@@ -162,11 +154,6 @@ export function useSessionProjectMenu() {
     : undefined;
 }
 
-/**
- * Global commands with the host's runner, from one context: whether Settings is open, the sidebar's
- * view and the chosen appearance. The palette and the sidebar's View menu both list these, so each
- * marks the same choices current.
- */
 export function useGlobalCommands() {
   const { state, run, global } = useCommands();
   const scope = useMachineScope();
@@ -187,7 +174,6 @@ export function useGlobalCommands() {
   return { commands, run };
 }
 
-/** A descriptor as a menu row, by its label and icon. */
 export function SessionCommandMenuItem({
   command,
   run,
@@ -206,10 +192,8 @@ export function SessionCommandMenuItem({
   );
 }
 
-/** A command whose effect is opening its URL in a new tab. */
 export type LinkCommand = SessionCommand & { intent: { kind: "open-url"; url: string } };
 
-/** The selected session's `open-preview` command while its app has a link to open. */
 export function useOpenPreview(): LinkCommand | undefined {
   const { commands } = useSessionCommands();
   const command = commands.find((c) => c.id === "open-preview");
@@ -218,10 +202,6 @@ export function useOpenPreview(): LinkCommand | undefined {
     : undefined;
 }
 
-/**
- * A link command as the link itself, so the browser opens the new tab (and its context menu offers
- * copy and open-in-window). Each surface supplies the content: its label, icon or both.
- */
 export function CommandLink({
   command,
   children,
@@ -234,11 +214,6 @@ export function CommandLink({
   );
 }
 
-/**
- * The one owner of command effects and their forms: whichever surface asked, running a command goes
- * through `runCommand`, which refuses a disabled one, and there is a single Rename, Archive, Delete, Close
- * folder, New project and Project settings dialog. The forms (`useCommandForms`) own submitting; the dialogs only render.
- */
 export function CommandHost({
   state,
   send,
@@ -247,7 +222,6 @@ export function CommandHost({
 }: {
   state: AppState;
   send: (command: ClientCommand) => SendDisposition;
-  /** Hears each server frame, as `Client.listen` does. */
   listen: (listener: (message: ServerMessage) => void) => () => void;
   children: React.ReactNode;
 }) {
@@ -273,16 +247,12 @@ export function CommandHost({
   const { view, setView } = useSidebarView();
   const { theme, setTheme } = useTheme();
   const sidebar = useSidebarLayout();
-  // Out of sight: the desktop column collapsed, or below the breakpoint the sheet closed. A boolean
-  // snapshot, so a resize drag does not re-render the host.
   const sidebarHidden = useSyncExternalStore(sidebar.subscribe, () =>
     sidebar.desktop() ? sidebar.getState().collapsed : !sidebar.getState().mobileOpen,
   );
-  // A page reporting its creation unavailable changes `pageCommands`, so every surface re-renders.
   useSyncExternalStore(pageAvailability.subscribe, pageAvailability.getState);
   const forms = useCommandForms({
     state,
-    // A form known not sent stays open with its input; say why, as the composer does.
     send: (command) => {
       const disposition = send(command);
       if (disposition === "not-sent") toast.warning(FORM_NOT_SENT);
@@ -296,12 +266,9 @@ export function CommandHost({
   const renaming = form?.kind === "rename-session" ? form.target : null;
   const close = forms.cancel;
   const answer = forms.answer();
-  // Archive, delete, close folder and delete project share one confirm dialog; `confirmation` decides its wording.
-  // The dialog animates closed on a copy of its last open face (useExitFace), so it needs no latch.
   const asking = form ? confirmation(state, form) : undefined;
   const project = form?.kind === "project" ? form.dialog : undefined;
   const projectSettings = form?.kind === "project-settings";
-  // The app whose details are open; another app, even in the same session, never reopens them.
   const [previewDetails, setPreviewDetails] = useState<PreviewClaim | null>(null);
   const detailsFocus = useRef<((event: Event) => void) | undefined>(undefined);
   const stopFocus = useRef<((event: Event) => void) | undefined>(undefined);
@@ -351,7 +318,6 @@ export function CommandHost({
         layout,
         codeWrap,
         state,
-        // The one global command context; "system" is next-themes' default before it reads storage.
         global: { settings, view, theme: theme ?? "system", sidebarHidden },
       }}
     >
@@ -404,7 +370,6 @@ export function CommandHost({
         description={asking?.description ?? ""}
         action={asking?.confirmLabel ?? ""}
         destructive={asking?.destructive}
-        // Sending closes the form at once, so there is no wait to show.
         busy={false}
         disabled={!answer.allowed}
         cancel={close}

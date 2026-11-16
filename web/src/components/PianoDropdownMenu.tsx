@@ -60,13 +60,7 @@ export function DropdownMenuSubContent({
   );
 }
 
-/**
- * A closing menu keeps its hands off focus. Radix refocuses the menu content when the pointer
- * leaves an item, and it does so while the menu is still mounted for its exit animation. An
- * overlay the item just opened (the PR popover) lands under the resting pointer, so the browser
- * fires `pointerleave` on the item, the closing menu takes focus, and the overlay dismisses
- * itself as focus moved outside it. Preventing the event skips Radix's handler.
- */
+// Radix's pointerleave refocus during menu exit dismisses the overlay just opened by its item.
 function keepFocusWhileClosing(event: React.PointerEvent<HTMLDivElement>) {
   const menu = event.currentTarget.closest('[role="menu"]');
   if (menu?.getAttribute("data-state") === "closed") event.preventDefault();

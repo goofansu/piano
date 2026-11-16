@@ -7,8 +7,6 @@ import { useMachineId } from "@/lib/useMachine";
 
 const empty: ReadonlyMap<string, string> = new Map();
 
-/** Optional, bounded image enhancement through the same policy as an explicit file preview.
- * Only mounted prose owns blobs; changing workspace/document or unmounting cancels and revokes. */
 export function useMarkdownImages(
   workspaceId: string | undefined,
   text: string,
@@ -39,11 +37,9 @@ export function useMarkdownImages(
       loader.dispose();
     };
   }, [workspaceId, document, machineId]);
-  // Never show an old workspace's blobs, even for the render before effect cleanup.
   const current =
     owner?.workspaceId === workspaceId && owner?.document === document ? owner : undefined;
   const loader = current?.loader;
-  // Streaming prose feeds every delta; the loader reads only paths it has not seen.
   useEffect(() => loader?.show(paths), [loader, paths]);
   return current?.images ?? empty;
 }

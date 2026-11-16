@@ -136,7 +136,6 @@ test("preview confirmation stays on its exact attachment, generation and instanc
   assert.deepEqual(sent, [{ _tag: "act", action: { _tag: "preview_stop", instanceId: "i1" } }]);
 });
 
-// Stop preview and Preview details both act through this claim, so it is the whole identity rule.
 test("a preview claim holds only for the same selection, Pi generation and app instance", () => {
   const preview = {
     instanceId: "i1",
@@ -188,7 +187,6 @@ test("rename sends the trimmed new title, and refuses an empty or unchanged one"
   });
   for (const title of ["Other", " Other ", "   ", ""])
     assert.deepEqual(answerForm(online, rename(), title), { allowed: false }, title);
-  // An untitled session needs some title.
   assert.equal(answerForm(online, rename({ cwd: "/repo", sessionId: "s2" }), "").allowed, false);
 });
 
@@ -222,7 +220,6 @@ test("a session title saves up to its limit, counted trimmed, in the form and on
   assert.deepEqual(answerForm(online, rename(), over), { allowed: false });
   const wire = (title: string) =>
     JSON.stringify({ _tag: "rename_session", cwd: "/repo", sessionId: "s2", title });
-  // The server would trim it to fit, so it is accepted.
   assert.equal(decodeClientMessage(wire(atLimit))._tag, "rename_session");
   assert.throws(() => decodeClientMessage(wire(over)));
 });
@@ -288,7 +285,6 @@ test("archive and close folder name their subject; an untitled session reads Unt
     confirmLabel: "Close",
     destructive: false,
   });
-  // Forms with their own dialogs ask nothing here.
   assert.equal(confirmation(online, rename()), undefined);
   assert.equal(confirmation(online, { kind: "project", dialog: {} }), undefined);
 });
@@ -310,7 +306,6 @@ test("project answers: a new project opens its home, create-and-assign stays put
     },
   });
   assert.deepEqual(newProject({ name: "  " }), { allowed: false });
-  // Instructions travel in the same save, trimmed; blank ones are left out; over the limit refuses.
   assert.deepEqual(newProject({ name: "Ship", instructions: "\n Reply in French. \n" }), {
     allowed: true,
     command: {
@@ -330,7 +325,6 @@ test("project answers: a new project opens its home, create-and-assign stays put
 });
 
 test("deleting a project asks first, counting the sessions that move to No project", () => {
-  // Members in the open folder /repo; `extra` sets archived, pinned or another directory.
   const members = (...extras: Array<Partial<SessionReference>>): AppState => ({
     ...online,
     folders: [repoFolder],
@@ -353,8 +347,6 @@ test("deleting a project asks first, counting the sessions that move to No proje
     confirmation(members(), deleteProject)!.description,
     '"Launch" is deleted. This cannot be undone.',
   );
-  // A member whose folder is closed leaves the sidebar, and a pinned one stays in Pinned:
-  // neither moves to No project.
   assert.equal(
     confirmation(members({}, { cwd: "/closed" }, { pinned: true }), deleteProject)!.description,
     '"Launch" is deleted; its session moves to No project. This cannot be undone.',
@@ -371,7 +363,6 @@ test("deleting the project on screen leaves for the Projects index once it is go
     [{ kind: "new", projectId: "p1" }, true],
     [{ kind: "project", projectId: "p2" }, false],
     [{ kind: "session" }, false],
-    // The Projects index offers each project's menu; deleting one there keeps the index.
     [{ kind: "projects" }, false],
   ] as const) {
     const { subject, sent, opened, setState } = forms();
@@ -379,7 +370,6 @@ test("deleting the project on screen leaves for the Projects index once it is go
     subject.open(deleteProject);
     assert.equal(subject.submit(), true);
     assert.deepEqual(sent, [{ _tag: "delete_project", id: "p1" }]);
-    // The project's page stays until the server's registry no longer has it.
     subject.settle();
     assert.deepEqual(opened, [], JSON.stringify(view));
     setState({ ...withWorkspace, view, projects: [] });
@@ -401,7 +391,6 @@ test("a delete the server refuses, or one cut off by a lost connection, stays on
       setState({ ...withWorkspace, view, projects: [launch], connected: false });
       subject.settle();
     }
-    // A later registry without the project (deleted elsewhere) is not this submit's answer.
     setState({ ...withWorkspace, view, projects: [] });
     subject.settle();
     assert.deepEqual(opened, [], fail);
@@ -414,7 +403,6 @@ test("a submitted form opens no page once the user has moved to another screen",
   deleted.setState({ ...withWorkspace, view: home, projects: [launch] });
   deleted.subject.open(deleteProject);
   assert.equal(deleted.subject.submit(), true);
-  // The user opens the index while the server is still deleting the project.
   deleted.setState({ ...withWorkspace, view: { kind: "projects" }, projects: [launch] });
   deleted.subject.settle();
   deleted.setState({ ...withWorkspace, view: { kind: "projects" }, projects: [] });
@@ -435,7 +423,6 @@ test("a submitted form opens no page once the user has moved to another screen",
   created.subject.settle();
   assert.deepEqual(created.opened, [], "the new project's home does not replace the page opened");
 
-  // From the New page, the first message starts a creation, addressed /new until it has an ID.
   const started = forms();
   started.setState({ ...withWorkspace, view: { kind: "new" }, session: null });
   started.subject.open({ kind: "project", dialog: {} });
@@ -454,8 +441,6 @@ test("a submitted form opens no page once the user has moved to another screen",
   assert.deepEqual(started.opened, [], "the creation keeps the screen");
 });
 
-// The forms' lifecycle: open, edit, submit, cancel.
-
 function forms(disposition: SendDisposition = "sent") {
   let state = withWorkspace;
   const sent: ClientCommand[] = [];
@@ -466,7 +451,6 @@ function forms(disposition: SendDisposition = "sent") {
       sent.push(command);
       return disposition;
     },
-    // Each page as its address names it: a project's home, the New page for a project, the index.
     openPage: (page) =>
       opened.push(
         page.kind === "project"
@@ -545,7 +529,6 @@ test("a form whose answer was not sent stays open with its input and opens no pa
     assert.equal(subject.submit(), false, form.kind);
     assert.equal(sent.length, 1, form.kind);
     assert.deepEqual(subject.getState(), input, form.kind);
-    // Nothing waits on a change the server never heard of.
     setState({ ...withWorkspace, projects: [launch, { id: "new-id", name: "Ship" }] });
     subject.settle();
     assert.deepEqual(opened, [], form.kind);
@@ -580,7 +563,6 @@ test("an untitled selected session renames from the same empty title in the head
     assert.equal(intent?.kind, "rename");
     return intent.kind === "rename" ? intent.target : undefined;
   };
-  // The sidebar row hands over the registry title, which an untitled session lacks.
   const row = { cwd: "/repo", sessionId: "s1", title: undefined };
   assert.deepEqual(renameTarget(), renameTarget(row));
   const { subject } = forms();
@@ -603,7 +585,6 @@ test("creating a project opens its home; from the New page's picker, the New pag
     },
   ]);
   assert.equal(created.subject.getState().form, null);
-  // Its home opens once the server's registry has it, and only once.
   created.subject.settle();
   assert.deepEqual(created.opened, []);
   const ship: Project = { id: "new-id", name: "Ship", instructions: "Reply in French." };
@@ -611,11 +592,9 @@ test("creating a project opens its home; from the New page's picker, the New pag
   created.subject.settle();
   created.subject.settle();
   assert.deepEqual(created.opened, ["/projects/new-id"]);
-  // The next opening starts clean.
   created.subject.open({ kind: "project", dialog: {} });
   assert.equal(created.subject.answer().allowed, false);
 
-  // The New page's project picker keeps its page, with the project it created picked.
   const picked = forms();
   picked.subject.open({ kind: "project", dialog: { newPage: true } });
   picked.subject.editProject({ name: "Ship", instructions: "" });
@@ -640,7 +619,6 @@ test("a new project the server fails to save opens nothing", () => {
   subject.open({ kind: "project", dialog: {} });
   subject.editProject({ name: "Ship", instructions: "" });
   assert.equal(subject.submit(), true);
-  // A failed session start is that selection's answer, not the save's.
   subject.hear({ _tag: "error", message: "Session not started", selectionId: "sel" });
   subject.hear({ _tag: "error", message: "Project not saved" });
   setState({ ...withWorkspace, projects: [{ id: "new-id", name: "Ship" }] });
@@ -658,7 +636,6 @@ test("Project settings starts from the project as saved and sends only what chan
     name: "Launch",
     instructions: "Reply in French.",
   });
-  // Nothing changed yet, so there is nothing to save.
   assert.equal(subject.submit(), false);
   assert.equal(subject.getState().form, settings);
 
@@ -667,7 +644,6 @@ test("Project settings starts from the project as saved and sends only what chan
   assert.deepEqual(sent, [{ _tag: "update_project", id: "p1", name: "Ship" }]);
   assert.equal(subject.getState().form, null);
 
-  // Reopening starts from what is saved, not from the last draft.
   subject.open(settings);
   assert.deepEqual(subject.getState().projectDraft, {
     name: "Launch",
@@ -725,7 +701,6 @@ test("Project settings keeps a change another tab saved while it was open", () =
     const { subject, sent, setState } = forms();
     setState({ ...withWorkspace, projects: [{ id: "p1", name }] });
     subject.open({ kind: "project-settings", projectId: "p1" });
-    // Another tab renames the project; this dialog still shows the opened name.
     setState({ ...withWorkspace, projects: [{ id: "p1", name: "Beta" }] });
     assert.equal(subject.submit(), false, "an untouched dialog has nothing to save");
     subject.editProject({ name, instructions: "New" });
@@ -754,7 +729,6 @@ test("opening Project settings replaces the open form, and another form replaces
   subject.open({ kind: "project-settings", projectId: "p1" });
   assert.equal(subject.getState().form?.kind, "project-settings");
   assert.equal(subject.getState().projectDraft.name, "Launch");
-  // Submitting answers the settings form, not the replaced confirmation.
   subject.editProject({ name: "Renamed", instructions: "" });
   subject.submit();
   assert.deepEqual(sent, [{ _tag: "update_project", id: "p1", name: "Renamed" }]);
@@ -764,7 +738,6 @@ test("opening Project settings replaces the open form, and another form replaces
   subject.open(rename());
   assert.equal(subject.getState().form?.kind, "rename-session");
   assert.equal(subject.getState().text, "Other");
-  // A New project opened next does not inherit the settings draft.
   subject.open({ kind: "project", dialog: {} });
   assert.deepEqual(subject.getState().projectDraft, { name: "", instructions: "" });
 });

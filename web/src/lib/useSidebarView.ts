@@ -8,7 +8,6 @@ const choose = <T extends string>(
   fallback: T,
 ): T => choices.find((choice) => choice.value === stored)?.value ?? fallback;
 
-/** Remembered like the sidebar's open groups: per browser. A missing or unknown field keeps its default. */
 const sidebarView = createPreference<SidebarView>({
   key: "piano.sidebarView",
   decode: (raw) => {
@@ -30,7 +29,6 @@ const sidebarView = createPreference<SidebarView>({
 const setView = (change: Partial<SidebarView>) =>
   sidebarView.set({ ...sidebarView.get(), ...change });
 
-/** The sidebar's grouping, sort and row details, shared by every sidebar instance and the command palette. */
 export function useSidebarView() {
   const [view] = usePreference(sidebarView);
   return { view, setView };

@@ -1,4 +1,3 @@
-// Opt-in, serial loopback workload; not a CI timing gate. Output stays outside Git.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -20,7 +19,6 @@ test("peer gateway warm attachment", { timeout: 180_000 }, async (t) => {
       : [],
   });
   const startupMs = performance.now() - start;
-  // Linux process counters are raw: CPU ticks, current RSS, and high-water RSS.
   const resource = () => ({
     stat: readFileSync(`/proc/${f.pid}/stat`, "utf8"),
     status: readFileSync(`/proc/${f.pid}/status`, "utf8"),
@@ -61,7 +59,6 @@ test("peer gateway warm attachment", { timeout: 180_000 }, async (t) => {
         await Promise.all(
           (concurrent ? ["eng-1", "eng-2"] : ["eng-1"]).map((id) => attach(id, count, n, warmup)),
         );
-        // Do not let the fixture's audit arrays become the measured retention.
         for (const p of f.peers) {
           p.state.sent.length = 0;
           p.state.received.length = 0;

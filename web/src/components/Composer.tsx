@@ -42,35 +42,24 @@ import { usePreference } from "@/lib/usePreference";
 import type { SessionView } from "@/store";
 
 interface Props {
-  /** The selected session; `null` while it loads. */
   session: SessionView | null;
-  /** `null` while the session is loading; the composer is disabled then. */
   draftKey: DraftKey | null;
   completion?: CompletionContext;
-  /** Where the session runs, for voice input's spelling hints. */
   place?: VoiceHints;
-  /** Local drafting is unavailable (for example, before a session has loaded). */
   disabled: boolean;
-  /** The session cannot take input now; model picks stay local until the next send. */
   actionsDisabled: boolean;
-  /** Shown in place of the composer, which keeps its draft-local model picks meanwhile. */
   readOnly?: SessionNotice;
   send: Client["send"];
   captureSend: Client["captureSend"];
   selectionId: string | null;
 }
 
-/** The delivery mode is a sticky preference; the alternative always stays on Alt+Enter. */
 const queueModePreference = createPreference<DeliveryMode>({
   key: "piano.queueMode",
   decode: (raw) => (raw === "follow-up" ? "follow-up" : "steering"),
   encode: (mode) => mode,
 });
 
-/**
- * The composer: a layer-1 card that lines up with the transcript column. It owns the session's
- * input contract: which session actions sending, queueing, stopping and picking a model send.
- */
 export function Composer({
   session: t,
   draftKey,
@@ -84,11 +73,8 @@ export function Composer({
   selectionId,
 }: Props) {
   const directoryModels = useModelCatalog(t?.cwd);
-  // Refreshing waits for the session to take input again.
   const models = actionsDisabled ? { ...directoryModels, refresh: undefined } : directoryModels;
   const { catalog } = models;
-  // A running Pi owns the selection; a saved session's picks wait for its first prompt and
-  // override only what was picked, so Pi restores the rest of its recorded selection.
   const choice = useModelChoice(
     models,
     {
@@ -133,7 +119,6 @@ export function Composer({
     if (!kind) return;
     imageSend.send((message, inputId, start) => messageCommand(kind, message, start, inputId));
   };
-  // Stopping Pi also abandons an image upload still on its way to the draft's message.
   const stop = () => {
     imageSend.cancel();
     sendCommand(STOP);
@@ -209,11 +194,7 @@ export function Composer({
               </div>
               <ol className="flex min-h-0 max-h-[min(9rem,20dvh)] flex-col gap-2 overflow-y-auto">
                 {queuedMessages.map((message, index) => (
-                  <li
-                    // Index keys: Pi queues carry only text, which may repeat.
-                    key={`${message.kind}-${index}`}
-                    className="flex min-w-0 flex-col gap-1"
-                  >
+                  <li key={`${message.kind}-${index}`} className="flex min-w-0 flex-col gap-1">
                     {queue.showKinds && (
                       <span className="text-xs text-ink-3">
                         {message.kind === "steering" ? "Steering" : "Follow-up"}
@@ -264,7 +245,6 @@ export function Composer({
           )
         }
         actions={
-          // Send and Stop are one control; its face cross-fades so the key never jumps.
           <ComposerSend
             face={showStop ? "neutral" : "primary"}
             className="relative"
@@ -297,7 +277,6 @@ export function Composer({
         }
       />
       <div className="mx-auto flex min-h-8 w-full max-w-3xl items-center gap-2 whitespace-nowrap font-mono text-xs text-ink-2 tabular-nums">
-        {/* role=group, not a <fieldset>: a <fieldset> brings form semantics and min-content sizing to a row of status buttons. */}
         <div
           className="ml-auto flex shrink-0 items-center gap-1 md:gap-2"
           role="group"

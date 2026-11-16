@@ -1,9 +1,3 @@
-/**
- * Workspace commands: the domain steps behind the browser's requests to discover and add
- * worktrees and to trust a folder. Registry holds references only (INV-01); Worktrees owns Git
- * and Worktrunk; FolderWorktrees creates and registers new worktrees; Pi's trust store owns
- * trust. Sessions belong to SessionHosts.
- */
 import { Cause, Context, Effect, Layer } from "effect";
 import type {
   ModelCatalog,
@@ -21,11 +15,6 @@ import { listWorktrees, WorktreeError } from "./Worktrees.ts";
 
 type ReadyWorktree = Extract<WorktreeResult, { status: "ready" }>;
 
-/**
- * The error result for a worktree mutation that failed with `error`. A WorktreeError says
- * itself whether a checkout may remain (FolderWorktrees marks failures after Worktrunk ran);
- * any other failure is unexpected, so nothing is confirmed and the result is `unconfirmed`.
- */
 export const worktreeFailure = (error: unknown): Extract<WorktreeResult, { status: "error" }> => ({
   status: "error",
   detail: errorText(error),
@@ -43,26 +32,13 @@ export interface TrustDecision {
 export class WorkspaceCommands extends Context.Service<
   WorkspaceCommands,
   {
-    /** Git's worktrees for a registered folder; an unregistered one is an error discovery, not a failure. */
     readonly discoverWorktrees: (folder: string) => Effect.Effect<WorktreeDiscovery>;
-    /**
-     * Register an existing checkout of a registered folder. Like `createWorktree`, it answers every
-     * outcome as a result, failures included, then has the sidebar rediscover (INV-06).
-     */
     readonly addWorktree: (folder: string, path: string) => Effect.Effect<WorktreeResult>;
-    /**
-     * Create a new branch checkout through FolderWorktrees, which finishes it even when the
-     * requester leaves. A failed result is `unconfirmed` when a checkout may exist anyway.
-     */
     readonly createWorktree: (
       folder: string,
       branch: string,
       options: { readonly hooks?: boolean },
     ) => Effect.Effect<WorktreeResult>;
-    /**
-     * Save Pi's trust decision for a directory. Every client re-probes its models and the sidebar
-     * shows the new trust; returns what Pi will now do there and the notice to show the requester.
-     */
     readonly setTrust: (
       path: string,
       trusted: boolean,
@@ -95,10 +71,6 @@ export const WorkspaceCommandsLive = Layer.effect(
         });
       return result;
     });
-    /**
-     * A worktree mutation's complete answer. Failures become error results (`worktreeFailure`).
-     * Then rediscover rather than retry: a failure may have left a checkout behind.
-     */
     const settled = <E>(work: Effect.Effect<ReadyWorktree, E>): Effect.Effect<WorktreeResult> =>
       work.pipe(
         Effect.catchCause((cause) => {
@@ -124,8 +96,6 @@ export const WorkspaceCommandsLive = Layer.effect(
         ),
 
       setTrust: Effect.fn("WorkspaceCommands.setTrust")(function* (path, trusted) {
-        // Pi's resources for this directory, and so its models and commands, change for sessions
-        // started from now. DirectoryFacts announces it; every client and the sidebar hear it there.
         const decision = yield* facts.setTrust(path, trusted);
         if (decision.trust.trusted !== trusted)
           return {

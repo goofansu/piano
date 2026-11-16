@@ -24,7 +24,6 @@ test("INV-03: overlapping turn and summary retries stay retrying until both fini
   assert.deepEqual(pi.record({ type: "summarization_retry_finished" }, 0).state, {
     isRetrying: false,
   });
-  // Settling clears both, so a later lone end cannot revive a stale flag.
   pi.record({ type: "auto_retry_start", attempt: 1, maxAttempts: 3, errorMessage: "e" }, 0);
   const settled = pi.record({ type: "agent_settled" }, 0);
   assert.deepEqual(settled.state, { isStreaming: false, isCompacting: false, isRetrying: false });

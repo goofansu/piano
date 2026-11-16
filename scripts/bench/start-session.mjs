@@ -1,5 +1,3 @@
-// Credential-free real Pi startup benchmark. Run: node scripts/bench/start-session.mjs /tmp/start-bench
-// BENCH_FAKE=1 selects the browser fixture; BENCH_SAMPLES defaults to 10.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -13,7 +11,6 @@ const root = fileURLToPath(new URL("../../", import.meta.url));
 const fake = process.env.BENCH_FAKE === "1";
 const scratch = mkdtempSync(join(tmpdir(), "piano-bench-cli-"));
 const shim = join(scratch, "cli.mjs");
-// Keep only scratch configuration and this child's Piano capabilities, never provider credentials.
 writeFileSync(
   shim,
   `const keep = /^(PATH|HOME|TMPDIR|XDG_.*|PI_CODING_AGENT_.*|PIANO_.*|PI_OFFLINE|NODE_COMPILE_CACHE|NODE_DISABLE_COMPILE_CACHE)$/;

@@ -1,8 +1,3 @@
-/**
- * Status read from saved history, as after a restart: what Pi's file proves, and what it does not;
- * and from a live host that looks idle but still has work Piano cannot vouch for. The other live
- * dispositions and the worktree journey are covered end to end in DispatchFanOut.test.ts.
- */
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
@@ -50,7 +45,6 @@ execFileSync("git", [
   "init",
 ]);
 
-/** A Pi session file, as Pi saves it. */
 const saved = (cwd: string, id: string, messages: ReadonlyArray<Record<string, unknown>>) => {
   let parentId: string | null = null;
   const entries = [
@@ -81,7 +75,6 @@ const reply = (text: string, stopReason = "stop") => ({
   stopReason,
 });
 
-/** GitHub answers one pull request as merged; any other lookup fails. */
 const github = Layer.succeed(GitHubPullRequests, {
   view: (link: { readonly url: string }) =>
     link.url.endsWith("/pull/7")
@@ -122,7 +115,7 @@ test("concurrent status reads share large saved projections rather than queueing
       const registry = yield* Registry;
       const status = yield* SessionStatus;
       yield* registry.addSession(plain, id);
-      yield* status.read({ sessionId: id }); // cold worker startup is not projection CPU
+      yield* status.read({ sessionId: id });
       const start = process.cpuUsage();
       const expected = yield* status.read({ sessionId: id });
       const single = process.cpuUsage(start);
@@ -169,10 +162,8 @@ test("a stopped session's history proves settlement only when it ends with a fin
       assert.equal(finished.needs, null);
       assert.equal(finished.changes, null, "a directory outside Git has no changes to report");
 
-      // A failed turn still stopped: settled is execution, not success (INV-03). It has no answer.
       const failed = yield* read("failed");
       assert.deepEqual([failed.disposition, failed.lastAnswer], ["settled", null]);
-      // History that stops mid-turn or before any reply proves no ending: never a guess.
       for (const id of ["cut-off", "unanswered"]) {
         const s = yield* read(id);
         assert.deepEqual([s.disposition, s.lastAnswer], ["unknown", null], id);
@@ -259,7 +250,6 @@ test("a live session that looks idle reads settled only once Piano has nothing p
         return session;
       });
 
-      // A command Pi applied but never acknowledged may still be running: not idle, not proven.
       const renamed = yield* live("live-rename");
       const rename = yield* renamed
         .act({ _tag: "set_name", name: "withhold acknowledgement" })
@@ -268,7 +258,6 @@ test("a live session that looks idle reads settled only once Piano has nothing p
       assert.equal((yield* renamed.state).isStreaming, false);
       assert.equal(yield* disposition("live-rename"), "running");
 
-      // A prompt Pi never acknowledged, on an idle Pi: Piano cannot tell whether it will run.
       const ignored = yield* live("live-ignored");
       yield* ignored.act({ _tag: "prompt", text: "ignore input" }).pipe(Effect.flip);
       assert.equal((yield* ignored.state).submission?.outcome, "uncertain");
@@ -279,7 +268,6 @@ test("a live session that looks idle reads settled only once Piano has nothing p
 });
 
 test("a status answers within its changes budget: a Git that is slower leaves changes null beside the other facts", async () => {
-  // Real Git, except that a diff takes longer than the read allows for changes.
   const slowGit = join(root, "slow-git");
   writeFileSync(
     slowGit,
@@ -319,8 +307,6 @@ test("the shared reading: a stopped Pi reads from its closure, and only a comple
     dialogs: [],
   });
   const working = { isStreaming: true };
-  // Pi exited mid-run and its host has not been retired yet: exited, not running; one Piano
-  // released idle before exiting reads settled, whatever the host had not confirmed yet.
   for (const closure of [
     { _tag: "exited", code: 1, detail: "Pi exited (code 1)" },
     { _tag: "failed", detail: "exit not observed" },
@@ -347,14 +333,12 @@ test("the shared reading: a stopped Pi reads from its closure, and only a comple
   const answerOf = (over: Partial<RenderMsg>) =>
     lastAnswerOf(snapshot({}, [prompt, reply("Half an answer", over)]));
   assert.equal(answerOf({ stopReason: "stop" }), "Half an answer");
-  // An emoji straddling the limit is left out whole, never cut to a lone surrogate.
   const straddling = lastAnswerOf(
     snapshot({}, [prompt, reply(`abc\u{1F600}def`, { stopReason: "stop" })]),
     4,
   );
   assert.equal(straddling, "abc");
   assert.equal(answerOf({ stopReason: "length" }), "Half an answer", "cut off, but finished");
-  // Still being written, waiting on a tool, interrupted or failed: text that is not an answer.
   for (const over of [
     {},
     { stopReason: "pending" },

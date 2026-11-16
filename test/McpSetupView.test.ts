@@ -27,7 +27,6 @@ const tools: McpServerSetup = {
   signedIn: false,
   removalKey: "k",
 };
-/** Pi sends a `/login` provider's token, as for Radius. */
 const gateway = docs({
   name: "gateway",
   config: { url: "https://gateway.example.com/mcp", headers: {}, hasAuthorization: false },
@@ -60,12 +59,9 @@ test("Manage edits only a server the user added, disconnects a URL server and de
 test("Reconnect appears only for an OAuth server whose sign-in is gone and that Pi can use", () => {
   assert.equal(row(http())?.reconnect, true);
   assert.equal(row(http({ signedIn: true }))?.reconnect, false);
-  // A configured Authorization header, or a local command, never signs in.
   assert.equal(row(docs())?.reconnect, false);
   assert.equal(row(tools)?.reconnect, false);
-  // Nor does a provider entry: Pi sends the provider's token, signed in on the Providers page.
   assert.equal(row(gateway)?.reconnect, false);
-  // Disabled in Pi: the problem is shown instead.
   const blocked = row(http({ detail: "Disabled." }));
   assert.deepEqual([blocked?.reconnect, blocked?.detail], [false, "Disabled."]);
 });

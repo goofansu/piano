@@ -35,10 +35,6 @@ interface Props {
   initialPath?: string;
 }
 
-/**
- * Directory picker in the style of Shelley's: one path input is the whole model
- * (`@/lib/folderPath`), browsed by `@/lib/folderBrowser`. Enter selects the directory being typed.
- */
 export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props) {
   const browser = useFolderBrowser(open, initialPath);
   const { input, prefix, dir, error, loading, mutating, ready, creating, goTo } = browser;
@@ -133,7 +129,6 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
         )}
 
         <ScrollArea className="h-56 shrink-0 rounded-md border border-line bg-surface-1">
-          {/* Each listing fades in, so stepping through directories reads as one surface changing. */}
           <div key={dir?.path ?? "loading"}>
             {loading && !dir && (
               <div className="flex flex-col gap-2 p-3" aria-busy>
@@ -142,8 +137,6 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
                 ))}
               </div>
             )}
-            {/* Hand-written rows: no shadcn component is a plain list of buttons that navigate a
-             * directory tree (Command filters and selects; Item has no button row). */}
             {dir?.parent && (
               <button
                 type="button"

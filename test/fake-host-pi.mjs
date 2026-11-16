@@ -1,4 +1,3 @@
-// Deterministic lifecycle fixture: filesystem audit and signal barriers, no model calls.
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";

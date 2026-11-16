@@ -3,8 +3,6 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import type { Client } from "@/lib/client";
 import { createDialogAnswer, type DialogReply } from "@/lib/piDialogs";
 
-/** Both presentations keep the same single-send guard, per attachment (see `createDialogAnswer`).
- * Mount keyed by generation and dialog ID. */
 export function useDialogAnswer(
   dialog: Dialog,
   attachment: string | null,
@@ -15,7 +13,6 @@ export function useDialogAnswer(
   useSyncExternalStore(controller.subscribe, controller.getState);
   const [now, setNow] = useState(Date.now);
   const view = controller.view(now, attachment);
-  // Only a deadline counts down; a dialog its tool call owns has none to tick.
   const ticking = open && view.deadline !== null;
   useEffect(() => {
     if (!ticking) return;

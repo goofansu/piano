@@ -1,4 +1,3 @@
-// Deterministic dialog/abort barriers at the actual Pi JSONL process seam. No model calls.
 import { spawn } from "node:child_process";
 import { closeSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
@@ -13,8 +12,6 @@ const args = process.argv.slice(2);
 const sessionId = args[args.indexOf("--session-id") + 1];
 const pending = new Map();
 const responses = [];
-// Piano's ask_user tool as Pi's native records show it: a running call raises its question and
-// ends with the batch result it stores. `mode` scripts what the fixture does with the reply.
 const questions = new Map();
 const held = new Set();
 const toolEnd = (call, answers) => {
@@ -28,7 +25,6 @@ const toolEnd = (call, answers) => {
     isError: false,
   });
 };
-// Each question is asked as the extension asks it, from the arguments as Pi converts them.
 const ask = (call) => {
   const id = `d${++serial}`;
   const prompt = askUserPrompt(call.questions, call.asked++);
@@ -86,7 +82,7 @@ function handle(cmd) {
         else ask(call);
         return;
       }
-      if (!cmd.cancelled) model = "beta"; // An extension command changes model after its dialog returns.
+      if (!cmd.cancelled) model = "beta";
       if (pending.has(cmd.id)) {
         if (pending.get(cmd.id)) reply(pending.get(cmd.id), { disposition: "handled" });
         pending.delete(cmd.id);
@@ -95,17 +91,13 @@ function handle(cmd) {
     case "abort":
       if (holdAbort) {
         abortHeld = cmd;
-        dialog(undefined); // A supported dialog arriving while abort acknowledgement is pending.
+        dialog(undefined);
         return;
       }
       streaming = false;
       out({ type: "agent_settled" });
       return reply(cmd);
     case "prompt": {
-      // `/ask [mode] [count] [ids]`: ask_user starts and raises its first question. Modes: `hold`
-      // keeps the call running after the reply until `/end-held`; `drop` ends it without storing
-      // the reply (Pi aborted it first); `drop-last` stores every reply but the last one.
-      // `numeric` IDs are announced as the model sent them (1, 2) and stored as Pi converts them.
       if (cmd.message.startsWith("/ask")) {
         const [, mode = "store", count = "1", ids] = cmd.message.split(" ");
         const numeric = ids === "numeric";
@@ -139,11 +131,9 @@ function handle(cmd) {
           toolEnd(call, call.answers);
         }
       }
-      // Another extension's command dialog; also sent while an ask_user call is asking, as a
-      // command from the composer or a tool hook raises one in Pi.
       if (cmd.message.startsWith("/dialog")) {
         const [, method, timeout] = cmd.message.split(" ");
-        return dialog(cmd, method, Number(timeout)); // originating command acknowledgement is blocked
+        return dialog(cmd, method, Number(timeout));
       }
       if (cmd.message === "/hold-abort") holdAbort = true;
       if (cmd.message === "/new-turn" || cmd.message === "/new-turn-release-abort") {
@@ -165,8 +155,6 @@ function handle(cmd) {
       }
       if (cmd.message === "/exit") process.exit(3);
       if (cmd.message === "/exit-held-stdout") {
-        // A descendant inherits stdout and keeps it open after Pi exits. Exit 0: a nonzero exit
-        // has the spawner signal the process group at once.
         const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
           stdio: ["ignore", process.stdout, "ignore"],
         });

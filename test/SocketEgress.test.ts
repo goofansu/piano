@@ -29,7 +29,6 @@ test(
         PI_CODING_AGENT_SESSION_DIR: join(root, "sessions"),
         PIANO_ALLOWED_ORIGINS: base,
         PIANO_PI_CLI: new URL("fake-pi.mjs", import.meta.url).pathname,
-        // A known secret: its value is redacted wherever it appears.
         PIANO_EGRESS_TOKEN: canary,
       },
       stdio: ["ignore", "pipe", "pipe"],
@@ -42,14 +41,11 @@ test(
       logs += chunk;
     });
     try {
-      // Startup takes far longer than usual while other test files load the machine.
       const deadline = Date.now() + 20_000;
       for (;;) {
         try {
           if ((await fetch(`${base}/api/folders`)).ok) break;
-        } catch {
-          /* startup */
-        }
+        } catch {}
         assert.ok(Date.now() < deadline && child.exitCode === null, logs);
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
@@ -63,8 +59,6 @@ test(
         }),
       );
       await once(ws, "open");
-      // Starting a session in a missing directory is rejected before Pi runs: the reply names the
-      // path it was given and is Piano's, not Pi's.
       const missing = join(root, canary);
       ws.send(
         JSON.stringify({ _tag: "create_session", selectionId: "s1", cwd: missing, options: {} }),
@@ -74,8 +68,6 @@ test(
       assert.equal(error.message, `Not a directory: ${join(root, "[REDACTED]")}`);
       assert.ok(!received.join("\n").includes(canary), "no message carries the secret");
 
-      // A directory is an identity the browser sends back, not display text: a path that looks like
-      // a token keeps its spelling in every message naming it, while display text stays redacted.
       const dir = join(root, "sk-demo");
       mkdirSync(dir);
       const messages = (tag: string) =>

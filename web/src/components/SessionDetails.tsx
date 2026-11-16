@@ -1,10 +1,5 @@
 import { BranchLabel } from "@/components/BranchLabel";
 
-/**
- * The details under a session's title in the sidebar, a project's home and the one-area session
- * header: its folder, kept up to half the line so a long branch truncates first, then its branch as
- * a quiet sans label, each named for a screen reader. Renders the parts only; the row lays out the line they sit on.
- */
 export function SessionDetails({ folder, branch }: { folder?: string; branch?: string }) {
   return (
     <>

@@ -19,13 +19,9 @@ const MiB = 1024 * 1024;
 interface BinaryFormat {
   kind: "image" | "audio" | "video" | "pdf";
   limit: number;
-  /** Sent to the browser for preview and download. */
   mime: string;
-  /** Other MIME bases the detector reports for this format. */
   aliases?: string[];
 }
-/** The one list of binary formats Piano previews; docs/file-previews.md describes it. Which
- * names claim them is `previewKindsByExtension` in shared/files.ts. */
 const binaryFormats: BinaryFormat[] = [
   { kind: "image", limit: PREVIEW_LIMIT_BYTES.image, mime: "image/png", aliases: ["image/apng"] },
   { kind: "image", limit: PREVIEW_LIMIT_BYTES.image, mime: "image/jpeg" },
@@ -46,11 +42,9 @@ const binaryTypes = new Map(
   ),
 );
 const binaryKinds = new Set<string>(binaryFormats.map((format) => format.kind));
-/** Detected types that are text: they go through the UTF-8 check like undetected files. */
 const isTextType = (mime: string) =>
   mime.startsWith("text/") ||
   ["application/xml", "image/svg+xml", "application/rtf"].includes(mime);
-/** NUL-free UTF-8, allowing a character cut off at the end of the slice. */
 const isUtf8Prefix = (bytes: Uint8Array) => {
   if (bytes.includes(0)) return false;
   try {
@@ -60,10 +54,8 @@ const isUtf8Prefix = (bytes: Uint8Array) => {
     return false;
   }
 };
-/** The detector's MIME without parameters, such as `audio/ogg; codecs=opus`. */
 const mimeBase = (detected: { mime: string } | undefined) =>
   detected?.mime.split(";")[0]?.trim().toLowerCase();
-// The acquisition module owns filename policy; renderers never infer formats themselves.
 const languages: Record<string, string> = {
   js: "javascript",
   mjs: "javascript",
@@ -108,14 +100,11 @@ const specialLanguages: Record<string, string> = {
   ".bashrc": "shellscript",
   ".zshrc": "shellscript",
 };
-/** Whether `path` (absolute) lies inside `root` or is it. */
 const within = (root: string, path: string) => {
   const name = relative(root, path);
   return name !== ".." && !name.startsWith(`..${sep}`) && !isAbsolute(name);
 };
 
-/** The physical path: the nearest existing ancestor resolved, the rest (a file not written yet,
- * or already removed) reattached. */
 async function physical(target: string): Promise<string> {
   let head = target;
   const tail: string[] = [];
@@ -131,32 +120,14 @@ async function physical(target: string): Promise<string> {
   }
 }
 
-/**
- * `path` (relative to the workspace, or absolute) as the kernel spells it: unnormalized, so a
- * read or `lstat` of it follows `link/..` through `link` as the OS does. `resolve` collapses
- * `link/..` lexically and would name a different file.
- */
 export const spell = (workspace: Workspace, path: string): string =>
   isAbsolute(path) ? path : `${resolve(workspace.path)}${sep}${path}`;
 
-/**
- * An absolute name for the same file as `spell`, with the leaf kept: the lexical one when the
- * spelling has no `..` (dropping `.` and repeated separators cannot change the file), otherwise
- * its parent resolved as the kernel resolves it.
- */
 async function name(spelled: string): Promise<string> {
   if (!spelled.split(sep).includes("..")) return resolve(spelled);
   return join(await physical(dirname(spelled)), basename(spelled));
 }
 
-/**
- * Where `path` (as a session's tool calls named it: relative to the workspace, or absolute) sits
- * in the workspace: its name relative to the workspace's real root, or `undefined` outside it.
- * Resolve directory aliases (including the workspace root) before naming the file, and follow a
- * symlink before the `..` after it, as the kernel does. Preserve the leaf: Git tracks a leaf
- * symlink itself, not its target. Missing descendants retain their names.
- * Placement is Git identity, not permission to read: previews may also open files outside it.
- */
 export async function place(workspace: Workspace, path: string): Promise<string | undefined> {
   const logical = resolve(workspace.path);
   const target = await name(spell(workspace, path));
@@ -166,7 +137,6 @@ export async function place(workspace: Workspace, path: string): Promise<string 
   return within(root, real) ? relative(root, real) : undefined;
 }
 
-/** One accepted file: what the preview shows, and the bytes it was read from. */
 interface Acquired {
   preview: FilePreview;
   name: string;
@@ -174,22 +144,15 @@ interface Acquired {
   data: Uint8Array;
 }
 
-/**
- * Explicit local reads, relative to the workspace or absolute; no listing or fallback search.
- * Preview and download share this, so a file downloads exactly when it previews.
- */
 async function acquire(workspace: Workspace, path: string, signal: AbortSignal): Promise<Acquired> {
   if (!path.trim() || path.includes("\0")) refuse("Choose a file path.");
-  // The checkout's own absence is the cause, named as the session's other views name it.
   await access(workspace.path).catch((error: NodeJS.ErrnoException) => {
     if (error.code === "ENOENT") refuse("Checkout removed");
   });
   const spelled = spell(workspace, path);
   const requested = await name(spelled);
-  // Keep workspace names stable; external files need their full path for nested links.
   const shown = (await place(workspace, path)) ?? requested;
   const target = await realpath(spelled);
-  // Nonblocking prevents special files (notably FIFOs) from hanging the request.
   const file = await open(target, constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW);
   try {
     const stat = await file.stat();
@@ -199,8 +162,6 @@ async function acquire(workspace: Workspace, path: string, signal: AbortSignal):
     const head = header.subarray(0, initial.bytesRead);
     const claimed = previewKindByName(requested);
     const binaryName = claimed !== undefined && binaryKinds.has(claimed);
-    // Short signatures such as `BM`, `MZ`, `ID3` and `%PDF` also start ordinary prose, so
-    // UTF-8 text under a name that does not claim a binary format is text whatever they suggest.
     const detected =
       !binaryName && isUtf8Prefix(head)
         ? undefined
@@ -294,7 +255,6 @@ export const readWorkspaceFile = Effect.fn("WorkspaceFiles.read")(function* (
   return yield* attempt(async (signal) => (await acquire(workspace, path, signal)).preview);
 });
 
-/** The file as it is on disk. The caller sends it as an attachment, never through the display projection. */
 export const downloadWorkspaceFile = Effect.fn("WorkspaceFiles.download")(function* (
   workspace: Workspace,
   path: string,

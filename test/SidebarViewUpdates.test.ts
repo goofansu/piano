@@ -27,14 +27,12 @@ process.env.PI_CODING_AGENT_SESSION_DIR = join(root, "sessions");
 mkdirSync(join(root, "sessions"));
 after(() => rmSync(root, { recursive: true, force: true }));
 
-/** Git discovery is the slow external boundary: count runs and hold them until the test opens the gate. */
 const slowGit = () => {
   let open: () => void = () => {};
   let entered: () => void = () => {};
   let gate: Promise<void> | undefined;
   const git = {
     calls: 0,
-    /** Hold the next runs; resolves once one of them is waiting in Git. */
     hold: () => {
       gate = new Promise((resolve) => {
         open = resolve;
@@ -103,7 +101,6 @@ test("INV-06: changes during discovery coalesce into one more run; a late subscr
       yield* registry.addFolder(first);
       yield* view.fresh;
       const before = git.calls;
-      // Hold a run in Git; every change below lands while it runs.
       const held = git.hold();
       yield* view.refresh;
       yield* held;
@@ -112,7 +109,6 @@ test("INV-06: changes during discovery coalesce into one more run; a late subscr
         (i) => registry.addSession(first, `s${i}`),
         { concurrency: "unbounded" },
       );
-      // Asked for while the run is still held, so the run after it answers.
       const fresh = yield* Effect.forkChild(view.fresh, { startImmediately: true });
       git.release();
       const built = yield* Fiber.join(fresh);
@@ -145,13 +141,11 @@ test("INV-06: a registry-only change publishes before Git answers; a later chang
       yield* view.fresh;
       const runs = git.calls;
 
-      // A prompt or rename must not wait on discovery: hold Git and the new title still arrives.
       git.hold();
       yield* registry.mirrorSession(first, "s1", { sessionName: "After" });
       assert.equal(titleOf(yield* nextView(view, () => true)), "After");
       git.release();
 
-      // A new folder needs discovery; the change starts a run and the view follows it.
       yield* registry.addFolder(second);
       const grown = yield* nextView(view, (m) => m.folders.length === 2);
       assert.deepEqual(grown.folders.map((f) => f.path).sort(), [first, second]);
@@ -171,7 +165,6 @@ test("INV-01/06/07: a prompt, rename, pin or membership starts no reader; sessio
       yield* registry.addSession(first, "s1", "Before");
       yield* view.fresh;
       const quiet = git.calls;
-      // Pi's history directory is availability's input; count its scans and header reads.
       let scans = 0,
         reads = 0;
       const readdir = fsPromises.readdir;
@@ -190,12 +183,9 @@ test("INV-01/06/07: a prompt, rename, pin or membership starts no reader; sessio
         return Reflect.apply(read, fs, args);
       });
 
-      // Exactly the writes a prompt (activity), a Pi rename and the sidebar's pin control make.
-      // Each is visible, so each must publish; none is read by a discovery run.
       for (let i = 0; i < 5; i++) yield* registry.touchSession(first, "s1", `prompt ${i}`);
       yield* registry.mirrorSession(first, "s1", { sessionName: "After" });
       yield* registry.pinSession(first, "s1", true);
-      // A project's own row is not an observation input either.
       yield* registry.saveProject({ id: "outcome", name: "Outcome" });
       const shown = yield* nextView(view, () => true);
       assert.deepEqual(
@@ -204,14 +194,10 @@ test("INV-01/06/07: a prompt, rename, pin or membership starts no reader; sessio
         "the metadata reached browsers from the last observation",
       );
 
-      // Let already-forked discovery work run before checking its observable counter. Asking
-      // for a fresh view here would itself request discovery and hide an erroneous request.
       yield* Effect.yieldNow;
       assert.equal(git.calls, quiet, "no discovery run for visible metadata or a project row");
       assert.equal(scans, 0, "no history scan for visible metadata or a project row");
 
-      // Membership is neither reader's input: every session is judged, in a project or not, so
-      // assigning s1 shows its project and the verdict already observed for it, and reads nothing.
       yield* registry.assignProject(first, "s1", "outcome");
       const assigned = yield* nextView(
         view,
@@ -222,8 +208,6 @@ test("INV-01/06/07: a prompt, rename, pin or membership starts no reader; sessio
       assert.equal(scans, 0, "project membership started no history scan");
       assert.equal(git.calls, quiet, "project membership started no Git discovery");
 
-      // The registered sessions are availability's input, not Git's: a new session asks history
-      // whether it is saved (it is not) and asks Git nothing.
       yield* registry.addSession(first, "s2", "Added");
       const judged = yield* nextView(
         view,
@@ -234,7 +218,6 @@ test("INV-01/06/07: a prompt, rename, pin or membership starts no reader; sessio
       assert.ok(scans > 0, "a new session was judged");
       assert.equal(git.calls, quiet, "a new session started no Git discovery");
 
-      // A folder is Git's input, not availability's: registering one discovers it and reads no history.
       const scanned = scans,
         headers = reads;
       yield* registry.addFolder(second);
@@ -263,15 +246,13 @@ test("INV-01: a registry write made outside any browser request reaches the side
       yield* view.fresh;
       yield* registry.addSession(first, "pi-named");
       const session = yield* hosts.open({ cwd: first, sessionId: "pi-named" });
-      // Pi renames the session (a /name command or an extension); SessionHosts mirrors the name into the registry.
       yield* session.act({ _tag: "set_name", name: "Named by Pi" });
       assert.equal(
         titleOf(yield* nextView(view, (m) => titleOf(m) === "Named by Pi")),
         "Named by Pi",
       );
 
-      // A statistics cache write publishes nothing, so the next view after it is the next visible change.
-      yield* view.fresh; // No discovery run is left to publish in between.
+      yield* view.fresh;
       const views = yield* view.subscribe.pipe(
         Effect.flatMap((s) =>
           s.pipe(Stream.take(2), Stream.runCollect, Effect.forkChild({ startImmediately: true })),
@@ -293,8 +274,6 @@ test("INV-01: a registry write made outside any browser request reaches the side
       for (const hidden of ["stats", "pullRequest"])
         assert.equal(hidden in shown, false, `${hidden} stays off the wire`);
 
-      // A pull request link is what tells a browser to read the PR, so its write publishes
-      // from the last observation: no discovery run.
       const runs = git.calls;
       const link = { url: "https://github.com/o/r/pull/1", source: "manual" } as const;
       const [linkedView] = yield* Effect.all(
@@ -359,10 +338,7 @@ test("INV-01/07: a removed worktree's sessions keep the last branch Git reported
   const live = join(root, "first.live"),
     detached = join(root, "first.detached"),
     removed = join(root, "first.removed");
-  // On disk throughout: what changes is only what Git says about them.
   for (const dir of [live, detached, removed]) mkdirSync(dir);
-  // Git's answer as the test moves the checkouts: every worktree listed, then a failed read,
-  // then the linked worktrees gone.
   let listing: "all" | "failed" | "gone" = "all";
   const git = {
     ...slowGit(),
@@ -446,7 +422,7 @@ test("INV-01/07: a removed worktree's sessions keep the last branch Git reported
 
 test("INV-06: while Git discovery fails, a worktree's sessions show no branch rather than the saved one", async () => {
   const linked = join(root, "first.switched");
-  mkdirSync(linked); // present, so only the failed read stands between it and a branch
+  mkdirSync(linked);
   const git = {
     ...slowGit(),
     discover: (_folder: string) =>
@@ -488,9 +464,6 @@ test("INV-01: a repeated observation that found nothing new publishes no view; a
       yield* registry.addSession(first, "s1", "One");
       yield* view.fresh;
 
-      // One browser is listening. Everything until the new session is another browser's page
-      // load, its five-second checkout poll and a Pi resource invalidation: each re-observes,
-      // none of them changes what this browser shows.
       const views = yield* view.subscribe.pipe(
         Effect.flatMap((s) =>
           s.pipe(Stream.take(2), Stream.runCollect, Effect.forkChild({ startImmediately: true })),
@@ -520,7 +493,6 @@ test("INV-01: a repeated observation that found nothing new publishes no view; a
 
 test("INV-01: a trust decision reaches the sidebar without a registry write", async () => {
   const skilled = join(root, "skilled");
-  // A project skill makes the directory's trust matter to Pi.
   mkdirSync(join(skilled, ".agents/skills/hello"), { recursive: true });
   writeFileSync(
     join(skilled, ".agents/skills/hello/SKILL.md"),
@@ -538,7 +510,6 @@ test("INV-01: a trust decision reaches the sidebar without a registry write", as
       assert.deepEqual(trustIn(yield* view.fresh), { required: true, trusted: false });
       const runs = git.calls;
 
-      // Pi's store is not the registry: DirectoryFacts announces the decision, and the view follows without Git.
       git.hold();
       const next = yield* nextView(view, (m) => trustIn(m)?.trusted === true).pipe(
         Effect.forkChild({ startImmediately: true }),
@@ -560,7 +531,6 @@ test("INV-01/02/06: retirement rechecks saved history without waiting for Git or
         hosts = yield* SessionHosts,
         view = yield* SidebarView;
       yield* registry.saveProject({ id: "lifecycle", name: "Lifecycle" });
-      // Registration is before Pi starts: force the real initial missing-history observation.
       yield* registry.onChange((before, after) =>
         after.sessions.length > before.sessions.length
           ? view.fresh.pipe(
@@ -580,13 +550,10 @@ test("INV-01/02/06: retirement rechecks saved history without waiting for Git or
       const id = session.spec.sessionId;
       const ref = (m: SidebarMessage) => m.sessionReferences?.find((s) => s.sessionId === id);
       yield* view.fresh;
-      // Leave an older full refresh waiting on Git while Pi persists and then stops.
       const held = git.hold();
       const full = yield* view.fresh.pipe(Effect.forkChild({ startImmediately: true }));
       yield* held;
       const runs = git.calls;
-      // Shape drift must not hold back history either: this folder waits for the queued Git
-      // run, while availability may still publish against the already observed folder set.
       yield* registry.addFolder(second);
       try {
         const written = yield* session.events.pipe(
@@ -598,8 +565,6 @@ test("INV-01/02/06: retirement rechecks saved history without waiting for Git or
         yield* session.act({ _tag: "prompt", text: "/final" });
         yield* Fiber.join(written);
         yield* hosts.release(first, id);
-        // Pin exposes a stale cached negative immediately on the unfixed build. Subscribe after
-        // that publication: only retirement's own availability read can correct it with Git held.
         yield* registry.pinSession(first, id, true);
         const available = yield* nextView(
           view,
@@ -617,7 +582,6 @@ test("INV-01/02/06: retirement rechecks saved history without waiting for Git or
       } finally {
         git.release();
       }
-      // Completing the older Git observation cannot overwrite the newer availability.
       assert.equal(ref(yield* Fiber.join(full))?.unavailable, undefined);
     }),
     "./fake-host-pi.mjs",
@@ -661,8 +625,6 @@ test("INV-01/02: failed acquisition rechecks history saved before readiness fail
   );
 });
 
-/** Withhold one real filesystem read's callback, after the bytes have been captured. Other
- * readers (including a concurrent host open) proceed normally. No SessionReferences mock. */
 const holdHistoryRead = (t: TestContext) => {
   let entered: () => void = () => {};
   const waiting = new Promise<void>((resolve) => {
@@ -707,12 +669,9 @@ test("INV-01/05: fresh awaits availability; a lifetime during its read invalidat
       const before = yield* view.fresh;
       const ref = (m: SidebarMessage) => m.sessionReferences?.find((s) => s.sessionId === "rapid");
       assert.equal(ref(before)?.unavailable, "history");
-      // A second folder is the next Git run's news: re-observing the same checkouts publishes
-      // nothing, so the view that names both folders is what says that run installed.
       const gitUpdated = yield* nextView(view, (m) => m.folders.length === 2).pipe(
         Effect.forkChild({ startImmediately: true }),
       );
-      // Ensure a real read even when unchanged headers from the previous refresh are cached.
       seedHistory(cwd, "new-marker");
       const held = holdHistoryRead(t);
       let freshDone = false;
@@ -742,8 +701,6 @@ test("INV-01/05: fresh awaits availability; a lifetime during its read invalidat
         yield* Fiber.join(persisted);
         yield* hosts.release(cwd, "rapid");
         yield* registry.pinSession(cwd, "rapid", true);
-        // Consume only subsequent publications. The read already in flight saw no rapid file;
-        // it must be discarded, not published before the corrective read queued by the lifetime.
         const next = yield* view.subscribe.pipe(
           Effect.flatMap((s) => s.pipe(Stream.drop(1), Stream.take(1), Stream.runCollect)),
           Effect.forkChild({ startImmediately: true }),
@@ -809,8 +766,6 @@ test("INV-01/06: established-host prompts do not rescan history; a never-written
       t.diagnostic(
         `five established-host prompts: ${git.calls - runs} Git runs, ${scans} history scans, ${reads} header reads`,
       );
-      // This fake handled the prompts without writing history. Retirement must actually check
-      // disk, not infer that having had a live host guarantees a saved conversation.
       yield* hosts.release(first, id);
       const missing = yield* nextView(view, (m) => ref(m)?.unavailable === "history");
       assert.equal(ref(missing)?.unavailable, "history");
@@ -823,16 +778,12 @@ test("INV-01/06: established-host prompts do not rescan history; a never-written
   );
 });
 
-/** A Pi session file whose header records `cwd`, as Pi writes it when its CLI starts there. */
 const seedHistory = (cwd: string, id: string) =>
   writeFileSync(
     join(root, "sessions", `${id}.jsonl`),
     `${JSON.stringify({ type: "session", version: 3, id, cwd, timestamp: "2026-10-05T00:00:00Z" })}\n`,
   );
 
-// SessionReferences' tests own which sessions are unavailable and that the opener agrees; this
-// one owns that the sidebar shows that judgement for every session, in a project or not, so the
-// browser reads `unavailable` the same way for each row.
 test("INV-01: the sidebar marks a session unavailable when its history or checkout is gone, in a project or not", async () => {
   const kept = join(root, "kept"),
     gone = join(root, "gone");
@@ -858,7 +809,6 @@ test("INV-01: the sidebar marks a session unavailable when its history or checko
         yield* registry.addSession(cwd, id);
         yield* registry.assignProject(cwd, id, "outcome");
       }
-      // Sessions in no project: the same verdicts, not "available" by default.
       for (const [cwd, id] of [
         [kept, "loose-written"],
         [kept, "loose-never-written"],
@@ -906,7 +856,6 @@ test("INV-06: a registered directory deleted outside Piano reads missing whateve
   gitIn(repo, "worktree", "add", "--quiet", "-b", "linked", linked);
   mkdirSync(plain);
   mkdirSync(hidden, { recursive: true });
-  // Real Git discovery: a deleted root is not a checkout (non-Git) or a broken one (error), never "ready".
   await run(
     { ...slowGit(), discover: listWorktrees },
     Effect.gen(function* () {
@@ -940,7 +889,6 @@ test("INV-06: a registered directory deleted outside Piano reads missing whateve
       );
 
       rmSync(repo, { recursive: true });
-      // A directory that exists but cannot be looked into is not verifiably gone (root reads anyway).
       fs.chmodSync(fenced, 0);
       try {
         const seen = statuses(yield* view.fresh);

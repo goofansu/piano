@@ -17,7 +17,6 @@ import { PiSessionsLive } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionReferences, SessionReferencesLive } from "../server/SessionReferences.ts";
 
-// Fixture history only: Pi reads PI_CODING_AGENT_SESSION_DIR and filters it by each file's cwd.
 const root = realpathSync(mkdtempSync(join(tmpdir(), "piano-references-")));
 const sessions = join(root, "sessions");
 mkdirSync(sessions);
@@ -25,7 +24,6 @@ process.env.PI_CODING_AGENT_DIR = join(root, "agent");
 process.env.PI_CODING_AGENT_SESSION_DIR = sessions;
 after(() => rmSync(root, { recursive: true, force: true }));
 
-/** A Pi session file whose header records `cwd`, as Pi writes it when its CLI starts there. */
 const seed = (cwd: string, id: string, text: string) => {
   const file = join(sessions, `${text.replaceAll(" ", "-")}.jsonl`);
   writeFileSync(
@@ -45,7 +43,6 @@ const seed = (cwd: string, id: string, text: string) => {
   );
   return file;
 };
-/** A checkout and a symlinked spelling of it. */
 const checkout = (name: string) => {
   const physical = join(root, name),
     alias = join(root, `${name}-alias`);
@@ -78,7 +75,6 @@ test("INV-01/02: alias history resolves under its registry owner; conflicting re
         registry = yield* Registry;
       const file = seed(alias, "legacy", "alias history");
       yield* registry.addSession(alias, "legacy");
-      // Asked under the physical spelling, the registry's spelling still owns the session.
       const location = yield* references.resolve(physical, "legacy");
       assert.equal(location.cwd, alias);
       assert.equal(location.physical, physical);
@@ -142,7 +138,6 @@ test("INV-01: availability judges each session as resolve finds it", async () =>
     Effect.gen(function* () {
       const references = yield* SessionReferences,
         registry = yield* Registry;
-      // Pi was started in the physical directory, so its file names that spelling, not the registry's.
       seed(physical, "aliased", "aliased history");
       seed(gone, "removed", "removed history");
       const refs = [

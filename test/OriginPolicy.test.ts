@@ -67,14 +67,11 @@ test(
       logs += chunk;
     });
     try {
-      // Startup takes far longer than usual while other test files load the machine.
       const deadline = Date.now() + 20_000;
       for (;;) {
         try {
           if ((await fetch(`${base}/api/folders`)).ok) break;
-        } catch {
-          /* startup */
-        }
+        } catch {}
         assert.ok(Date.now() < deadline && child.exitCode === null, logs);
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
@@ -147,7 +144,6 @@ test(
         assert.equal(await handshake(origin), 101);
       }
       assert.equal((await fetch(`${base}/api/folders`)).status, 200, "safe reads need no Origin");
-      // DNS rebinding: the page's own hostname arrives as Host, with no Origin to refuse.
       const readWithHost = (host: string, extra: Record<string, string> = {}) =>
         new Promise<number>((resolve, reject) => {
           const req = request(`${base}/api/folders`, { headers: { host, ...extra } }, (res) => {
@@ -193,8 +189,6 @@ test(
             assert.match(extensions, /server_no_context_takeover/);
             assert.match(extensions, /client_no_context_takeover/);
           }
-          // Both small control messages and bulk payloads survive negotiation unchanged.
-          // The no-extension case also protects native Node WebSocket dispatch clients.
           for (const nonce of ["small", "large-".repeat(2048)]) {
             const pong = new Promise<string>((resolve) => {
               const receive = (data: NodeWS.RawData) => {
@@ -212,8 +206,6 @@ test(
         } finally {
           ws.terminate();
         }
-        // The actual parser bounds the complete *inflated* message, including fragments,
-        // before JSON/schema decoding. Highly compressible input must not bypass the limit.
         for (const fragmented of [false, true]) {
           const oversized = connect();
           try {

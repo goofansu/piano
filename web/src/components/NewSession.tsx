@@ -67,24 +67,17 @@ type WorktreeClient = WorktreeOperationOptions["client"] & Pick<Client, "capture
 
 interface Props {
   state: AppState;
-  /** Sends commands; the worktree picker also hears its own receipts through it. */
   client: WorktreeClient;
-  /** Picks the directory the session will run in; the page shows the store's `view.cwd`. */
   chooseDirectory: (cwd: string) => void;
-  /** Absent on a project's home, which is the project. */
   onProjectChange?: (projectId?: string) => void;
 }
 
-/** New session: a welcome above the composer. The project control names the project; the headline does not repeat it. */
 export function NewSession({ state, client, chooseDirectory, onProjectChange }: Props) {
   return (
     <>
-      {/* No header on this page; the sidebar sheet still needs its button on small screens. */}
       <PaneShowSidebar />
       <div className="new-session-layout flex min-h-0 flex-1 flex-col overflow-y-auto px-(--gutter) pt-14 pb-[max(1rem,env(safe-area-inset-bottom))] md:py-16">
         <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col md:my-auto md:flex-none">
-          {/* Below md the mark alone fills the space above the composer: the project control
-           * beneath already names the project, and a long name would wrap into a wall of text. */}
           <div className="new-session-welcome flex min-h-0 flex-1 flex-col items-center justify-center py-6 text-center md:mb-7 md:flex-none md:py-0">
             <PianoMark className="size-12 rounded-2xl md:mb-5" />
             <h1 className="hidden text-xl font-medium tracking-tight md:block md:text-[2rem]">
@@ -107,13 +100,6 @@ export function NewSession({ state, client, chooseDirectory, onProjectChange }: 
   );
 }
 
-/**
- * The composer that starts a session, on the New page and on a project's home: where it runs, that
- * directory's trust, which project it joins (only where `onProjectChange` lets the page change it),
- * and the first message. The first prompt creates the session in the chosen directory with the
- * chosen model and effort. On a remote machine the directory is one the remote registered: there is
- * no browsing or worktree creation, which would change more than its projects and that folder's trust.
- */
 export function NewSessionComposer({
   state,
   client,
@@ -130,8 +116,6 @@ export function NewSessionComposer({
   const { run } = useCommands();
   const offers = useOffers();
   const sidebarLayout = useSidebarLayout();
-  // The client starts a fresh New page in the last directory used, else the first folder; a
-  // project's New page starts without one, and its home in its most recent member's folder.
   const page = startPage(state.view);
   const cwd = page?.cwd ?? "";
   const projectId = page?.projectId;
@@ -143,7 +127,6 @@ export function NewSessionComposer({
   const trust = trustCommand(state, cwd);
   const models = useModelCatalog(cwd || undefined);
   const { catalog } = models;
-  // The choice belongs to the directory; a reconnect keeps it, re-clamped to the refreshed catalog.
   const choice = useModelChoice(
     models,
     { kind: "new", cwd },
@@ -154,9 +137,7 @@ export function NewSessionComposer({
       : undefined,
   );
   const imageSend = useImageSend(editor, client.captureSend, { cwd }, state.selectionId, choice);
-  // No session can start where the checkout is gone; the draft waits for another directory.
   const checkoutMissing = !!cwd && checkoutMissingAt(state, cwd);
-  // The client asks Pi about this directory's models and trust whenever it changes (see lib/client).
   const ready =
     !editor.preparing &&
     (!cwd || offers.startsSessionIn(state, cwd)) &&
@@ -170,10 +151,7 @@ export function NewSessionComposer({
     });
 
   const submit = () => {
-    // A creation that is sent switches the main pane to the new session at once, so this page never
-    // shows a pending state; one known not sent keeps the draft and the pick here.
     if (!ready) return;
-    // A project deleted while it was chosen is no longer joined.
     const join = findProject(state, projectId)?.id;
     imageSend.send((message, attemptId, start) => ({
       ...newSessionCommand({ cwd, projectId: join }, message, start),
@@ -184,11 +162,7 @@ export function NewSessionComposer({
   return (
     <>
       <div className={className}>
-        {/* Left: where the session runs, with that directory's trust beside it. Right: which project it
-         * joins. Below md the pane is the whole screen and the row wraps instead, each control the
-         * size of its name, so a long folder, branch or project name never crowds the others out. */}
         <div className="mb-2 flex min-w-0 items-center gap-1 max-md:flex-wrap max-md:gap-y-0.5">
-          {/* The directory and its trust stay on one line: the branch gives way, never the trust. */}
           <div className="flex min-w-0 max-w-full shrink items-center gap-1">
             <div className="min-w-0 shrink">
               <DirectorySelect
@@ -233,7 +207,6 @@ export function NewSessionComposer({
           cancelUpload={imageSend.cancel}
           completion={completionTarget(state)}
           attachmentsDisabled={!state.connected}
-          // Not under an open sidebar, as after a machine switch: focus stays with the sidebar.
           autoFocus={
             !window.matchMedia("(pointer: coarse)").matches && !sidebarLayout.getState().mobileOpen
           }
@@ -275,11 +248,6 @@ export function NewSessionComposer({
   );
 }
 
-/**
- * Which project the new session joins: the sidebar's destination menu with the current choice
- * checked, as the Directory and Model pickers beside it check theirs, and No project last. A
- * project created here becomes the page's project.
- */
 function ProjectSelect({
   state,
   value,
@@ -343,10 +311,6 @@ function ProjectSelect({
   );
 }
 
-/**
- * The palette's Trust folder command as a toggle that shows the directory's state; offered only for
- * directories with `.pi` resources or `.agents/skills`, which Pi loads only when trusted.
- */
 function TrustToggle({
   command,
   run,
@@ -391,10 +355,6 @@ function TrustToggle({
   );
 }
 
-/**
- * Folder roots plus Browse and Worktrees escape hatches, offered only where this machine may
- * browse or create; a selected worktree is still named by folder and branch.
- */
 function DirectorySelect({
   state,
   value,
@@ -416,7 +376,6 @@ function DirectorySelect({
     onChange(cwd);
     setOpen(false);
   });
-  // A pending worktree operation keeps the picker open until its receipt, timeout or disconnect.
   const wtPending = worktrees.request.status === "pending";
   const search = useRef<HTMLInputElement>(null);
   const choices = directoryChoices(state, value, useOffers().startsSessionIn);
@@ -428,7 +387,6 @@ function DirectorySelect({
       onOpenChange={(next) => {
         if (wtPending) return;
         setOpen(next);
-        // Reset to the folder list on open, not on close: a closing overlay keeps its last open face.
         if (next) setWtOpen(false);
       }}
     >
@@ -440,7 +398,6 @@ function DirectorySelect({
           role="combobox"
           aria-expanded={open}
           aria-label="Directory"
-          // The full path, which the trigger's text shortens; with no directory chosen there is none.
           title={value || undefined}
           className={cn(
             picker,
@@ -453,7 +410,6 @@ function DirectorySelect({
             <span>Directory</span>
           ) : trigger.kind === "checkout" ? (
             <>
-              {/* The folder keeps its name; a long branch truncates first, as in the session header. */}
               <span className="max-w-[12rem] shrink-0 truncate">{trigger.folder}</span>
               {trigger.branchLabel && (
                 <BranchLabel branch={trigger.branchLabel} className="text-ink-3" />
@@ -510,7 +466,6 @@ function DirectorySelect({
                         <FolderOpenIcon /> Browse…
                       </CommandItem>
                     )}
-                    {/* Worktrees belong to the chosen folder's repository. */}
                     {worktreesFolder && (
                       <CommandItem
                         value="__worktree"

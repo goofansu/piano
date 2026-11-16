@@ -2,32 +2,21 @@ import { cn } from "cn";
 
 interface Props {
   className?: string;
-  /** The keys play while Pi works and rest when it finishes. */
   playing?: boolean;
 }
 
-/** Solid keys under a fallboard: white, black, white, with the black key shorter. */
 interface Grid {
-  /** Width of one key. */
   keyWidth: number;
-  /** Open space between keys. */
   gap: number;
-  /** Height of the fallboard; a 1-unit gap separates it from the keys. */
   board: number;
   white: number;
   black: number;
 }
 
-/**
- * A fallboard across the top and three keys hanging from it, so the glyph reads as a keyboard seen
- * from above and as a π with one more leg. Solid bars, like Pi's mark, so it keeps its weight at
- * favicon size. Every unit is one CSS pixel at the native size; `crispEdges` keeps edges sharp.
- */
 function KeyBars({ keyWidth, gap, board, white, black, className, playing }: Grid & Props) {
   const width = 3 * keyWidth + 2 * gap;
   const top = board + 1;
   const height = top + white;
-  // Round the box up to even sides so a centring parent never lands the bars on half pixels.
   const box = (n: number) => n + (n % 2);
   return (
     <svg
@@ -63,7 +52,6 @@ function KeyBars({ keyWidth, gap, board, white, black, className, playing }: Gri
   );
 }
 
-/** The three-key mark: Piano's wordmark glyph by day, and the instrument's live signal whenever Pi is working. */
 export function PianoMark({ className, playing = false }: Props) {
   return (
     <span
@@ -73,8 +61,6 @@ export function PianoMark({ className, playing = false }: Props) {
         className,
       )}
     >
-      {/* A 16×16 glyph at about 4/7 of the tile, rounded to a whole multiple of its height so the
-          bars always land on whole pixels: 1× in the 24 and 28px tiles, 2× in the 48px tile. */}
       <KeyBars
         keyWidth={4}
         gap={2}
@@ -88,8 +74,6 @@ export function PianoMark({ className, playing = false }: Props) {
   );
 }
 
-/** The same keys without the tile, in the current text colour, sized for a glyph gutter or a row:
- * about 3/4 of the mark's 16px glyph, so the keys keep its weight beside 14px text. */
 export function Keys({ className, playing = false }: Props) {
   return (
     <KeyBars

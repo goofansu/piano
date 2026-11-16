@@ -107,7 +107,6 @@ const view = (value: string, overrides: Partial<SlashView> = {}): SlashView => (
   context: "ctx",
   ...overrides,
 });
-/** Focused in `value` with a collapsed caret at its end, or at `caret`. */
 const focused = (value: string, caret = value.length): SlashState =>
   slashUpdate(initialSlashState, view(value), { type: "focus", value, selection: at(caret) });
 const press = (key: string, extra: Partial<SlashKey> = {}, caret = 0): SlashKey => ({
@@ -157,7 +156,6 @@ test("arrows wrap around the list and a new caret position starts at the top", (
   assert.equal(move("ArrowUp"), 2);
   assert.equal(move("ArrowDown"), 0);
   assert.equal(move("ArrowDown"), 1);
-  // Typing elsewhere and coming back does not restore the old highlight.
   state = slashUpdate(state, view("/re"), { type: "select", value: "/r", selection: at(2) });
   state = slashUpdate(state, view("/r"), { type: "select", value: "/re", selection: at(3) });
   assert.equal(slashActive(state, view("/re"), 3), 0);
@@ -189,7 +187,6 @@ test("Escape closes the list until the text or caret changes or the textarea is 
   const { state, effect } = slashKeyDown(focused("/re"), view("/re"), press("Escape"), 3);
   assert.deepEqual(effect, { type: "close" });
   assert.equal(slashOpen(state, view("/re")), false);
-  // Escape again is the composer's.
   assert.deepEqual(slashKeyDown(state, view("/re"), press("Escape"), 3).effect, { type: "pass" });
   const moved = slashUpdate(state, view("/re"), { type: "select", value: "/re", selection: at(2) });
   assert.equal(slashOpen(moved, view("/re")), true);
@@ -218,7 +215,6 @@ test("accepting names the command and keeps the list closed at the new caret", (
     selection: at(14),
   });
   assert.equal(slashOpen(after, view(accepted.text)), false);
-  // The textarea moved on since the render that offered the list: nothing is accepted.
   assert.equal(
     slashAccept(state, view("/re"), "skill:review", { value: "/rev", selection: at(4) }),
     null,
@@ -235,10 +231,8 @@ test("Backspace after an accepted command selects the whole token first", () => 
   const { state: next, effect } = slashKeyDown(state, view(text), press("Backspace", {}, 13), 0);
   assert.deepEqual(effect, { type: "select-token", from: 0, to: 13 });
   assert.deepEqual(next.selection, { start: 0, end: 13 });
-  // A held Backspace keeps the token selected rather than deleting it a character at a time.
   const held = press("Backspace", { repeat: true, selection: { start: 0, end: 13 } });
   assert.equal(slashKeyDown(next, view(text), held, 0).effect.type, "select-token");
-  // Once selected, a fresh Backspace deletes it; so does one with a modifier or in a read-only box.
   const fresh = press("Backspace", { selection: { start: 0, end: 13 } });
   assert.deepEqual(slashKeyDown(next, view(text), fresh, 0).effect, { type: "pass" });
   assert.deepEqual(

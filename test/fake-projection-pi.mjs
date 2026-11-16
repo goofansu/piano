@@ -1,4 +1,3 @@
-// Deliberately contradictory partial/final records, driven by explicit prompt barriers.
 import { StringDecoder } from "node:string_decoder";
 
 const out = (value) => process.stdout.write(JSON.stringify(value) + "\n");

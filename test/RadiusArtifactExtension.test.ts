@@ -132,7 +132,7 @@ test("create confirms a private Radius publication; update retains identity and 
       "private",
       "override a public organization default",
     );
-    await h.load(); // Pi-owned intent survives extension reload, not an extension singleton.
+    await h.load();
     assert.deepEqual(await h.call("create", document), created);
     assert.equal(h.http.writes.length, 1);
     h.http.artifacts.get("artifact-1")!.visibility = "organization";

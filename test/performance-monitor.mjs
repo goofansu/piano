@@ -1,11 +1,9 @@
-// Loaded only by performance-folder-registry.mjs in its scratch backend.
 import fs from "node:fs";
 import promises from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import { monitorEventLoopDelay } from "node:perf_hooks";
 import { setTimeout as sleep } from "node:timers/promises";
 
-// Synthetic metadata latency, scoped to the scratch listing only. Not a claim about NFS.
 const slowPath = process.env.PIANO_BENCH_SLOW_PATH;
 const pause = new Int32Array(new SharedArrayBuffer(4));
 if (slowPath) {

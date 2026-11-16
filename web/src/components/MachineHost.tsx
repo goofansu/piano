@@ -10,7 +10,6 @@ import { toastNotify } from "@/lib/toastNotify";
 import { MachineContext } from "@/lib/useMachine";
 import { useSidebarLayout } from "@/lib/useSidebarLayout";
 
-/** Drafts and question replies live for this page load; a machine switch disposes its connection, not them. */
 export function MachineHost({ children }: { children: React.ReactNode }) {
   const [id, setId] = useState(() => machineLocation(location.pathname).id);
   const [machines, setMachines] = useState<Machine[]>([LOCAL]);
@@ -22,7 +21,6 @@ export function MachineHost({ children }: { children: React.ReactNode }) {
     const controller = new AbortController();
     void listMachines(controller.signal)
       .then((list) => {
-        // Only a list the server answered: a failed read forgets nothing.
         forgetUnconfiguredMachines(list);
         setMachines([...list]);
         setLoaded(true);
@@ -30,8 +28,6 @@ export function MachineHost({ children }: { children: React.ReactNode }) {
       .catch(() => {
         if (!controller.signal.aborted) setError(true);
       });
-    // Each machine's navigation remembers the pages shown on it (machineAddress); here only
-    // which machine the address names.
     const pop = () => setId(machineLocation(location.pathname).id);
     window.addEventListener("popstate", pop);
     return () => {
@@ -46,7 +42,6 @@ export function MachineHost({ children }: { children: React.ReactNode }) {
   };
   const machine = machines.find((m) => m.id === id);
   const { closeMobile } = useSidebarLayout();
-  // Without a machine no sidebar is drawn; an open reveal must not spring back on the next one.
   useEffect(() => {
     if (!machine) closeMobile();
   }, [machine, closeMobile]);

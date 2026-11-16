@@ -1,8 +1,3 @@
-/**
- * Data controls sends each intent once. Only a correlated server receipt settles it; losing
- * the connection or timing out never replays a mutation. The server owns eligibility (including
- * held locks not in the host broadcast), registry updates and success toasts.
- */
 import type { ClientCommand } from "@shared/wire";
 import type { Client } from "./client.ts";
 
@@ -13,7 +8,6 @@ export type DataControlsRequest =
 
 export interface DataControlsState {
   request: DataControlsRequest | undefined;
-  /** A fresh server count opens the confirmation; undefined means it is closed. */
   count: number | undefined;
   countFailed: boolean;
 }
@@ -30,7 +24,6 @@ export interface DataControlsOptions {
   };
 }
 
-/** The count is a server observation, never an estimate from the visible session catalog. */
 export function archiveConfirmation(state: DataControlsState, connected: boolean) {
   return {
     open: state.count !== undefined,
@@ -65,7 +58,6 @@ export function createDataControls({
     if (!request) return;
     clearTimer();
     publish({ request: undefined, count: undefined, countFailed: request.kind === "count" });
-    // Reads have no toast; their retry stays on the page. Mutations fail once, with fixed copy.
     if (request.kind !== "count")
       failure(
         request.kind === "unarchive" ? "Could not unarchive session" : "Could not archive sessions",
@@ -78,7 +70,6 @@ export function createDataControls({
       if (state.request?.requestId === request.requestId) fail();
     }, DATA_CONTROLS_TIMEOUT_MS);
     try {
-      // An uncertain send may have reached the server. Await its receipt, never resend.
       if (client.send(command) === "not-sent") fail();
     } catch {
       fail();
@@ -102,7 +93,6 @@ export function createDataControls({
       const stopState = client.subscribe(() => {
         if (client.getState().connected) return;
         if (state.request) fail();
-        // A count from a lost connection must be fetched again, not reused on reconnect.
         else if (state.count !== undefined) publish({ count: undefined });
       });
       const stopMessages = client.listen((message) => {
@@ -123,7 +113,6 @@ export function createDataControls({
         stopState();
         stopMessages();
         clearTimer();
-        // Fence late receipts when this page is left, including React's effect restart.
         publish({ request: undefined, count: undefined });
       };
     },

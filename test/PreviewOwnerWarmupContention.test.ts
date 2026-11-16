@@ -13,8 +13,6 @@ import { ownerFixture } from "./fixtures/preview-owner-fixture.ts";
 
 for (const platform of ["linux", "darwin"] as Platform[]) {
   const fixture = (t: TestContext, lockWait?: number) => ownerFixture(t, platform, lockWait);
-  // A running app's ownership is discovered from the real host (/proc on Linux, ps and lsof on
-  // macOS), so cases that observe one run only on their native platform.
   const foreign = process.platform !== platform;
 
   test(`[${platform}] another workspace's start waiting for readiness never stalls a warming app's checks`, async (t) => {
@@ -50,7 +48,6 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
     assert.equal(cold.port, port);
     assert.equal(shown?.warming, true);
 
-    // Another session starts an app that never answers and waits out its whole readiness window.
     f.host.afterSubmit = undefined;
     const elsewhere = join(f.root, "elsewhere");
     await mkdir(elsewhere);
@@ -60,7 +57,6 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
       .call(other, { command: [process.execPath, "-e", "process.exit(0)"], timeoutSeconds: 8 })
       .finally(() => (otherDone = true));
 
-    // Meanwhile the first app answers: its owner's own checks show it while the other start waits.
     await new Promise((resolve) => setTimeout(resolve, 1500));
     warm = true;
     while (!shown?.ready && !otherDone) await new Promise((resolve) => setTimeout(resolve, 50));
@@ -104,13 +100,10 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
     });
     assert.equal(shown?.warming, true);
 
-    // Another helper holds the account-wide lock longer than a check waits for it.
     const holder = new DatabaseSync(join(f.state, "lock.sqlite"));
     holder.exec("BEGIN EXCLUSIVE");
     await new Promise((resolve) => setTimeout(resolve, 3000));
     assert.equal(shown?.warming, true, "a busy lock says nothing about the app");
-    // A browser read (Refresh, a focus read) fails on the same lock: the app shows unknown, and
-    // its owner still checks it.
     await assert.rejects(f.call(f.owner, { action: "status" }), /busy/);
     assert.equal(shown?.ready, false);
     holder.exec("ROLLBACK");

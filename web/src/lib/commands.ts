@@ -1,9 +1,3 @@
-/**
- * The one runner for every command a surface offers: global, project, folder and session. Surfaces
- * render descriptors and call `run(command)`; this decides what running one means, and refuses one
- * that is not enabled, whichever surface offered it. `CommandHost` supplies the effects.
- */
-// Relative, not @shared: module tests load this file directly in Node.
 import type { ClientCommand, Project } from "../../../shared/wire.ts";
 import type { FolderCommand } from "./folderCommands.ts";
 import type { Appearance, GlobalCommand } from "./globalCommands.ts";
@@ -15,10 +9,6 @@ import type { SidebarView } from "./sidebarView.ts";
 
 export type Command = GlobalCommand | ProjectCommand | FolderCommand | SessionCommand;
 
-/**
- * A radio group as a menu renders it: the checked choice's id (the group's value), that choice's
- * name for a submenu trigger, and every choice in order. With none checked both are empty.
- */
 export interface RadioChoice<C> {
   value: string;
   currentLabel: string;
@@ -36,7 +26,6 @@ export function radioChoiceOf<
   };
 }
 
-/** A form the host owns, which asks before anything changes; `answerForm` re-checks its rule. */
 export type CommandForm =
   | Extract<SessionCommand["intent"], { kind: "stop-preview" }>
   | { kind: "rename-session"; target: SessionTarget }
@@ -47,7 +36,6 @@ export type CommandForm =
   | { kind: "project-settings"; projectId: string }
   | { kind: "delete-project"; project: Project };
 
-/** What running a command can do; the host binds each to navigation, the client, and its own forms. */
 export interface CommandEffects {
   switchMachine?: (id: string) => void;
   send: (message: ClientCommand) => void;
@@ -57,11 +45,9 @@ export interface CommandEffects {
   openProjects: () => void;
   openProject: (projectId: string) => void;
   openChanges: () => void;
-  /** The session header's Artifacts menu. */
   openArtifacts: () => void;
   toggleRail: () => void;
   showAgent: () => void;
-  /** The dialog that links a pull request to the selected session. */
   openPullRequest: () => void;
   toggleSidebar: () => void;
   setAppearance: (appearance: Appearance) => void;
@@ -70,14 +56,11 @@ export interface CommandEffects {
   setCodeWrap: (on: boolean) => void;
   copy: (value: string, label: string) => void;
   openForm: (form: CommandForm) => void;
-  /** Opens `url` in a new tab, without giving it this page. */
   openUrl: (url: string) => void;
   openPreviewDetails: () => void;
-  /** Opens the Settings page's editor on a new entry. */
   openPageEditor: (page: EditorPage) => void;
 }
 
-/** Carry out `command`'s intent. A disabled command does nothing; the result says whether it ran. */
 export function runCommand(command: Command, effects: CommandEffects): boolean {
   if (!command.enabled) return false;
   const intent = command.intent;
@@ -162,7 +145,6 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
     case "messages-only":
       effects.setMessagesOnly(intent.on);
       break;
-    // An enabled session command always has its target; the guard only narrows the type.
     case "rename":
       if (!intent.target) return false;
       effects.openForm({ kind: "rename-session", target: intent.target });

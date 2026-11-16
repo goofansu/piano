@@ -11,9 +11,6 @@ import { SIDEBAR_WIDTH } from "@/lib/sidebarLayout";
 import { useSidebarLayout, useSidebarLayoutState } from "@/lib/useSidebarLayout";
 import { useSidebarSwipe } from "@/lib/useSidebarSwipe";
 
-/** Stock Sidebar's fixed+gap geometry cannot resize as one interruptible surface. Keep its
- * menu primitives/context, but own the width-bearing aside and the persistent main landmark.
- * The sidebar layout (lib/sidebarLayout) owns what is shown; this draws it and feeds it pointers. */
 export function AppLayout({
   navigation,
   navigationTitle,
@@ -38,7 +35,6 @@ export function AppLayout({
     event.preventDefault();
     const startWidth = event.currentTarget.parentElement?.getBoundingClientRect().width ?? width;
     const startX = event.clientX;
-    // The layout ends the drag on release, a collapse or a breakpoint change; listeners go with it.
     layout.startResize(
       startWidth,
       trackPointerDrag(event.currentTarget, event.pointerId, {
@@ -62,9 +58,6 @@ export function AppLayout({
         className="relative hidden shrink-0 md:flex md:flex-col"
         style={{ width: collapsed ? 0 : width }}
       >
-        {/* Collapsed, the column has no width and no rail: each pane's header carries the control
-            that brings it back. Visibility (not display:none) preserves scroll. The column keeps
-            the pane's frame on its outer sides, so its rows and header share the pane's geometry. */}
         <div className="relative h-full overflow-hidden">
           <div
             inert={collapsed}
@@ -76,8 +69,6 @@ export function AppLayout({
           </div>
         </div>
         {!collapsed && (
-          // No standard shadcn resize handle supports drag-to-collapse with remembered pixel width.
-          // role=separator: an interactive window splitter, not a thematic break.
           <div
             role="separator"
             tabIndex={0}
@@ -115,7 +106,6 @@ export function AppLayout({
       >
         {navigation}
       </PianoSidebarReveal>
-      {/* A viewport landmark, not a shadcn content Card with header/footer padding. */}
       <main
         ref={swipe.mainRef}
         data-slot="layout-main"
@@ -124,7 +114,6 @@ export function AppLayout({
         style={swipe.style}
         className={cn(
           "relative flex min-w-0 flex-1 flex-col overflow-hidden bg-conversation md:my-(--pane-inset) md:mr-(--pane-inset) md:rounded-2xl md:border-(length:--pane-line) md:border-line md:shadow-1",
-          // With the sidebar collapsed the pane keeps the gap the column gave it.
           collapsed && "md:ml-(--pane-inset)",
         )}
       >
@@ -135,7 +124,6 @@ export function AppLayout({
   );
 }
 
-/** Removing the entrance class while hidden replays it on return without remounting children. */
 export function LayoutView({ active = true, children }: { active?: boolean; children: ReactNode }) {
   return (
     <div
@@ -149,20 +137,10 @@ export function LayoutView({ active = true, children }: { active?: boolean; chil
   );
 }
 
-/**
- * The sidebar's header, in the one header shape and no heavier: the hide control first, where
- * each pane's show control appears once the sidebar is collapsed, so the toggle never moves; then
- * the pane's controls, its one primary action last. The rows beneath say what the list is, for
- * sessions and for Settings alike; the only title is the machine, when there is more than one,
- * and it gives up width, then its place, before any control does. The mark lives in the footer.
- */
 export function LayoutHeader({ title, children }: { title?: ReactNode; children?: ReactNode }) {
   const { hide } = useSidebarLayout();
   return (
-    // The pane header's row in the same frame, so Hide sits where a pane's Show appears; without
-    // its hairline, so the sidebar reads as one column.
     <SidebarHeader className={cn(paneHeaderRow, "flex-row gap-1 border-b-0")}>
-      {/* The sidebar's title takes the free width and gives it up first, ahead of the controls. */}
       <HeaderLead
         className="min-w-0 flex-1"
         toggle={
@@ -178,7 +156,6 @@ export function LayoutHeader({ title, children }: { title?: ReactNode; children?
   );
 }
 
-/** The sidebar's footer: its one plain action and the mark, which marks the app once, at rest. */
 export function LayoutFooter({ children }: { children: ReactNode }) {
   return (
     <div className="flex shrink-0 items-center gap-2 px-(--row-inset) py-3">

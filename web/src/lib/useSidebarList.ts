@@ -10,7 +10,6 @@ import {
 import type { SidebarView } from "./sidebarView.ts";
 import { useMachineId } from "./useMachine.ts";
 
-/** Shared by every mount for one machine, so a sidebar that remounts reads what the last one left open. */
 const preferences = new Map<string, SidebarPreferences>();
 function preferencesFor(machineId: string): SidebarPreferences {
   let own = preferences.get(machineId);
@@ -18,7 +17,6 @@ function preferencesFor(machineId: string): SidebarPreferences {
   return own;
 }
 
-/** The sidebar list for this state and view over the real clock and storage, following them while mounted. */
 export function useSidebarList(
   state: AppState,
   view: SidebarView,

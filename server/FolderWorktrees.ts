@@ -1,15 +1,7 @@
-/**
- * New worktrees of registered folders: created through Worktrunk (INV-06) and registered under
- * their folder, as one server-owned step. A requester that leaves while Worktrunk runs cannot
- * interrupt it into a checkout left on disk but never registered (INV-02). SessionHosts and
- * WorkspaceCommands both create worktrees here, so this module sits below them and needs only
- * the registry and Worktrees.
- */
 import { Context, Effect, Fiber, Layer } from "effect";
 import { Registry } from "./Registry.ts";
 import { createWorktree, WorktreeError } from "./Worktrees.ts";
 
-/** A worktree created and registered under `folder`. */
 export interface CreatedWorktree {
   readonly folder: string;
   readonly path: string;
@@ -21,12 +13,6 @@ export interface CreatedWorktree {
 export class FolderWorktrees extends Context.Service<
   FolderWorktrees,
   {
-    /**
-     * Create a new branch's worktree from a registered folder and register it. The work belongs
-     * to the server: interrupting the caller leaves it running to completion. A failure after
-     * Worktrunk ran, its own or the registry's, is a WorktreeError marked `unconfirmed`, since a
-     * checkout may exist anyway; any earlier refusal created nothing.
-     */
     readonly create: (
       folder: string,
       branch: string,

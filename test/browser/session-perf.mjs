@@ -1,4 +1,3 @@
-// Opt-in diagnostic, not a timing gate. See docs/session-performance.md.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -43,7 +42,6 @@ const report = {
 };
 const save = () => writeFileSync(`${evidence}/results.json`, JSON.stringify(report, null, 2));
 
-// A fresh browser and backend per sample prevents previous transcripts/GC from biasing it.
 for (let repeat = 0; repeat < repeats; repeat++)
   for (const { shape, n } of cases)
     await run(
@@ -78,7 +76,7 @@ for (let repeat = 0; repeat < repeats; repeat++)
         return { folders: [cwd], sessions };
       },
       async (page) => {
-        await page.open("/"); // Warm Vite's module transforms, not the measured page's HTTP cache.
+        await page.open("/");
         const socket = new WebSocket(await page.ab("get", "cdp-url"));
         await new Promise((done, fail) => {
           socket.addEventListener("open", done, { once: true });
@@ -159,7 +157,7 @@ for (let repeat = 0; repeat < repeats; repeat++)
               opening.articles > 0 && opening.articles <= 25,
               "only the visible window and buffer mount",
             );
-            const memory = await cdp("Runtime.getHeapUsage"); // No forced GC; not a retained-heap/leak claim.
+            const memory = await cdp("Runtime.getHeapUsage");
             const scroll = await evaluate(`new Promise(resolve => {
         const el = document.querySelector('[data-slot="transcript"]');
         el.scrollTop = 0;
@@ -195,7 +193,6 @@ for (let repeat = 0; repeat < repeats; repeat++)
             assert.ok(Math.abs(scroll.bottomGap) < 2);
             assert.ok(scroll.peakArticles <= 25, "scrolling keeps mounted rows bounded");
             assert.equal(scroll.blankFrames, 0, "the moving window must not leave blank frames");
-            // Measure the actual button click, not npx command startup; the fake Pi adds a user/reply pair.
             await page.ab("fill", '[aria-label="Message"]', `perf-append-${repeat}`);
             await evaluate(`(() => {
         const button = document.querySelector('[aria-label="Send"]');
@@ -215,8 +212,6 @@ for (let repeat = 0; repeat < repeats; repeat++)
             const appendMs = await evaluate("window.perfAppendMs");
             await cdp("HeapProfiler.collectGarbage");
             const retained = await cdp("Runtime.getHeapUsage");
-            // The sweep ends at an already measured tail. Also stop at an unmeasured middle
-            // destination: smooth frames must not conceal Markdown that never catches up.
             const midpointReadyMs = await evaluate(`new Promise((resolve, reject) => {
               const t = document.querySelector('[data-slot="transcript"]');
               const start = performance.now();

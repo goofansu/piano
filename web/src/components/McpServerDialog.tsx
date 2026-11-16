@@ -52,7 +52,6 @@ const record = (list: readonly Pair[]) =>
     list.filter((pair) => pair.key.trim()).map((pair) => [pair.key.trim(), pair.value]),
   );
 
-/** Key/value rows (headers, environment) with add and remove. */
 function KeyValueFields({
   list,
   onChange,
@@ -69,7 +68,6 @@ function KeyValueFields({
   return (
     <div className="flex flex-col gap-2">
       {list.map((pair, index) => (
-        // Rows have no identity until typed, so the index is the key.
         <div key={index} className="flex items-center gap-2">
           <Input
             aria-label={`${addLabel} name ${index + 1}`}
@@ -116,7 +114,6 @@ function KeyValueFields({
   );
 }
 
-/** The pasted `mcpServers` JSON as the one entry to add, or why it cannot be read. */
 export function parseMcpServerJson(
   text: string,
 ): { name: string; config: unknown } | { error: string } | undefined {
@@ -144,26 +141,15 @@ export function parseMcpServerJson(
 type Kind = "url" | "command";
 type Auth = "oauth" | "header";
 
-/**
- * Add or edit one entry of Pi's global configuration: its fields in place, errors on the field
- * they belong to, Add MCP server or Save in the footer. Adding also takes the `mcpServers` JSON a server's
- * README shows, one server at a time, on its JSON tab. A URL server is saved only once it
- * connects: one that cannot is refused on its URL, and one that asks for a sign-in closes this
- * dialog for the sign-in, which saves it. A saved Authorization header stays saved until the
- * field replaces or removes it.
- */
 export function McpServerDialog({
   entry,
   close,
   refresh,
   saved,
 }: {
-  /** The entry to edit, or undefined to add. */
   entry?: McpServerSetup;
   close: () => void;
-  /** Re-reads the list once a save settles. */
   refresh: () => void;
-  /** The change's answer, with the entry's name, once it saved or waits for a sign-in. */
   saved: (reply: McpSetupChange, name: string) => void;
 }) {
   const config = entry?.config;
@@ -172,7 +158,6 @@ export function McpServerDialog({
   const [kind, setKind] = useState<Kind>(config && "command" in config ? "command" : "url");
   const [url, setUrl] = useState(config && "url" in config ? config.url : "");
   const [auth, setAuth] = useState<Auth>(entry?.auth.kind === "header" ? "header" : "oauth");
-  // Pi sends this provider's token instead: no header or sign-in of the form's would be used.
   const provider = entry?.auth.kind === "provider" ? entry.auth.provider : undefined;
   const authorization = useSavedSecret(!!config && "url" in config && config.hasAuthorization);
   const [headers, setHeaders] = useState<Pair[]>(
@@ -189,7 +174,6 @@ export function McpServerDialog({
     failure: "keep",
   });
   const busy = actions.running !== undefined;
-  // A refusal belongs to the tab that sent it, so switching tabs does not carry it over.
   const refusal = useFieldRefusal(MCP_FIELDS, actions.error);
   const errorAt = (field: McpField | undefined) => refusal.at(field, tab);
   const argList = args
@@ -197,7 +181,6 @@ export function McpServerDialog({
     .map((arg) => arg.trim())
     .filter(Boolean);
   const pasted = tab === "json" ? parseMcpServerJson(json) : undefined;
-  // Saving a local command starts it once, so say so before the user saves.
   const startsCommand = pasted
     ? "name" in pasted &&
       !!pasted.config &&
@@ -205,7 +188,6 @@ export function McpServerDialog({
       "command" in pasted.config
     : tab === "form" && kind === "command";
 
-  // The confirm waits for the required fields, as New project does.
   const complete =
     tab === "json"
       ? !!pasted && "name" in pasted
@@ -216,7 +198,6 @@ export function McpServerDialog({
       .run({
         id: "save",
         run: () => changeMcpSetup(request).catch((cause: unknown) => refusal.record(cause, tab)),
-        // A server waiting for its sign-in is not saved yet: the sign-in says when it is.
         done: (reply) => (reply.signIn ? undefined : done),
         fallback: "Could not save MCP server.",
       })
@@ -238,7 +219,6 @@ export function McpServerDialog({
       return;
     }
     const trimmed = name.trim();
-    // Adding and editing send the same fields; the server merges them into the entry.
     const form: McpServerEdit =
       kind === "url"
         ? {
@@ -337,7 +317,6 @@ export function McpServerDialog({
             </Field>
             <Field>
               <FieldLabel id="mcp-kind-label">Type</FieldLabel>
-              {/* Field stretches its children; the wrapper keeps the group's shadow to its buttons. */}
               <div>
                 <ToggleGroup
                   type="single"
@@ -371,7 +350,6 @@ export function McpServerDialog({
                 {provider !== undefined ? (
                   <Field aria-labelledby="mcp-auth-label">
                     <FieldLabel id="mcp-auth-label">Authentication</FieldLabel>
-                    {/* A fact, not a choice: Pi decides it from the entry's provider. */}
                     <p className="text-sm">
                       Provider sign-in <span className="font-mono text-xs">{provider}</span>
                     </p>

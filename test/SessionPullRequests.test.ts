@@ -28,7 +28,6 @@ const candidate = (number: number, branch = "feature", owner = "example") => ({
   headRepository: { name: "repo" },
   headRepositoryOwner: { login: owner },
 });
-/** Sessions `one` and `two` in `cwd`, else in a fresh repository on `feature`. */
 async function fixture(t: TestContext, cwd?: string) {
   const root = mkdtempSync(join(tmpdir(), "piano-session-pr-")),
     repo = join(root, "repo"),
@@ -50,7 +49,6 @@ async function fixture(t: TestContext, cwd?: string) {
   const path = join(root, "registry.db"),
     forge = join(root, "forge.json"),
     gh = join(bin, "gh");
-  // The fake reads its fixture from the child's environment; nothing global changes.
   writeFileSync(
     gh,
     `#!${process.execPath}\nprocess.env.PIANO_TEST_GH_FIXTURE = ${JSON.stringify(forge)};\nawait import(${JSON.stringify(resolve("test/fixtures/fake-gh.mjs"))});\n`,
@@ -73,7 +71,6 @@ async function fixture(t: TestContext, cwd?: string) {
     await runtime.dispose();
     rmSync(root, { recursive: true, force: true });
   });
-  // Stand in for the router: resolve the entry by identity, then hand it to the module.
   const getIn = (
     from: ManagedRuntime.ManagedRuntime<SessionPullRequests | Registry, unknown>,
     id = "one",
@@ -97,12 +94,9 @@ async function fixture(t: TestContext, cwd?: string) {
   return { root, repo, path, git, control, runtime, registry, prs, get, getIn, change, layer };
 }
 
-// A remote relays this answer under a deadline derived from the bound, so the bound must hold
-// even when GitHub stalls: the refusal names a retry rather than the browser seeing "unavailable".
 test("a pull request lookup that outlasts its bound answers its own error within it, saving nothing", async (t) => {
   const f = await fixture(t);
   const started = join(f.root, "stalled-started");
-  // gh stalls until a release that never comes (the fake gives up after about 5 s).
   f.control({ prs: [candidate(42)], gate: { started, release: join(f.root, "never") } });
   const boundMs = 1_000;
   const begun = Date.now();
@@ -148,7 +142,6 @@ test("INV-01/07: discovers by branch AND head repository, pins identity across b
   await f.change({ action: "remove" });
   assert.deepEqual(await f.get(), { link: null, pullRequest: null });
   assert.equal((await f.get("two")).pullRequest?.number, 43);
-  // Preference is durable metadata, not forge facts or history.
   const persisted = await Effect.runPromise(
     Effect.gen(function* () {
       return yield* (yield* Registry).get;
@@ -231,14 +224,12 @@ test("exe.dev integration routes discovery and saved/manual PR reads through gh 
   assert.deepEqual(discovered.link, { url: candidate(42).url, source: "branch", apiHost: host });
   assert.equal(discovered.pullRequest?.number, 42);
   assert.equal(process.env.GH_HOST, "unrelated.example", "host routing is child-local");
-  // A later change to a normal remote does not lose the saved integration route.
   f.git("remote", "set-url", "origin", "git@github.com:example/repo.git");
   assert.equal((await f.get()).pullRequest?.number, 42);
   f.control({ ...proxy, expectedHost: "github.com", expectedRepo: "github.com/example/repo" });
   const direct = await f.change({ action: "link", url: candidate(42).url });
   assert.equal(direct.link?.apiHost, undefined);
   assert.equal(direct.pullRequest?.number, 42);
-  // Existing canonical links (created before integration support) infer the workspace route.
   f.git("remote", "set-url", "origin", `https://${host}/example/repo.git`);
   f.control(proxy);
   assert.equal((await f.get()).pullRequest?.number, 42);
@@ -338,7 +329,6 @@ test("INV-06: inherited GIT_* state cannot redirect discovery; the user's url.<b
     ["remote", "add", "origin", "git@github.com:other/repo.git"],
   ])
     execFileSync("git", ["-C", other, ...args], { env: clean });
-  // A global rewrite to the exe.dev integration, as a VM may configure for github.com remotes.
   writeFileSync(
     join(home, ".gitconfig"),
     `[url "https://${host}/"]\n\tinsteadOf = git@github.com:\n`,
@@ -374,9 +364,7 @@ test("discovery asks GitHub for the branch's name on its remote, not its local n
   f.git("update-ref", "refs/remotes/origin/james/feat", "HEAD");
   f.git("config", "branch.feat.remote", "origin");
   f.git("config", "branch.feat.merge", "refs/heads/james/feat");
-  // Git pushes the branch to its upstream (else it would push to `feat`).
   f.git("config", "push.default", "upstream");
-  // A same-named branch on GitHub is someone else's work, not this branch's.
   f.control({ prs: [candidate(42, "james/feat"), candidate(7, "feat")] });
   assert.equal((await f.get()).pullRequest?.number, 42);
 });
@@ -391,12 +379,10 @@ test("discovery asks GitHub for the name a push refspec gives the branch", async
 
 test("discovery asks GitHub for a branch started from another remote branch by its own name", async (t) => {
   const f = await fixture(t);
-  // Without `refs/remotes/origin/HEAD`, as `git remote add` and `git fetch` leave it.
   f.git("update-ref", "refs/remotes/origin/main", "HEAD");
   f.git("update-ref", "refs/remotes/origin/release", "HEAD");
   f.git("config", "push.default", "simple");
   for (const start of ["origin/main", "origin/release"]) {
-    // `git switch -c feat <start>`, later pushed without `-u`.
     f.git("switch", "-qC", "feat", "--track", start);
     f.control({ prs: [candidate(42, "feat"), candidate(7, "main"), candidate(9, "release")] });
     assert.equal((await f.get()).pullRequest?.number, 42, start);
@@ -408,7 +394,6 @@ test("a link records the pull request's head and base as GitHub last reported th
   f.control({ prs: [{ ...candidate(42), baseRefName: "main" }] });
   const found = await f.get();
   assert.deepEqual([found.link?.head, found.link?.base], ["feature", "main"]);
-  // A retarget on GitHub moves the recorded base on the next read; nothing else about the link changes.
   f.control({ prs: [{ ...candidate(42), baseRefName: "release" }] });
   const retargeted = await f.get();
   assert.deepEqual([retargeted.link?.source, retargeted.link?.base], ["branch", "release"]);
@@ -421,14 +406,12 @@ test("a link records the pull request's head and base as GitHub last reported th
     headRepo: "example/repo",
     baseRepo: "example/repo",
   });
-  // A deleted head repository removes stale proof, even when branch names are unchanged.
   f.control({ prs: [{ ...candidate(42), baseRefName: "release", headRepository: null }] });
   assert.equal((await f.get()).link?.headRepo, undefined);
   assert.equal(
     (await f.runtime.runPromise(f.registry.get)).sessions[0].pullRequest?.headRepo,
     undefined,
   );
-  // A manual link learns its branches from the first successful read.
   f.control({ prs: [{ ...candidate(7, "topic"), baseRefName: "main" }] });
   const manual = await f.change({ action: "link", url: "https://github.com/example/repo/pull/7" });
   assert.deepEqual(
@@ -437,8 +420,6 @@ test("a link records the pull request's head and base as GitHub last reported th
   );
 });
 
-// The fork fixture's other half is in Worktrees and WorkspaceChanges: all three name the same
-// repository and branch.
 test("INV-01: discovery asks GitHub for the branch where the session's own worktree pushes it", async (t) => {
   const { worktree } = forkWorktree(t);
   const f = await fixture(t, worktree);

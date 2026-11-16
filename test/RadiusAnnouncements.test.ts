@@ -23,7 +23,6 @@ const success = (action: "install" | "uninstall"): Observed => ({
 });
 const settled = (configured: boolean): RadiusObservation => ({ kind: "settled", configured });
 
-/** The toasts a page shows for a sequence of observations, from first opening. */
 function toasts(...observations: RadiusObservation[]) {
   let progress = RADIUS_PROGRESS;
   const shown: string[] = [];

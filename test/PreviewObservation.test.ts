@@ -93,7 +93,6 @@ function fakeSource(initial: AppState, disposition: SendDisposition = "sent") {
       for (const listener of updates) listener();
     },
     deliver: (m: ServerMessage) => {
-      // The server echoes the request being answered; callers can supply an obsolete ID.
       const latest = sent.at(-1);
       if (
         m._tag === "action_result" &&
@@ -315,7 +314,6 @@ test("a refused read settles only its own request and leaves the app inspectable
   f.deliver(observed("i1", "earlier output"));
   f.focus(5_000);
   assert.equal(f.sent.length, 2);
-  // Neither an unrelated error, another request's refusal nor another selection's settles it.
   for (const message of [
     { _tag: "error", message: "Unrelated", selectionId: "sel-1" } as const,
     unobserved("r1"),
@@ -338,7 +336,6 @@ test("a refused read settles only its own request and leaves the app inspectable
       error: "Client input capacity is full. Request was not started.",
     },
   });
-  // Every view reads the app through the observation, so the refusal reaches them all.
   const state = page({ preview: app });
   const unknown = seenPreview(state, f.observation.getState())!;
   assert.deepEqual(
@@ -395,7 +392,7 @@ test("confirmed stop clears details and notifies success once", () => {
     const f = fakeSource(page({ preview: app }));
     f.deliver(observed());
     f.observation.refresh();
-    f.set(page()); // The server publishes preview removal before the action result.
+    f.set(page());
     f.deliver(stopped(outcome));
     f.deliver(stopped(outcome));
     assert.deepEqual(f.notices, [{ message: "Preview stopped", level: "success" }]);

@@ -1,5 +1,4 @@
 import { execFileSync } from "node:child_process";
-// File evidence for contributor checks, not a product evidence store or an execution snapshot.
 import { createHash } from "node:crypto";
 import {
   lstatSync,
@@ -20,8 +19,6 @@ const limitation =
   "Live checkout, not an immutable snapshot. Endpoint captures cannot exclude transient edits, " +
   "including edits during capture. No claim of complete race detection or automatic evidence reuse.";
 
-/** Hash bytes, index entries and filesystem metadata. Never follow symlinks or silently ignore
- * unsupported entries. The scope is deliberately larger than changed files, not a test selector. */
 export function captureRevision(cwd, { production = false } = {}) {
   const problems = [];
   const entries = [];
@@ -72,7 +69,6 @@ export function captureRevision(cwd, { production = false } = {}) {
         .split("\0")
         .filter(Boolean),
     );
-    // Vite reads ignored/global-ignored env files too. Capture them without publishing values.
     for (const dir of [".", "web"]) {
       try {
         for (const name of readdirSync(join(cwd, dir)))
@@ -150,9 +146,7 @@ export function executionEnvironment(cwd, commands = ["npm", "git", "wt"]) {
           packages[name] = "unavailable";
         }
       }
-    } catch {
-      /* A fixture may have no web workspace. */
-    }
+    } catch {}
   }
   return {
     node: process.version,
@@ -178,8 +172,6 @@ export function revisionOutcome(before, after) {
   return before.identity === after.identity ? "endpoints-match" : "unstable";
 }
 
-// Persist running before acquiring resources, and terminal status only after cleanup. A hard kill
-// leaves running (incomplete), never a pass. Atomic rename prevents a half-written JSON record.
 export function saveRun(evidence, record) {
   const file = join(evidence, "run.json");
   writeFileSync(`${file}.tmp`, JSON.stringify(record, null, 2) + "\n");

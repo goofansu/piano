@@ -3,7 +3,6 @@ import { AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
-/** The folded part of a notice: the title says what happened, this says why, on request. */
 export function AlertDetails({
   label = "Details",
   children,
@@ -23,7 +22,6 @@ export function AlertDetails({
   );
 }
 
-/** A notice above the transcript: it slides in, and its details fold out on request. */
 export function Banner({
   variant,
   title,

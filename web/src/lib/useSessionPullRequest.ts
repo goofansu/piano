@@ -7,14 +7,6 @@ import type { PullRequestTarget } from "@/lib/sessionContext";
 import { createSessionPullRequest, pullRequestKey } from "@/lib/sessionPullRequest";
 import { useMachineId } from "@/lib/useMachine";
 
-/**
- * Only the selected session's `target` is observed (none where its pull request cannot be
- * addressed), and only while the registry links it (`link` is the catalog's). The module owns
- * freshness, focus/work refreshes and polling of visible active PR details; this hook passes the
- * session snapshot and what is on screen without deciding that policy. The details are the row
- * under the Changes toolbar, so they show while Changes does (`visible`); navigation owns whether
- * the link dialog is open, and the link may close it.
- */
 export function useSessionPullRequest(
   target: PullRequestTarget | undefined,
   link: SessionPullRequestLink | null | undefined,
@@ -23,9 +15,7 @@ export function useSessionPullRequest(
     visible,
     dialog,
   }: {
-    /** Changes is on screen for this session, where the pull request row shows. */
     visible: boolean;
-    /** The link dialog: linking one, or changing the saved link. */
     dialog: { open: boolean; onOpenChange: (open: boolean) => void };
   },
 ) {
@@ -34,7 +24,6 @@ export function useSessionPullRequest(
   latest.current = dialog;
   const [pr] = useState(() =>
     createSessionPullRequest({
-      // This mount's machine: the app remounts when the machine changes.
       api: (workspaceId, sessionId, action, options) =>
         sessionPullRequest(workspaceId, sessionId, action, { ...options, machineId }),
       notify: {
@@ -47,7 +36,6 @@ export function useSessionPullRequest(
       },
     }),
   );
-  // The catalog republishes an unchanged link as a new object; follow the link, not the object.
   const url = link?.url,
     source = link?.source,
     apiHost = link?.apiHost,
@@ -64,23 +52,18 @@ export function useSessionPullRequest(
     [pr, workspaceId, sessionId, registered, working, visible, dialog.open],
   );
   const state = useSyncExternalStore(pr.subscribe, pr.getState);
-  // Only the current session's value, even in the render in which the session changes (INV-07).
   const current = state.key === pullRequestKey(workspaceId, sessionId);
   return {
-    /** The session can be addressed: its pull request can be linked here. */
     addressable: !!target,
     value: current ? state.value : undefined,
     linked: current && state.linked,
     registered: current ? state.link : undefined,
-    /** Changes reads again when this moves: the registry's link as Changes compares by it. */
     changesTrigger: pullRequestTrigger(link),
     loading: current && state.loading,
     busy: current && state.busy,
     finding: current && state.finding,
     surface: current ? state.surface : "closed",
-    /** Opens the link dialog: to link one, or to change the saved link. */
     open: () => dialog.onOpenChange(true),
-    /** Leaves the dialog; a changed link stays as it was. */
     cancel: () => dialog.onOpenChange(false),
     link: pr.link,
     discover: pr.discover,

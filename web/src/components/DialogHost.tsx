@@ -13,7 +13,6 @@ import type { PendingDialogs } from "@/lib/piDialogs";
 import { useDialogAnswer } from "@/lib/useDialogAnswer";
 import { useLastShown } from "@/lib/useLastShown";
 
-/** Only the queue head may open a modal, and only for a confirmation. */
 export function DialogHost({
   pending: { head, surface, more, attachment },
   send,
@@ -21,7 +20,6 @@ export function DialogHost({
   pending: PendingDialogs;
   send: Client["send"];
 }) {
-  // The dialog animates closed after it leaves the queue, so it keeps the last question meanwhile.
   const confirmation = surface === "modal" ? head : undefined;
   const shown = useLastShown(confirmation);
   return shown ? (

@@ -1,7 +1,4 @@
 import { createHash } from "node:crypto";
-// The Pi the browser journeys talk to: `pi --mode rpc` for one session, without a model.
-// It resumes a session file's history, echoes each prompt with priced usage, and keeps a prompt
-// of exactly "hold" running until Stop. PIANO_TEST_AUDIT records every command it receives.
 import { appendFileSync, existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
@@ -11,12 +8,10 @@ const arg = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : unde
 const file = arg("--session");
 const entries =
   file && existsSync(file) ? readFileSync(file, "utf8").trim().split("\n").map(JSON.parse) : [];
-// Prompt templates as Pi offers them: each `--prompt-template` folder's direct `.md` files, by name.
 const promptCommands = args
   .flatMap((a, i) => (a === "--prompt-template" && existsSync(args[i + 1]) ? [args[i + 1]] : []))
   .flatMap((dir) => readdirSync(dir).filter((name) => name.endsWith(".md")))
   .map((name) => ({ name: name.slice(0, -3), source: "prompt" }));
-// Skills as Pi offers them from each `--skill` folder: one directory with a SKILL.md per skill.
 const skillCommands = args
   .flatMap((a, i) => (a === "--skill" && existsSync(args[i + 1]) ? [args[i + 1]] : []))
   .flatMap((dir) =>
@@ -27,7 +22,6 @@ const skillCommands = args
 const sessionId = entries[0]?.id ?? arg("--session-id") ?? "probe";
 const sessionFile =
   file ?? join(process.env.PI_CODING_AGENT_SESSION_DIR ?? process.cwd(), `${sessionId}.jsonl`);
-// A compaction entry replays as the summary message Pi's get_messages would report.
 const messages = entries
   .filter((e) => e.type === "message" || e.type === "compaction")
   .map((e) =>
@@ -35,7 +29,6 @@ const messages = entries
       ? { role: "compactionSummary", summary: e.summary, tokensBefore: e.tokensBefore }
       : e.message,
   );
-// As Pi does, start on the saved defaults (settings.json in the agent dir) unless a flag names one.
 const settings = (() => {
   try {
     return JSON.parse(
@@ -129,7 +122,6 @@ function handle(cmd) {
     case "extension_ui_response":
       return reply(`Answer: ${cmd.cancelled ? "cancelled" : cmd.value}`);
     case "get_state":
-      // Opt-in scratch failure, never probes or saved sessions. Remove the marker to retry.
       if (
         sessionId !== "probe" &&
         !file &&
@@ -161,7 +153,6 @@ function handle(cmd) {
     case "get_messages":
       return respond(cmd, { messages });
     case "get_entries": {
-      // Extensions' custom entries come first, as Piano's dispatch record does in a real file.
       const all = [
         ...entries.filter((e) => e.type === "custom"),
         ...messages.map((message, i) => ({ type: "message", id: `e${i}`, message })),
@@ -245,7 +236,6 @@ function handle(cmd) {
         let line = 0;
         streamTimer = setInterval(() => {
           line += 1;
-          // Observe production continuing while the browser is offline, independently of its view.
           audit({ command: "stream", sessionId, line, pid: process.pid });
           out({
             type: "message_update",

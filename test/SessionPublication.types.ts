@@ -3,8 +3,6 @@ import type { DialogRequest } from "../server/PiRecords.ts";
 import type { makeSessionDialogs } from "../server/SessionDialogs.ts";
 import type { SessionPublication } from "../server/SessionPublication.ts";
 
-// Compile-only API contract: lock-only mutation must be obtained from a transaction.
-// Not executed; npm run typecheck verifies both permitted and rejected calls.
 export const publicationContract = (
   publication: SessionPublication,
   dialogs: ReturnType<typeof makeSessionDialogs>,
