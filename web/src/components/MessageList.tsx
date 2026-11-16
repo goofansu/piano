@@ -789,7 +789,6 @@ function UserMessage({
               }}
             >
               {open ? "Show less" : "Show more"}
-              <DisclosureChevron open={open} />
             </Button>
           </div>
         )}
