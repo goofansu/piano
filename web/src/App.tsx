@@ -114,7 +114,7 @@ function MachineApp() {
             <AppLayout
               navigationTitle={settings ? "Settings navigation" : "Folders and sessions"}
               navigation={
-                offers.settings && settings ? (
+                settings ? (
                   <SettingsNavigation
                     section={settings}
                     onSelect={openSettings}
@@ -126,7 +126,7 @@ function MachineApp() {
               }
               content={
                 <>
-                  <LayoutView key={state.view.kind} active={!offers.settings || !settings}>
+                  <LayoutView key={state.view.kind} active={!settings}>
                     {state.view.kind === "new" ? (
                       <NewSession
                         state={state}
@@ -186,7 +186,7 @@ function MachineApp() {
                       <SessionView state={state} send={send} captureSend={client.captureSend} />
                     )}
                   </LayoutView>
-                  {offers.settings && settings && (
+                  {settings && (
                     <LayoutView>
                       <SettingsPage section={settings} state={state} client={client} />
                     </LayoutView>

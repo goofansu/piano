@@ -224,7 +224,8 @@ A remote session's menu, in the sidebar and in its header, offers **Rename**, **
 **Archive** and **Delete** as on Local. Archive and Delete stop the session on the remote, and
 Delete removes its history there. To unarchive a remote session, use **Settings → Data controls**
 on that remote's own Piano. Unarchive and Archive all are not offered or accepted through a peer;
-Settings remains local-only.
+Settings remains local-only: a remote's `/settings/...` address opens its New page and
+corrects the address.
 
 ### Artifacts and pull request
 
