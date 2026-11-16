@@ -1,9 +1,59 @@
-# piano
+# AGENTS.md
 
-## Words
+## Verification
 
-Use [the glossary](docs/glossary.md) for names in code, UI and docs. When talking to the user,
-name what they see in the UI ("Piano's database", not "the registry").
+Before changing behavior, name the claim, relevant invariant and smallest check that could disprove
+it. Inspect existing coverage first. Add a regression test only for a meaningful failure that is not
+already protected; test observable contracts, not private helpers or mock choreography. For a bug,
+reproduce it before fixing it when feasible, then show the same check passing.
+
+### What to add and run
+
+| Change | Verification |
+| --- | --- |
+| Documentation or comments only | Review accuracy, links and the diff; confirm no runtime or tooling directives changed. No tests or app run needed. |
+| Logic, protocol or lifecycle behavior | Add or extend a focused module test for an uncovered failure at the public boundary. Run `node --test --import ./test/setup.ts test/<name>.test.ts`. |
+| Application behavior | Observe the affected journey on scratch Piano, using an existing browser journey or a focused `agent-browser` check. Module tests alone do not prove the user journey. |
+| UI strings, controls or styling | Apply Quiet UI and choose evidence using the UI evidence scope below: a focused capture for a local cosmetic edit, the affected journey for behavior, broader comparisons for shared styles. |
+| New critical path | Add a journey in `test/browser/`; otherwise extend relevant existing coverage rather than adding another browser journey. |
+| New transcript row kind | Extend and run `node test/browser/transcript-rows.mjs <evidence-directory>`. Its gutter glyph must centre on the first text line; a screenshot alone is insufficient. |
+
+For **code or dependency changes**, run `npm run verify -- <evidence-directory>`: typecheck, lint
+and the full module suite must all pass. It uses fake Pi and needs no model credentials. Focused
+checks do not replace this baseline, and the baseline does not run browser journeys. Run an affected
+journey with `node test/browser/<journey>.mjs <evidence-directory>`; `npm run test:browser` runs the
+committed suite. Use the verification routes below to choose the check, not every journey by default.
+
+Retain actual command/browser output on the PR, outside Git, tied to the tested revision and
+environment. Report pass/fail, skipped or blocked checks, and limitations. Never weaken assertions
+to make a change green. Stop once the claim and relevant risk are covered and required gates pass.
+
+### Scratch instance
+
+Use `verify-piano` for scratch launch, doctor, browser checks, evidence and cleanup. Committed
+browser journeys own their scratch setup; do not launch another instance beside them. Leave the
+user's real Piano, backend and database alone (local 7070; exe.dev 8000/8001).
+
+Radix menus/popovers open on pointer events: use `agent-browser click`, not DOM `.click()` in `eval`.
+Prefer fake Pi; when a real model call is needed, prompt "Reply with exactly: X" and read it back.
+
+## Document routes
+
+Read the matching entry before working on that surface; follow its linked detail when needed.
+
+| When | Read |
+| --- | --- |
+| Choosing tests or evidence | [Testing policy](docs/testing.md), [commands and prerequisites](docs/development.md#tests) |
+| Verifying application behavior | [verify-piano](.agents/skills/verify-piano/SKILL.md) and its [feature map](.agents/skills/verify-piano/features/README.md#features) |
+| Naming code, UI or docs | [Glossary](docs/glossary.md); use the user's UI names, such as "Piano's database", not "the registry" |
+| Changing UI, including strings and controls | [Quiet UI](docs/quiet-ui.md), [UI evidence scope](docs/testing.md#ui-evidence-scope), [Linear design language](docs/design-moonstone.md#linear) |
+| Writing Effect code or upgrading Effect | [Effect](docs/effect.md) |
+| Adding, renaming or moving browser-storage keys | [Browser storage](docs/browser-storage.md) |
+| Changing architecture or workflow | [Development direction](docs/README.md), then its ADR, invariants and roadmap; cite affected invariant IDs in the PR |
+| Adding or substantially changing a feature | [Feature locality](docs/architecture-reviews.md#feature-locality): one starting document linking owners, interfaces and verification |
+| Proposing module-deepening candidates | [Architecture reviews](docs/architecture-reviews.md) |
+| User-authorized exe.dev deployment | [Deployment routes and policy](docs/hosted-development.md): `deploy-exe-dev` provisions a new VM; `sync-exe-dev` updates all tagged VMs. Both skills are user-invoked only. |
+| GitHub setup or permission failure on exe.dev | [GitHub integration](https://exe.dev/docs/integrations-github.md) |
 
 ## Code comments
 
@@ -16,82 +66,18 @@ Preserve required legal notices and functional tooling directives. Give lint/typ
 truthful, concise reason. Keep module overviews, API explanations and test narration in the owning
 docs rather than source comments. Leave upstream/vendor comments intact.
 
-## Verification
-
-Before changing behavior, name the claim, relevant invariant and smallest useful check. Follow
-[the testing policy](docs/testing.md) for regression tests and evidence. Documentation-only changes
-need document/link review, not tests or an app run.
-
-- **Code or dependency changes:** run `npm run verify`, the thin wrapper over `npm run typecheck`,
-  `npm run lint` and `npm test` (module tests against `test/fake-pi.mjs`, no credentials). All three
-  must pass; focused checks and browser journeys remain explicit ([commands](docs/development.md#tests)).
-- **Application behavior:** observe the affected journey on a [scratch instance](#scratch-instance)
-  and keep the output as PR evidence.
-- **UI changes:** apply the [quiet UI checks](docs/quiet-ui.md#checks) and choose evidence using
-  [UI evidence scope](docs/testing.md#ui-evidence-scope).
-- **Critical paths** (start a session; open and continue one) live in `test/browser/`; add a
-  journey there only for a new critical path.
-- **Model calls** cost real credits: prompt "Reply with exactly: X" and read the reply back.
-- **Transcript rows:** a new row's gutter glyph centres on its first text line. Add the row kind
-  to `test/browser/transcript-rows.mjs` and run it; the journey measures every row (see
-  [alignment](docs/testing.md#alignment)); a screenshot alone is insufficient.
-- **Radix menus and popovers** open on pointer events: use `agent-browser click`, not a DOM
-  `.click()` from `eval`.
-
-Report command outcomes, the tested revision and environment, and limitations. Stop once the
-relevant risk is covered.
-
-### Scratch instance
-
-The user's own Piano (local on 7070; on exe.dev the systemd units on 8000/8001) runs on their real
-database: leave it, its backend and its database alone. Verify on a scratch instance that the
-`verify-piano` skill launches, drives and tears down.
-
-## Design
-
-Follow Linear's design and interaction language (see [the Linear notes](docs/design-moonstone.md#linear)
-and Linear's [agent interaction guidelines](https://linear.app/developers/aig)); Codex and T3 Code
-remain references for the web harness around Pi, not for how Piano looks.
-
-Before adding or changing UI, including strings and controls, read [Quiet UI](docs/quiet-ui.md).
-
-## Server
+## Safeguards
 
 Keep Pi protocol details behind `server/PiSessions.ts`. Extend its public contract through
 `SessionAction`/`SessionEvent` in `shared/wire.ts`; test through that contract.
-Name modules in PascalCase after their export; `main.ts` is the sole entry point.
+Name server modules in PascalCase after their export; `main.ts` is the sole entry point.
 
 Use workspace/session IDs in URLs, never filesystem paths. Send arbitrary paths in POST JSON bodies
 to keep them out of URL logs.
 
-## Effect
-
-Before writing Effect code or upgrading Effect packages, read [Effect](docs/effect.md).
-
-## Browser storage
-
-Before adding, renaming or moving a `localStorage` or `sessionStorage` key, read
-[browser storage](docs/browser-storage.md).
-
-## Direction and guardrails
-
-For architecture and workflow changes, read [docs/README.md](docs/README.md), then the ADR,
-development invariants and roadmap it links, and cite affected invariant IDs in the PR. The short
-form of INV-01: Pi owns history, Git owns repository facts, Worktrunk sits behind the lifecycle
-adapter, Piano owns workspace and integration policy.
-
-### Feature locality
-
-For a new or substantially changed feature, group what genuinely changes together within its
-runtime behind a small interface; preserve `web → shared ← server`. Give it one obvious starting
-place: a `docs/<feature>.md` page naming the owning modules per runtime, their exposed interface,
-module tests, and the `verify-piano` feature entry / browser journey. Link that page from the
-feature’s entry in the [verification map](.agents/skills/verify-piano/features/README.md#features).
-This is not a folder migration and does not apply retroactively.
-
-## Architecture reviews
-
-Before proposing module-deepening candidates, read [architecture reviews](docs/architecture-reviews.md).
+Rebuild, restart or deploy the user's running Piano only when asked; coding, committing and pushing
+do not authorize it. Piano has no application authentication: on exe.dev keep it on loopback behind
+private authenticated access (INV-11).
 
 ## Branches
 
@@ -105,15 +91,7 @@ Before proposing module-deepening candidates, read [architecture reviews](docs/a
   a PR for the user's review and merge. If checks cannot pass or the next step needs a user decision,
   stop and ask, naming the blocker.
 
-## Deploy
-
-Rebuild, restart or deploy only when the user asks. On an exe.dev VM, follow
-[the shortest deploy path](docs/hosted-development.md#shortest-deploy-path); to update every
-machine, the user runs the `sync-exe-dev` skill (user-invoked only). On exe.dev the server has no
-authentication: it stays on loopback behind exe.dev private access (INV-11).
-
 ## GitHub on exe.dev
 
 Prefix GitHub CLI commands with `GH_HOST=github.int.exe.xyz`. Pass `--repo goofansu/piano` where
-supported; `gh repo view` takes `goofansu/piano` as a positional argument. Setup and permission
-failures: [exe.dev GitHub integration](https://exe.dev/docs/integrations-github.md).
+supported; `gh repo view` takes `goofansu/piano` as a positional argument.

@@ -9,7 +9,7 @@ Use **Fork session** in the latest completed assistant answer's action row, back
 It preserves the answer the user was looking at. A literal Pi `fork` command does not.
 
 Also make the same action available in the session menu and Mod+K Session commands, following
-Piano's [command-surface policy](../../AGENTS.md#design). A latest-message action is a good
+Piano's [command-surface policy](../quiet-ui.md#command-palette-and-shortcuts). A latest-message action is a good
 contextual shortcut, not the only discoverable/keyboard-accessible surface.
 
 Keep a different action, **Fork before this message**, for revising an earlier user prompt.

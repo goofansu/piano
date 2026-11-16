@@ -387,7 +387,7 @@ behavior through `agent-browser` on a scratch instance that
 Documentation-only work needs document review and link checks, not a browser smoke test.
 
 In the PR, summarize what changed, what evidence supports it, the tested revision/environment and
-any material gaps. When the [feature-locality rule](../AGENTS.md#feature-locality) applies, also name
+any material gaps. When the [feature-locality rule](architecture-reviews.md#feature-locality) applies, also name
 the feature’s starting place (`docs/<feature>.md`). Mention whether a regression test was added or
 why existing coverage/inspection was sufficient. Short explanations are enough; do not create a
 second evidence database in the registry or a large ritual for small edits.

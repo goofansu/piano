@@ -1,7 +1,7 @@
 # One-line session header — October 24, 2026
 
 Question: what is the minimal, useful composition of the session header as one line? Constraints
-are the [quiet UI](../../AGENTS.md#quiet-ui) checks (Kind, Once, Same names, Same shape, Feedback,
+are the [quiet UI](../quiet-ui.md#checks) checks (Kind, Once, Same names, Same shape, Feedback,
 Details on demand), the shared structure rule "one header shape on the session, the right sidebar
 and Settings (a title, context beneath it when that adds something, controls at the end)" and "the
 sidebar row owns a session's state, so the header repeats nothing" (`AGENTS.md:91-96`), and

@@ -33,7 +33,7 @@ legacy apps must be explicitly stopped before upgrade.
 Contributor skill preferences are optional; see the development handoff.
 When developing Piano, follow [evidence-based development and testing](testing.md): choose checks
 from the risk and acceptance claim, and add regression tests only where they provide durable value.
-For new or substantially changed features, follow the [feature-locality practice](../AGENTS.md#feature-locality).
+For new or substantially changed features, follow the [feature-locality practice](architecture-reviews.md#feature-locality).
 
 [Runtime ownership](runtime-ownership.md) maps transport, publication, dialog and shutdown
 responsibilities and failure policy behind the public PiSessions interface.
