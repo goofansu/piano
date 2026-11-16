@@ -172,10 +172,11 @@ sessions there; Local's defaults are unchanged. Cmd+K searches
 only the selected machine and offers a **Switch to …** command for each configured machine. A remote session's
 address is `/m/eng-1/s/<sessionId>`; reload and back/forward retain that machine.
 
-**New session** (or **New session here** in Cmd+K) starts a session on the selected machine. Its
-directory picker lists only the folders open on that machine, and **New session here** is
-unavailable for a session whose folder is closed there (pinned and project sessions stay listed);
-its first message may contain text, images or both.
+**New session** (or **New session here** in Cmd+K or on an open folder's sidebar row) starts a
+session on the selected machine. Its directory picker lists only the folders open on that machine,
+and **New session here** is unavailable for a session whose folder is closed there (pinned and
+project sessions stay listed); its first message may contain text, images or both. A remote
+folder's row has no folder menu: Close stays on the owning Piano.
 The session runs and stays on the remote. A worktree for parallel work comes from the remote
 session's own dispatch, which runs on the remote, not from this picker.
 
