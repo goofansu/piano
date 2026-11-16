@@ -108,7 +108,14 @@ test("resizing follows the pointer within bounds and remembers the width it ends
   assert.equal(p.state().width, 330);
   p.layout.finishResize();
   assert.deepEqual(released, ["released"]);
-  assert.deepEqual(p.state(), { collapsed: false, width: 330, resizing: false, mobileOpen: false });
+  assert.deepEqual(p.state(), {
+    collapsed: false,
+    width: 330,
+    resizing: false,
+    mobileOpen: false,
+    wide: true,
+    hidden: false,
+  });
   assert.equal(p.storage.get("piano.sidebarWidth"), "330");
   p.layout.resetWidth();
   assert.equal(p.state().width, SIDEBAR_WIDTH.default);
@@ -128,7 +135,14 @@ test("dragging below 160px collapses and keeps the remembered width", () => {
   assert.equal(p.state().width, 320);
   assert.equal(p.storage.get("piano.sidebarWidth"), "320");
   p.layout.show();
-  assert.deepEqual(p.state(), { collapsed: false, width: 320, resizing: false, mobileOpen: false });
+  assert.deepEqual(p.state(), {
+    collapsed: false,
+    width: 320,
+    resizing: false,
+    mobileOpen: false,
+    wide: true,
+    hidden: false,
+  });
 });
 
 test("a cancelled resize, or a collapse during one, restores the remembered width", () => {
@@ -146,6 +160,8 @@ test("a cancelled resize, or a collapse during one, restores the remembered widt
     width: SIDEBAR_WIDTH.default,
     resizing: false,
     mobileOpen: false,
+    wide: true,
+    hidden: true,
   });
   p.layout.finishResize();
   assert.equal(released, 2);
@@ -207,4 +223,27 @@ test("closing the sheet returns focus to where it was, else to a visible show-si
   p.layout.closeMobile();
   p.layout.restoreFocus();
   assert.equal(p.focused(), null, "no visible control to fall back to");
+});
+
+test("crossing the breakpoint tells subscribers whether the sidebar is hidden", () => {
+  const p = page();
+  const shown = p.state();
+  let notified = 0;
+  p.layout.subscribe(() => notified++);
+  p.resize(false);
+  assert.equal(notified, 1, "narrowing with the sheet already closed still notifies");
+  assert.equal(shown.wide, true);
+  assert.equal(shown.hidden, false, "the desktop column is shown");
+  assert.equal(p.state().wide, false);
+  assert.equal(p.state().hidden, true, "the closed sheet hides the sidebar");
+  p.layout.toggle();
+  assert.equal(p.state().hidden, false);
+  p.resize(true);
+  assert.equal(p.state().hidden, false, "widening shows the remembered column");
+  p.layout.hide();
+  assert.equal(p.state().hidden, true);
+  notified = 0;
+  p.resize(false);
+  assert.equal(notified, 1, "narrowing a collapsed column still notifies");
+  assert.equal(p.state().hidden, true);
 });
