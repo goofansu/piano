@@ -76,6 +76,9 @@ These checks protect the supported semantics, not arbitrary future SDK releases 
 
 ## Failed creation and reconnect
 
+For implementation work on starting a session and recovering a failed or uncertain start, begin at
+[Developer navigation: session creation and recovery](#developer-navigation-session-creation-and-recovery).
+
 A `create_session` claims its durable `attemptId` before checkout creation, session registration
 or Pi startup. A client that sends no `attemptId` makes no claim: its creation runs once and cannot
 be reconciled, because a `selectionId` lives only as long as its connection. The claim stores
@@ -104,6 +107,172 @@ another session is announced with a toast. An uncertain outcome offers **Check s
 Creation claims survive restart; drafts remain browser-memory state, as other drafts do. Reloading
 or closing the tab does not persist attachment bytes or automatically retry an abandoned attempt.
 The caller must retain the attempt identity to reconcile an unnamed start after losing that memory.
+
+### Developer navigation: session creation and recovery
+
+This is the starting place for starting a session from the New page, a project home or dispatch,
+and for what the user sees when the start is refused, fails or stays uncertain. It spans the
+modules below, not one feature module. Preserve `web → shared ← server`: the browser decides
+where it offers to start and keeps the draft; `shared/creationVerdict.ts` and
+`shared/inputVerdict.ts` are the one reading of the server's answer; the server owns the durable
+claim, the registry writes and Pi's startup, and only it decides that nothing was created.
+[Image attachments](image-attachments.md) owns the input policy,
+[Session dispatch](session-dispatch.md#results-and-limits) the tools' result vocabulary, and
+[Remote Pianos](remote-piano.md#developer-navigation) the peer slice.
+
+Where to begin: where a session may start, `startsSessionIn` in
+[`machineOffers.ts`](../web/src/lib/machineOffers.ts) and the rules in
+[`sessionContext.ts`](../web/src/lib/sessionContext.ts); what the screen does with an answer, the
+`selection_rejected`, `error` and `connected` cases of [`store.ts`](../web/src/store.ts) with
+[`firstMessage.ts`](../web/src/lib/firstMessage.ts); what an answer means,
+[`creationVerdict.ts`](../shared/creationVerdict.ts); what the server records or removes,
+[`CreationAttempts.ts`](../server/CreationAttempts.ts) and `create` in
+[`SessionHosts.ts`](../server/SessionHosts.ts).
+
+#### Web ownership and interfaces
+
+- [`NewSession.tsx`](../web/src/components/NewSession.tsx) is the UI caller: its submit hands the
+  draft to `useImageSend` ([`imageSender.ts`](../web/src/lib/imageSender.ts)) with a callback
+  that builds `newSessionCommand` ([`composerControl.ts`](../web/src/lib/composerControl.ts))
+  and adds the draft's fresh `inputId` as the `attemptId` (the command builder itself sets none);
+  the sender delivers it through `Client.captureSend`, so a send that completes after navigation
+  or a reconnect is not sent. **Retry** is the same submit over
+  the restored draft, a new attempt; **Dismiss** dispatches `dismiss_creation`.
+- [`machineOffers.ts`](../web/src/lib/machineOffers.ts) exposes `startsSessionIn(state, cwd)`,
+  the one rule for where this machine offers to start: Local anywhere whose checkout is not
+  gone, a remote only in a directory listed under one of its open folders. Its callers are the
+  New page's default directory in [`client.ts`](../web/src/lib/client.ts), the Directory
+  picker's roots (`directoryChoices`), a folder row's and a session's New session here
+  ([`folderCommands.ts`](../web/src/lib/folderCommands.ts),
+  [`sessionCommands.ts`](../web/src/lib/sessionCommands.ts)) and a project home's directory.
+- [`sessionContext.ts`](../web/src/lib/sessionContext.ts) exposes `checkoutMissingAt`, the one
+  decision that a checkout is gone: the selected session's own `checkoutMissing` state, a session
+  reference unavailable for its checkout, or a folder root Git lists as missing (a linked
+  worktree's, unknown or non-Git status is not evidence). Trust, New session here, Rename, the
+  focused directory, the composer and the status line all read it. It also exposes
+  `directoryChoices`, `startPlace` and `focusedDirectory` for the New page.
+- [`client.ts`](../web/src/lib/client.ts) sends `create_session`: it mints a `selectionId` and
+  shows the first message only once the socket took the frame; a send known not sent keeps the
+  draft on the New page with a warning. On reconnect with an uncertain first message and no
+  session named, it sends `select` with the `attemptId`, a read-back, never the creation again. A
+  verdict for a creation no longer on screen is announced as a toast.
+- [`firstMessage.ts`](../web/src/lib/firstMessage.ts) exposes `PendingCreate` and its
+  transitions `started`, `connectionLost`, `rejected`, `failed` and `reconcile`, under which Pi's
+  own submission receipt supersedes the browser's record. [`store.ts`](../web/src/store.ts)
+  decides when each applies: a `refused` verdict returns to the New page with the attempt's
+  options; `created_not_sent` keeps the created session on screen with its input in that
+  session's draft; anything else is uncertain and is never resent.
+- [`messageDraft.ts`](../web/src/lib/messageDraft.ts) exposes `createDrafts()`, whose `submit`
+  and `prepareSubmit` consume the draft and mint the `inputId`, and whose `follow(client)`
+  returns input a frame declares `not_sent` to its draft ahead of newer typing: the New draft for
+  a refused creation, the created session's draft when the frame names one.
+- [`sessionNotices.ts`](../web/src/lib/sessionNotices.ts) owns the banners on a session: Unable
+  to open session with **Retry** (a plain `select`), and an uncertain first message with
+  **Check start** (the same `select` with `attemptId` that reconnect sends). The New page's Could
+  not start session banner with Retry and Dismiss is rendered by `NewSession.tsx`.
+
+#### Shared contracts
+
+- [`wire.ts`](../shared/wire.ts) defines `create_session { selectionId, attemptId?, cwd,
+  projectId?, inheritProject?, options, worktree?, text?, attachments, preparedImages? }` and the
+  frames that end it: `selected` names the session; `selection_rejected` with `inputId` refuses
+  the named creation, nothing created or sent; `error` with `inputId`, `cwd` and `sessionId` says
+  the session exists but Piano refused its first input before Pi saw it; `selection_failed` says
+  an admitted attachment failed and makes no claim about the creation.
+- [`creationVerdict.ts`](../shared/creationVerdict.ts) exposes `creationVerdictOf(frame, {
+  attemptId, sessionNamed })`, which reads one result frame as `refused`, `created_not_sent`,
+  `created_uncertain` or `uncertain`, and `refusedAttempt(frame)`. The browser (`store.ts`,
+  `client.ts`) and the dispatch extension read every creation here; a rejection naming nothing
+  leaves the creation uncertain.
+- [`inputVerdict.ts`](../shared/inputVerdict.ts) exposes `inputVerdictOf(frame)`: `not_sent` for
+  an `error` or `selection_rejected` naming an input, else Pi's submission receipt. Drafts and the
+  dispatch extension decide here whether input may be sent again.
+
+#### Server ownership and interfaces
+
+- [`ClientDispatch.ts`](../server/ClientDispatch.ts) admits `create_session` as a claim that is
+  never coalesced with navigation. Its unanswered policy maps a refusal or `SessionNotCreated` to
+  `selection_rejected` with `inputId`, `InputNotSent` to an `error` naming the created session,
+  and any other failure to a plain `error`; a refused delivery of a reused `attemptId` whose
+  original may have run answers that the original must be inspected. Prepared peer images are
+  claimed here, before creation.
+- [`ClientSessions.ts`](../server/ClientSessions.ts) exposes `create`: with an `attemptId` it
+  calls `CreationAttempts.begin`, a duplicate reconciles instead of creating, and the first prompt
+  is sent only after this client has attached, with `inputId` equal to the `attemptId`. Its
+  `reconcile` answers a `select` with `attemptId` from the recorded outcome: `failed` as
+  `selection_rejected` with `inputId`, `created` by showing the session, `uncertain` or
+  `unclaimed` as an `error` saying nothing was restarted or resent.
+- [`CreationAttempts.ts`](../server/CreationAttempts.ts) exposes `begin(request, create)` and
+  `outcome(id, { wait })`. `begin` answers `started` for a new identity or `duplicate` for the same
+  identity with the same input (a fingerprint of the destination, options, text and attachment
+  bytes), and fails with a rejection for the same identity with different input, creating
+  nothing. A started creation runs under server ownership and records `created`, `failed` or
+  `uncertain` through the registry's `claimCreation` and `saveCreation`
+  ([`CreationAttempt.ts`](../server/CreationAttempt.ts): identity, destination and state, never
+  prompt bytes).
+- [`SessionHosts.ts`](../server/SessionHosts.ts) exposes `create(spec)`: the project check
+  (including dispatch inheritance), the destination or new worktree through `FolderWorktrees`
+  (INV-06), `attempt.place(cwd)`, the Starting announcement, then Pi. `SessionNotCreated` means no
+  reference remains and no input was sent: a fresh reference is removed only after confirmed child
+  exit and conclusively absent history, a kept worktree is named in `detail`, and
+  `checkoutUnconfirmed` makes the sidebar rediscover. Every other failure keeps its evidence as a
+  `PiSessionError`, which the browser and the attempt record read as uncertain.
+- [`PeerScope.ts`](../server/PeerScope.ts)'s `peerVerdict` admits a peer's `create_session` only
+  in an open registered directory with the creation options the slice allows; the browser's
+  `startsSessionIn` offers no more than this, and the server decides.
+
+#### Tests and verification paths
+
+Module checks are grouped by the contract they protect:
+
+- Where a session may start: [`SessionContext.test.ts`](../test/SessionContext.test.ts) covers
+  the Directory picker offering only roots on disk, one rule for a folder whose root is missing,
+  New session here asking the machine's rule, and a missing checkout decided once;
+  [`Client.test.ts`](../test/Client.test.ts) covers the New page's default directory and a
+  remote's remembered directory giving way to an open folder;
+  [`RemoteSlice.test.ts`](../test/RemoteSlice.test.ts) checks every enabled New session here on a
+  remote against the peer's admission; [`MachineOffers.test.ts`](../test/MachineOffers.test.ts)
+  covers the offers themselves.
+- Verdicts and the draft: [`CreationVerdict.test.ts`](../test/CreationVerdict.test.ts) reads
+  each result frame; [`Client.test.ts`](../test/Client.test.ts) covers the minted selection, a
+  rejection marking only its own first message, a rejection naming nothing leaving it uncertain,
+  reattachment failures never resending creation, and the toast for a creation that fails after
+  the person moved on; [`DraftSubmission.test.ts`](../test/DraftSubmission.test.ts) covers a
+  failed creation restoring text, quotes, images and options with reconnect only reading the
+  original attempt, a refused first input returning to the created session's draft, a known
+  not-sent message staying on the New page, and a throwing send opening the session as uncertain;
+  [`Navigation.test.ts`](../test/Navigation.test.ts) covers Settings preserving a failed
+  selection's Retry and an uncertain creation without replay;
+  [`SessionNotices.test.ts`](../test/SessionNotices.test.ts) covers the uncertain first message's
+  wording. No module test asserts the Check start action by name; the read-back it sends is the
+  one reconnect sends, covered above.
+- Durable claims: [`CreationAttempts.test.ts`](../test/CreationAttempts.test.ts) covers a reused
+  identity refused while and after the original runs, the read-back waiting for the original, and
+  claims surviving restart; [`ClientSessions.test.ts`](../test/ClientSessions.test.ts) covers a
+  failed attempt as a tombstone across restart, a claim interrupted before startup staying
+  uncertain, a duplicate waiting for the original and attaching, a creation naming no attempt
+  making no claim, and the registry writes landing before Pi sees the first prompt.
+- Startup failure evidence: [`SessionHosts.test.ts`](../test/SessionHosts.test.ts) covers removing
+  only a conclusively empty fresh reference after Pi exits, a killed Pi still being a confirmed
+  stop, a never-spawned Pi leaving no reference, a done project getting its mark back, and
+  preserved evidence for saved, unreadable, unattributed and stop-unconfirmed startups;
+  [`ClientDispatch.test.ts`](../test/ClientDispatch.test.ts) covers a missing directory rejected
+  as never started and a first input refused before Pi saw it reading not sent.
+- The dispatch reader: [`SessionDispatch.test.ts`](../test/SessionDispatch.test.ts) covers a
+  refused creation naming and claiming nothing, and a send that throws or a start abandoned after
+  sending staying uncertain.
+
+The committed journey is [`start-session.mjs`](../test/browser/start-session.mjs), run by
+`npm run test:browser` or alone with `node test/browser/start-session.mjs <evidence-directory>`:
+its creation steps cover a successful start with directory, model, effort and project, the reply,
+and a reload that sends nothing again. It does not exercise a failed start. Those paths are the
+verify-piano recipes in [Start a session](../.agents/skills/verify-piano/features/start-session.md):
+`failed-start` (the browser fake's opt-in `PIANO_TEST_STARTUP_FAILURE` marker, confirmed rejection
+with the draft and options restored, Retry once, Dismiss), `not-sent`, `choose-folder` and the
+`remote-new` prerequisite, plus `refusals` in
+[Session dispatch](../.agents/skills/verify-piano/features/session-dispatch.md). Connection-loss
+reconciliation and Check start have no browser journey; the module tests above are their
+evidence. The fixture is a process-boundary refusal, not a real Pi startup failure.
 
 ## Publication mutation contract (PIN-28)
 

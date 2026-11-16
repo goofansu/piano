@@ -63,7 +63,8 @@ the [feature-locality rule](../../../../AGENTS.md#feature-locality).
   message and reply, reload without resending,
   navigation-retained drafts, confirmed failed-start recovery, image attachment/refusal/preview,
   and a kept draft when not sent.
-  Docs: [Remote Pianos](../../../../docs/remote-piano.md).
+  Docs: [Session creation and recovery](../../../../docs/runtime-ownership.md#developer-navigation-session-creation-and-recovery),
+  [Remote Pianos](../../../../docs/remote-piano.md).
 - [Open and continue a session](./open-session.md): open from the sidebar, palette or project
   home or Alt+Up/Down; read history and cost; follow up; edit queued messages without stopping;
   stop a running reply; archive and delete from the row's
@@ -72,7 +73,7 @@ the [feature-locality rule](../../../../AGENTS.md#feature-locality).
   the published-artifact menu, including codemode receipts; unavailable-history recovery and
   the configured-peer prerequisite for session actions, trust and machine memory, including
   peer image/voice coverage limits.
-  Docs: [Session navigation](../../../../docs/sidebar-session-navigation.md),
+  Docs: [Session navigation](../../../../docs/sidebar-session-navigation.md#developer-navigation),
   [Transcript performance](../../../../docs/session-performance.md),
   [Remote Pianos](../../../../docs/remote-piano.md).
 - [Projects index](./projects-index.md): `/projects` from the sidebar row and the palette; one row
@@ -90,7 +91,8 @@ the [feature-locality rule](../../../../AGENTS.md#feature-locality).
 - [Session dispatch](./session-dispatch.md): `scripts/dispatch-session.ts` start, `--worktree`,
   `follow-up`, `status` and `list --project`, project inheritance/opt-out, its refusals,
   and a dialog that needs input.
-  Docs: [Session dispatch](../../../../docs/session-dispatch.md).
+  Docs: [Session dispatch](../../../../docs/session-dispatch.md),
+  [Session creation and recovery](../../../../docs/runtime-ownership.md#developer-navigation-session-creation-and-recovery).
 - [Changes and files](./changes-and-files.md): the Changes pane for a workspace's diff and its
   pull request, and the desktop session rail's Environment and Outputs (no Links section or
   narrow rail); peer-owned surfaces and their prerequisite.
