@@ -12,7 +12,12 @@ import {
 } from "./projectCommands.ts";
 import { inSidebarGroups, sessionCatalog, sessionLabel } from "./sessionCatalog.ts";
 import { canRenameSession } from "./sessionCommands.ts";
-import { sessionMutable, sessionReady, sessionWorking } from "./sessionContext.ts";
+import {
+  sessionMutable,
+  sessionReady,
+  sessionReferenceChangeable,
+  sessionWorking,
+} from "./sessionContext.ts";
 import { previewClaimHolds, sessionHasPreview, stopPreview } from "./sessionPreview.ts";
 import type { SendDisposition } from "./ws.ts";
 
@@ -90,7 +95,8 @@ export function answerForm(
     case "project": {
       const { assign, newPage } = form.dialog;
       const saved = typeof input === "string" ? undefined : checkProjectDraft(input).saved;
-      if (!state.connected || !saved) return { allowed: false };
+      if (!state.connected || !saved || (assign && !sessionReferenceChangeable(state, assign)))
+        return { allowed: false };
       const { name, instructions } = saved;
       const id = newId();
       return {

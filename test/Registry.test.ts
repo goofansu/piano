@@ -482,6 +482,36 @@ test("PIN-152: reversible archive preserves metadata and refuses stale writes af
   );
 });
 
+test("INV-01: every user write to a session reference refuses an archived reference with one detail", async (t) => {
+  const f = fixture(t),
+    cwd = join(f.root, "folder");
+  await f.run(
+    Effect.gen(function* () {
+      const r = yield* Registry;
+      yield* r.addSession(cwd, "one", "One");
+      yield* r.saveProject({ id: "launch", name: "Launch" });
+      yield* r.archiveSession(cwd, "one");
+      const before = yield* r.get;
+      const writes = {
+        pinSession: r.pinSession(cwd, "one", true),
+        setSessionChangesScope: r.setSessionChangesScope(cwd, "one", "uncommitted"),
+        assignProject: r.assignProject(cwd, "one", "launch"),
+        "saveProject with assign": r.saveProject(
+          { id: "assigned", name: "Assigned" },
+          { cwd, sessionId: "one" },
+        ),
+      };
+      for (const [name, write] of Object.entries(writes))
+        assert.equal(
+          yield* Effect.match(write, { onFailure: (e) => e.detail, onSuccess: () => "succeeded" }),
+          "Session reference is unavailable. Refresh and try again.",
+          name,
+        );
+      assert.deepEqual(yield* r.get, before, "no refused write changes Piano's database");
+    }),
+  );
+});
+
 for (const version of [4, 5, 6]) {
   test(`INV-01: version-${version} migration retires notification stores and preserves unrelated data`, async (t) => {
     const f = fixture(t);

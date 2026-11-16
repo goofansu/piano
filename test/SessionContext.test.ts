@@ -466,12 +466,19 @@ test("directory trust prefers the latest probe over discovery", () => {
 test("the selected session waits for a settled attachment before registry changes; other sessions do not", () => {
   const selected = { cwd: "/work/repo.feature", sessionId: "s1" };
   const other = { cwd: "/repo", sessionId: "s2" };
-  const settled = { ...base, session: session("/work/repo.feature") };
+  const settled = {
+    ...base,
+    sessionReferences: [...base.sessionReferences, sessionReference("/repo", "s2")],
+    session: session("/work/repo.feature"),
+  };
   assert.equal(sessionMutable(settled, selected), true);
   assert.equal(sessionMutable({ ...settled, resync: true }, selected), false);
   assert.equal(sessionMutable({ ...settled, resync: true }, other), true);
   assert.equal(sessionMutable({ ...settled, connected: false }, other), false);
-  assert.equal(sessionMutable({ ...base, selectionId: null, view: { kind: "new" } }, other), true);
+  assert.equal(
+    sessionMutable({ ...settled, selectionId: null, session: null, view: { kind: "new" } }, other),
+    true,
+  );
   assert.equal(
     sessionCheckoutMissing(
       { ...base, session: session("/work/repo.feature", { checkoutMissing: true }) },

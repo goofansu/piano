@@ -5,7 +5,7 @@ import {
   type Project,
 } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
-import { sessionProject } from "./sessionContext.ts";
+import { sessionProject, sessionReferenceChangeable } from "./sessionContext.ts";
 import { byName } from "./sidebarView.ts";
 
 export function findProject(state: AppState, id: string | null | undefined): Project | undefined {
@@ -218,7 +218,7 @@ export function newProjectCommand(
     id: "new-project",
     label: "New project",
     icon: "create",
-    enabled: state.connected,
+    enabled: assign ? sessionReferenceChangeable(state, assign) : state.connected,
     intent: {
       kind: "project-dialog",
       dialog: assign
@@ -239,7 +239,7 @@ export function assignProjectCommand(
     id: "assign",
     label: findProject(state, projectId)?.name ?? "None",
     icon: projectId ? "project" : "remove",
-    enabled: state.connected,
+    enabled: sessionReferenceChangeable(state, session),
     intent: {
       kind: "send",
       command: {
@@ -272,7 +272,10 @@ export function sessionProjectMenu(state: AppState, session: SessionRef): Sessio
   return {
     current,
     open: current ? openProjectCommand(current) : undefined,
-    entry: { label: current ? "Move to project" : "Add to project", enabled: state.connected },
+    entry: {
+      label: current ? "Move to project" : "Add to project",
+      enabled: sessionReferenceChangeable(state, ref),
+    },
     create: newProjectCommand(state, { assign: ref }),
     destinations: projectDestinations(state, current, { keepCurrent: false }).map((project) => ({
       project,
