@@ -187,6 +187,18 @@ await run(
       );
     }
     await page.capture("0-settings-without-machine-picker");
+    await page.open("/m/eng-1/settings/data-controls");
+    await page.until(`location.pathname === '/m/eng-1/new'`);
+    await page.see("What should we work on?");
+    assert.equal(await page.evaluate(`document.title`), "New session - Piano");
+    assert.equal(
+      await page.evaluate(`!!document.querySelector('[aria-label="Settings"]')`),
+      false,
+      "a remote's Settings address opens a page, not Settings",
+    );
+    await page.capture("0a-remote-settings-address");
+    await page.open("/settings/data-controls");
+    await page.until(`!!document.querySelector('[aria-label="Settings"] header h1')`);
     await page.click("button", "Show sidebar");
     await page.click("button", "Home");
     await page.see("Local collision session");

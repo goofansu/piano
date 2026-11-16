@@ -62,7 +62,12 @@ function addressBar(start: string) {
   };
 }
 
-function page(url: string, memory?: SurfaceMemory, rail?: Preference<boolean>) {
+function page(
+  url: string,
+  memory?: SurfaceMemory,
+  rail?: Preference<boolean>,
+  { settings }: { settings?: boolean } = {},
+) {
   const address = addressBar(url);
   const sent: ClientMessage[] = [];
   let handlers: ConnectionHandlers | undefined;
@@ -125,6 +130,7 @@ function page(url: string, memory?: SurfaceMemory, rail?: Preference<boolean>) {
     address: address.bar,
     memory,
     rail,
+    settings,
     moved: () => moves++,
   });
   client.start();
@@ -488,6 +494,27 @@ test("a direct Settings link closes to New before the registry arrives", () => {
   p.registry();
   assert.deepEqual(p.selects(), []);
   assert.equal(p.path(), "/new");
+});
+
+test("a machine without Settings opens a page for a Settings address and refuses Settings", () => {
+  const p = page("/settings/data-controls", undefined, undefined, { settings: false });
+  p.registry();
+  assert.equal(p.navigation.getState().settings, null);
+  assert.equal(p.client.getState().view.kind, "new");
+  assert.deepEqual(p.entries, ["/new"], "the Settings address is corrected in place");
+  assert.equal(p.title(), "New session - Piano");
+  p.navigation.openSettings("providers");
+  assert.equal(p.navigation.getState().settings, null);
+  assert.deepEqual(p.entries, ["/new"]);
+  assert.equal(p.moves(), 0, "a refused Settings request is not a move");
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.entries.push("/settings/mcp");
+  p.forward();
+  assert.equal(p.navigation.getState().settings, null, "history onto a Settings address");
+  assert.equal(p.client.getState().view.kind, "new");
+  assert.deepEqual(p.entries, ["/new", "/s/a", "/new"]);
+  assert.equal(p.title(), "New session - Piano");
 });
 
 test("the Settings button opens the section /settings opens", () => {

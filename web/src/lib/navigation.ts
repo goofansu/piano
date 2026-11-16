@@ -135,6 +135,7 @@ export interface NavigationOptions {
   ) => ReturnType<typeof workspaceFile>;
   memory?: SurfaceMemory;
   rail?: Preference<boolean>;
+  settings?: boolean;
   moved?: () => void;
 }
 
@@ -350,9 +351,15 @@ export function createNavigation({
   readFile,
   memory,
   rail: railPreference,
+  settings: offersSettings = true,
   moved = () => {},
 }: NavigationOptions): Navigation {
-  let wanted: Route | null = parseRoute(address.location());
+  const refused = (route: Route) => route.kind === "settings" && !offersSettings;
+  const routeAt = (): Route => {
+    const route = parseRoute(address.location());
+    return refused(route) ? { kind: "new" } : route;
+  };
+  let wanted: Route | null = routeAt();
   const fields = {
     surface: null,
     rail: railPreference?.get() ?? false,
@@ -534,8 +541,9 @@ export function createNavigation({
       const { pathname, search } = address.location();
       const target = addressFor(c, state.settings, pathname);
       if (target) {
+        const replace = target.mode === "replace" || refused(parseRoute({ pathname }));
         if (target.path !== pathname + search)
-          (target.mode === "replace" ? address.replace : address.push)(target.path);
+          (replace ? address.replace : address.push)(target.path);
         if (target.title !== syncedTitle) {
           address.setTitle(target.title);
           syncedTitle = target.title;
@@ -709,7 +717,7 @@ export function createNavigation({
       const stopPop = address.onPop(() =>
         batch(() => {
           moved();
-          const route = parseRoute(address.location());
+          const route = routeAt();
           set({ settings: route.kind === "settings" ? route.section : null });
           wanted = route;
           moving = true;
@@ -728,12 +736,14 @@ export function createNavigation({
     openNew: (cwd, projectId) => open({ kind: "new", cwd, projectId }),
     openProjects: () => open({ kind: "projects" }),
     openProject: (projectId) => open({ kind: "project", projectId }),
-    openSettings: (section = DEFAULT_SETTINGS_SECTION) =>
+    openSettings: (section = DEFAULT_SETTINGS_SECTION) => {
+      if (!offersSettings) return;
       batch(() => {
         wanted = null;
         set({ settings: section });
         moved();
-      }),
+      });
+    },
     closeSettings,
     openChanges: () => openView("changes"),
     toggleRail: () => {
