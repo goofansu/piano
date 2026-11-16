@@ -1,6 +1,6 @@
 # ADR 0003: Pi owns managed preview lifetime
 
-Status: proposed; accepted on merge of PIN-99. Supersedes PIN-94's independent-lifetime decision
+Status: accepted (PIN-99). Supersedes PIN-94's independent-lifetime decision
 in [managed live previews](../live-previews.md), not its launch validation or private-access policy.
 
 The session that starts a preview owns it through **one concrete live Pi generation**. Piano owns

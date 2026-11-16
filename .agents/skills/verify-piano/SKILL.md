@@ -49,7 +49,8 @@ and Chromium, first. Launch needs `node_modules` (runs `npm ci` when missing). I
 `/tmp/verify-piano/<run-id>/` (`VERIFY_SCRATCH` overrides the parent) holding:
 
 - `db/piano.db`: a new database; Piano creates the schema on start. Seeded runs fill it first
-  through `scripts/seed.ts` (the browser tests' own `test/fixtures/registry.ts`), because only one
+  through `.agents/skills/verify-piano/scripts/seed.ts` (the browser tests' own
+  `test/fixtures/registry.ts`), because only one
   backend may own a database.
 - `repo/`: a committed throwaway Git repo (`README.md`, `src/answer.ts`, `.gitignore` ignoring
   `ignored/`). Worktrees Piano creates appear beside it as `repo.<branch>`, still inside the run.
@@ -88,8 +89,8 @@ the printed run dir anyway.
 
 Seed data (seeded runs): folder `repo`; projects `verify` "Verify Project" and `empty` "Empty
 Project"; sessions `verify-plan` "Plan the verification"
-(project `verify`, saved PR link `#222`) and `verify-loose` "Loose session" (no project), each with
-Pi history `What is 2 + 2? (<title>)` / `Answer 4.`; "Plan the verification" also holds one
+(project `verify`, saved PR link `#222`, last active 1 hour ago) and `verify-loose` "Loose session"
+(no project, 20 minutes ago), each with Pi history `What is 2 + 2? (<title>)` / `Answer 4.`; "Plan the verification" also holds one
 successful Pi `write` of `src/answer.ts` (hand-written, since fake Pi makes no tool calls).
 
 ### A deployed instance
@@ -148,7 +149,7 @@ after `web/dist` was built (then the running backend or UI predates the checkout
    They do not need `launch.sh`: run them one at a time before Launch (or after cleaning up an
    existing run), and let each finish its own teardown before the next journey or Launch.
    `npm run test:browser` runs these and the remote journey serially under the narrow exception
-   above. `npm run verify` is the separate typecheck/lint/module-test baseline, not browser coverage.
+   above; on macOS the remote journey skips with exit 0, which is not a pass. `npm run verify` is the separate typecheck/lint/module-test baseline, not browser coverage.
 
    For mapped Preview behavior, also run `node test/browser/preview.mjs <evidence-directory>`
    serially before Launch. It needs the native supervisor and free ports described in
@@ -283,5 +284,4 @@ When a journey fails because the app changed (a renamed button, a moved menu ite
 update the feature file in the same change, never the assertion's intent. After changing launch
 isolation, run `.agents/skills/verify-piano/scripts/test-launch-isolation.sh`: it dispatches through
 real Worktrunk with owned stand-in user settings, asserts sibling worktree placement, and cleans up
-its scratch run while retaining evidence. Use
-`/maintain-verification-skill` to bring this skill up to date after a feature lands.
+its scratch run while retaining evidence.

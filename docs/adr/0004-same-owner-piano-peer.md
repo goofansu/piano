@@ -1,6 +1,6 @@
 # ADR 0004: Same-owner remote Piano through exe.dev private access
 
-Status: proposed; accepted when merged.
+Status: accepted.
 
 One developer already runs independent private Pianos on their exe.dev VMs. For the first
 remote-conversation slice, the main Piano proxies explicitly configured peers running the same
@@ -155,7 +155,7 @@ sessions there, and a prompt can run anything the directory holds (INV-11).
 
 ## Session surfaces: Changes, files and the session rail
 
-A remote session shows what a Local one does, except its managed app preview and sharing: the
+A remote session shows what a Local one does, except its managed app preview: the
 session rail (Environment and Outputs), Changes with its comparison and pull request, and files
 opened from the transcript, Changes or Outputs. This supersedes the earlier limit that a remote
 grants no workspace file access.

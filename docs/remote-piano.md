@@ -156,7 +156,7 @@ tab its open file tabs and the page it was on, under the machine's ID:
 renaming an ID starts that machine fresh, and what was remembered for an ID removed from the
 file is deleted the next time the page loads.
 `name` is the picker label. `endpoint` is the integration's or target VM's HTTPS origin, without
-path, credentials, query or fragment. HTTP loopback endpoints require `NODE_ENV=test` and exist
+path, credentials, query or fragment. HTTP loopback endpoints require `PIANO_TEST_HTTP_LOOPBACK_PEERS=1` and exist
 only for isolated tests with dummy credentials, never real tokens.
 `origin` is the **target Piano's allowed Origin**, not the integration hostname or laptop origin.
 Omit `vmTokenFile` for an exe.dev peer integration; the edge supplies authentication. Set it only

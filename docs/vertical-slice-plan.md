@@ -59,42 +59,12 @@ A phase is a thin **user journey through storage/execution → wire → browser*
 failure outcome. Do not finish a backend-only phase and leave the observable contract for a later UI
 phase. A phase can contain several small PRs, but its gate applies to the assembled journey.
 
-For every implemented phase:
-
-1. Name the acceptance claim and affected invariant IDs before editing. Reinspect current coverage;
-   add/extend a regression only for a meaningful uncovered defect.
-2. Use the smallest falsifiable check listed below. Pi protocol tests use the PiSessions interface and
-   scripted fake Pi, not private translators. Host/routing contracts are observed through public
-   server operations with real fake-Pi subprocesses. Domain modules use their caller-facing interfaces;
-   Git/Worktrunk compatibility uses real scratch repositories. No mocked CLI can prove backend semantics.
-3. Observe the changed browser journey through `agent-browser`, including the named failure state,
-   and retain output. Fake Pi handles races/faults; paid prompts are short compatibility/product checks,
-   not race generators. Open Radix menus/popovers with browser pointer clicks.
-4. Run `npm test` and `npm run typecheck` for code/dependency changes. Run `npm run build` for runtime
-   dependency, bundling, asset or production-serving changes; do not treat a build as journey evidence.
-5. Record the actual revision **including dirty content**, environment/tool versions, claim, command
-   and observed result, artifacts and remaining limitations. A blocked check is not a pass. Stop when
-   the relevant claim/risk and required gates are covered; do not rerun every invariant scenario.
-
-Retain a small evidence packet per implementation phase outside the registry: tested commit plus dirty
-patch/input digest, effective Pi CLI path/version and arguments, Node/Effect/Worktrunk versions, relevant
-fixture/check/requirement versions, command outcomes, browser observations and artifact paths. Keep
-secrets out of exported records. Missing output cannot substantiate a claimed observation.
-
-### Isolation for all implementation checks
-
-Use a created scratch directory, registry, throwaway Git repository and isolated Pi agent/session
-storage as appropriate. The static/browser instance is:
-
-```bash
-HOST=127.0.0.1 PIANO_DB_PATH=<scratch-path>/piano.db PORT=7171 node server/main.ts
-```
-
-Retain its PID; stop only processes you started. Register only scratch directories, remove scratch
-worktrees/branches and the exact scratch session files afterward. Never restart the user's instance
-(on 7070 or the hosted 8000/8001 services), change its registry, or blanket-clean Pi's session store.
-Keep private authenticated access and loopback binding throughout. Preview isolation is not permission
-to expose the control plane. See [the development handoff](development-on-exe-dev.md).
+For every implemented phase, follow [AGENTS.md](../AGENTS.md#verification) and the
+[testing policy](testing.md): name the claim and invariant IDs, use the smallest falsifiable check
+listed for the phase, observe the changed browser journey on a scratch instance from
+[verify-piano](../.agents/skills/verify-piano/SKILL.md), run the baseline, and record the revision,
+environment and observed result. Run `npm run build` for runtime dependency, bundling, asset or
+production-serving changes; a build is not journey evidence.
 
 ## 3. Sequence and checkpoints
 
@@ -589,7 +559,7 @@ Repository sources:
   [private development](development-on-exe-dev.md), [hosted development](hosted-development.md).
 - [`package.json`](../package.json), [`package-lock.json`](../package-lock.json),
   [`PiSessions`](../server/PiSessions.ts), [`SessionHosts`](../server/SessionHosts.ts),
-  [`PiRecords`](../server/PiRecords.ts), [`SessionFiles`](../server/SessionFiles.ts),
+  [`PiRecords`](../server/PiRecords.ts), `SessionFiles` (since removed),
   [`Worktrees`](../server/Worktrees.ts), [`WsClient`](../server/WsClient.ts),
   [`wire`](../shared/wire.ts), [`browser store`](../web/src/store.ts),
   [`existing module tests`](../test/PiSessions.test.ts).

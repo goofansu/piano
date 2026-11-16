@@ -85,11 +85,11 @@ that every PR add tests applies.
 | Change or risk | Useful evidence |
 | --- | --- |
 | Domain rule, translation or state transition | Focused unit/module test if the behavior is consequential and not already covered. |
+| Browser–server request or reply (`ClientMessage`/`ServerMessage` in `shared/wire.ts`, endpoints in `shared/http.ts`) | Module test through the handler: `test/ClientDispatch.test.ts` for socket messages, `test/Api.test.ts` for HTTP; `test/PeerScope.test.ts` when a remote may send it. |
 | RPC lifecycle, reconnect, dialog race | Deterministic fake-Pi contract test through PiSessions; browser observation when UI behavior changes. |
 | Git/Worktrunk lifecycle semantics | Integration check in a throwaway repository against the supported version; a mocked CLI alone cannot establish compatibility. |
 | User interaction, rendering or preview identity | Observe the affected browser journey, including relevant error/empty states; retain a regression test when recurrence warrants it. |
 | Pi/runtime dependency upgrade | Existing suites/typechecks plus the compatibility and scratch-browser checks in INV-12. |
-| Documentation or comments only | Inspect accuracy, links and consistency; no new unit tests or unrelated runtime suite needed. |
 | Refactor with unchanged behavior | Existing relevant tests and typecheck; add a test only for a meaningful uncovered risk. |
 
 Avoid proving the same behavior at every layer. Use a small number of integration/browser checks
@@ -136,7 +136,8 @@ an isolated cosmetic edit. The repository's code-check gates still apply.
 ## Browser tests
 
 Browser evidence for a change is an observation through `agent-browser` on a scratch instance,
-kept in the PR; it does not become a committed script. Install agent-browser and Chromium as
+kept in the PR. It becomes committed only as a step in an existing journey, when a regression is
+likely to recur. Install agent-browser and Chromium as
 specified in [development setup](development.md#setup); journeys use the CLI on `PATH`. The committed browser
 tests are only the critical paths, which must keep working on every change and run in CI:
 
@@ -156,11 +157,13 @@ tests are only the critical paths, which must keep working on every change and r
   are stored under its own ID, and a machine no longer configured is forgotten on load. The harness's optional
   `peers` fixtures each own separate database/history/audit; `remote` is the one-peer shorthand.
 
-`npm run test:browser` runs these and the transcript-row alignment check against scratch registries, Pi history and
+`npm run test:browser` runs these and the transcript-row alignment check against scratch databases, Pi history and
 `test/browser/fake-pi.mjs`, with no model calls. They drive the UI by role and accessible name and
 assert what a user sees and what Pi receives, not markup. Add a journey only for a new critical
 path; cover rules and edge cases with module tests. Earlier documents cite `test/browser-*.mjs`
-scripts as the evidence of their time; those scripts were removed for these two journeys.
+scripts as the evidence of their time; those scripts no longer exist. On macOS
+`remote-session.mjs` skips (exit 0, no `run.json`) and `open-session.mjs` skips its copied-content
+check, so only a Linux run or CI covers them.
 
 For production startup observations, first run `npm run build` in the checkout being tested, then
 prefix a journey with `PIANO_BROWSER_PRODUCTION=1`. The same isolated backend serves that
@@ -234,98 +237,6 @@ JS
 ±1. Keep the output with the screenshot: the screenshot shows the row, the numbers show it is
 aligned.
 
-## Folder and registry benchmark
-
-`test/performance-folder-registry.mjs` measures folder-picker and registry latency and event-loop
-stalls against a scratch backend:
-
-```sh
-node test/performance-folder-registry.mjs .scratch/piano-performance.json
-# Short controlled slow-folder reproduction (adds 1 ms to each filesystem metadata operation):
-PIANO_BENCH_SLOW_ONLY=1 node test/performance-folder-registry.mjs .scratch/piano-performance-slow.json
-```
-
-Run it uncontended, apart from the test suite and browser checks. It requires Node 24, Git and Linux
-`ss`. It starts `server/main.ts` on an ephemeral loopback port with a temporary SQLite registry,
-isolated home/config/Pi directories and `test/fake-pi.mjs`, then deletes its scratch data after
-stopping its own child; no credentials or model calls. JSON and backend logs are written beside the
-output path, whose parent directory must exist. To compare before and after a change, copy
-`test/performance-{folder-registry,monitor}.mjs` into a separate checkout of the base revision and
-run them there too; never against a running checkout or the real registry.
-
-## Saved-history benchmark
-
-`node test/performance-saved-history.mjs .scratch/saved-history.json` measures cold and five warm
-saved peeks plus 16 concurrent peeks of the same 34.7 MB synthetic history with one tiny active
-message. Run uncontended on Node 24: it records latency, process CPU, interactive-thread CPU and
-1 ms timer gaps, using PiSessions with temporary history/Pi directories and no agent or model calls.
-It disposes the service/worker and removes its fixture; the JSON survives at the supplied path.
-For a baseline comparison, copy this script and `test/fixtures/large-history.ts` into a separate
-checkout of the base revision and run there too. Cold observations include SDK worker startup;
-warm observations do not reuse completed projections. This is evidence, not a CI wall-clock gate.
-
-## Sidebar sessions benchmark
-
-`test/performance-sidebar-sessions.mjs` is an opt-in rendering benchmark, not a CI timing gate:
-
-```sh
-npm ci
-agent-browser install
-node test/performance-sidebar-sessions.mjs .scratch/sidebar-performance
-# Override the session counts for a narrower comparison:
-node test/performance-sidebar-sessions.mjs .scratch/sidebar-performance 2000 5000
-```
-
-Requires Node 24, Git and agent-browser/Chromium (the same prerequisites as the browser journeys).
-The existing browser harness starts a scratch backend and Vite **development** UI on free loopback
-ports, with isolated database, HOME and Pi directories, fake Pi and a throwaway repository. It
-creates N saved session references and empty synthetic histories, all in Today, with no pinned,
-archived or running sessions. No prompts or model calls; no live database/history. Recorded children
-and scratch data are cleaned up even on failure. Output JSON and screenshots survive in the chosen
-evidence directory; keep them on the PR, not in Git. Run uncontended, separately from test suites.
-
-The default counts are 100, 500, 1,000 and 2,000, at 1280×900 without throttling. Each count gets a
-fresh scratch instance and browser. After an untimed app bootstrap (warming Vite and selecting the
-browser target), CDP installs instrumentation before application code and measures:
-
-- **Navigation to rows ready:** reload to the initial sidebar window committed, then two animation frames
-  (a paint opportunity, not a paint trace). First reload clears the browser HTTP cache; the next
-  two retain it. This is cache-cold versus cache-warm, **not** cold process/server startup. Includes
-  app startup, WebSocket registry delivery, development module loading, React and layout. JSON also
-  retains the commit timestamp and observed long tasks; it is not isolated sidebar CPU time.
-- **Group reopen:** three real Today button clicks after collapsing and observing zero mounted
-  rows. Time starts at the captured browser click, ends two animation frames after the window mounts;
-  CLI invocation latency is excluded. This does not time completion of the disclosure animation.
-- **Scroll cadence:** three 3-second requestAnimationFrame probes, advancing scrollTop by 120px
-  each frame and reversing at the ends. JSON reports frame count, effective rate, p95/max interval,
-  intervals over 34ms and distance actually travelled. This measures main-thread cadence during
-  scripted scrolling, **not** compositor FPS or input-to-pixel latency. Large lists need not reach
-  the bottom. Assertions bound mounted rows independently of N, then jump to the middle and bottom
-  and verify contiguous visible rows. For N ≥ 100, untimed checks also retain the actual focused/menu
-  node while scrolling, Tab/Shift+Tab through it, dismiss its menu with focus restored, and verify
-  the offscreen row unmounts once neither focus nor menu needs it. Pin/Unpin at the list's end
-  checks that a shrinking window never reads past the new session count.
-- **Memory/DOM:** whole-page CDP JS heap after explicit GC, DOM node/listener counts and sidebar
-  element count. Not browser RSS or sidebar-only heap. Screenshots show the actual tested surface.
-
-The implementation path is `web/src/store.ts` (registry snapshot) →
-`web/src/lib/sessionCatalog.ts` → `sidebarList.ts` / `sidebarView.ts` (filter/group/sort, cached
-against sidebar facts) → `useSidebarList.ts` → `web/src/components/Sidebar.tsx`.
-`SessionRows` uses `useSidebarWindow.ts` to mount visible rows plus five rows of overscan on each
-side, against the shared Radix `ScrollArea` viewport. Group headers stay in normal flow. A CSS ruler
-measures the existing responsive row heights and list gap/padding; each list preserves its full
-scroll height. Stable session keys retain row identity through range updates. Focused rows, their
-neighbours (including the nearest available sessions), open-menu anchors (through Radix focus
-restoration), and each list's keyboard entry/exit rows stay mounted outside the window. Closed groups still unmount their rows. This bounds session
-DOM by visible rows plus a small buffer per expanded group, not by sessions per group. It does not
-virtualize group headers or paginate/filter the catalog.
-
-Compare the raw runs, their environment/revision fields and repeated samples rather than treating
-one machine's times as budgets. Before virtualization, the same instrumentation waited for all N
-rows; use the base revision's harness for that comparison. Production builds, real wheel/touch
-input, many-folder grouping, streaming and session selection are separate experiments. No new UI
-strings, controls or actions are introduced.
-
 ## File evidence provenance
 
 `npm run verify -- <evidence-directory>` and `test/browser/harness.mjs` write `run.json`, command
@@ -392,13 +303,10 @@ failure without requiring a browser installation.
 
 ## Completion evidence
 
-For code or dependency changes, `npm run verify` runs `npm run typecheck`, `npm run lint` and
-`npm test` as the repository baseline, preserving their individual results. The commands remain
-independently runnable; CI uses those same gates in parallel.
+For code or dependency changes, run the [baseline](development.md#setup).
 Run build or other checks when the changed surface requires them. Observe affected application
 behavior through `agent-browser` on a scratch instance that
 [the `verify-piano` skill](../.agents/skills/verify-piano/SKILL.md) launches.
-Documentation-only work needs document review and link checks, not a browser smoke test.
 
 In the PR, summarize what changed, what evidence supports it, the tested revision/environment and
 any material gaps. For new or substantially changed features, also name the starting document

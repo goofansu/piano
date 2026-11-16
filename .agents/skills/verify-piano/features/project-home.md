@@ -16,7 +16,7 @@ moves its sessions to "No project"; unknown IDs show "Project not found".
 - `open-from-palette`: Mod+K on a member session offers "Open project: <name>".
 - `member-cards`: one `[data-slot=item]` row inside a `role=listitem` wrapper per non-archived member session in
   the Sessions group's hairline list; its title button opens `/s/<id>`.
-- `row-actions`: each row's "Session menu for <title>", revealed while pointed at, holds "Archive"
+- `row-actions`: each row's "Session menu for <title>", revealed while pointed at, ends with "Archive"
   and a red "Delete", the sidebar row's menu ([`open-session.md`](./open-session.md)
   `archive-delete`). Archive toasts "Session archived" and the row leaves, the count dropping;
   Delete asks "Delete session?" and toasts "Session deleted". The page stays.

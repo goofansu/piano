@@ -371,6 +371,12 @@ If connection loss leaves creation uncertain, inspect Piano's sessions before di
 Automatic retry could create duplicate work. If the child link is known, open it to inspect the
 current state; a transport error does not prove the child failed or stopped.
 
-Piano's database remains schema 6. A database upgraded to schema 7 by the removed PIN-31 changes
-requires separate operational handling before this server can open it; dispatch never resets or
-downgrades user data.
+## Developer navigation
+
+- **Owners:** `scripts/dispatch-session.ts` (terminal), `extensions/piano-dispatch/` (the Pi tool),
+  `shared/dispatch.ts` (their shared contract) and `server/ClientDispatch.ts` (the socket requests).
+- **Smallest check:** `node --test --import ./test/setup.ts test/SessionDispatch.test.ts` for the
+  extension, `test/DispatchScript.test.ts` for the script; then the
+  [dispatch recipe](../.agents/skills/verify-piano/features/session-dispatch.md) on scratch Piano.
+- **Not proved:** fake Pi makes no tool calls, so the extension's waits, the parent's tool rows and
+  child backlinks in the UI need a real Pi or scripted model.

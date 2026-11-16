@@ -6,7 +6,7 @@ per-Pi-child limits, not global quotas or a security sandbox.
 
 Every conversation-runtime byte cap below derives from one **maximum message**: the attachment policy's total
 (`MAX_ATTACHMENT_BYTES` in `shared/attachments.ts`) after base64 encoding, plus a named
-JSON/text allowance (`MAX_MESSAGE_BYTES` in `server/InboundCapacity.ts`). Raising the attachment policy raises every cap
+JSON/text allowance (`MAX_MESSAGE_BYTES` in `shared/attachments.ts`). Raising the attachment policy raises every cap
 below with it; about 83 MiB for today's 50 MiB policy.
 
 | Boundary | Ordinary capacity | Reserved control capacity |
@@ -33,7 +33,8 @@ without acquiring ordinary-work capacity, so a pending prompt cannot starve them
 
 - **WebSocket messages:** one maximum message, including all fragments. The Node `ws` parser enforces
   this while assembling messages; `WsClient` also checks before JSON decoding.
-  Oversized messages close with code 1009. Compression is disabled. The platform's
+  Oversized messages close with code 1009. Per-message compression is negotiated (`server/main.ts`);
+  only the main-to-peer socket turns it off. The platform's
   pausable socket reader backpressures buffered messages at its high-water mark.
 - **RPC lines/input:** one maximum message. Output framing counts raw bytes before UTF-8
   decoding, JSON parsing, or waiting for a newline. This permits a full image upload batch
@@ -199,9 +200,7 @@ compares admission sizing with JSON serialization, including image envelopes, op
 arrays, escaped/non-ASCII strings, invalid direct inputs and JSON failures.
 `test/ClientDispatch.test.ts` covers selection preservation and live heartbeats and
 controls at client capacity. `test/OriginPolicy.test.ts` sends oversized single and
-fragmented messages through the real Node server. The scratch-only
-`test/browser-inbound-limits.mjs` observes overload, answering, acknowledgements,
-heartbeat continuity and a subsequent prompt through `npx agent-browser` with fake Pi.
+fragmented messages through the real Node server. No committed browser journey observes overload.
 
 `PreparedImages.test.ts`, `PeerScope.test.ts`, `PeerGateway.test.ts`, `Machine.test.ts` and
 `DraftSubmission.test.ts` cover image validation/resource bounds, scope/provenance, one-use/expiry/
@@ -214,7 +213,7 @@ real phone memory, provider acceptance or authenticated exe.dev edge body/time l
 
 `Dictation.test.ts` covers source-store identity, Stop/navigation, late permission, explicit abort,
 newer typing/Send, recorder errors and actual byte accounting. `VoiceInput.test.ts` uses a stub
-provider for canonical input, bounded responses, concurrency and timeout/abort. `VoiceInputHttp.test.ts`
-checks the real Node streamed-body boundary and denied peer voice routes. The remote browser journey
+provider for canonical input, bounded responses and timeout/abort. `VoiceInputHttp.test.ts`
+checks the real Node streamed-body boundary, the concurrency refusal and denied peer voice routes. The remote browser journey
 also covers Local and peer dictation using fake device APIs and stub transcription responses; it is
 not a real microphone, codec, mobile lock or credentialed OpenAI check.

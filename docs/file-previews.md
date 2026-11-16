@@ -2,7 +2,7 @@
 
 Click a local Markdown link such as `[guide](docs/guide.md)` in a session to open it read-only in
 the Surface area beside the conversation, where Changes opens too. Side by side the area is
-resizable from its left edge and remembers its width; where the areas take turns, the file gets
+resizable from its left edge and remembers its width.
 Each file opens in a tab of its own, added at the end; a file already open is read again in its
 tab. After a successful read, tabs adopt the server-resolved path and merge duplicate spellings,
 keeping the first tab's position and the latest explicit open's acquisition and return area,
@@ -114,11 +114,9 @@ Closing the file or changing its owner aborts preparation and discards its docum
 
 ### Text, Markdown and PDF
 
-Highlighting uses a disposable worker, lazy grammars/themes, at most 65,536 characters and
-2,000 characters per line, and a three-second work budget. Larger files stay readable as source,
-rendered in blocks of 500 lines (one text and one line-number gutter each) that the browser lays
-out and paints only near the view, so a file up to the 1 MiB limit opens without blocking the
-page. An expanded diff in Changes renders its rows in the same blocks.
+Highlighting and rendering come from `@pierre/diffs` (`web/src/components/Code.tsx`): a pool of two
+workers highlights, and a virtualizer lays out and paints only the lines near the view, so a file
+up to the 1 MiB limit opens without blocking the page. An expanded diff in Changes renders the same way.
 Markdown uses Streamdown in static mode, with CommonMark/GFM support including fenced code
 inside lists, tables and reference links. Conversations use its streaming mode to format incomplete
 responses; files do not repair unfinished Markdown. Piano retains its own links, code-copy controls

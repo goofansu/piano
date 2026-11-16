@@ -83,7 +83,7 @@ ratio over any layer with `--fill-active` beneath the glyph, as in a selected ro
 Limitation: light-mode status colours drop below 4.5:1 as text over a selected (`--fill-active`) row;
 they stay above 3:1 there, which is what their glyph use needs.
 
-Motion has one token, `--ease-out` (see Motion).
+Motion's default curve is `--ease-out` (see Motion).
 
 ## Type
 
@@ -139,10 +139,10 @@ font, and narrowing the column would cramp the composer. The 16px body stays.
 
 Left-aligned throughout. The transcript column is centred at max 48rem; the composer lines up
 with it. The conversation is an inset sheet with a 1px line and the layer-1 shadow. A parchment
-fill marks the selected session. Rows are 36px with a
+fill marks the selected session. Rows are 32px with a
 pointer and 44px on touch screens.
 
-A session row is its title alone. Where it runs and which project it belongs to live in the session
+A session row is its title alone by default. Where it runs and which project it belongs to live in the session
 header and the sidebar's groupings, not on every row.
 
 The session header is one line, as Amp's is: the project crumb and the title with its menu
@@ -192,7 +192,7 @@ clear of the rail (`--rail-inset`), and its first section sits level with the tr
 row. It and the Surface area share the session's right side: whichever came in last shows. Opening a Surface tab hides the rail;
 closing the last one brings it back; turning the rail on while tabs are open hides them until a
 tab is shown again or the rail goes off. The desktop rail has no header or toolbar: its folding sections are
-Environment (folder or repository, branch or detached commit, linked pull request) and Outputs,
+App, Environment (folder or repository, branch or detached commit, linked pull request) and Outputs,
 the files Pi wrote or edited, once there is one. A Links section once listed the web links the
 conversation mentioned; mostly long bare URLs nobody revisits, it was removed, and links stay
 tappable in the conversation. The composer's usage row once held Outputs as a popover. The
@@ -285,7 +285,6 @@ still. (See Motion.)
   the first token arrives, and stay the glyph while the reply streams.
 - With the sidebar collapsed, where no rows are visible, the pane header's show-sidebar control
   carries a breathing busy dot while any session is working.
-- The browser tab icon switches to a pressed-keys variant while the session on screen works.
 
 This is the only ornament; everything else is structure.
 
@@ -345,9 +344,8 @@ What the removed motion was is recorded under "What Felt changed and why" below.
 | --- | --- |
 | `⌘K` / `Ctrl+K` | Command palette: switch to any session (search title, project, branch), start a new session in a project, toggle the sidebar, change appearance |
 
-The palette shortcut appears as a `Kbd` hint on the sidebar search button. The palette also
-offers New session, per project, and the sidebar toggle without shortcuts of their own. `⌘B`,
-`⌘⇧N`, `⌘[` / `⌘]` and `Alt+↑/↓` were tried and removed as too easy to hit by accident.
+The palette shortcut appears as a `Kbd` hint on the sidebar search button. The current global
+shortcuts are listed in [Quiet UI](quiet-ui.md#command-palette-and-shortcuts).
 
 ## What Felt changed and why
 
@@ -397,9 +395,6 @@ Considered and rejected:
 
 ## Tests
 
-- `test/browser-ui-polish.mjs` now takes `PIANO_TEST_BACKEND_PORT` and `PIANO_TEST_WEB_PORT`
-  (defaults unchanged at 7171/7172) so it can run beside other instances, and its reduced-motion
-  caret check reads the caret where it now lives, at the end of the reply's last block.
 - Known failures unrelated to this theme: three server tests (`RealPiProjection` ×2 and the
   `INV-07/08` worktree manifest test) fail identically on the base commit 9e0c7b4 in this
   environment, and `PiSessions` "catalog observations" failed once in a full run on a macOS

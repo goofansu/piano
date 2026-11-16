@@ -8,8 +8,8 @@ app components below. App wrappers forward props and refs and compose caller eve
 The CLI also owns `web/src/hooks/use-mobile.ts`.
 
 Always exclude upstream shadcn source from formatting, import sorting and general linting:
-`ignorePatterns` in `.oxfmtrc.json` and `.oxlintrc.json`, where `components/ui/` keeps its own
-`.oxlintrc.json` that runs only the Tailwind class check. This includes generated hooks and other
+`ignorePatterns` in `.oxfmtrc.json`, while `components/ui/` keeps its own `.oxlintrc.json`;
+[Formatting and lint](development.md#formatting-and-lint) says what that config checks. This includes generated hooks and other
 dependencies outside `components/ui/`: add a specific exclusion whenever the CLI introduces another
 upstream-owned path. Keep Piano-owned hooks and wrappers checked; do not exclude their whole
 directories. Preserve upstream formatting as well as behavior.

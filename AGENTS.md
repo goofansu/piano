@@ -14,7 +14,7 @@ reproduce it before fixing it when feasible, then show the same check passing.
 | Documentation or comments only | Review accuracy, links and the diff; confirm no runtime or tooling directives changed. No tests or app run needed. |
 | Logic, protocol or lifecycle behavior | Add or extend a focused module test for an uncovered failure at the public boundary. Run `node --test --import ./test/setup.ts test/<name>.test.ts`. |
 | Application behavior | Observe the affected journey on scratch Piano, using an existing browser journey or a focused `agent-browser` check. Module tests alone do not prove the user journey. |
-| UI strings, controls or styling | Apply Quiet UI and choose evidence using the UI evidence scope below: a focused capture for a local cosmetic edit, the affected journey for behavior, broader comparisons for shared styles. |
+| UI strings, controls or styling | Apply Quiet UI and choose evidence using the [UI evidence scope](docs/testing.md#ui-evidence-scope): a focused capture for a local cosmetic edit, the affected journey for behavior, broader comparisons for shared styles. |
 | New critical path | Add a journey in `test/browser/`; otherwise extend relevant existing coverage rather than adding another browser journey. |
 | New transcript row kind | Extend and run `node test/browser/transcript-rows.mjs <evidence-directory>`. Its gutter glyph must centre on the first text line; a screenshot alone is insufficient. |
 
@@ -22,7 +22,7 @@ For **code or dependency changes**, run `npm run verify -- <evidence-directory>`
 and the full module suite must all pass. It uses fake Pi and needs no model credentials. Focused
 checks do not replace this baseline, and the baseline does not run browser journeys. Run an affected
 journey with `node test/browser/<journey>.mjs <evidence-directory>`; `npm run test:browser` runs the
-committed suite. Use the verification routes below to choose the check, not every journey by default.
+committed suite. Use the table above to choose the check, not every journey by default.
 
 Retain actual command/browser output on the PR, outside Git, tied to the tested revision and
 environment. Report pass/fail, skipped or blocked checks, and limitations. Never weaken assertions
@@ -44,7 +44,8 @@ Read the matching entry before working on that surface; follow its linked detail
 | When | Read |
 | --- | --- |
 | Choosing tests or evidence | [Testing policy](docs/testing.md), [commands and prerequisites](docs/development.md#tests) |
-| Verifying application behavior | [verify-piano](.agents/skills/verify-piano/SKILL.md) and its [feature map](.agents/skills/verify-piano/features/README.md#features) |
+| Finding a feature's owning modules, or verifying its behavior | The [feature map](.agents/skills/verify-piano/features/README.md#features) links each feature's recipe and owning doc; [verify-piano](.agents/skills/verify-piano/SKILL.md) launches and drives scratch Piano |
+| Measuring performance | [Benchmarks](docs/performance/README.md) |
 | Naming code, UI or docs | [Glossary](docs/glossary.md); use the user's UI names, such as "Piano's database", not "the registry" |
 | Changing UI, including strings and controls | [Quiet UI](docs/quiet-ui.md), [UI evidence scope](docs/testing.md#ui-evidence-scope), [Linear design language](docs/design-moonstone.md#linear) |
 | Writing Effect code or upgrading Effect | [Effect](docs/effect.md) |

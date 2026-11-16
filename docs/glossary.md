@@ -8,7 +8,7 @@ SQLite, UI and documentation. Some describe the target model in
 | --- | --- |
 | Project | A named, bounded initiative grouping sessions from any folders toward one outcome; see [Projects](#projects). |
 | Folder | An added root directory together with the worktrees created from it. Sessions in a worktree are listed under their folder with the branch beside them. A non-Git directory is listed the same way, without a branch label. |
-| Directory | A filesystem path a session runs in: a repository root, one of its worktrees, or any other folder. The New page picks a directory; the sidebar groups by repository. |
+| Directory | A filesystem path a session runs in: a repository root, one of its worktrees, or any other folder. The New page picks a directory; the sidebar groups by date, folder or project. |
 | Checkout | The directory on disk a session runs in: a folder root, one of its worktrees, or another directory. A session whose checkout is gone keeps its history but cannot continue until the directory is restored at the same path. |
 | Worktree | A Git checkout of a folder. Piano lists worktrees from Git and creates new ones through Worktrunk (`wt`), the initial backend for their lifecycle. |
 | Machine | A Piano backend this browser is connected to: **Local**, or a configured remote Piano owned by the same user ([Remote Pianos](remote-piano.md)). It owns its sessions, files, history and database. |

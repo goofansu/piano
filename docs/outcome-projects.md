@@ -30,8 +30,8 @@ it does not resume the deferred evidence/integration phases.
   tasks, but the first slice requires neither task records nor a task hierarchy.
 
 The UI now uses **Project** for outcomes and **Folders** for the sidebar's location groups, each
-a root with its worktrees; a non-Git directory is listed the same way with a Non-Git badge. The
-sidebar's view menu groups sessions by folder, by project (with a No project group) or not at all.
+a root with its worktrees; a non-Git directory is listed the same way without a branch label. The
+sidebar's view menu groups sessions by date, by folder or by project (with a No project group).
 Code uses the same words: `folders` for locations and `projects`/`projectId` for organization.
 
 ## Step 1 — Organize sessions across repositories
@@ -81,7 +81,7 @@ instruction selection. Separate concurrent writing tasks still need separate wor
 - Keep the view quiet: project name, sessions and essential actions. No synthetic
   progress percentages, mandatory task board or permanent implementation-status banners.
 - Provide equivalent command-palette entries for new sidebar/header actions, under the existing
-  command groups and with matching names. Mod+K remains the only global shortcut.
+  command groups and with matching names.
 
 ### Compatibility and ownership
 
