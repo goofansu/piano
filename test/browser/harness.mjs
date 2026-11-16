@@ -4,10 +4,25 @@
 // The real registry, Pi config and ports 8000/8001 are never touched.
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import {
+  captureRevision,
+  executionEnvironment,
+  revisionOutcome,
+  saveRun,
+} from "../../scripts/verification-evidence.mjs";
 import { freePorts } from "../fixtures/ports.ts";
 import { seedRegistry } from "../fixtures/registry.ts";
 
@@ -93,11 +108,165 @@ export async function run(name, setup, journey, options = {}) {
   const evidence = resolve(process.argv[2] ?? join(ROOT, ".scratch/browser", name));
   mkdirSync(evidence, { recursive: true });
   const production = process.env.PIANO_BROWSER_PRODUCTION === "1";
-  if (production)
-    assert.ok(existsSync(join(ROOT, "web/dist/index.html")), "run npm run build first");
-  const root = mkdtempSync(join(tmpdir(), `piano-${name}-`));
-  const local = await fixture(root, setup);
-  const peers = [];
+  const started = Date.now();
+  const record = {
+    name,
+    production,
+    cwd: ROOT,
+    command: [process.execPath, ...process.execArgv, ...process.argv.slice(1)],
+    startedAt: new Date(started).toISOString(),
+    outcome: "running",
+    phase: "setup",
+  };
+  saveRun(evidence, record);
+  const owned = { children: [], commands: new Set(), peers: [], logs: {}, evidence, production };
+  let interrupted;
+  let rejectCancellation;
+  const cancellation = new Promise((_, reject) => {
+    rejectCancellation = reject;
+  });
+  const interrupt = (signal) => {
+    if (interrupted) return;
+    interrupted = signal;
+    record.signal = signal;
+    record.phase = "cancelling";
+    saveRun(evidence, record);
+    for (const child of owned.commands) child.kill("SIGTERM");
+    rejectCancellation(new Error(`Journey cancelled by ${signal}`));
+  };
+  const onInt = () => interrupt("SIGINT");
+  const onTerm = () => interrupt("SIGTERM");
+  process.on("SIGINT", onInt);
+  process.on("SIGTERM", onTerm);
+  owned.check = () => {
+    if (interrupted || owned.closed) throw new Error("Journey is no longer running");
+  };
+  let failure;
+  try {
+    record.revision = captureRevision(ROOT, { production });
+    record.environment = executionEnvironment(ROOT, ["npm", "git", "wt", "agent-browser"]);
+    saveRun(evidence, record);
+    if (production && !existsSync(join(ROOT, "web/dist/index.html"))) {
+      record.outcome = "blocked";
+      throw new Error("Missing production build: run npm run build first");
+    }
+    await Promise.race([runJourney(name, setup, journey, options, owned, record), cancellation]);
+    record.assertions = "passed";
+  } catch (error) {
+    failure = error;
+    if (record.outcome === "running")
+      record.outcome = error.code === "ERR_ASSERTION" ? "failed" : "error";
+    record.error = String(error.stack ?? error);
+    if (!interrupted && owned.page) {
+      try {
+        await owned.page.capture("failure");
+      } catch {}
+    }
+  } finally {
+    owned.closed = true;
+    record.phase = "cleanup";
+    const cleanupErrors = [];
+    if (owned.ab) {
+      try {
+        await owned.ab("close");
+      } catch (error) {
+        cleanupErrors.push(String(error));
+      }
+    }
+    for (const child of owned.children) {
+      if (!child.pid || child.exitCode !== null || child.signalCode !== null) continue;
+      const exited = new Promise((done) => child.once("exit", done));
+      child.kill("SIGTERM");
+      let timer;
+      await Promise.race([
+        exited,
+        new Promise((done) => {
+          timer = setTimeout(done, 10000);
+        }),
+      ]);
+      clearTimeout(timer);
+      if (child.exitCode === null && child.signalCode === null) {
+        child.kill("SIGKILL");
+        await Promise.race([
+          exited,
+          new Promise((done) => {
+            timer = setTimeout(done, 5000);
+          }),
+        ]);
+        clearTimeout(timer);
+      }
+      if (child.exitCode === null && child.signalCode === null)
+        cleanupErrors.push(`Child ${child.pid} did not exit`);
+    }
+    writeFileSync(
+      join(evidence, "process.log"),
+      Object.entries(owned.logs)
+        .map(([label, content]) => `[${label}]\n${content}`)
+        .join("\n"),
+    );
+    for (const [label, content] of Object.entries(owned.logs))
+      writeFileSync(join(evidence, `${label}.log`), content);
+    for (const [label, machine] of [
+      ["local", owned.local],
+      ...owned.peers.map((peer) => [peer.config.id, peer.machine]),
+    ]) {
+      if (machine && existsSync(machine.audit))
+        writeFileSync(join(evidence, `${label}-audit.jsonl`), readFileSync(machine.audit));
+    }
+    if (owned.root && !cleanupErrors.length) rmSync(owned.root, { recursive: true, force: true });
+    record.cleanup = { outcome: cleanupErrors.length ? "error" : "passed", errors: cleanupErrors };
+    record.revisionAfter = captureRevision(ROOT, { production });
+    record.contentObservation = revisionOutcome(
+      record.revision ?? { identity: null },
+      record.revisionAfter,
+    );
+    if (interrupted) {
+      record.outcome = "cancelled";
+      failure ??= new Error(`Journey cancelled by ${interrupted}`);
+    }
+    if (cleanupErrors.length) {
+      record.outcome = "error";
+      failure ??= new Error(`Cleanup failed; scratch retained at ${owned.root}`);
+    } else if (!failure) {
+      record.outcome =
+        record.contentObservation === "endpoints-match" ? "passed" : record.contentObservation;
+      if (record.outcome !== "passed")
+        failure = new Error(`Inconclusive provenance: ${record.contentObservation}`);
+    }
+    record.pids = owned.children.map((child) => child.pid);
+    record.scratch = owned.root;
+    record.phase = "finished";
+    record.finishedAt = new Date().toISOString();
+    record.exitCode = failure ? 1 : 0;
+    saveRun(evidence, record);
+    process.off("SIGINT", onInt);
+    process.off("SIGTERM", onTerm);
+  }
+  console.log(
+    `${record.outcome.toUpperCase()} ${name} (${((Date.now() - started) / 1000).toFixed(1)}s), evidence in ${evidence}`,
+  );
+  if (failure) throw failure;
+}
+
+async function runJourney(name, setup, journey, options, owned, record) {
+  const { evidence, production } = owned;
+  const root = (owned.root = mkdtempSync(join(tmpdir(), `piano-${name}-`)));
+  record.scratch = root;
+  saveRun(evidence, record);
+  const local = (owned.local = await fixture(root, setup));
+  owned.check();
+  // Record npm/Worktrunk when present, but direct Node browser journeys only require Git and
+  // agent-browser. The baseline still requires Worktrunk for its real lifecycle module test.
+  const missing = Object.entries(record.environment.tools).filter(
+    ([tool, version]) => ["git", "agent-browser"].includes(tool) && typeof version !== "string",
+  );
+  if (missing.length) {
+    record.outcome = "blocked";
+    throw new Error(
+      `Missing prerequisites: ${missing.map(([name]) => name).join(", ")}; see docs/development.md#setup`,
+    );
+  }
+  const peers = owned.peers;
   const specs = options.peers ?? (options.remote ? [options.remote] : []);
   const [backendPort, vitePort, ...peerPorts] = await freePorts(2 + specs.length);
   const webPort = production ? backendPort : vitePort;
@@ -143,16 +312,42 @@ export async function run(name, setup, journey, options = {}) {
   });
   const env = environment(local);
   let log = "";
-  const logs = {};
+  const logs = owned.logs;
   const relaunch = new WeakMap();
   const start = (label, args, options) => {
+    owned.check();
     const child = spawn(process.execPath, args, { ...options, stdio: ["ignore", "pipe", "pipe"] });
-    const record = (data) => {
+    owned.children.push(child);
+    (record.processes ??= []).push({
+      label,
+      pid: child.pid,
+      command: [process.execPath, ...args],
+      cwd: options.cwd,
+      isolation: Object.fromEntries(
+        [
+          "HOST",
+          "PORT",
+          "HOME",
+          "PIANO_DB_PATH",
+          "PI_CODING_AGENT_DIR",
+          "PI_CODING_AGENT_SESSION_DIR",
+          "PIANO_PI_CLI",
+          "PI_OFFLINE",
+        ].map((key) => [key, options.env[key]]),
+      ),
+    });
+    saveRun(evidence, record);
+    child.on("error", (error) => {
+      logs[label] = (logs[label] ?? "") + String(error);
+    });
+    if (logs[label] === undefined) writeFileSync(join(evidence, `${label}.log`), "");
+    const recordOutput = (data) => {
       log += `[${label}] ${data}`;
       logs[label] = (logs[label] ?? "") + data;
+      appendFileSync(join(evidence, `${label}.log`), data);
     };
-    child.stdout.on("data", record);
-    child.stderr.on("data", record);
+    child.stdout.on("data", recordOutput);
+    child.stderr.on("data", recordOutput);
     relaunch.set(child, () => start(label, args, options));
     return child;
   };
@@ -224,7 +419,9 @@ export async function run(name, setup, journey, options = {}) {
   );
 
   const browser = `piano-${name}-${process.pid}`;
-  const ab = async (...args) => {
+  record.browserSession = browser;
+  const ab = (owned.ab = async (...args) => {
+    if (args[0] !== "close") owned.check();
     const result = await new Promise((done, fail) => {
       const child = spawn("agent-browser", ["--session", browser, ...args], {
         env: {
@@ -234,12 +431,17 @@ export async function run(name, setup, journey, options = {}) {
         },
         stdio: ["ignore", "pipe", "pipe"],
       });
+      owned.commands.add(child);
+      child.once("close", () => owned.commands.delete(child));
       let stdout = "";
       let stderr = "";
       child.stdout.on("data", (d) => (stdout += d));
       child.stderr.on("data", (d) => (stderr += d));
       const timer = setTimeout(() => child.kill("SIGTERM"), 30000);
-      child.on("error", fail);
+      child.on("error", (error) => {
+        clearTimeout(timer);
+        fail(error);
+      });
       child.on("exit", (status) => {
         clearTimeout(timer);
         done({ status, stdout, stderr });
@@ -251,9 +453,9 @@ export async function run(name, setup, journey, options = {}) {
       `agent-browser ${args.join(" ")}: ${result.stderr || result.stdout}`,
     );
     return result.stdout.trim();
-  };
+  });
   let mod;
-  const page = {
+  const page = (owned.page = {
     ab,
     evidence,
     peers: peerViews,
@@ -364,32 +566,39 @@ export async function run(name, setup, journey, options = {}) {
       }),
     /** What the fake Pis received, in order: `{ command, text?, args?, sessionId }`. */
     received: local.received,
-  };
+  });
   page.prompts = () =>
     page
       .received()
       .filter((r) => r.command === "prompt")
       .map((r) => r.text);
 
-  const started = Date.now();
-  const provenance = {
-    name,
-    production,
-    revision: execFileSync("git", ["rev-parse", "HEAD"], { cwd: ROOT, encoding: "utf8" }).trim(),
-    dirty: execFileSync("git", ["status", "--short"], { cwd: ROOT, encoding: "utf8" }).trim(),
-    node: process.version,
-    platform: process.platform,
+  Object.assign(record, {
     web,
     backend: `http://127.0.0.1:${backendPort}`,
     peers: peers.map((peer) => peer.config),
-    pids: children.map((child) => child.pid),
-    startedAt: new Date(started).toISOString(),
-    outcome: "failed",
-  };
-  try {
+    pids: owned.children.map((child) => child.pid),
+    scratch: root,
+    phase: "readiness",
+    configuration: {
+      browserArgs: options.browserArgs,
+      backendOverrideKeys: Object.keys(options.backendEnv ?? {}),
+      overridesSha256: createHash("sha256")
+        .update(JSON.stringify([options.backendEnv, peers.map((peer) => peer.backendEnv)]))
+        .digest("hex"),
+      limitation:
+        "Override values are not published; the journey constructs them. External config bytes are not snapshotted.",
+    },
+  });
+  saveRun(evidence, record);
+  {
     for (let attempt = 0; ; attempt++) {
+      owned.check();
       for (const child of children)
-        assert.equal(child.exitCode, null, `scratch process exited:\n${log}`);
+        assert.ok(
+          child.pid && child.exitCode === null && child.signalCode === null,
+          `scratch process exited:\n${log}`,
+        );
       try {
         if (
           (await fetch(`http://127.0.0.1:${backendPort}/api/folders`)).ok &&
@@ -406,46 +615,10 @@ export async function run(name, setup, journey, options = {}) {
       await delay(100);
     }
     await ab("set", "viewport", "1280", "900");
+    record.browser = await ab("eval", "navigator.userAgent");
+    record.phase = "journey";
+    saveRun(evidence, record);
     await journey(page);
-    provenance.outcome = "passed";
-    console.log(
-      `PASS ${name} (${((Date.now() - started) / 1000).toFixed(1)}s), evidence in ${evidence}`,
-    );
-  } catch (error) {
-    try {
-      await page.capture("failure");
-    } catch {}
-    provenance.error = String(error.stack ?? error);
-    throw error;
-  } finally {
-    try {
-      await ab("close");
-    } catch {}
-    for (const child of children)
-      if (child.exitCode === null && child.signalCode === null) {
-        const exited = new Promise((done) => child.once("exit", done));
-        child.kill("SIGTERM");
-        await exited;
-      }
-    writeFileSync(join(evidence, "process.log"), log);
-    for (const [label, content] of Object.entries(logs))
-      writeFileSync(join(evidence, `${label}.log`), content);
-    for (const [label, machine] of [
-      ["local", local],
-      ...peers.map((peer) => [peer.config.id, peer.machine]),
-    ])
-      if (machine)
-        writeFileSync(
-          join(evidence, `${label}-audit.jsonl`),
-          machine
-            .received()
-            .map((entry) => JSON.stringify(entry))
-            .join("\n") + "\n",
-        );
-    writeFileSync(
-      join(evidence, "run.json"),
-      JSON.stringify({ ...provenance, finishedAt: new Date().toISOString() }, null, 2),
-    );
-    rmSync(root, { recursive: true, force: true });
+    owned.check();
   }
 }

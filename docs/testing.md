@@ -312,9 +312,75 @@ rows; use the base revision's harness for that comparison. Production builds, re
 input, many-folder grouping, streaming and session selection are separate experiments. No new UI
 strings, controls or actions are introduced.
 
+## File evidence provenance
+
+`npm run verify -- <evidence-directory>` and `test/browser/harness.mjs` write `run.json`, command
+logs and (for browser journeys) screenshots and fake-Pi audits outside scratch state. Defaults are
+ignored `.scratch/verify/<run-id>` and `.scratch/browser/<journey>`; use a fresh explicit directory
+for durable comparisons. Cleanup removes only the run's disposable state, not evidence. Temp
+cleanup may eventually remove `/tmp`; publish the relevant output on the PR. Review logs before
+publication: source/config **bytes** are not in the fingerprint manifest, but paths, output and
+screenshots can still contain private information.
+
+The version-1 revision capture records HEAD, the index's stages/object IDs/modes, and SHA-256 of
+all tracked and non-ignored untracked file bytes, with paths, working-tree permissions, deletions
+and symlink text. Thus two edits to the same dirty path differ, as do stage/unstage operations.
+Symlinks are identified, not traversed: internal targets must also be in the captured path set;
+external/uncaptured targets, submodules, unreadable inputs and unsupported file kinds make
+provenance **unknown**, not passed. Root and web `.env*` files are included even if ignored;
+production browser mode also hashes the existing `web/dist` tree. It identifies the served build,
+not proof that the build came from the current source: rebuild first.
+
+Exclusions are explicit in each record: other ignored/generated files, installed dependency
+**bytes**, external configuration and services are not snapshotted. The lockfile is captured and
+installed direct dependency versions recorded; use `npm ci`, not hand-edited dependencies. Vite
+regenerates `web/public/pdfjs` from installed `pdfjs-dist`; this derived directory is excluded.
+Node/OS/architecture, npm/Git/Worktrunk and (for browsers) agent-browser/browser versions, cwd,
+argv, safe environment fields, journey name, process commands/isolated state paths and timestamps
+identify the execution. Browser preflight requires Git and agent-browser; npm/Worktrunk versions
+are optional observations there, recorded as unavailable when absent. The baseline still requires
+Worktrunk for its lifecycle module test. Journey-supplied backend overrides have a digest and key list, not secret
+values; report external overrides needed for reproduction separately. This is not a full environment
+snapshot, a product evidence engine or implementation of all INV-08/09 target contracts.
+
+The harness persists **running** before setup, and a terminal result only after cleanup. Failed
+assertions are **failed**; missing prerequisites are **blocked**; execution/cleanup problems are
+**error**. SIGINT/SIGTERM are **cancelled** and trigger owned cleanup. SIGKILL/host loss cannot run
+finalizers: a leftover **running** record is incomplete, never a pass, and needs manual owned-resource
+inspection before replacement. The baseline marks unexecuted gates **not-run**. A baseline gate passes on command exit 0, not
+on a claim that every subtest ran: retain/report skipped-test counts and reasons from its log.
+Browser setup
+failures also retain a record and remove their scratch root. A helper file exiting zero without
+calling the harness is not a journey result.
+
+Checks run in the **live checkout**, not an immutable snapshot. Start/end capture differences yield
+**unstable**, capture problems yield **unknown**; both exit nonzero even if assertions passed.
+Matching endpoints mean only `endpoints-match`: they cannot exclude transient edits (including
+during capture), dependency mutation or external environment changes. Run uncontended, report
+known concurrent edits as inconclusive and rerun. Do not infer an atomic snapshot, complete race
+detection, automatic reuse after a commit/rebase, or acceptance of an entire feature from a pass.
+A pass is the bounded observation of executed assertions with the recorded limitations. The PR
+still names the acceptance claim/invariants and any checks not run (INV-07–09, INV-11, INV-13).
+
+Harness failure/cleanup probes, separate from the critical-path suite:
+
+```sh
+node test/fixtures/verification-journey.mjs /tmp/piano-setup-failure setup
+node test/fixtures/verification-journey.mjs /tmp/piano-journey-failure failure
+node test/fixtures/verification-journey.mjs /tmp/piano-cancelled cancel
+```
+
+These deliberately exit nonzero. Inspect `run.json` for the intended error/cancellation, retained
+logs/captures, `cleanup.outcome`, removed scratch path and exited owned PIDs; exit failure alone is
+not evidence that the intended failure was exercised. They use the same scratch harness, never
+live Piano. The module suite covers capture identities, baseline outcomes/cancellation and setup
+failure without requiring a browser installation.
+
 ## Completion evidence
 
-For code or dependency changes, run `npm test`, `npm run typecheck` and `npm run lint` as the repository baseline.
+For code or dependency changes, `npm run verify` runs `npm run typecheck`, `npm run lint` and
+`npm test` as the repository baseline, preserving their individual results. The commands remain
+independently runnable; CI uses those same gates in parallel.
 Run build or other checks when the changed surface requires them. Observe affected application
 behavior through `agent-browser` on a scratch instance that
 [the `verify-piano` skill](../.agents/skills/verify-piano/SKILL.md) launches.

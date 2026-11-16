@@ -296,9 +296,10 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
   database/history and a configured peer connection. Image previews are supported; managed app
   Preview remains on the peer's own Piano.
   The committed `test/browser/remote-session.mjs` covers those boundaries with main plus two
-  independent peers; it cannot run under this skill's one-instance limit. Its imported
-  `voice-input.mjs` helper also needs those peers. Record that unmet prerequisite rather than
-  running the helper alone or borrowing the owner's Piano. An exe.dev peer additionally needs
+  independent peers under the [narrow run-limit exception](../SKILL.md#run-limits); run it alone
+  and wait for owned cleanup. Its imported `voice-input.mjs` helper also needs those peers. The
+  default manual launch has none: record that prerequisite instead of running the helper alone
+  or borrowing the owner's Piano. An exe.dev peer additionally needs
   an authorized peer integration or VM-scoped token, as described in
   [Remote Pianos](../../../../docs/remote-piano.md#setup); direct exe.dev UI/link access needs a
   signed-in browser. Record the actual route attempted and the unmet prerequisite.

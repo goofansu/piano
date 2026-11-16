@@ -32,12 +32,21 @@ terminals, use `npm run dev:server` and `npm run dev:web`.
 Before you commit code or dependency changes, run:
 
 ```bash
-npm run typecheck
-npm run lint
-npm test
+npm run verify
+# Keep evidence in a chosen directory (outside Git):
+npm run verify -- /tmp/piano-baseline
 ```
 
-Documentation-only changes need document and link review, not tests or an app run.
+`verify` runs the unchanged required gates: `npm run typecheck`, `npm run lint`, then `npm test`.
+It retains each command's output and a `run.json`, reports every result, and exits nonzero for a
+failed, blocked, cancelled, error or inconclusive run. A failed gate does not hide later results;
+cancellation leaves remaining gates `not-run`. Run `npm run verify -- --help` for focused and browser
+entry points. On a fresh worktree run `npm ci` first; missing dependencies or tools are **blocked**,
+not success. The wrapper is for Linux/macOS, like the scratch scripts; it owns no app/database.
+
+Documentation-only changes still need document and link review, not this baseline or an app run.
+A baseline pass does not verify a feature or select its browser evidence: follow
+[the testing policy](testing.md). CI retains its existing independent jobs and shards.
 
 The code lives in `server/` (backend), `web/` (React UI), `shared/` (wire schemas) and `test/`.
 Read these next:
@@ -75,7 +84,8 @@ rules with the TypeScript, unicorn, import, React and jsx-a11y plugins; each rul
 why. Suppress one finding with `// oxlint-disable-next-line <rule> -- <reason>`; lint fails on a
 suppression that no longer matches. The same run checks Tailwind classes with `@shadcn/lint`, loaded
 as an oxlint JS plugin: it rejects classes the UI's Tailwind theme does not define.
-`web/src/components/ui/.oxlintrc.json` runs only that check on upstream components.
+`web/src/components/ui/.oxlintrc.json` adds that check on upstream components; they also inherit
+Piano's layer boundary rule.
 
 Stylelint checks the CSS for names that do not exist: an unknown property, or a `var(--…)` that no
 CSS defines. Both pass the build and silently do nothing in the browser. `stylelint.config.mjs` runs
@@ -87,11 +97,48 @@ names or `style` props.
 `npm install` installs a Husky pre-commit hook that runs `npm run lint`. A lint error blocks the
 commit.
 
+## Import boundaries
+
+`npm run lint` enforces `web/src → shared ← server` with the local oxlint rule in
+[`scripts/lint-boundaries.mjs`](../scripts/lint-boundaries.mjs). Browser source may import only its
+own layer and shared via local paths; shared may import only shared. This closes local bridge
+routes through scripts/tests as well as direct cross-layer edges. Server may not import `web/`;
+its intentional `scripts/PreviewOwner.ts` and `PreviewAdapter.ts` imports remain allowed.
+
+Imports, type-only imports (including `import("…")` types), re-exports, literal dynamic imports
+and `require` are checked. Relative paths, current tsconfig aliases and existing symlink targets
+are normalized. Computed imports are rejected; the one resolved Pi SDK URL in
+`server/PiHistoryFile.ts` has a documented inline exemption. The rule reads the two plain-JSON tsconfigs' `paths`; inheritance,
+`baseUrl` or non-terminal alias wildcards require extending the rule rather than silently losing edges. Keep Vite aliases aligned with
+those configs; custom runtime loaders, Vite-only aliases and arbitrary third-party internals are
+not a transitive graph analysis.
+
+Shared external entry points are reviewed, not blanket-banned by vendor: `effect`,
+`@earendil-works/pi-schema` and `zod` are environment-neutral runtime schemas in use today. New
+entry points (including package subpaths) require review in the rule; Node builtins and Node-only
+packages fail even as type imports. `test/lint-boundaries.test.ts` runs allowed and forbidden
+fixtures through the actual oxlint config, including a browser → shared → server bridge and the
+upstream UI config. CI runs the same lint and includes these fixtures in its module shards.
+This guards code review; configuration edits, lint suppressions and unrestricted shell access
+remain trusted, not a security sandbox (INV-01, INV-09).
+
 ## Tests
 
 Module tests (`npm test`) run against a fake Pi and need no model credentials. One test drives a
 real Worktrunk and needs `wt` 0.80.0 or later on `PATH`. The critical-path browser journeys in
-`test/browser/` run with `npm run test:browser`.
+`test/browser/` run with `npm run test:browser`. To focus without a selection DSL:
+
+```sh
+node --test --import ./test/setup.ts test/lint-boundaries.test.ts
+node --test --test-name-pattern='revision identifies' --import ./test/setup.ts test/verification-evidence.test.ts
+node test/browser/start-session.mjs /tmp/piano-start
+```
+
+Node options go **before** the test path; `npm test -- --test-name-pattern=…` does not select tests.
+Browser prerequisites and journey choices live in [testing](testing.md#browser-tests); manual
+setup/readiness/capture/cleanup remain in the [verify-piano skill](../.agents/skills/verify-piano/SKILL.md).
+Use a fresh evidence directory for each observation. See [provenance](testing.md#file-evidence-provenance)
+for exactly what a recorded pass does and does not establish.
 
 ## CI and merging
 

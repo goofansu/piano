@@ -27,6 +27,13 @@ either, finish teardown of the previous run-owned resource using [Cleanup](#clea
 its [evidence](#evidence). If teardown cannot be confirmed, stop and report the blocker rather than
 start a replacement.
 
+**Narrow exception:** `node test/browser/remote-session.mjs <evidence-directory>` may own main plus
+two headless peers and one browser, as one serial journey. Its existing harness gives each machine
+a separate database, HOME, XDG/Pi state and audit, loopback ports and recorded child ownership;
+the one harness tears all of them down before another journey or Launch. Run no other scratch
+instance alongside it. This exception is only for that committed multi-peer journey, not arbitrary
+parallel launches or reuse of live peers. Confirm its `run.json` cleanup result before continuing.
+
 ## Launch
 
 ```bash
@@ -136,11 +143,12 @@ after `web/dist` was built (then the running backend or UI predates the checkout
    node test/browser/transcript-rows.mjs "$EVIDENCE/harness-transcript-rows"
    ```
 
-   Each prints `PASS <name> (<s>), evidence in <dir>` and exits 0, or fails with the assertion.
+   Each prints its outcome and evidence directory. `PASSED` exits 0; failed, blocked, cancelled,
+   error or inconclusive runs exit nonzero. Inspect `run.json`, not just the exit code.
    They do not need `launch.sh`: run them one at a time before Launch (or after cleaning up an
    existing run), and let each finish its own teardown before the next journey or Launch.
-   `npm run test:browser` also includes a multi-peer journey, which exceeds the run limit; use the
-   individual commands above and report any required multi-instance coverage as blocked.
+   `npm run test:browser` runs these and the remote journey serially under the narrow exception
+   above. `npm run verify` is the separate typecheck/lint/module-test baseline, not browser coverage.
 
    For mapped Preview behavior, also run `node test/browser/preview.mjs <evidence-directory>`
    serially before Launch. It needs the native supervisor and free ports described in
@@ -148,12 +156,10 @@ after `web/dist` was built (then the running backend or UI predates the checkout
    `PIANO_PREVIEW_CONFIG` containing `{"origin":"http://127.0.0.1"}` enables external-tab
    interaction without exe.dev authentication; it does not prove authenticated HTTPS access.
 
-   `test/browser/remote-session.mjs` starts main plus two peers, so it exceeds these Run limits
-   even when invoked alone. `test/browser/voice-input.mjs` exports a helper used by that journey;
-   running it directly performs no checks. Record peer conversation, projects, session actions,
-   Changes/files/rail, trust, browser memory, image and voice isolation as unreachable under this
-   limit, with the configured-peer prerequisite and route attempted
-   (see [Open a session](features/open-session.md)). Do not count a helper's exit 0 as coverage.
+   For peer coverage, run `node test/browser/remote-session.mjs <evidence-directory>` alone, before
+   Launch or after cleanup. `test/browser/voice-input.mjs` is only an imported helper: running it
+   directly performs no checks. The default manual launch still has no configured peer; report
+   that prerequisite honestly (see [Open a session](features/open-session.md)).
 
 2. **Then launch once and reuse `agent-browser`** for anything the harness does not cover,
    through `ab.sh`, which runs `agent-browser --session "$AB_SESSION"` from `PATH`.
@@ -198,6 +204,12 @@ set `VERIFY_EVIDENCE` to a persistent directory when longer retention is needed.
 .agents/skills/verify-piano/scripts/capture.sh "$RUN" <feature-id> <step>
 # -> $EVIDENCE/<feature-id>/<step>.png, <step>.aria.txt, <step>.state.json
 ```
+
+The committed harness additionally records content identities, command/environment/journey and
+outcome in `run.json`; see [capture scope and limitations](../../../docs/testing.md#file-evidence-provenance).
+The manual shell flow below has its existing captures/logs, **not** that content fingerprint. Keep
+its drive script and separately identify the tested changes/environment on the PR; invoking the
+skill alone is not evidence.
 
 `state.json` records the URL, title, session header text and the fake-Pi command count at that
 moment. Cleanup adds `_run/` (server and Vite logs, `fake-pi-audit.jsonl`, `run.env`, `pids`).

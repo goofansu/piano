@@ -13,6 +13,7 @@ const loadHistorySdk = async () => {
     import.meta.resolve("@earendil-works/pi-coding-agent"),
   );
   try {
+    // oxlint-disable-next-line piano/layer-imports -- resolved Pi SDK URL above, not a local layer edge.
     const sdk = (await import(url.href)) as Pick<
       typeof import("@earendil-works/pi-coding-agent"),
       "parseSessionEntries" | "SessionManager"

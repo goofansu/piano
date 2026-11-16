@@ -14,6 +14,7 @@
     "dev:web": "npm --prefix web run dev --",
     "build": "npm --prefix web run build",
     "test": "node --test --import ./test/setup.ts 'test/**/*.test.ts'",
+    "verify": "node scripts/verify.mjs",
     "test:browser": "npm run test:browser:local && npm run test:browser:remote",
     "test:browser:local": "node test/browser/start-session.mjs && node test/browser/open-session.mjs && node test/browser/transcript-rows.mjs",
     "test:browser:remote": "node test/browser/remote-session.mjs",
