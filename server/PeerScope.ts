@@ -1,6 +1,6 @@
 import { type ClientMessage, sameSession } from "../shared/wire.ts";
 import type { Selection } from "./ClientSessions.ts";
-import type { RegistryData } from "./Registry.ts";
+import { inOpenFolder, type RegistryData } from "./Registry.ts";
 
 type Request = Exclude<ClientMessage, { _tag: "ack" }>;
 type Act = Extract<Request, { _tag: "act" }>;
@@ -10,14 +10,10 @@ export type PeerVerdict = "admit" | "refuse";
 
 export const registered = (data: RegistryData, cwd: string) =>
   data.workspaces.some((workspace) => workspace.path === cwd);
-const openDirectory = (data: RegistryData, cwd: string) =>
-  data.workspaces.some(
-    (workspace) => workspace.path === cwd && data.folders.includes(workspace.folder),
-  );
 const listed = (data: RegistryData, cwd: string, sessionId: string) =>
   registered(data, cwd) && data.sessions.some((entry) => sameSession(entry, { cwd, sessionId }));
 export const inputTarget = (data: RegistryData, cwd: string, sessionId: string | null) =>
-  sessionId === null ? openDirectory(data, cwd) : listed(data, cwd, sessionId);
+  sessionId === null ? inOpenFolder(data, cwd) : listed(data, cwd, sessionId);
 
 function actionAllowed({ action, start }: Act): boolean {
   if (start?.name !== undefined || start?.dispatchedFrom !== undefined) return false;
@@ -84,7 +80,7 @@ export function peerVerdict(
     case "delete_session":
       return listed(data, request.cwd, request.sessionId) ? "admit" : "refuse";
     case "create_session":
-      return openDirectory(data, request.cwd) && creationAllowed(request) ? "admit" : "refuse";
+      return inOpenFolder(data, request.cwd) && creationAllowed(request) ? "admit" : "refuse";
     case "act":
       return selection?.selectionId === request.selectionId &&
         inputTarget(data, selection.cwd, selection.sessionId) &&
