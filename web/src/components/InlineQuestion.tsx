@@ -94,56 +94,63 @@ function Question({
         {/* A legend holds phrasing content only; the question is Markdown blocks, so it names the
             group by reference instead. */}
         <FieldSet disabled={disabled} aria-labelledby={`${id}-title`} className="min-w-0 gap-3">
-          <QuestionText id={`${id}-title`} text={title} />
-          <FieldGroup className="max-h-[min(16rem,35dvh)] gap-3 overflow-y-auto overscroll-contain p-1">
-            {d.message && (
-              <FieldDescription className="whitespace-pre-wrap break-words">
-                {d.message}
-              </FieldDescription>
-            )}
-            {choice ? (
-              <RadioGroup
-                aria-labelledby={`${id}-title`}
-                value={selected}
-                onValueChange={setReply}
-                disabled={disabled}
-              >
-                {(d.options ?? []).map((option, index) => (
-                  <Field
-                    // Index keys: Pi's immutable option strings may repeat.
-                    key={`${index}-${option}`}
-                    orientation="horizontal"
-                    data-disabled={disabled}
-                  >
-                    <RadioGroupItem id={`${id}-${index}`} value={String(index + 1)} />
-                    <FieldLabel
-                      htmlFor={`${id}-${index}`}
-                      className="min-w-0 flex-1 whitespace-pre-wrap break-words py-2"
+          {/* The title, message and field scroll as one bounded region, so a long question (the
+              model writes paragraphs) leaves the actions and the composer on a phone's screen: the
+              card sits in the pane's non-scrolling column under the transcript. A div, not the
+              fieldset, scrolls: iOS Safari does not scroll a fieldset's overflow reliably. The 1px
+              inset keeps focus rings inside the clip. */}
+          <div className="flex max-h-[min(24rem,50dvh)] min-h-0 flex-col gap-3 overflow-y-auto overscroll-contain p-1">
+            <QuestionText id={`${id}-title`} text={title} />
+            <FieldGroup className="gap-3">
+              {d.message && (
+                <FieldDescription className="whitespace-pre-wrap break-words">
+                  {d.message}
+                </FieldDescription>
+              )}
+              {choice ? (
+                <RadioGroup
+                  aria-labelledby={`${id}-title`}
+                  value={selected}
+                  onValueChange={setReply}
+                  disabled={disabled}
+                >
+                  {(d.options ?? []).map((option, index) => (
+                    <Field
+                      // Index keys: Pi's immutable option strings may repeat.
+                      key={`${index}-${option}`}
+                      orientation="horizontal"
+                      data-disabled={disabled}
                     >
-                      {option}
-                    </FieldLabel>
-                  </Field>
-                ))}
-              </RadioGroup>
-            ) : (
-              <Field data-disabled={disabled}>
-                {d.method === "editor" ? (
-                  <Textarea
-                    aria-labelledby={`${id}-title`}
-                    value={value}
-                    onChange={(event) => setReply(event.target.value)}
-                    className="min-h-24"
-                  />
-                ) : (
-                  <Input
-                    aria-labelledby={`${id}-title`}
-                    value={value}
-                    onChange={(event) => setReply(event.target.value)}
-                  />
-                )}
-              </Field>
-            )}
-          </FieldGroup>
+                      <RadioGroupItem id={`${id}-${index}`} value={String(index + 1)} />
+                      <FieldLabel
+                        htmlFor={`${id}-${index}`}
+                        className="min-w-0 flex-1 whitespace-pre-wrap break-words py-2"
+                      >
+                        {option}
+                      </FieldLabel>
+                    </Field>
+                  ))}
+                </RadioGroup>
+              ) : (
+                <Field data-disabled={disabled}>
+                  {d.method === "editor" ? (
+                    <Textarea
+                      aria-labelledby={`${id}-title`}
+                      value={value}
+                      onChange={(event) => setReply(event.target.value)}
+                      className="min-h-24"
+                    />
+                  ) : (
+                    <Input
+                      aria-labelledby={`${id}-title`}
+                      value={value}
+                      onChange={(event) => setReply(event.target.value)}
+                    />
+                  )}
+                </Field>
+              )}
+            </FieldGroup>
+          </div>
         </FieldSet>
         <div className="flex flex-wrap items-center gap-2">
           {/* A question its tool call owns has no deadline to report, and the composer's Stop is
