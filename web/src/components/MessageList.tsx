@@ -145,7 +145,7 @@ export function MessageList({
   const { virtual, jumping } = useVirtualTranscript(projection, ref, list, viewport);
   const measureRow = useCallback(
     (row: HTMLElement) => {
-      // Radix unmounts closed content in a nested commit; measure in the next microtask.
+      // WORKAROUND(Radix): unmounts closed content in a nested commit; measure in the next microtask.
       queueMicrotask(() => {
         if (!row.isConnected) return;
         flushSync(() => virtual.resizeItem(virtual.indexFromElement(row), row.offsetHeight));
@@ -191,7 +191,7 @@ export function MessageList({
               )}
               <TranscriptDisclosures value={disclosures}>
                 <TranscriptMeasure value={measureRow}>
-                  {/* Clip unmeasured rows to avoid Firefox's scroll/unmount loop. Chromium needs both axes clipped for overflow-clip-margin. */}
+                  {/* WORKAROUND(Firefox/Chromium): clip unmeasured rows to avoid Firefox's scroll/unmount loop. Chromium needs both axes clipped for overflow-clip-margin. */}
                   <div
                     ref={list}
                     className="relative overflow-clip [overflow-clip-margin:6px]"
@@ -441,7 +441,7 @@ function FoldRow({
         return el && head ? domFoldEdges(el, head) : undefined;
       });
     }
-    // Refocusing a clicked header paints a spurious ring in WebKit, where clicks do not focus buttons.
+    // WORKAROUND(WebKit): refocusing a clicked header paints a spurious ring; clicks do not focus buttons.
     const active = document.activeElement;
     if (
       toolOutput &&
@@ -761,7 +761,7 @@ function DispatchRow({
     >
       {detail && <p className="text-xs text-ink-3">{detail}</p>}
       {params && (
-        // A scrollable <pre> breaks drag selection in Firefox; scroll its wrapper instead.
+        // WORKAROUND(Firefox): a scrollable <pre> breaks drag selection; scroll its wrapper instead.
         <div className="overflow-x-auto rounded-lg bg-fill">
           <pre className="whitespace-pre-wrap break-words px-3 py-2 text-ink-2">
             {clamp(params, 8000)}
@@ -926,7 +926,7 @@ function ToolDetails({
   return (
     <>
       {details && (
-        // A scrollable <pre> breaks drag selection in Firefox; scroll its wrapper instead.
+        // WORKAROUND(Firefox): a scrollable <pre> breaks drag selection; scroll its wrapper instead.
         <div className="overflow-x-auto rounded-lg bg-fill">
           <pre className="whitespace-pre px-3 py-2 text-ink-2">{clamp(details, 4000)}</pre>
         </div>

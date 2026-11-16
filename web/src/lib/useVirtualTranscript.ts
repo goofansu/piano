@@ -93,7 +93,7 @@ export function useVirtualTranscript(
     };
   }, [container, viewport, virtual]);
 
-  // oxlint-disable-next-line react-hooks/exhaustive-deps
+  // oxlint-disable-next-line react-hooks/exhaustive-deps -- measure and notify the viewport after every render.
   useLayoutEffect(() => {
     const el = container.current;
     const inner = list.current;

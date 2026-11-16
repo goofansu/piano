@@ -7,7 +7,7 @@ import "./index.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    {/* Make next-themes' SSR script inert to avoid React's warning; index.html sets the theme. */}
+    {/* WORKAROUND(next-themes): make its SSR script inert to avoid React's warning; index.html sets the theme. */}
     <ThemeProvider
       storageKey="piano.theme"
       attribute="class"

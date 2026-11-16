@@ -60,7 +60,7 @@ export function DropdownMenuSubContent({
   );
 }
 
-// Radix's pointerleave refocus during menu exit dismisses the overlay just opened by its item.
+// WORKAROUND(Radix): pointerleave refocus during menu exit dismisses the overlay just opened by its item.
 function keepFocusWhileClosing(event: React.PointerEvent<HTMLDivElement>) {
   const menu = event.currentTarget.closest('[role="menu"]');
   if (menu?.getAttribute("data-state") === "closed") event.preventDefault();

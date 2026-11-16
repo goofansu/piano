@@ -6,7 +6,7 @@ import {
   ModelRuntime,
 } from "@earendil-works/pi-coding-agent";
 import { Context, Data, Effect, Layer } from "effect";
-// Pi's MCP auth helpers are private imports; replace when a public API exists.
+// WORKAROUND(Pi): MCP auth helpers are private imports; replace when a public API exists.
 import { FileAuthStorageBackend } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/auth-storage.js";
 import {
   createDefaultTransport,

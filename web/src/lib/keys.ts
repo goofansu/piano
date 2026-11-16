@@ -7,7 +7,7 @@ export const hasMod = (e: KeyboardEvent | React.KeyboardEvent) =>
 
 type ImeFields = Pick<KeyboardEvent, "isComposing" | "keyCode">;
 
-// Safari's IME-confirming Enter reports keyCode 229 without isComposing.
+// WORKAROUND(Safari): IME-confirming Enter reports keyCode 229 without isComposing.
 export const isImeKey = (e: ImeFields | { nativeEvent: ImeFields }) => {
   const key = "nativeEvent" in e ? e.nativeEvent : e;
   return key.isComposing || key.keyCode === 229;

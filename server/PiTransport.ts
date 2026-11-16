@@ -125,7 +125,7 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
     ],
     {
       cwd,
-      // Node --watch messages confuse Pi's image-resize worker; clear WATCH_REPORT_DEPENDENCIES.
+      // WORKAROUND(Node --watch): messages confuse Pi's image-resize worker; clear WATCH_REPORT_DEPENDENCIES.
       env: {
         ...childEnvironment(),
         WATCH_REPORT_DEPENDENCIES: undefined,

@@ -89,13 +89,72 @@ Piano's layer boundary rule.
 
 Stylelint checks the CSS for names that do not exist: an unknown property, or a `var(--…)` that no
 CSS defines. Both pass the build and silently do nothing in the browser. `stylelint.config.mjs` runs
-only those two rules. It counts Tailwind's own theme variables as defined, and lists the custom
+those two rules plus the [comment policy](#code-comments). It counts Tailwind's own theme variables as defined, and lists the custom
 properties that components set at runtime through `style`; add a new one there with the file that
 sets it. It does not see `var(--…)` inside TSX class
 names or `style` props.
 
 `npm install` installs a Husky pre-commit hook that runs `npm run lint`. A lint error blocks the
 commit.
+
+## Code comments
+
+Keep source comments for concrete workarounds, required legal notices and functional tooling
+directives. Put explanations in the owning docs rather than module headers, API narration, section
+dividers or test commentary. Use this form for a retained workaround:
+
+```ts
+// WORKAROUND(Safari): IME-confirming Enter reports keyCode 229 without isComposing.
+```
+
+```css
+/* WORKAROUND(shadcn 4.21): attachments need scrollbar-none; upstream supplies no-scrollbar. */
+```
+
+Name the affected tool/platform and a nonempty concrete problem or trigger. Keep the note concise;
+include an existing removal condition or issue URL when known, without inventing one. Block comments
+can wrap. A marker alone, an empty target or punctuation-only text fails. The syntax cannot prove
+that a note describes a genuine workaround: reviewers assess its claim, relevance and concision.
+
+`piano/comment-policy` runs in both Oxlint and Stylelint through `npm run lint`, the existing
+pre-commit hook, `npm run verify` and CI. [`scripts/comment-policy.mjs`](../scripts/comment-policy.mjs)
+owns the shared scope and allowed forms, and the Oxlint rule composed into
+[`scripts/lint-boundaries.mjs`](../scripts/lint-boundaries.mjs).
+[`scripts/stylelint-comments.mjs`](../scripts/stylelint-comments.mjs) adapts Stylelint's parsed
+comment nodes. Both check real comments, including JSX containers, not comment-like strings, URLs,
+regex literals, template contents or CSS strings. Neither rule offers an autofix or deletes comments.
+
+The scope is authored JS/TS (including JSX/TSX and module variants) under `server/`, `shared/`,
+`web/`, `scripts/`, `test/`, `extensions/` and `.husky/`, plus root `.mjs` configs. Stylelint's
+existing command checks `web/src/**/*.css`. Upstream `web/src/components/ui/**` and
+`web/src/hooks/use-mobile.ts` are exempt from **comment** checks, not import boundaries. Skills,
+Markdown, shell, JSONC, YAML, `web/public/`, `web/dist/` and normally ignored generated files are
+outside this policy's lint scope; this does not broaden formatting or other lint exclusions.
+
+The deliberately small tooling/legal allowlist is:
+
+- `oxlint`/`eslint` `disable`, `disable-line`, `disable-next-line` and `enable`, with explicit
+  comma-separated rule names and `-- <reason>`; CSS accepts the corresponding `stylelint` forms.
+  A reason must contain text, not just punctuation. JSX suppression containers work too.
+- Line `@ts-expect-error` with a reason and exact `@ts-check`; triple-slash `reference` with one
+  quoted `lib`, `types`, `path`, or `no-default-lib="true"` attribute. Other TypeScript lint rules
+  still apply (for example, the preference for imports over legacy path references).
+- Exact block `@__PURE__`, `#__PURE__`, `@__NO_SIDE_EFFECTS__`, `#__NO_SIDE_EFFECTS__` and
+  `@vite-ignore` annotations, plus parsed shebangs. These are JS tooling, not CSS exceptions.
+- JSDoc containing only `@type {import("package").Type}` (including qualified type names and
+  wrapped JSDoc). This preserves config typing such as `stylelint.config.mjs`, without exempting
+  arbitrary JSDoc tags or accompanying narrative. Additional functional forms need a reviewed
+  allowlist change and CLI fixture, not a generic escape marker.
+- Copyright notices beginning with `Copyright`, optional `(c)`/`©`, a year and a holder (optionally
+  prefixed by `@license`); `SPDX-License-Identifier:` or `@license` followed by a license identifier
+  or an unparenthesized `AND`/`OR`/`WITH` expression. Legal blocks may start with `!`; that marker
+  alone does not exempt prose. Preserve required notice bodies; reviewers check their legal purpose.
+
+[`test/comment-policy.test.ts`](../test/comment-policy.test.ts) exercises the real CLI configs,
+allowed and rejected forms, source-data false positives, unchanged files under `--fix`, and vendor
+exemptions with import-boundary violations. Configuration edits and lint suppressions remain trusted
+review decisions, not security enforcement (INV-09). This is contributor tooling, not a mandatory
+product skill or a new verification command (INV-13).
 
 ## Import boundaries
 

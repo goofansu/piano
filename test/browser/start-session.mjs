@@ -132,7 +132,7 @@ await run(
     await page.capture("3-after-reload");
   },
   {
-    // Headless Chromium can expose no pointer; force a mouse for this journey.
+    // WORKAROUND(headless Chromium): can expose no pointer; force a mouse for this journey.
     browserArgs:
       "--blink-settings=primaryPointerType=4,availablePointerTypes=4,primaryHoverType=2,availableHoverTypes=2",
   },

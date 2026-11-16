@@ -41,7 +41,7 @@ export function nodeSocketEnvironment(config: DispatchConfiguration): SocketEnvi
     frameBytes: machineFrameBytes(LOCAL.id),
     nonce: () => crypto.randomUUID(),
     open: (url, events) => {
-      // Node's WebSocket accepts Undici headers, but its DOM typings omit that overload.
+      // WORKAROUND(Node WebSocket): Undici headers work, but DOM typings omit that overload.
       const NodeWebSocket = WebSocket as unknown as {
         new (url: string, options: { headers: Record<string, string> }): WebSocket;
       };

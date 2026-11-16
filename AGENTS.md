@@ -15,7 +15,8 @@ registry").
 Keep authored source comments to concise notes about concrete hacks, workarounds or compatibility
 patches, naming the trigger or known removal condition. Preserve legal notices and tooling directives.
 Keep explanations in the owning docs, not module headers, API narration or test commentary. Leave
-upstream/vendor comments intact.
+upstream/vendor comments intact. Use `WORKAROUND(tool/platform): concrete problem or trigger`;
+see [comment lint](docs/development.md#code-comments) for scope and recognized exceptions.
 
 ## Verification
 
