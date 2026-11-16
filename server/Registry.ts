@@ -73,6 +73,8 @@ const SessionEntry = Schema.Struct({
   createdAt: Schema.String,
   updatedAt: Schema.String,
   archived: Schema.Boolean,
+  /** Retention generation: prevents stale writes across archive → unarchive. */
+  retentionVersion: Schema.optional(Schema.Number),
   /** Sidebar preference; absent means unpinned. */
   pinned: Schema.optional(Schema.Boolean),
   /** Changes preference: the comparison the user chose; absent means Uncommitted. */
@@ -88,8 +90,9 @@ export type SessionEntry = typeof SessionEntry.Type;
 export const shownReference = ({
   stats: _stats,
   changesScope: _changesScope,
+  retentionVersion: _retentionVersion,
   ...shown
-}: SessionEntry): Omit<SessionEntry, "stats" | "changesScope"> => shown;
+}: SessionEntry): Omit<SessionEntry, "stats" | "changesScope" | "retentionVersion"> => shown;
 
 /**
  * `entry` is still the reference `expected` was read as: not recreated (same creation time), not
@@ -97,7 +100,8 @@ export const shownReference = ({
  */
 const sameReference = (entry: SessionEntry, expected: SessionEntry, link?: SessionLinkKey) =>
   entry.createdAt === expected.createdAt &&
-  (!entry.archived || expected.archived) &&
+  (entry.retentionVersion ?? 0) === (expected.retentionVersion ?? 0) &&
+  entry.archived === expected.archived &&
   (link === undefined || entry[link] === expected[link]);
 
 /** Private integration credentials, deliberately outside RegistryData and its listeners. */
@@ -391,6 +395,14 @@ export class Registry extends Context.Service<
       scope: ChangesScope | undefined,
     ) => Effect.Effect<void, RegistryError>;
     readonly archiveSession: (cwd: string, sessionId: string) => Effect.Effect<void, RegistryError>;
+    readonly unarchiveSession: (
+      cwd: string,
+      sessionId: string,
+    ) => Effect.Effect<void, RegistryError>;
+    /** One write; rechecks reference generation and pinned state at commit. Caller owns execution locks. */
+    readonly archiveSessions: (
+      expected: ReadonlyArray<SessionEntry>,
+    ) => Effect.Effect<number, RegistryError>;
     /**
      * `reopened` names the done mark `addSession` cleared for this session: removing a start that
      * failed gives it back, unless the project took a later session or is no longer open.
@@ -784,9 +796,41 @@ export const RegistryLive = Layer.effect(
         update((d) => ({
           ...d,
           sessions: d.sessions.map((t) =>
-            isSession(cwd, sessionId)(t) ? { ...t, archived: true } : t,
+            isSession(cwd, sessionId)(t) && !t.archived
+              ? { ...t, archived: true, retentionVersion: (t.retentionVersion ?? 0) + 1 }
+              : t,
           ),
         })),
+      unarchiveSession: (cwd, sessionId) =>
+        update((d) => {
+          const entry = d.sessions.find(isSession(cwd, sessionId));
+          if (!entry?.archived)
+            throw new RegistryError({
+              detail: "Session reference is unavailable. Refresh and try again.",
+            });
+          return {
+            ...d,
+            sessions: d.sessions.map((s) =>
+              s === entry
+                ? { ...s, archived: false, retentionVersion: (s.retentionVersion ?? 0) + 1 }
+                : s,
+            ),
+          };
+        }),
+      archiveSessions: Effect.fn("Registry.archiveSessions")(function* (expected) {
+        let count = 0;
+        const candidates = new Map(expected.map((s) => [sessionKey(s.cwd, s.sessionId), s]));
+        yield* update((d) => ({
+          ...d,
+          sessions: d.sessions.map((s) => {
+            const before = candidates.get(sessionKey(s.cwd, s.sessionId));
+            if (!before || s.archived || s.pinned || !sameReference(s, before)) return s;
+            count++;
+            return { ...s, archived: true, retentionVersion: (s.retentionVersion ?? 0) + 1 };
+          }),
+        }));
+        return count;
+      }),
       removeSession: (cwd, sessionId, reopened) =>
         update((d) => {
           const at = d.sessions.findIndex(isSession(cwd, sessionId));

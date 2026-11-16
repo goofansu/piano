@@ -205,7 +205,7 @@ test("Settings commands offer pages, not nested sections such as Radius", () => 
     );
     assert.deepEqual(
       commands.map((command) => command.label),
-      ["Providers", "MCP", "Skills", "Prompts", "Webhooks", "Preferences"],
+      ["Providers", "MCP", "Skills", "Prompts", "Webhooks", "Preferences", "Data controls"],
     );
     assert.deepEqual(commands[0]?.intent, { kind: "settings", section: "providers" });
   }

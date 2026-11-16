@@ -1040,6 +1040,30 @@ const refusals: {
     { _tag: "archive_session", cwd, sessionId: "x" },
     { _tag: "error", message: "REFUSED" },
   ],
+  unarchive_session: [
+    { _tag: "unarchive_session", cwd, sessionId: "x", requestId: "u1" },
+    {
+      _tag: "data_controls_result",
+      requestId: "u1",
+      result: { status: "error", detail: "REFUSED" },
+    },
+  ],
+  archive_all_sessions: [
+    { _tag: "archive_all_sessions", requestId: "a1" },
+    {
+      _tag: "data_controls_result",
+      requestId: "a1",
+      result: { status: "error", detail: "REFUSED" },
+    },
+  ],
+  archive_sessions_count: [
+    { _tag: "archive_sessions_count", requestId: "c1" },
+    {
+      _tag: "data_controls_result",
+      requestId: "c1",
+      result: { status: "error", detail: "REFUSED" },
+    },
+  ],
   delete_session: [
     { _tag: "delete_session", cwd, sessionId: "x" },
     { _tag: "error", message: "REFUSED" },
@@ -1422,6 +1446,87 @@ test("every change ends with one toast naming it after it succeeds; a failed cha
           ["archived", undefined, undefined, true],
         ],
       );
+    }),
+  );
+});
+
+test("PIN-152: Data controls returns actual counts, clears an archived selection and confirms closed folders truthfully", async () => {
+  await run(
+    Effect.gen(function* () {
+      const r = yield* Registry;
+      yield* r.addFolder(cwd);
+      for (const id of ["saved", "pinned", "live"]) yield* r.addSession(cwd, id);
+      yield* r.pinSession(cwd, "pinned", true);
+      yield* (yield* SessionHosts).open({ cwd, sessionId: "live" });
+      const { receive } = yield* client;
+      yield* yield* receive({ _tag: "select", cwd, sessionId: "saved", selectionId: "saved-view" });
+      let from = sent.length;
+      yield* yield* receive({ _tag: "archive_sessions_count", requestId: "count" });
+      assert.deepEqual(answers(from), [
+        { _tag: "data_controls_result", requestId: "count", result: { status: "ready", count: 1 } },
+      ]);
+      from = sent.length;
+      yield* yield* receive({ _tag: "archive_all_sessions", requestId: "archive" });
+      const result = answers(from);
+      assert.ok(
+        result.some(
+          (m) => m._tag === "selected" && m.selectionId === "saved-view" && m.sessionId === null,
+        ),
+      );
+      assert.deepEqual(
+        result.filter((m) => m._tag !== "selected"),
+        [
+          {
+            _tag: "data_controls_result",
+            requestId: "archive",
+            result: { status: "ready", count: 1 },
+          },
+          { _tag: "toast", level: "success", message: "1 sessions archived" },
+        ],
+      );
+      for (const closed of [false, true]) {
+        if (closed) {
+          yield* r.archiveSession(cwd, "saved");
+          yield* r.removeFolder(cwd);
+        }
+        from = sent.length;
+        yield* yield* receive({
+          _tag: "unarchive_session",
+          cwd,
+          sessionId: "saved",
+          requestId: "restore",
+        });
+        assert.deepEqual(answers(from), [
+          {
+            _tag: "data_controls_result",
+            requestId: "restore",
+            result: { status: "ready", count: 1 },
+          },
+          {
+            _tag: "toast",
+            level: "success",
+            message: closed ? "Session unarchived · Folder remains closed" : "Session unarchived",
+          },
+        ]);
+      }
+      from = sent.length;
+      yield* yield* receive({
+        _tag: "unarchive_session",
+        cwd,
+        sessionId: "saved",
+        requestId: "invalid",
+      });
+      assert.deepEqual(answers(from), [
+        {
+          _tag: "data_controls_result",
+          requestId: "invalid",
+          result: {
+            status: "error",
+            detail: "Session reference is unavailable. Refresh and try again.",
+          },
+        },
+      ]);
+      assert.deepEqual((yield* r.get).folders, []);
     }),
   );
 });

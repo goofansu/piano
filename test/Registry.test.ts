@@ -98,7 +98,7 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
   const upgraded = new DatabaseSync(f.dbPath, { readOnly: true }),
     backup = new DatabaseSync(`${f.dbPath}.v1-backup`, { readOnly: true });
   try {
-    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 16);
+    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 17);
     assert.deepEqual(
       upgraded
         .prepare("SELECT name FROM pragma_table_info('projects')")
@@ -341,7 +341,7 @@ test("version-16 retires session sharing: a saved Radius link is dropped and its
   assert.deepEqual((await f.get()).sessions, [before]);
   const upgraded = new DatabaseSync(f.dbPath, { readOnly: true });
   try {
-    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 16);
+    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 17);
     assert.equal(
       upgraded
         .prepare("SELECT name FROM pragma_table_info('sessions')")
@@ -404,6 +404,90 @@ test("INV-01/07: a session link is set only on the same reference, not archived 
   );
 });
 
+test("PIN-152: version-16 migration preserves references and introduces durable retention generations", async (t) => {
+  const f = fixture(t),
+    cwd = join(f.root, "folder");
+  await f.run(
+    Effect.gen(function* () {
+      yield* (yield* Registry).addSession(cwd, "legacy");
+    }),
+  );
+  const before = await f.get();
+  const legacy = new DatabaseSync(f.dbPath);
+  try {
+    legacy.exec("ALTER TABLE sessions DROP COLUMN retention_version; PRAGMA user_version = 16;");
+  } finally {
+    legacy.close();
+  }
+  assert.deepEqual(await f.get(), before);
+  await f.run(
+    Effect.gen(function* () {
+      const r = yield* Registry;
+      yield* r.archiveSession(cwd, "legacy");
+      yield* r.unarchiveSession(cwd, "legacy");
+    }),
+  );
+  assert.equal((await f.get()).sessions[0]?.retentionVersion, 2);
+});
+
+test("PIN-152: reversible archive preserves metadata and refuses stale writes after unarchive; bulk commits once", async (t) => {
+  const f = fixture(t),
+    cwd = join(f.root, "missing-closed-folder");
+  let stale: import("../server/Registry.ts").SessionEntry;
+  await f.run(
+    Effect.gen(function* () {
+      const r = yield* Registry;
+      for (const id of ["one", "two", "pinned"]) yield* r.addSession(cwd, id, id);
+      const before = yield* r.get;
+      yield* r.pinSession(cwd, "pinned", true); // Pin after planning: the write must recheck it.
+      stale = before.sessions[0]!;
+      let changes = 0;
+      yield* r.onChange(() =>
+        Effect.sync(() => {
+          changes++;
+        }),
+      );
+      const db = new DatabaseSync(f.dbPath, { readOnly: true });
+      try {
+        const revision = Number(db.prepare("SELECT revision FROM registry_meta").get()!.revision);
+        assert.equal(yield* r.archiveSessions(before.sessions), 2);
+        assert.equal(changes, 1);
+        assert.equal(
+          db.prepare("SELECT revision FROM registry_meta").get()!.revision,
+          revision + 1,
+        );
+        assert.equal(yield* r.archiveSessions(before.sessions), 0);
+        assert.equal(changes, 1, "no empty write");
+      } finally {
+        db.close();
+      }
+      yield* r.unarchiveSession(cwd, "one");
+      const restored = (yield* r.get).sessions[0]!;
+      assert.deepEqual(restored, { ...stale, retentionVersion: 2 });
+      assert.equal(yield* r.current(stale), undefined);
+      assert.equal(yield* r.setSessionLink(stale, "pullRequest", null), undefined);
+      assert.equal(
+        yield* r.archiveSessions([stale]),
+        0,
+        "an earlier bulk snapshot cannot archive a restored reference",
+      );
+      for (const id of ["one", "unknown"])
+        assert.match(
+          (yield* Effect.flip(r.unarchiveSession(cwd, id))).detail,
+          /Session reference is unavailable/,
+        );
+      assert.deepEqual((yield* r.get).folders, []);
+    }).pipe(Effect.scoped),
+  );
+  await f.run(
+    Effect.gen(function* () {
+      const r = yield* Registry;
+      assert.equal((yield* r.get).sessions[0]!.retentionVersion, 2);
+      assert.equal(yield* r.current(stale!), undefined, "the generation survives restart");
+    }),
+  );
+});
+
 for (const version of [4, 5, 6]) {
   test(`INV-01: version-${version} migration retires notification stores and preserves unrelated data`, async (t) => {
     const f = fixture(t);
@@ -436,7 +520,7 @@ for (const version of [4, 5, 6]) {
     assert.deepEqual(await f.get(), before, "reopening the upgraded database is idempotent");
     const stored = new DatabaseSync(f.dbPath, { readOnly: true });
     try {
-      assert.equal(stored.prepare("PRAGMA user_version").get()!.user_version, 16);
+      assert.equal(stored.prepare("PRAGMA user_version").get()!.user_version, 17);
       assert.deepEqual(
         stored
           .prepare(

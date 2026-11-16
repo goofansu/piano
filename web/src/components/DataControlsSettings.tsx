@@ -33,7 +33,7 @@ export function DataControlsSettings({ state, client }: { state: AppState; clien
       dialogs={
         <RemovalDialog
           {...confirmation}
-          description="Open and pinned sessions are kept. Transcripts are kept."
+          description="Running and pinned sessions are kept. Transcripts are kept."
           action="Archive all"
           destructive={false}
           cancel={controls.cancel}

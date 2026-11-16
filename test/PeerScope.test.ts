@@ -294,6 +294,32 @@ test(
       assert.match(String(act?.message), notAvailable);
     });
 
+    await t.test(
+      "Data controls mutations and count are local only, even for a listed session",
+      async () => {
+        const before = await readRegistry("unused", f.database);
+        for (const _tag of [
+          "unarchive_session",
+          "archive_all_sessions",
+          "archive_sessions_count",
+        ]) {
+          const [answer, ...rest] = await peer.answers({
+            _tag,
+            requestId: _tag,
+            cwd: identity.cwd,
+            sessionId: identity.sessionId,
+          });
+          assert.equal(answer?._tag, "data_controls_result");
+          assert.equal(answer?.requestId, _tag);
+          assert.ok(answer);
+          assert.equal((answer.result as { status: string }).status, "error");
+          assert.match((answer.result as { detail: string }).detail, notAvailable);
+          assert.deepEqual(rest, []);
+        }
+        assert.deepEqual((await readRegistry("unused", f.database)).sessions, before.sessions);
+      },
+    );
+
     await t.test("a registered folder's trust is decided from another machine", async () => {
       const from = peer.frames.length;
       peer.ws.send(JSON.stringify({ _tag: "set_trust", path: f.checkout, trusted: true }));
