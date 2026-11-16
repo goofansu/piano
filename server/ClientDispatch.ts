@@ -248,9 +248,9 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
     },
     models: {
       admission: "ordinary",
-      run: ({ cwd, refresh, requestId }) =>
+      run: ({ cwd, requestId }) =>
         facts
-          .catalog(cwd, { refresh })
+          .catalog(cwd, { refresh: true })
           .pipe(
             Effect.flatMap((catalog) =>
               send(
