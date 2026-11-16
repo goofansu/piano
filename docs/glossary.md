@@ -15,6 +15,9 @@ SQLite, UI and documentation. Some describe the target model in
 | Offers (machine) | What a machine offers in this browser, decided in one place (`machineOffers`): Local offers everything; a remote offers the conversation slice of [ADR 0004](adr/0004-same-owner-piano-peer.md), its projects included. Name an offer by what the UI shows ("files", "worktrees"), not by "remote". |
 | Workspace | Piano's context around a folder root or worktree, attaching sessions, revision, processes, evidence and integration state. Each has a registry ID, which URLs carry in place of its path. |
 | Session | The Pi session, with Pi-owned history and identity. Use "session" for the entity and its lifecycle, never "thread". |
+| Running session | A session whose Pi is running or starting, including while idle, waiting for input or owning an app. Not merely the session selected on screen, and not only one that is Working. |
+| Data controls | The local Settings section for session retention: Archive all sessions and Archived sessions. |
+| Unarchive | Restore an archived session's normal listing eligibility without starting Pi or changing its history. A closed folder stays closed. |
 | Page | A main-pane view other than a session: the New page, the Projects index, a project's home, or Session not found. Opening one leaves the selected session; each has its own address. |
 | Session pane | The main pane when it is not on a page: a session shown or being selected, a session being created (addressed `/new` until it has an ID), a selection that failed (kept at the session's address with its Retry), or an unresolved deep link. Closing Settings returns to it unless it holds nothing. |
 | Conversation | The user messages and final assistant replies within a session, rather than its tool activity or intermediate assistant output. Use for navigation through that exchange, such as "Top of conversation" and "End of conversation"; not a separate session identity. |

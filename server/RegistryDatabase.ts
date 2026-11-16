@@ -28,6 +28,7 @@ const schema = `
     cwd TEXT NOT NULL REFERENCES workspaces(path), session_id TEXT NOT NULL,
     project_id TEXT REFERENCES projects(id), title TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
     archived INTEGER NOT NULL CHECK (archived IN (0, 1)),
+    retention_version INTEGER NOT NULL DEFAULT 0,
     pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1)),
     stats TEXT CHECK (stats IS NULL OR json_valid(stats)),
     pull_request_state TEXT NOT NULL CHECK (pull_request_state IN ('discover', 'removed', 'linked')),
@@ -137,6 +138,7 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
       "pull_request_head_repo",
       "pull_request_base_repo",
       "changes_scope",
+      "retention_version",
     ],
     keys: 2,
     key: (s) => [s.cwd, s.sessionId],
@@ -160,6 +162,7 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
       s.pullRequest?.headRepo ?? null,
       s.pullRequest?.baseRepo ?? null,
       s.changesScope ?? null,
+      s.retentionVersion ?? 0,
     ],
     decode: (r) => ({
       cwd: r.cwd as string,
@@ -167,6 +170,7 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
       createdAt: r.created_at as string,
       updatedAt: r.updated_at as string,
       archived: Boolean(r.archived),
+      ...(r.retention_version ? { retentionVersion: Number(r.retention_version) } : {}),
       ...(r.pinned ? { pinned: true } : {}),
       ...(r.changes_scope === null
         ? {}
@@ -331,7 +335,8 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
         version !== 13 &&
         version !== 14 &&
         version !== 15 &&
-        version !== 16
+        version !== 16 &&
+        version !== 17
       )
         throw new Error(
           `Unsupported registry database version ${version}; upgrade Piano rather than resetting the database.`,
@@ -423,6 +428,16 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
           .get();
         if (share) db.exec("ALTER TABLE sessions DROP COLUMN radius_share;");
         db.exec("PRAGMA user_version = 16;");
+      }
+      // Retention generations survive reversible archive and restart; old references start at zero.
+      if (Number(version) < 17) {
+        if (
+          !db
+            .prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name = 'retention_version'")
+            .get()
+        )
+          db.exec("ALTER TABLE sessions ADD COLUMN retention_version INTEGER NOT NULL DEFAULT 0;");
+        db.exec("PRAGMA user_version = 17;");
       }
       db.exec("COMMIT");
     } catch (error) {

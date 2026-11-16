@@ -1067,6 +1067,14 @@ export const ClientMessage = Schema.Union([
   }),
   /** Hide a session from the sidebar (and stop Pi for it if running). */
   Schema.TaggedStruct("archive_session", { cwd: Schema.String, sessionId: Schema.String }),
+  /** Local Data controls: change references only, never start or stop Pi. */
+  Schema.TaggedStruct("unarchive_session", {
+    cwd: Schema.String,
+    sessionId: Schema.String,
+    requestId: Schema.String,
+  }),
+  Schema.TaggedStruct("archive_all_sessions", { requestId: Schema.String }),
+  Schema.TaggedStruct("archive_sessions_count", { requestId: Schema.String }),
   /** Stop Pi for a session, delete its file from Pi's session store, and forget it. */
   Schema.TaggedStruct("delete_session", { cwd: Schema.String, sessionId: Schema.String }),
 ]);
@@ -1169,6 +1177,13 @@ export const ServerMessage = Schema.Union([
     selectionId: Schema.String,
     requestId: Schema.String,
     message: Schema.String,
+  }),
+  Schema.TaggedStruct("data_controls_result", {
+    requestId: Schema.String,
+    result: Schema.Union([
+      Schema.Struct({ status: Schema.Literal("ready"), count: Schema.Number }),
+      Schema.Struct({ status: Schema.Literal("error"), detail: Schema.String }),
+    ]),
   }),
   Schema.TaggedStruct("worktree_result", { requestId: Schema.String, result: WorktreeResult }),
   Schema.TaggedStruct("session_status", {

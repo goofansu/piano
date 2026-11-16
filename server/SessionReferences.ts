@@ -72,8 +72,10 @@ export class SessionReferences extends Context.Service<
     ) => Effect.Effect<(cwd: string, sessionId: string) => SessionReference["unavailable"]>;
     /** The saved conversation without starting Pi, with last known statistics and checkout state. */
     readonly peek: (location: SessionLocation) => Effect.Effect<Snapshot>;
-    /** Keep the history and hide the reference; an archived session cannot be resolved again. */
+    /** Keep history and hide the reference until explicitly unarchived. */
     readonly archive: (location: SessionLocation) => Effect.Effect<void, PiSessionError>;
+    /** Clear retention under the same alias checks, without reading or changing Pi history. Returns the registered cwd. */
+    readonly unarchive: (cwd: string, sessionId: string) => Effect.Effect<string, PiSessionError>;
     /** Delete Pi's file, then the reference. Pi must not be running for it. */
     readonly remove: (location: SessionLocation) => Effect.Effect<void, PiSessionError>;
   }
@@ -108,12 +110,10 @@ export const SessionReferencesLive = Layer.effect(
       return { ...at, spellings: new Set([directoryPath(cwd), at.physical]) };
     });
 
-    const resolve = Effect.fn("SessionReferences.resolve")(function* (
+    const reference = Effect.fn("SessionReferences.reference")(function* (
       cwd: string,
       sessionId: string,
-      options?: { readonly create?: boolean; readonly confirmAbsent?: boolean },
-    ): Effect.fn.Return<SessionLocation, PiSessionError> {
-      const create = options?.create ?? false;
+    ) {
       const { physical } = yield* checkout(cwd);
       const candidates = (yield* registry.get).sessions.filter((s) => s.sessionId === sessionId);
       const matching = [];
@@ -128,9 +128,20 @@ export const SessionReferencesLive = Layer.effect(
         return yield* rejected(
           `Conflicting session references for ${sessionId}: ${matching.map((s) => s.cwd).join(", ")}. Keep the original references and resolve the duplicate explicitly; Piano has not merged or moved history.`,
         );
-      const entry = matching[0];
+      return { entry: matching[0], physical };
+    });
+
+    const resolve = Effect.fn("SessionReferences.resolve")(function* (
+      cwd: string,
+      sessionId: string,
+      options?: { readonly create?: boolean; readonly confirmAbsent?: boolean },
+    ): Effect.fn.Return<SessionLocation, PiSessionError> {
+      const create = options?.create ?? false;
+      const { entry, physical } = yield* reference(cwd, sessionId);
       if (entry?.archived)
-        return yield* rejected("This session is archived. Start a new session instead.");
+        return yield* rejected(
+          "This session is archived. Unarchive it in Settings → Data controls.",
+        );
       if (!entry && !create)
         return yield* rejected(
           "This session is no longer registered. Refresh the folder list; deleted sessions cannot be restarted.",
@@ -211,6 +222,15 @@ export const SessionReferencesLive = Layer.effect(
         registry
           .archiveSession(location.cwd, location.sessionId)
           .pipe(Effect.mapError((e) => rejected(e.detail))),
+      unarchive: Effect.fn("SessionReferences.unarchive")(function* (cwd, sessionId) {
+        const { entry } = yield* reference(cwd, sessionId);
+        if (!entry?.archived)
+          return yield* rejected("Session reference is unavailable. Refresh and try again.");
+        yield* registry
+          .unarchiveSession(entry.cwd, sessionId)
+          .pipe(Effect.mapError((e) => rejected(e.detail)));
+        return entry.cwd;
+      }),
       remove: Effect.fn("SessionReferences.remove")(function* (location: SessionLocation) {
         const file = location.file;
         if (file)

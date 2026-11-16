@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { folderCommands } from "../web/src/lib/folderCommands.ts";
-import { trustCommand } from "../web/src/lib/globalCommands.ts";
+import { globalCommands, trustCommand } from "../web/src/lib/globalCommands.ts";
 import { LOCAL } from "../web/src/lib/machine.ts";
 import { type MachineOffers, machineOffers } from "../web/src/lib/machineOffers.ts";
 import {
@@ -9,6 +9,7 @@ import {
   newProjectCommand,
   projectCommands,
 } from "../web/src/lib/projectCommands.ts";
+import { SETTINGS_SECTIONS } from "../web/src/lib/routes.ts";
 import { sessionCommands } from "../web/src/lib/sessionCommands.ts";
 import { type AppState, initialState } from "../web/src/store.ts";
 
@@ -25,6 +26,33 @@ const surfaces = (offers: MachineOffers) =>
   Object.entries(offers)
     .filter(([, value]) => typeof value === "boolean")
     .map(([name, value]) => [name, value] as const);
+
+test("Data controls is the seventh Settings destination, offered only on Local", () => {
+  assert.equal(SETTINGS_SECTIONS.length, 7);
+  assert.deepEqual(SETTINGS_SECTIONS.at(-1), {
+    id: "data-controls",
+    label: "Data controls",
+    icon: "archive",
+  });
+  const commands = globalCommands(state, {
+    settings: null,
+    view: { groupBy: "date", sortBy: "recent", folderAndBranch: false },
+    theme: "dark",
+  });
+  const command = commands.find((c) => c.id === "settings-data-controls");
+  assert.ok(command);
+  assert.equal(machineOffers(LOCAL).command(command), true);
+  const remote = machineOffers({ id: "eng-1", name: "eng-1" });
+  assert.equal(remote.settings, false);
+  assert.equal(remote.command(command), false);
+  for (const wire of [
+    { _tag: "archive_sessions_count", requestId: "r1" },
+    { _tag: "archive_all_sessions", requestId: "r2" },
+    { _tag: "unarchive_session", cwd: "/repo", sessionId: "s1", requestId: "r3" },
+  ] as const) {
+    assert.equal(remote.command({ ...command, intent: { kind: "send", command: wire } }), false);
+  }
+});
 
 test("Local offers every surface and command", () => {
   const offers = machineOffers(LOCAL);

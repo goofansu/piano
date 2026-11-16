@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { toast } from "sonner";
 import { ApiKeySettings } from "@/components/ApiKeySettings";
 import { LayoutFooter, LayoutHeader } from "@/components/AppLayout";
+import { DataControlsSettings } from "@/components/DataControlsSettings";
 import { LibrarySettings } from "@/components/LibrarySettings";
 import { McpSettings } from "@/components/McpSettings";
 import { PianoButton } from "@/components/PianoButton";
@@ -33,10 +34,12 @@ import {
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WebhookSettings } from "@/components/WebhookSettings";
+import type { Client } from "@/lib/client";
 import { providersSettingsView } from "@/lib/providersSettingsView";
 import { SETTINGS_SECTIONS, type SettingsSection } from "@/lib/routes";
 import { providerAccounts, useProviderAccounts } from "@/lib/useProviderAccounts";
 import { useSetupActions } from "@/lib/useSetupActions";
+import type { AppState } from "@/store";
 
 export type { SettingsSection } from "@/lib/routes";
 
@@ -86,7 +89,15 @@ export function SettingsNavigation({
   );
 }
 
-export function SettingsPage({ section }: { section: SettingsSection }) {
+export function SettingsPage({
+  section,
+  state,
+  client,
+}: {
+  section: SettingsSection;
+  state: AppState;
+  client: Client;
+}) {
   // Each page; a page named in SETTINGS_SECTIONS without one here fails to typecheck.
   const pages: Record<SettingsSection, () => React.ReactNode> = {
     providers: () => <ProvidersSettings />,
@@ -95,6 +106,7 @@ export function SettingsPage({ section }: { section: SettingsSection }) {
     prompts: () => <LibrarySettings kind="prompt" />,
     webhooks: () => <WebhookSettings />,
     preferences: () => <PreferencesSettings />,
+    "data-controls": () => <DataControlsSettings state={state} client={client} />,
   };
   return pages[section]();
 }

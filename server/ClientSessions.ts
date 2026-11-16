@@ -19,6 +19,7 @@ import {
   type HostInfo,
   type ServerMessage,
   type SessionAction,
+  type SessionReference,
   type StartOptions,
   sameSession,
 } from "../shared/wire.ts";
@@ -109,6 +110,10 @@ interface ClientSessions {
    * otherwise keep the answer it was shown with.
    */
   readonly recheck: Effect.Effect<void>;
+  /** Clear this client's saved selection after its bulk retention change. Other clients retain the Archived view. */
+  readonly clearArchived: (
+    references: ReadonlyArray<Pick<SessionReference, "cwd" | "sessionId" | "archived">>,
+  ) => Effect.Effect<void>;
   /** Detaches a session, stops Pi and archives or deletes it, then clears the selection if it showed that session. */
   readonly retire: (
     cwd: string,
@@ -560,6 +565,31 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
       ),
     act,
     recheck,
+    clearArchived: (references) =>
+      navigate(
+        Effect.gen(function* () {
+          if (
+            !selected?.sessionId ||
+            !references.some(
+              (r) => r.archived && r.cwd === selected?.cwd && r.sessionId === selected.sessionId,
+            )
+          )
+            return;
+          const { selectionId, cwd } = selected;
+          selected = null;
+          shown = null;
+          yield* detach;
+          yield* send({
+            _tag: "selected",
+            selectionId,
+            cursor: null,
+            cwd,
+            sessionId: null,
+            hosted: false,
+            snapshot: emptySnapshot(""),
+          });
+        }),
+      ),
     retire,
   } satisfies ClientSessions as ClientSessions;
 });

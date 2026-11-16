@@ -170,7 +170,7 @@ function MachineApp() {
                   </LayoutView>
                   {offers.settings && settings && (
                     <LayoutView>
-                      <SettingsPage section={settings} />
+                      <SettingsPage section={settings} state={state} client={client} />
                     </LayoutView>
                   )}
                 </>

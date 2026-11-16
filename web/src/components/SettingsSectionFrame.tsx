@@ -1,6 +1,7 @@
 import { cn } from "cn";
 import {
   AlertCircleIcon,
+  ArchiveIcon,
   ExternalLinkIcon,
   type LucideIcon,
   PlugIcon,
@@ -31,6 +32,7 @@ const ICONS: Record<SettingsSectionIconName, LucideIcon> = {
   prompt: SquareSlashIcon,
   webhook: WebhookIcon,
   preferences: SlidersHorizontalIcon,
+  archive: ArchiveIcon,
 };
 
 /** A Settings section's icon, as navigation and the command palette show it. */

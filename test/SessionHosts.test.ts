@@ -917,6 +917,104 @@ for (const operation of ["archive", "delete"] as const)
 
 // SessionReferences' tests own which reference and file a session resolves to and what a
 // conflict is; this one owns that Pi starts under the owner's spelling and a refusal starts none.
+test("PIN-152: bulk archive keeps live and pinned sessions, includes closed/missing checkouts, and unarchive starts nothing", async () => {
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts,
+        registry = yield* Registry;
+      const missing = join(root, "bulk-missing");
+      yield* registry.addFolder(cwd);
+      for (const id of ["bulk-idle", "bulk-working", "bulk-pinned", "bulk-saved"])
+        yield* registry.addSession(alias, id, id);
+      yield* registry.addSession(missing, "bulk-missing");
+      yield* registry.pinSession(alias, "bulk-pinned", true);
+      const idle = yield* hosts.open({ cwd, sessionId: "bulk-idle" });
+      const working = yield* hosts.open({ cwd, sessionId: "bulk-working" });
+      yield* prompt(working, "/hold");
+      const file = seed(alias, "bulk-saved", "saved history");
+      const history = readFileSync(file, "utf8");
+      yield* registry.removeFolder(cwd);
+      assert.equal(yield* hosts.archiveCount, 2);
+      assert.equal(yield* hosts.archiveAll, 2);
+      assert.deepEqual(
+        (yield* registry.get).sessions.filter((s) => s.archived).map((s) => s.sessionId),
+        ["bulk-saved", "bulk-missing"],
+      );
+      assert.equal(yield* hosts.get(cwd, "bulk-idle"), idle);
+      assert.equal(yield* hosts.get(cwd, "bulk-working"), working);
+      assert.equal((yield* working.state).isQuiescent, false);
+      assert.equal(
+        records("bulk-idle").some((r) => r.event === "exit"),
+        false,
+      );
+      assert.equal(
+        records("bulk-working").some((r) => r.event === "exit"),
+        false,
+      );
+      assert.equal(yield* hosts.unarchive(cwd, "bulk-saved"), true);
+      assert.equal(records("bulk-saved").length, 0, "restoration starts no child");
+      assert.equal(readFileSync(file, "utf8"), history);
+      assert.deepEqual((yield* registry.get).folders, []);
+      const read = yield* hosts.read(cwd, "bulk-saved");
+      assert.equal(read._tag, "saved");
+      assert.equal(records("bulk-saved").length, 0);
+      const restored = yield* hosts.open({ cwd, sessionId: "bulk-saved" });
+      assert.equal(restored.spec.cwd, alias);
+      assert.equal(records("bulk-saved").filter((r) => r.event === "spawn").length, 1);
+    }),
+    { registry: "bulk" },
+  );
+});
+
+test(
+  "PIN-152: bulk archive skips starting Pi and a held canonical ownership lock through an alias",
+  { timeout: 15000 },
+  async () => {
+    await run(
+      Effect.gen(function* () {
+        const hosts = yield* SessionHosts,
+          registry = yield* Registry;
+        yield* registry.addSession(alias, "bulk-starting");
+        yield* registry.addSession(cwd, "bulk-other");
+        const opening = yield* hosts
+          .open({ cwd, sessionId: "bulk-starting" })
+          .pipe(Effect.forkChild);
+        yield* waitAudit("bulk-starting", (rs) => rs.some((r) => r.command === "get_state"));
+        assert.equal(
+          (yield* hosts.list).length,
+          0,
+          "the ownership lock protects startup before the host broadcast",
+        );
+        assert.equal(yield* hosts.archiveCount, 1);
+        assert.equal(yield* hosts.archiveAll, 1);
+        assert.equal(
+          (yield* registry.get).sessions.find((s) => s.sessionId === "bulk-starting")?.archived,
+          false,
+        );
+        process.kill(records("bulk-starting")[0].pid, "SIGCONT");
+        const opened = yield* Fiber.join(opening);
+        assert.equal(opened.spec.cwd, alias);
+        assert.equal(yield* hosts.archiveAll, 0);
+        const registered = yield* Deferred.make<string>();
+        yield* registry.onChange((_, after) => {
+          const fresh = after.sessions.find(
+            (s) => s.sessionId !== "bulk-starting" && s.sessionId !== "bulk-other",
+          );
+          return fresh ? Deferred.succeed(registered, fresh.sessionId) : Effect.void;
+        });
+        const creating = yield* hosts.create({ cwd, options: {} }).pipe(Effect.forkChild);
+        const id = yield* Deferred.await(registered);
+        yield* waitAudit(id, (rs) => rs.some((r) => r.command === "get_state"));
+        assert.ok((yield* hosts.list).some((h) => h.sessionId === id && h.starting));
+        assert.equal(yield* hosts.archiveAll, 0, "a fresh starting session is kept too");
+        process.kill(records(id)[0].pid, "SIGCONT");
+        yield* Fiber.join(creating);
+      }),
+      { holdReadiness: true, registry: "bulk-starting" },
+    );
+  },
+);
+
 test("INV-01/02: alias history opens under its registry owner; a conflict refuses to start", async () => {
   await run(
     Effect.gen(function* () {
@@ -934,6 +1032,11 @@ test("INV-01/02: alias history opens under its registry owner; a conflict refuse
         /Conflicting session references/,
       );
       assert.equal(records("legacy").filter((r) => r.event === "spawn").length, 1);
+      yield* registry.archiveSession(alias, "legacy");
+      assert.match(
+        (yield* Effect.flip(hosts.unarchive(cwd, "legacy"))).detail,
+        /Conflicting session references/,
+      );
     }),
   );
 });
@@ -1062,6 +1165,17 @@ test(
             }),
           ),
         );
+        yield* hosts.archiveAll;
+        assert.equal(
+          records("idle-check-fails").some((r) => r.event === "exit"),
+          false,
+          "bulk cannot retire an app-owning Pi, even when the supervisor is unreadable",
+        );
+        assert.equal(
+          (yield* (yield* Registry).get).sessions.find((s) => s.sessionId === "idle-check-fails")
+            ?.archived,
+          false,
+        );
         const other = yield* registered("idle-after-failure");
         for (const s of [failing, other]) {
           yield* prompt(s, "/settle");
@@ -1073,7 +1187,13 @@ test(
         assert.equal(yield* hosts.get(cwd, "idle-check-fails"), failing, "unknown is not idle");
         assert.equal(records("idle-check-fails").filter((r) => r.event === "exit").length, 0);
       }),
-      { idleMs: 100, clock: true, timeoutMs: 1000, previewAdapter: new UnknownPreview() },
+      {
+        idleMs: 100,
+        clock: true,
+        timeoutMs: 1000,
+        previewAdapter: new UnknownPreview(),
+        registry: "app-owner-bulk",
+      },
     );
   },
 );
@@ -1444,6 +1564,12 @@ test("INV-01/02: input refused because its Pi is closing records no activity", a
       assert.equal(bumps.length, 1, "accepted input records activity");
       const closing = yield* hosts.release(cwd, id).pipe(Effect.forkChild);
       yield* Effect.promise(() => cleaning);
+      assert.equal(
+        yield* hosts.archiveAll,
+        0,
+        "bulk never waits for or takes over preview cleanup's held ownership",
+      );
+      assert.equal((yield* registry.get).sessions[0]?.archived, false);
       yield* Effect.sleep("2 millis");
       const refused = yield* session
         .act({ _tag: "prompt", text: "while closing" })

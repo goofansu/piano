@@ -23,7 +23,7 @@ test(
     try {
       const database = new DatabaseSync(fixture.database, { readOnly: true });
       try {
-        assert.equal(database.prepare("PRAGMA user_version").get()?.user_version, 16);
+        assert.equal(database.prepare("PRAGMA user_version").get()?.user_version, 17);
       } finally {
         database.close();
       }

@@ -109,6 +109,9 @@ the [feature-locality rule](../../../../AGENTS.md#feature-locality).
   authenticated setup, transcription and webhook delivery remain separate checks.
   Docs: [Provider sign-in](../../../../docs/provider-sign-in.md),
   [Radius setup](../../../../docs/radius-setup.md).
+- [Settings › Data controls](./data-controls.md): archived rows, Unarchive, closed-folder feedback,
+  neutral Archive all confirmation/count, preserved running/pinned sessions and local-only scope.
+  Docs: [Data controls](../../../../docs/data-controls.md).
 - [Settings › MCP](./settings-mcp.md): `/settings/mcp` over the scratch `mcp.json`; Connect,
   Add MCP server by form and JSON paste (URL/startup refusals and local command success),
   Manage → Edit / Delete, Connect cancellation, and Pi's MCP switch. Authenticated URL-server

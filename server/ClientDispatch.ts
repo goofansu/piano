@@ -118,6 +118,15 @@ const worktreeUnanswered = (
       : worktreeFailure(reason.error),
 });
 
+const dataControlsUnanswered = (
+  request: { readonly requestId: string },
+  reason: Unanswered,
+): ServerMessage => ({
+  _tag: "data_controls_result",
+  requestId: request.requestId,
+  result: { status: "error", detail: unansweredText(reason) },
+});
+
 /** Sends the current hosts and sidebar, then forwards updates until the surrounding scope closes. */
 export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
   output: ClientOutput,
@@ -422,6 +431,50 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
       run: ({ cwd, sessionId }) => sessions.retire(cwd, sessionId, "archive"),
       unanswered: plainError,
       confirmed: "Session archived",
+    },
+    unarchive_session: {
+      admission: "ordinary",
+      run: Effect.fn("ClientDispatch.unarchive")(function* ({ cwd, sessionId, requestId }) {
+        const closed = yield* hosts.unarchive(cwd, sessionId);
+        yield* send({
+          _tag: "data_controls_result",
+          requestId,
+          result: { status: "ready", count: 1 },
+        });
+        yield* send({
+          _tag: "toast",
+          level: "success",
+          message: closed ? "Session unarchived · Folder remains closed" : "Session unarchived",
+        });
+      }),
+      unanswered: dataControlsUnanswered,
+      confirmed: null,
+    },
+    archive_sessions_count: {
+      admission: "ordinary",
+      run: ({ requestId }) =>
+        hosts.archiveCount.pipe(
+          Effect.flatMap((count) =>
+            send({ _tag: "data_controls_result", requestId, result: { status: "ready", count } }),
+          ),
+        ),
+      unanswered: dataControlsUnanswered,
+      confirmed: null,
+    },
+    archive_all_sessions: {
+      admission: "ordinary",
+      run: Effect.fn("ClientDispatch.archiveAll")(function* ({ requestId }) {
+        const count = yield* hosts.archiveAll;
+        yield* sessions.clearArchived((yield* registry.get).sessions);
+        yield* send({
+          _tag: "data_controls_result",
+          requestId,
+          result: { status: "ready", count },
+        });
+        yield* send({ _tag: "toast", level: "success", message: `${count} sessions archived` });
+      }),
+      unanswered: dataControlsUnanswered,
+      confirmed: null,
     },
     delete_session: {
       admission: "ordinary",

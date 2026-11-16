@@ -19,6 +19,13 @@ Type `!` on its own to list available filters: currently only **Projects only ·
 with Enter or a click inserts `!p` followed by a space, keeping the dialog open and the search
 field focused so you can type a project name.
 
+## Archive and restore sessions
+
+A session's **Archive** action stops its Pi and hides it, keeping the transcript.
+In **Settings → Data controls**, use **Unarchive** to restore its listing without starting Pi;
+a closed folder stays closed. **Archive all** keeps pinned sessions and every running or starting
+Pi, including idle sessions and app owners. It never stops work. See [Data controls](data-controls.md).
+
 ## Preview local files
 
 Click a local file link in a session to read it beside the conversation. Markdown offers
@@ -37,7 +44,8 @@ on later turns. See [setup, supported formats and failure handling](radius-artif
 On macOS, or on a configured private exe.dev host, ask **“Run this app so I can try it.”** The
 agent launches an app in the session's workspace and returns a preview link (on a Mac,
 `http://localhost:<port>/`). It keeps running after the reply, Stop and browser disconnect,
-but ends with its owning Pi process (including archive/delete or Piano shutdown).
+but ends with its owning Pi process (including that session's Archive/Delete or Piano shutdown).
+Data controls' **Archive all** keeps app-owning sessions running.
 Ask the agent to stop the exact instance when finished. See [setup and limits](live-previews.md).
 If a link, sign-in or pop-up does nothing in Preview, choose **More preview actions → Not working
 here?** and open the app in a new tab; see
