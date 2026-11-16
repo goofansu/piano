@@ -19,7 +19,6 @@ const git = (cwd: string, ...args: string[]) =>
     env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" },
   }).trim();
 
-/** Two registered folders: one with `.agents/skills`, one plain. Pi's agent dir is isolated so the real trust file is untouched. */
 function fixture(t: TestContext) {
   const root = mkdtempSync(join(realpathSync(tmpdir()), "piano-trust-")),
     skilled = join(root, "skilled"),
@@ -70,18 +69,15 @@ test("INV-01: project trust is read from and written to Pi's trust file, per dir
           (projects) => projects.flatMap((p) => p.worktrees).find((w) => w.path === path)!.trust,
         );
 
-      // Headless Pi skips protected resources until a decision is saved; a plain checkout needs no decision.
       assert.deepEqual(yield* trustOf(skilled), { required: true, trusted: false });
       assert.deepEqual(yield* trustOf(plain), { required: false, trusted: true });
 
       yield* setProjectTrust(skilled, true);
       assert.deepEqual(yield* trustOf(skilled), { required: true, trusted: true });
-      // The file is Pi's: canonical path keys with boolean decisions, as `/trust` writes them.
       assert.deepEqual(JSON.parse(readFileSync(join(agent, "trust.json"), "utf8")), {
         [skilled]: true,
       });
 
-      // Untrust is an explicit "do not trust", so it also overrides a trusted ancestor.
       yield* setProjectTrust(root, true);
       yield* setProjectTrust(skilled, false);
       assert.deepEqual(yield* trustOf(skilled), { required: true, trusted: false });

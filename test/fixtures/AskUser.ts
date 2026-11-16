@@ -1,4 +1,3 @@
-/** Real Pi, scripted loopback model: no credentials, remote requests or paid model calls. */
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";

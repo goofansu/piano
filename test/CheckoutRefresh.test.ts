@@ -6,7 +6,6 @@ import {
   createCheckoutRefresh,
 } from "../web/src/lib/checkoutRefresh.ts";
 
-/** A clock the test advances, and focus and visibility events it fires. */
 function environment() {
   let now = 0,
     hidden = false;
@@ -68,7 +67,6 @@ const session = (patch: Partial<Session> = {}): Session => ({
   ...patch,
 });
 
-/** The page's client: its state, its subscribers and every registry request sent. */
 function client(initial: Partial<CheckoutRefreshState> = {}) {
   let state: CheckoutRefreshState = {
     connected: true,
@@ -94,7 +92,6 @@ function client(initial: Partial<CheckoutRefreshState> = {}) {
       state = { ...state, ...patch };
       for (const listener of listeners) listener();
     },
-    /** Requests sent since the last call. */
     take: () => {
       const n = sent;
       sent = 0;

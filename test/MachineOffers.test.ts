@@ -80,13 +80,11 @@ test("a remote offers the conversation slice, its projects and its sessions' men
     assignProjectCommand(state, session, null),
   ])
     assert.ok(offers.command(command), command.label);
-  // A registered folder's trust is decided from here; the remote refuses any other directory.
   assert.ok(offers.command(trustCommand(state, "/repo")!), "folder trust");
   assert.ok(
     !offers.command(folderCommands(state, folder, offers.startsSessionIn).close),
     "Close folder",
   );
-  // A session's own life is managed from here too.
   const commands = sessionCommands(state, { ...session, title: "Session" });
   for (const id of ["rename", "pin", "archive", "delete"]) {
     const command = commands.find((c) => c.id === id);

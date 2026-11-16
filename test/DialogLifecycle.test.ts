@@ -180,8 +180,6 @@ test(
         assert.equal((yield* session.state).dialogResolution?.reason, "expired");
         assert.equal((yield* session.state).dialogResolution?.answer, undefined);
         assert.deepEqual((yield* snapshot(session)).dialogs, []);
-        // Controlled competition at the deadline: either answer or timeout may win,
-        // but Pi must never receive two responses and late attachment stays closed.
         const second = yield* openDialog(session, "/dialog input 1000");
         yield* Effect.all(
           [session.act(answer(second.dialog)).pipe(Effect.result), TestClock.adjust(1000)],
@@ -212,11 +210,10 @@ test(
         const expired = yield* watch(session, (e) => e._tag === "dialog_resolved");
         yield* TestClock.adjust(1000);
         yield* Fiber.join(expired);
-        yield* audit(session); // a command that starts no run leaves the report in place
+        yield* audit(session);
         const ending = (yield* snapshot(session)).state.dialogResolution;
         assert.equal(ending?.id, dialog.id);
         assert.equal(ending?.reason, "expired");
-        // The fake opens a dialog once the run has started.
         const started = yield* watch(session, (e) => e._tag === "dialog");
         yield* session.act({ _tag: "prompt", text: "/new-turn" });
         yield* Fiber.join(started);
@@ -261,7 +258,6 @@ test(
           cwd: process.cwd(),
           sessionId: "dialog-recovery",
         });
-        // Without a Pi timeout, and with one later than the policy, host recovery bounds the dialog.
         for (const text of ["/dialog input", "/dialog input 120000"]) {
           const { dialog, prompt } = yield* openDialog(session, text);
           assert.equal(dialog.deadlineKind, "host-recovery");
@@ -307,7 +303,6 @@ test("INV-02/04: abort releases pre-ack command dialogs, cancels arrivals, and a
         (e) => e._tag === "notice" && e.message === "received d2",
       );
       const oldAbort = yield* session.act({ _tag: "abort" }).pipe(Effect.forkChild);
-      // Competes with the abort's claim. Whichever wins must be the only write.
       yield* session.act(answer(dialog)).pipe(Effect.result);
       yield* Fiber.join(cancelledArrival);
       yield* Fiber.join(prompt);
@@ -414,8 +409,6 @@ test("INV-04: broken stdin is delivery-uncertain, never silently reopened or ret
       assert.deepEqual((yield* snapshot(session)).dialogs, []);
       assert.equal((yield* session.act(answer(dialog)).pipe(Effect.result))._tag, "Failure");
     }).pipe(
-      // Nothing here waits on this deadline; it only bounds a hang. A loaded machine can take
-      // longer than 500ms to answer the startup read.
       Effect.provideService(PiRequestTimeoutMs, 3000),
       Effect.timeout("8 seconds"),
       Effect.scoped,
@@ -444,7 +437,6 @@ test("INV-04: another dialog's exit closure does not replace an uncertain answer
       const failed = yield* session.act(answer(dialog)).pipe(Effect.result);
       assert.equal(failed._tag, "Failure");
       yield* Fiber.join(stopped);
-      // Pi's exit settled the other dialog as unanswered; the queue drops it.
       assert.deepEqual((yield* snapshot(session)).dialogs, []);
       assert.notEqual(other.dialog.id, dialog.id);
       const kept = (yield* session.state).dialogResolution;
@@ -460,8 +452,6 @@ test("INV-04: another dialog's exit closure does not replace an uncertain answer
 });
 
 test("INV-04: an answer refused after Pi exited, before closure, reads not sent and keeps its words", async () => {
-  // Pi's input stops at process exit; closure waits for stdout, which a descendant holds. The
-  // test clock keeps that drain open; the end of the stdin sink shows input has stopped.
   const inputStopped = Deferred.makeUnsafe<void>();
   const observedInput = Layer.effect(
     ChildProcessSpawner.ChildProcessSpawner,
@@ -492,7 +482,6 @@ test("INV-04: an answer refused after Pi exited, before closure, reads not sent 
       yield* Deferred.await(inputStopped);
       const failed = yield* session.act(answer(dialog)).pipe(Effect.result);
       const refused = (yield* session.state).dialogResolution;
-      // Elapse the drain bound before asserting: it ends the descendant holding stdout.
       const closed = yield* watch(session, (e) => e._tag === "closed");
       yield* TestClock.adjust(1000);
       yield* Fiber.join(closed);
@@ -500,7 +489,6 @@ test("INV-04: an answer refused after Pi exited, before closure, reads not sent 
       const kept = { title: `Fixture ${dialog.id}`, value: "A" };
       assert.equal(refused?.delivery, "not-sent", "an answer Pi never received is not uncertain");
       assert.deepEqual(refused?.answer, kept);
-      // The closure keeps the receipt as it is.
       assert.equal((yield* session.state).dialogResolution?.delivery, "not-sent");
       assert.deepEqual((yield* session.state).dialogResolution?.answer, kept);
     }).pipe(
@@ -600,7 +588,6 @@ test("another extension's dialog opened while a batch asks is not the batch's qu
       const first = yield* openDialog(session, "/ask store 2");
       assert.equal(first.dialog.title, "1 of 2: Question 1");
       assert.equal(first.dialog.questionId, "q1");
-      // A command from the composer (Pi's `/rpc-input`) or a tool hook asks while the call runs.
       const foreign = yield* openDialog(session, "/dialog input");
       assert.equal(
         foreign.dialog.toolCallId,
@@ -680,7 +667,6 @@ test("Stop with another extension's dialog open leaves an answered question's re
       yield* Fiber.join(written);
       const foreign = yield* openDialog(session, "/dialog input");
       assert.equal(foreign.dialog.toolCallId, undefined);
-      // Stop cancels the foreign dialog; its cancellation is written before abort returns.
       yield* session.act({ _tag: "abort" });
       assert.deepEqual((yield* snapshot(session)).dialogs, []);
       assert.equal((yield* session.state).dialogResolution?.id, question.dialog.id);
@@ -728,7 +714,6 @@ test("an answer the batch result stores only for an earlier question is rejected
         cwd: process.cwd(),
         sessionId: "owned-same-answer",
       });
-      // Both questions answered "A"; the call ends before storing the second (a Stop racing it).
       const first = yield* openDialog(session, "/ask drop-last 2");
       const next = yield* watch(session, (event) => event._tag === "dialog");
       yield* session.act(answer(first.dialog));

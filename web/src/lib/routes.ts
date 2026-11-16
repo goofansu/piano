@@ -1,19 +1,5 @@
-/**
- * Routes, kept in the address bar so refresh, back and forward work:
- *   /new             the New page (which directory it starts in is not part of the address)
- *   /projects        the Projects index: every project, newest activity first
- *   /projects/<id>   one project's home: its branches and other member sessions
- *   /projects/<id>/new the New page for one project: a session started there joins it
- *   /s/<sessionId>   one session; its directory is looked up in the folder list
- *   /settings/<section> one settings page; /settings aliases the default section, Providers
- */
-
 import { sessionPath } from "../../../shared/sessionLink.ts";
 
-/**
- * The Settings pages, shared by the route parser, navigation and command palette.
- * A destination carries no search words: the palette already matches the label the user reads.
- */
 export const SETTINGS_SECTIONS = [
   { id: "providers", label: "Providers", icon: "plug" },
   { id: "mcp", label: "MCP", icon: "server" },
@@ -31,7 +17,6 @@ export const SETTINGS_SECTIONS = [
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number]["id"];
 export type SettingsSectionIconName = (typeof SETTINGS_SECTIONS)[number]["icon"];
 
-/** The section `/settings` and the Settings button open: the first. */
 export const DEFAULT_SETTINGS_SECTION: SettingsSection = SETTINGS_SECTIONS[0].id;
 
 export type Route =

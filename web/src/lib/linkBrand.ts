@@ -1,11 +1,8 @@
 type LinkBrand = {
-  /** A compact URL label when the provider has one; never replaces supplied link text. */
   label?: string;
   icon: { viewBox: string } & ({ path: string } | { href: string });
 };
 
-/** Bundled branding for a recognized destination in prose links.
- * Recognition, URL safeguards, compact labels and icon sources belong here, not in callers. */
 export function linkBrand(href: string): LinkBrand | undefined {
   let url: URL;
   try {

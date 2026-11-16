@@ -1,7 +1,3 @@
-/** The one subprocess runner. It owns spawning, closed stdin, bounded output, accepted exit
- * codes, timeout and cancellation; callers only phrase failures for users. Tool binaries are
- * References, the seam through which tests supply fakes (Worktrunk's lives in Worktrees.ts).
- */
 import { type ChildProcess, spawn } from "node:child_process";
 import { Context, Data, Effect } from "effect";
 import { childEnvironment } from "./ChildEnvironment.ts";
@@ -9,7 +5,6 @@ import { childEnvironment } from "./ChildEnvironment.ts";
 export const GitCommand = Context.Reference<string>("piano/GitCommand", {
   defaultValue: () => "git",
 });
-/** `PIANO_GH_CLI` points a scratch instance at a stand-in forge, as `PIANO_PI_CLI` does for Pi. */
 export const GhCommand = Context.Reference<string>("piano/GhCommand", {
   defaultValue: () => process.env.PIANO_GH_CLI || "gh",
 });
@@ -18,23 +13,12 @@ export interface RunOptions {
   readonly command: string;
   readonly args: readonly string[];
   readonly cwd?: string;
-  /** Complete replacement environment; defaults to `childEnvironment()`. Build overrides from
-   * that helper to avoid inheriting another session's launch variables. */
   readonly env?: NodeJS.ProcessEnv;
-  /** Stdin receives this then EOF; omitted input sends EOF immediately. Ignored in group mode. */
   readonly input?: Buffer | string;
-  /** Maximum retained stdout bytes (default 8 MiB). */
   readonly limit?: number;
-  /** Discard excess stdout and wait for exit; otherwise excess output terminates the command. */
   readonly truncate?: boolean;
-  /** Exit codes that count as success (default `[0]`). */
   readonly okCodes?: readonly number[];
-  /** Milliseconds before termination starts; omitted means no deadline. */
   readonly timeout?: number;
-  /** Own a process group with output discarded; termination includes descendants in that group.
-   * Otherwise only the direct child is owned: callers spawning descendants must use `group`
-   * or arrange their cleanup. Inherited pipes cannot delay termination settlement.
-   */
   readonly group?: boolean;
 }
 export interface RunResult {
@@ -47,7 +31,6 @@ export class SubprocessError extends Data.TaggedError("SubprocessError")<{
   readonly reason: "start" | "exit" | "limit" | "timeout" | "aborted";
   readonly command: string;
   readonly code: number | null;
-  /** At most 16,384 UTF-16 code units of decoded stderr, kept from the beginning. */
   readonly stderr: string;
   readonly limit: number;
   readonly cause?: unknown;
@@ -121,9 +104,7 @@ export function runAsync(options: RunOptions, signal?: AbortSignal): Promise<Run
       try {
         if (group && child.pid) process.kill(-child.pid, signal);
         else if (!exited) child.kill(signal);
-      } catch {
-        /* The process/group may already have exited. */
-      }
+      } catch {}
     };
     const done = () => {
       settled = true;
@@ -147,12 +128,10 @@ export function runAsync(options: RunOptions, signal?: AbortSignal): Promise<Run
       send("SIGTERM");
       escalation = setTimeout(() => {
         escalated = true;
-        // Even if the leader exited, descendants in its group may ignore SIGTERM.
         send("SIGKILL");
         if (exited) finishStopped();
         else
           killWait = setTimeout(() => {
-            // Do not retain the event loop or inherited pipes if the OS cannot reap promptly.
             child.unref();
             finishStopped();
           }, KILL_WAIT);
@@ -199,7 +178,6 @@ export function runAsync(options: RunOptions, signal?: AbortSignal): Promise<Run
   });
 }
 
-/** Interruption cancels and kills the child. */
 export const run = (options: RunOptions): Effect.Effect<RunResult, SubprocessError> =>
   Effect.tryPromise({
     try: (signal) => runAsync(options, signal),

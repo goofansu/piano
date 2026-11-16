@@ -9,7 +9,6 @@ import { jumpEntries, transcriptRows } from "../web/src/lib/transcript.ts";
 import type { MachineScope } from "../web/src/lib/useMachine.ts";
 import { localMachineScope } from "./fixtures/machineScope.ts";
 
-// Load the real TSX component through the application's existing Vite transform.
 const vite = await createServer({
   root: path.resolve("web"),
   server: { middlewareMode: true, watch: null },
@@ -150,7 +149,6 @@ test("messages-only never flashes a completed intermediate message while the age
         }),
       ),
     );
-  // message_end can arrive before the next message_start, with no pending message.
   assert.doesNotMatch(working(history), /Let me investigate/);
   assert.deepEqual(
     jumpEntries(transcriptRows(history, { working: true })).flatMap((entry) =>
@@ -169,7 +167,6 @@ test("messages-only never flashes a completed intermediate message while the age
   assert.doesNotMatch(settled, /Let me investigate/);
   assert.match(settled, /Final answer/);
   assert.match(working([...history, failure()]), /The usage limit has been reached/);
-  // Starting a new turn must not hide a previous turn's answer.
   assert.match(working([user, final, { ...user, id: "next" }]), /Final answer/);
 });
 
@@ -179,7 +176,6 @@ test("error summaries render as text, never markup", () => {
   assert.doesNotMatch(render([failure(unsafe)]), /<script>/);
 });
 
-/** One folding row's markup, from its group to the next folding row. */
 const fold = (html: string, label: string) => {
   const start = html.indexOf(`role="group" aria-label="${label}"`);
   assert.ok(start >= 0, `no folding row named ${label}`);
@@ -196,7 +192,6 @@ const fold = (html: string, label: string) => {
     open: /aria-expanded="true"/.test(header),
     canOpen: !/ disabled=""/.test(header),
     chevron: /lucide-chevron-right/.test(header),
-    /** The body's element, rendered whenever the row can open; hidden while closed. */
     body,
     bodyHidden: body ? / hidden=""/.test(body) : undefined,
   };
@@ -229,7 +224,6 @@ test("every folding row folds the same way: context starts open, a card without 
   const skill = fold(html, "review skill");
   const tool = fold(html, "bash tool call");
   const bare = fold(html, "Dispatched session: Session");
-  // Every header is a disclosure that lets a sidebar swipe pass through it.
   for (const row of [context, skill, tool, bare]) {
     assert.match(row.header, /data-sidebar-swipe="true"/);
     assert.equal(row.chevron, row.canOpen, "a chevron exactly when the row can open");
@@ -248,7 +242,6 @@ test("every folding row folds the same way: context starts open, a card without 
   assert.equal(bare.canOpen, false, "a card without details cannot open");
   assert.equal(bare.body, undefined, "a card without details has no body");
   assert.doesNotMatch(html, /tool output text/, "a closed body renders nothing");
-  // A skill folds inside its prompt bubble: no gutter of its own.
   assert.match(html, /<article[^>]*>(?:(?!<\/article>).)*aria-label="review skill"/s);
   assert.doesNotMatch(
     skill.markup.slice(0, skill.markup.indexOf(skill.header)),

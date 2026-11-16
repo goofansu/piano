@@ -65,14 +65,11 @@ const KIND_ICON: Record<Preview["kind"], typeof FileIcon> = {
   pdf: FileIcon,
 };
 
-/** A file tab's icon, by the kind its extension suggests before the file is read. */
 export function FileTabIcon({ path, className }: { path: string; className?: string }) {
   const Icon = KIND_ICON[previewKindByName(path) ?? "text"];
   return <Icon className={className} aria-hidden />;
 }
 
-/** Presents a navigation-owned acquisition, keyed by `file.key`, not its adopted path.
- * Renderers own only disposable presentation resources; they never initiate the file read. */
 export function WorkspaceFile({ file, active }: { active: boolean; file: FileTab }) {
   const { openFile } = useNavigation();
   const machineId = useMachineId();
@@ -83,7 +80,6 @@ export function WorkspaceFile({ file, active }: { active: boolean; file: FileTab
   useEffect(() => {
     setBinary(undefined);
     if (!result || result.kind === "pdf") return;
-    // Images (raster or SVG) as Markdown shows them; audio and video play their own bytes.
     const blob =
       previewImage(result) ??
       ("bytes" in result
@@ -100,7 +96,6 @@ export function WorkspaceFile({ file, active }: { active: boolean; file: FileTab
     result?.path,
   );
   const [saving, setSaving] = useState(false);
-  // The browser saves the file through a short-lived object URL; the server sends exact bytes.
   const save = async () => {
     if (!workspaceId || saving) return;
     setSaving(true);
@@ -121,7 +116,6 @@ export function WorkspaceFile({ file, active }: { active: boolean; file: FileTab
     }
   };
   const path = result?.path ?? file.path;
-  // Source text is on screen: a text file, or a document whose preview is off.
   const source =
     !!result &&
     !("bytes" in result) &&
@@ -205,7 +199,6 @@ export function WorkspaceFile({ file, active }: { active: boolean; file: FileTab
             ) : null
           ) : result.kind === "markdown" && mode === "preview" ? (
             <LocalFileContext
-              // A link in a file opens beside it, in the Surface area.
               value={(path) => openFile(relativeToDocument(result.path, path), "surface")}
             >
               <Markdown

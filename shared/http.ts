@@ -1,12 +1,3 @@
-/**
- * The HTTP seam, as wire.ts is for the socket: one table of `/api/*` endpoints that the server
- * router (server/Router.ts) and the browser adapter (web/src/lib/api.ts) both derive from.
- *
- * Paths never travel in URLs, so access logs and proxies never record them: a URL may carry only
- * registered IDs in its query string, and a filesystem path travels in a POST body. `endpoint`
- * enforces that shape: the query names only ID parameters, the path has no parameters of its own,
- * and a GET has no body.
- */
 import { Schema } from "effect";
 import { FileDownload, FilePreview, LARGEST_PREVIEW_BYTES } from "./files.ts";
 import { LIBRARY_KINDS, type LibraryKind, type LibraryKindWords } from "./library.ts";
@@ -43,14 +34,8 @@ import {
   WorkspaceWrittenFiles,
 } from "./wire.ts";
 
-/**
- * How many paths one written-files request carries. A session writes as many files as it writes,
- * so this bounds the request, not the question: the browser adapter reads a longer list in
- * batches of this size and answers it as one observation.
- */
 export const WRITTEN_PATHS_LIMIT = 1000;
 
-/** The paths a session wrote, as its tool calls named them, at most `WRITTEN_PATHS_LIMIT`. */
 const WrittenPaths = Schema.Struct({
   paths: Schema.Array(Schema.String.check(Schema.isMaxLength(4096))).check(
     Schema.isMaxLength(WRITTEN_PATHS_LIMIT),
@@ -59,37 +44,18 @@ const WrittenPaths = Schema.Struct({
 
 export type Method = "GET" | "POST" | "PUT" | "DELETE";
 
-/** The only values a URL carries: IDs the registry resolves. The server answers 404 for an unknown one. */
 export type IdParam = "workspaceId" | "sessionId";
 
-/**
- * The message for a failure the user cannot act on: the browser shows it when the server sent no
- * `error` of its own (`status` 0: no response), and the server answers an unexpected failure (500)
- * with it, never with the failure's own message.
- */
 export type Fallback = string | ((status: number) => string);
 
-/** A JSON Schema that needs no services to decode or encode. */
 export type Json = Schema.ConstraintCodec<unknown, unknown, never, never>;
 
-/**
- * A failed request's answer, as the router writes it: `{ error, field? }`. `error` is the sentence
- * for people, else `fallback` when the body is not that shape (a proxy, a crash); `field` is the
- * form field it belongs to, if any.
- */
 export function readRefusal(body: unknown, fallback: string): { error: string; field?: string } {
   const answer = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
   const error = typeof answer.error === "string" && answer.error ? answer.error : fallback;
   return typeof answer.field === "string" ? { error, field: answer.field } : { error };
 }
 
-/**
- * A large request body the router admits under its own bounds before decoding it: at most
- * `concurrent` requests at once, the next refused 429 with `busy` before its body is read, and at
- * most `bytes` actually streamed (413 `tooLarge`), uncompressed (415 `compressed`). A body that
- * fails to arrive is refused 400 `unreadable`, or 408 `timedOut` when it takes too long. The
- * sentences name what the endpoint uploads, so each is the endpoint's own.
- */
 export interface Upload {
   readonly bytes: number;
   readonly concurrent: number;
@@ -100,7 +66,6 @@ export interface Upload {
   readonly timedOut: string;
 }
 
-/** The status a service's refusal (a tagged error carrying a `detail` for people) is answered with. */
 export type RefusedStatus = 400 | 409 | 502;
 
 export interface Endpoint<
@@ -111,21 +76,14 @@ export interface Endpoint<
 > {
   readonly method: Method;
   readonly path: `/api/${string}`;
-  /** Required ID parameters; `sessionId` is always resolved within `workspaceId`. */
   readonly query: ReadonlyArray<Q>;
-  /** JSON request body. A body outside it is answered 400 with `invalid`. */
   readonly body: B;
   readonly invalid: string;
   readonly response: R;
-  /** Live facts: the server marks the response uncacheable and the browser bypasses its cache. */
   readonly noStore: boolean;
-  /** The server answers a refusal with this status and its `detail`; anything else is a 500. */
   readonly refused: F;
-  /** False for state that carries no transcript content, such as sign-in and setup state, so codes
-   * and URLs reach the user intact; everything else leaves through the display projection. */
   readonly redact: boolean;
   readonly fallback: Fallback;
-  /** Set for a large body: the router bounds its admission and read (`Upload`). */
   readonly upload: Upload | undefined;
 }
 
@@ -167,12 +125,6 @@ const endpoint = <
 const RadiusReply = Schema.Struct({ state: RadiusSetupState });
 const McpReply = Schema.Struct({ state: McpSetupState });
 
-/**
- * One sign-in lane's four requests on one path: read the current attempt, start one for a subject
- * (a provider, or an MCP catalog server), answer its prompt, cancel it. Credential values and
- * callback URLs travel only in bodies; each request answers with the current attempt, or null when
- * none exists.
- */
 const signInEndpoints = <const P extends `/api/${string}`>(path: NoPathParams<P>) => {
   const shared = {
     path,
@@ -185,7 +137,6 @@ const signInEndpoints = <const P extends `/api/${string}`>(path: NoPathParams<P>
   } as const;
   return {
     state: endpoint({ ...shared, method: "GET" }),
-    // `provider` names the subject, as the attempt's own `provider` field does for both lanes.
     start: endpoint({
       ...shared,
       method: "POST",
@@ -205,15 +156,6 @@ const signInEndpoints = <const P extends `/api/${string}`>(path: NoPathParams<P>
 };
 export type SignInEndpoints = ReturnType<typeof signInEndpoints>;
 
-/**
- * One library kind's requests (`library.ts`), all on `/api/settings/<kind>s` and worded once for
- * both kinds: list, create, propose (what a save would do, so Piano's save tool shows it for the
- * user's Save and asks nothing when the save would be refused; writes nothing), update (replaces
- * an entry Piano created, with the file the tool showed as `previous`, so one changed since is
- * refused, not overwritten) and remove. Entries are the user's own words, shown and copied as they
- * wrote them (DisplayProjection's authored-text rule), so they leave without redaction. A list
- * that cannot be read is an unexpected failure, not a refusal: nothing in the request was wrong.
- */
 const libraryEndpoints = <E extends Json, C extends Json, U extends Json, P extends Json>(
   { kind, Noun }: LibraryKindWords,
   schemas: { entry: E; create: C; update: U; proposal: P },
@@ -271,7 +213,6 @@ const libraryEndpoints = <E extends Json, C extends Json, U extends Json, P exte
 };
 
 export const Endpoints = {
-  /** This Piano and the remotes it was configured with; never their endpoints or credentials. */
   machines: endpoint({
     method: "GET",
     path: "/api/machines",
@@ -281,8 +222,6 @@ export const Endpoints = {
     fallback: "Could not load machines.",
   }),
 
-  // Folder picker
-
   listDirectory: endpoint({
     method: "POST",
     path: "/api/ls",
@@ -291,7 +230,6 @@ export const Endpoints = {
     refused: 400,
     fallback: "Could not list this folder.",
   }),
-  /** mkdir -p for the folder picker's "New folder". */
   makeDirectory: endpoint({
     method: "POST",
     path: "/api/mkdir",
@@ -308,8 +246,6 @@ export const Endpoints = {
     fallback: "Could not load folders.",
   }),
 
-  // Workspace
-
   workspaceFile: endpoint({
     method: "POST",
     path: "/api/workspace/file",
@@ -320,7 +256,6 @@ export const Endpoints = {
     refused: 400,
     fallback: "Could not read this file. Check the path and try again.",
   }),
-  /** The same files the preview accepts, as exact bytes in an attachment: no display redaction. */
   workspaceFileDownload: endpoint({
     method: "POST",
     path: "/api/workspace/file/download",
@@ -331,7 +266,6 @@ export const Endpoints = {
     refused: 400,
     fallback: "Could not download this file. Check the path and try again.",
   }),
-  /** The session's Changes: its saved scope, or the one in the body for this read. */
   sessionChanges: endpoint({
     method: "POST",
     path: "/api/session/changes",
@@ -342,7 +276,6 @@ export const Endpoints = {
     fallback: (status) =>
       `Changes request failed (${status}). Refresh folders or inspect the server.`,
   }),
-  /** One file's fresh patch under the scope the list was read with; the browser checks the base. */
   sessionChangedFile: endpoint({
     method: "POST",
     path: "/api/session/changes/file",
@@ -352,7 +285,6 @@ export const Endpoints = {
     response: WorkspaceChanges,
     fallback: (status) => `File request failed (${status}).`,
   }),
-  /** Save the session's scope (`null` for the Uncommitted default) and answer with a fresh read. */
   setSessionChangesScope: endpoint({
     method: "PUT",
     path: "/api/session/changes",
@@ -375,8 +307,6 @@ export const Endpoints = {
     fallback: (status) => `Files request failed (${status}).`,
   }),
 
-  // Session pull request (GitHub facts are live)
-
   sessionPullRequest: endpoint({
     method: "GET",
     path: "/api/session/pull-request",
@@ -398,9 +328,6 @@ export const Endpoints = {
     fallback: "Could not load the pull request.",
   }),
 
-  // Composer
-
-  /** Before a session starts: the directory's probe answers. The path travels in the body. */
   slashCommands: endpoint({
     method: "POST",
     path: "/api/commands",
@@ -410,10 +337,6 @@ export const Endpoints = {
     refused: 502,
     fallback: "Could not load commands.",
   }),
-  /**
-   * `slashCommands` for another machine's gateway only: answers for a folder registered on this
-   * machine and refuses any other path, as `/ws/peer` does (ADR 0004).
-   */
   peerSlashCommands: endpoint({
     method: "POST",
     path: "/api/peer/commands",
@@ -423,7 +346,6 @@ export const Endpoints = {
     refused: 409,
     fallback: "Could not load commands.",
   }),
-  /** A running session answers from its own child; a stopped one is never started to answer. */
   sessionCommands: endpoint({
     method: "GET",
     path: "/api/session/commands",
@@ -434,14 +356,12 @@ export const Endpoints = {
     fallback: "Could not load commands.",
   }),
 
-  // Settings
   webhooks: endpoint({
     method: "GET",
     path: "/api/settings/webhooks",
     response: Schema.Array(Webhook),
     noStore: true,
     refused: 400,
-    // The receiver URL is the user's own and is edited and saved back: redacting it would overwrite it.
     redact: false,
     fallback: "Could not load webhooks.",
   }),
@@ -453,7 +373,6 @@ export const Endpoints = {
     response: Webhook,
     noStore: true,
     refused: 400,
-    // The receiver URL is the user's own and is edited and saved back: redacting it would overwrite it.
     redact: false,
     fallback: "Could not save webhook.",
   }),
@@ -481,7 +400,6 @@ export const Endpoints = {
     response: WebhookDelivery,
     noStore: true,
     refused: 400,
-    // The receiver URL is the user's own and is edited and saved back: redacting it would overwrite it.
     redact: false,
     fallback: "Could not test webhook.",
   }),
@@ -548,7 +466,6 @@ export const Endpoints = {
     refused: 400,
     fallback: "Could not load voice input.",
   }),
-  /** The key travels only in this body and is never answered back. */
   saveVoiceInput: endpoint({
     method: "PUT",
     path: "/api/settings/voice-input",
@@ -559,7 +476,6 @@ export const Endpoints = {
     refused: 400,
     fallback: "Could not save voice input.",
   }),
-  /** A recording and the session hints that steer its spelling; the transcript is display text. */
   transcribe: endpoint({
     method: "POST",
     path: "/api/voice/transcribe",
@@ -615,82 +531,32 @@ export const Endpoints = {
     fallback: "Could not sign out. Try again.",
   }),
 
-  // Sign-in: provider OAuth, and MCP server OAuth with the same attempt shape.
-
   providerLogin: signInEndpoints("/api/provider-login"),
   mcpLogin: signInEndpoints("/api/settings/mcp/login"),
 } as const;
 
 export type Endpoints = typeof Endpoints;
 
-/**
- * The requests another machine answers through this Piano's gateway (ADR 0004), declared once:
- * the gateway serves exactly these at `/peer/<machine id>` + the browser path, and the browser
- * sends nothing else there. The browser calls `browser`; the gateway checks the request against
- * it, then asks the remote's `upstream` with the same IDs and body and returns its answer.
- */
 export interface RemoteRequest {
   readonly browser: Endpoint;
   readonly upstream: Endpoint;
-  /** The 400 answer for a request outside `browser`'s query or body. */
   readonly invalid: string;
-  /**
-   * The remote's refusal (`upstream.refused`) reaches the browser as its own `{ error, field? }`
-   * at `browser.refused`, for a check only the remote can make. Otherwise any answer but 200 is
-   * the remote unavailable.
-   */
   readonly passRefusal: boolean;
-  /**
-   * `bytes`: the answer is a file, relayed as the remote sent it (its type and attachment name
-   * with it) under `answerBytes`, never decoded here. Otherwise it is JSON, read whole and checked
-   * against `upstream.response`.
-   */
   readonly answer?: "bytes";
-  /** The largest request body, where one path or reference (the gateway's default) is too small. */
   readonly bodyBytes?: number;
-  /** The largest answer, where one conversation frame (the gateway's default) is too small. */
   readonly answerBytes?: number;
-  /**
-   * How long the gateway waits for the remote's answer, where the remote may take longer than the
-   * gateway's default: `outlasting` the limit the remote enforces on its own answer.
-   */
   readonly requestMs?: number;
 }
 
-/** A JSON answer's text as the server sends it, so a budget can measure what is actually sent. */
 export const answerJson = (body: unknown): string => JSON.stringify(body, null, 2);
 
 const MiB = 1024 * 1024;
-/**
- * The remote bounds its own Changes answer at CHANGES_ANSWER_BYTES, measured before display
- * redaction, which swaps a secret for a marker and can lengthen only a secret shorter than it. The
- * margin covers that, so the gateway's bound only catches a misbehaving remote; with none, an
- * answer the remote allows could reach the browser as "machine unavailable".
- */
 const changesAnswerBytes = CHANGES_ANSWER_BYTES + 64 * 1024;
-/**
- * The gateway's deadline starts first (before dialing; the remote's only once it starts the work it
- * bounds), so a request the remote bounds at `remoteMs` waits that plus this margin for the dial,
- * the answer and the remote's own work around the bounded part. With no margin the gateway always
- * loses and the remote's own answer (an error naming what timed out) never arrives.
- */
 const REMOTE_MARGIN_MS = 5_000;
-/** The gateway's deadline for a request the remote answers within `remoteMs`. */
 const outlasting = (remoteMs: number) => remoteMs + REMOTE_MARGIN_MS;
-/**
- * A remote's Git observation answers within CHECKOUT_TIMEOUT_MS, as `{ status: "error" }` when Git
- * outlasts it. Its clock starts once the remote holds one of its Changes permits: a wait for a
- * permit on a busy remote is still unbounded. This covers Git's timeout, not a queue.
- */
 const checkoutRequestMs = outlasting(CHECKOUT_TIMEOUT_MS);
-/**
- * A file read has no deadline on the remote, only a size (LARGEST_PREVIEW_BYTES): this is the
- * gateway's own allowance to receive the largest one, not a bound the remote enforces.
- */
 const fileTransferMs = 60_000;
-/** The largest file in a multipart answer with its metadata. */
 const fileAnswerBytes = LARGEST_PREVIEW_BYTES + 2 * MiB;
-/** A session's own surfaces: the remote resolves both IDs in its registry, as for its own browser. */
 const sessionSurface = (
   endpoint: Endpoint,
   limits: Pick<RemoteRequest, "answer" | "bodyBytes" | "answerBytes" | "requestMs"> = {},
@@ -698,19 +564,11 @@ const sessionSurface = (
   browser: endpoint,
   upstream: endpoint,
   invalid: "Remote workspace or session ID, or the request itself, is invalid.",
-  // What only the remote knows: a missing file, a comparison it cannot save, GitHub's answer.
   passRefusal: endpoint.refused !== undefined,
   ...limits,
 });
 
-/**
- * Each request the remote bounds waits `outlasting` that bound. Saving defaults keeps the gateway's
- * default: the remote checks a new model against its cached global catalog, and only an uncached
- * catalog starts a Pi probe, whose reads have their own deadlines but no total one.
- */
 export const RemoteRequests: ReadonlyArray<RemoteRequest> = [
-  // The remote resolves the IDs in its own registry and refuses what it does not list, or a
-  // stopped session; a running one answers within SLASH_COMMANDS_TIMEOUT_MS.
   {
     browser: Endpoints.sessionCommands,
     upstream: Endpoints.sessionCommands,
@@ -718,8 +576,6 @@ export const RemoteRequests: ReadonlyArray<RemoteRequest> = [
     passRefusal: true,
     requestMs: outlasting(SLASH_COMMANDS_TIMEOUT_MS),
   },
-  // Its peer folder read answers only for a folder registered there, from a fresh Pi probe that
-  // answers or refuses within SLASH_COMMANDS_TIMEOUT_MS.
   {
     browser: Endpoints.slashCommands,
     upstream: Endpoints.peerSlashCommands,
@@ -727,15 +583,12 @@ export const RemoteRequests: ReadonlyArray<RemoteRequest> = [
     passRefusal: true,
     requestMs: outlasting(SLASH_COMMANDS_TIMEOUT_MS),
   },
-  // The remote checks the model against its own catalog ("Choose an available model.").
   {
     browser: Endpoints.saveDefaults,
     upstream: Endpoints.saveDefaults,
     invalid: Endpoints.saveDefaults.invalid,
     passRefusal: true,
   },
-  // Changes: a list with its first patch excerpt, one file's patch, and the saved comparison, each
-  // one Git observation of the checkout.
   sessionSurface(Endpoints.sessionChanges, {
     answerBytes: changesAnswerBytes,
     requestMs: checkoutRequestMs,
@@ -748,18 +601,13 @@ export const RemoteRequests: ReadonlyArray<RemoteRequest> = [
     answerBytes: changesAnswerBytes,
     requestMs: checkoutRequestMs,
   }),
-  // Outputs: up to WRITTEN_PATHS_LIMIT paths as the session's tool calls named them, checked in
-  // one Git observation.
   sessionSurface(Endpoints.workspaceWrittenFiles, { bodyBytes: MiB, requestMs: checkoutRequestMs }),
-  // The pull request: Git and GitHub answer the remote, or it refuses, within
-  // PULL_REQUEST_TIMEOUT_MS.
   sessionSurface(Endpoints.sessionPullRequest, {
     requestMs: outlasting(PULL_REQUEST_TIMEOUT_MS),
   }),
   sessionSurface(Endpoints.changeSessionPullRequest, {
     requestMs: outlasting(PULL_REQUEST_TIMEOUT_MS),
   }),
-  // A file as the remote's own browser reads it.
   sessionSurface(Endpoints.workspaceFile, {
     answer: "bytes",
     answerBytes: fileAnswerBytes,

@@ -1,33 +1,21 @@
 import type { ModelCatalog, RenderMsg, SessionState, SessionStats, Usage } from "@shared/wire";
 import { formatTokenCount } from "./format.ts";
 
-/** What Pi reports about a session's spending: current context and full-session totals. */
 export type SessionUsage = Pick<SessionState, "context" | "cost" | "tokens">;
 
-/** The context figures the usage button and its popover show, derived once from the same inputs. */
 export interface ContextFigures {
-  /** Tokens Pi counts in the current context; `null` until Pi reports them. */
   readonly tokens: number | null;
-  /** The context window in tokens, from Pi or else the selected model; absent when unknown. */
   readonly window: number | undefined;
-  /** The usage button's text, such as `21%/200k`, `200k` before the first reply, or `—`. */
   readonly label: string;
-  /** The usage button's accessible description. */
   readonly description: string;
-  /** The popover's heading. */
   readonly heading: string;
-  /** Little of the window is left, so both surfaces show the warning colour. */
   readonly low: boolean;
-  /** The progress bar, when Pi reports a percentage. */
   readonly used: { readonly value: number; readonly text: string } | null;
-  /** Such as `85% left`, when Pi reports a percentage. */
   readonly left: string | null;
 }
 
-/** Below this share of the window left, the usage figures turn to the warning colour. */
 const LOW_PERCENT_LEFT = 15;
 
-/** Derive the context figures from the session's usage, falling back to the catalog's window for `model`. */
 export function contextFigures(
   context: SessionUsage["context"],
   catalog: ModelCatalog | null,
@@ -51,7 +39,6 @@ export function contextFigures(
   return {
     tokens,
     window,
-    // Before the first reply only the window is known, so it stands alone rather than reading as "—/1k".
     label:
       usedLabel && windowLabel ? `${usedLabel}/${windowLabel}` : (usedLabel ?? windowLabel ?? "—"),
     description:
@@ -67,7 +54,6 @@ export function contextFigures(
   };
 }
 
-/** The share of input tokens served from cache, as a whole percentage; absent without input. */
 export function cacheHit(
   usage?: Pick<NonNullable<SessionStats["tokens"]>, "input" | "cacheRead" | "cacheWrite">,
 ): number | undefined {
@@ -79,29 +65,19 @@ export function cacheHit(
 const number = (value: number) => value.toLocaleString();
 const dollars = (value: number) => `$${value.toFixed(4)}`;
 
-/** Which figure the response history graphs. */
 export type HistoryMetric = "tokens" | "cost";
 
-/** A transcript response that carries Pi's usage for it. */
 export type UsageResponse = RenderMsg & { readonly usage: Usage };
 
-/** The response history graph and slider: per-response values and the inspected response. */
 export interface ResponseHistory {
-  /** Assistant responses with usage, in transcript order. */
   readonly responses: ReadonlyArray<UsageResponse>;
-  /** Each response's figure for the metric, aligned with `responses`. */
   readonly values: ReadonlyArray<number>;
-  /** The largest value, or 0 without responses. */
   readonly peak: number;
-  /** The peak as the caption shows it, such as `12k` or `$0.0123`. */
   readonly peakText: string;
-  /** The inspected response: the chosen one, else the latest. */
   readonly selected: UsageResponse | undefined;
-  /** The inspected response's 1-based position, or 0 without responses. */
   readonly position: number;
 }
 
-/** History usage is per response, not a reconstruction of Pi's current context. */
 export function responseHistory(
   messages: ReadonlyArray<RenderMsg>,
   metric: HistoryMetric,
@@ -125,14 +101,12 @@ export function responseHistory(
   };
 }
 
-/** One row of the token and cost breakdown, formatted, with `—` where a figure is unknown. */
 export interface BreakdownRow {
   readonly label: string;
   readonly response: string;
   readonly session: string;
 }
 
-/** The inspected response's usage beside Pi's full-session totals. */
 export function usageBreakdown(
   response: Usage | undefined,
   session: Pick<SessionUsage, "tokens" | "cost"> | undefined,

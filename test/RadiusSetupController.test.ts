@@ -17,7 +17,6 @@ const REFRESHED = "Radius setup refreshed.";
 
 const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 
-/** A clock the test advances; nothing waits on real time. */
 function clock() {
   let now = 0,
     ids = 0;
@@ -62,11 +61,6 @@ const state = (
 const running: RadiusSetupState["installation"] = { status: "running", action: "install" };
 const succeeded: RadiusSetupState["installation"] = { status: "success", action: "install" };
 
-/**
- * Radius setup over a Pi whose setup the test sets, signed in to Radius. Reads answer with the
- * current setup at once; a change answers with `answer[action]`, or the setup unchanged, or fails
- * with `refuse[action]`.
- */
 async function section(initial: RadiusSetupState) {
   const { env, advance } = clock();
   const pi = {
@@ -117,14 +111,12 @@ test("a web-search install that finishes during a manual refresh toasts once, af
   pi.setup = state("missing", "ready", succeeded);
   setup.refreshByHand();
   await settle();
-  // The read has answered, but the refresh keeps turning for one full spin.
   assert.equal(setup.getState().refreshing, true);
   assert.deepEqual(messages(), []);
   await advance(REFRESH_SPIN_MS);
   assert.equal(setup.getState().refreshing, false);
   assert.equal(setup.getState().view.settled, true);
   assert.deepEqual(messages(), [INSTALLED]);
-  // A later poll interval, refresh-free, adds nothing.
   await advance(INSTALL_POLL_MS * 4);
   assert.deepEqual(messages(), [INSTALLED]);
 });
@@ -160,7 +152,6 @@ test("a manual refresh with no change running confirms it refreshed, without imp
   setup.refreshByHand();
   await advance(REFRESH_SPIN_MS);
   assert.deepEqual(messages(), [REFRESHED]);
-  // Opening an already complete setup never announces it.
   const complete = await section(state("ready", "ready"));
   assert.deepEqual(complete.messages(), []);
 });
@@ -188,6 +179,5 @@ test("a failed change answers with its error toast, not the section's attention"
   assert.deepEqual(messages(), []);
   const { view } = setup.getState();
   assert.equal(view.attention, undefined);
-  // The steps are usable again: the failure does not lock them.
   assert.equal(view.mcp.install?.enabled, true);
 });

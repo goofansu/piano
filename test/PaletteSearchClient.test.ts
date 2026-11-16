@@ -13,7 +13,6 @@ import {
   type PaletteSearchWorker,
 } from "../web/src/lib/paletteSearchClient.ts";
 
-/** Real ranking and structured copies, with only worker scheduling/failure under test control. */
 class ControlledWorker implements PaletteSearchWorker {
   readonly requests: PaletteSearchRequest[] = [];
   readonly replies: PaletteSearchReply[] = [];
@@ -41,7 +40,6 @@ class ControlledWorker implements PaletteSearchWorker {
   }
 }
 
-/** A catalog of command rows the client searches by key, value and keywords alone. */
 const catalog = (prefix: string, count = 1): PaletteGroup[] => [
   {
     id: "global",
@@ -187,7 +185,7 @@ for (const ending of ["error", "messageerror", "post", "dispose"] as const) {
     if (ending === "dispose") client.dispose();
     else if (ending === "post") {
       worker.throwOnPost = true;
-      worker.deliver(); // Sending the queued request throws.
+      worker.deliver();
     } else worker.fail(ending);
     worker.deliver({ id: 1, pages: [] });
     worker.fail("error");

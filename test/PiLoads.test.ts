@@ -16,8 +16,6 @@ test("a package manager that hangs never stalls Piano, and fails the answer inst
     join(agentDir, "skills", "theirs", "SKILL.md"),
     "---\nname: theirs\ndescription: Pi's own.\n---\n\nGo.\n",
   );
-  // Pi asks the package manager, synchronously, where global packages live for an `npm:` package
-  // not in its own folder. This one takes two seconds to answer.
   const slow = join(root, "slow-npm.mjs");
   writeFileSync(slow, "Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2000);\n");
   const settings = join(agentDir, "settings.json");
@@ -34,7 +32,6 @@ test("a package manager that hangs never stalls Piano, and fails the answer inst
   assert.ok(Date.now() - started < 1500, "the answer fails at its deadline");
   assert.ok(ticks >= 10, `Piano's event loop kept running (${ticks} ticks)`);
 
-  // The next answer comes from a new worker.
   writeFileSync(settings, JSON.stringify({}));
   const found = await loadedBeforePiano("skill", agentDir, piano);
   assert.equal(found.get("theirs"), join(agentDir, "skills", "theirs", "SKILL.md"));

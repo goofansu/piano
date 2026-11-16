@@ -1,6 +1,3 @@
-/** Isolated real-Pi resources shared by the Phase 0 checkpoint and browser journey.
- * No production config loader: these are fixture inputs that the normal CLI loads itself.
- */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
@@ -43,7 +40,6 @@ export async function createPiCompatibilityFixture() {
   copyFileSync(fixturePath("Phase0Extension.ts"), join(agentDir, "extensions", "checkpoint.ts"));
   const json = (path: string, data: unknown) =>
     writeFileSync(path, `${JSON.stringify(data, null, 2)}\n`);
-  // This is a synthetic local protocol endpoint, not an LLM. Any unexpected prompt fails closed.
   const endpoint = createServer(async (request, response) => {
     let input = "";
     for await (const chunk of request) input += chunk;
@@ -60,7 +56,7 @@ export async function createPiCompatibilityFixture() {
             .map((block) => block.text)
             .join("");
     const observation = { model: body.model, input: text ?? "", aborted: false };
-    requests.push(observation); // Retain only fixture input, never the system prompt or request headers.
+    requests.push(observation);
     if (text !== "PHASE0_WAIT") {
       response.writeHead(400, { "content-type": "application/json" });
       response.end(
@@ -76,7 +72,6 @@ export async function createPiCompatibilityFixture() {
       observation.aborted = true;
       signalAbort();
     });
-    // Stay pending until Pi's native abort closes this response.
   });
   await new Promise<void>((resolve) => endpoint.listen(0, "127.0.0.1", resolve));
   const port = (endpoint.address() as { port: number }).port;
@@ -146,7 +141,6 @@ await import(${JSON.stringify(pathToFileURL(installedCli).href)});
   ): PiCliConfig => ({
     node: process.execPath,
     cli: shim,
-    // No extension/resource-disabling flags. --approve is scratch-only, never a production default.
     extraArgs: [
       "--offline",
       ...(trust === "approved" ? ["--approve"] : []),
@@ -216,7 +210,6 @@ await import(${JSON.stringify(pathToFileURL(installedCli).href)});
         return false;
       }
     });
-    // Never kill a recorded PID after ownership ended: report leaks instead.
     assert.deepEqual(alive, [], "fixture Pi/MCP children must have exited before removing storage");
     rmSync(root, { recursive: true, force: true });
   };

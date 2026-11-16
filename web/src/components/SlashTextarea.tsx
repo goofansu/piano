@@ -30,9 +30,7 @@ import { useObservation } from "@/lib/useObservation";
 
 export interface CompletionContext {
   cwd: string;
-  /** Only supplied for a live child, which then answers; discovery must not start a saved session. */
   session?: { workspaceId: string; sessionId: string };
-  /** Invalidates pending discovery after replacement, reconnect or trust changes. */
   revision?: string;
 }
 
@@ -43,7 +41,6 @@ type Props = Omit<ComponentProps<typeof Textarea>, "value" | "ref" | "onChange">
   completion?: CompletionContext;
 };
 
-/** One textarea/listbox interaction for both composers. No prompt transformation or execution. */
 export function SlashTextarea({
   value,
   ref,
@@ -72,9 +69,6 @@ export function SlashTextarea({
   };
   const range = completionRange(value, state.selection);
   const token = commandToken(value, state.accepted);
-  // The native textarea remains the editor (selection, undo, IME and accessibility).
-  // A non-interactive mirror paints command color and hover without replacing native editing.
-  // Extra dependencies: resync DOM metrics when draft text or input styling changes, not on streaming renders.
   useLayoutEffect(() => {
     const element = ref.current;
     const overlay = mirror.current;
@@ -123,8 +117,6 @@ export function SlashTextarea({
   const open = slashOpen(state, view);
   const cwd = completion?.cwd;
   const session = completion?.session;
-  // Fetch once per opening, not per keystroke. Reopening gets the live catalog
-  // again, including changes made by a handled extension command.
   const catalog = useObservation(open && cwd ? key : null, (signal) =>
     session
       ? sessionCommands(session.workspaceId, session.sessionId, { signal, machineId })
@@ -135,8 +127,6 @@ export function SlashTextarea({
     : catalog.error
       ? { commands: [], error: catalog.error }
       : undefined;
-  // Discovery still starts immediately and stays scoped to this opening. Only its
-  // presentation waits: fast responses need no loading flash, slow ones get a status row.
   const pending = open && !current;
   const [waitingContext, setWaitingContext] = useState<string>();
   useEffect(() => {
@@ -261,7 +251,6 @@ export function SlashTextarea({
               else if (effect.type === "accept") accept(commands[effect.index]);
             }}
           />
-          {/* No shadcn primitive paints inline ranges inside a native textarea. */}
           <div ref={mirror} className="slash-textarea-mirror" aria-hidden="true">
             {token && (
               <>
@@ -292,7 +281,7 @@ export function SlashTextarea({
         onOpenAutoFocus={(event) => event.preventDefault()}
         onCloseAutoFocus={(event) => event.preventDefault()}
         onEscapeKeyDown={(event) => {
-          event.preventDefault(); /* The textarea owns Escape, including IME. */
+          event.preventDefault();
         }}
         onInteractOutside={(event) => {
           if (event.target === ref.current) event.preventDefault();
@@ -301,8 +290,6 @@ export function SlashTextarea({
           if (event.pointerType !== "touch") event.preventDefault();
         }}
       >
-        {/* cmdk assumes a separate single-line search input. This listbox keeps
-            textarea focus and its caret, including on touch suggestion selection. */}
         <ul
           ref={list}
           id={id}
@@ -331,7 +318,6 @@ export function SlashTextarea({
             >
               <span className="flex items-center gap-3">
                 <span className="min-w-0 flex-1 truncate">/{command.name}</span>
-                {/* Pi's source, as Settings names it: prompt, skill or extension. */}
                 <span className="text-xs text-muted-foreground">{command.source}</span>
               </span>
               {command.description && (

@@ -46,7 +46,6 @@ interface LaunchSpec {
   origin: string;
   path: string;
 }
-/** Trusted by the session broker, never taken from tool arguments. Not a reusable PID. */
 export interface PreviewOwnerIdentity {
   generation: string;
   sessionId: string;
@@ -63,42 +62,30 @@ interface Intent {
   port: number;
   createdAt: number;
   invocation?: string;
-  /** Retained for launchd's asynchronous bootout confirmation; never used to signal a PID. */
   processGroup?: number;
-  /** When readiness was first observed: an app that answered once is no longer warming up. */
   readyAt?: number;
 }
-/** The app's lifecycle in the same words on every supervisor. */
 export type PreviewState = "starting" | "running" | "exited" | "failed" | "stopping" | "not-loaded";
 interface UnitState {
   state: PreviewState;
-  /** Identifies one run of the unit; a different value means someone else restarted it. */
   invocation?: string;
-  /** The supervisor's own fields, for diagnosis only. */
   raw: Record<string, string>;
 }
-/** Runs a supervisor client. Rejects with `status` set to the exit code when it fails. */
 type Run = (args: string[], timeout?: number) => Promise<string>;
 
-/** What differs between hosts: launching, observing, owning a listener, stopping and logs. */
 interface Supervisor {
-  /** Throws unless this host can own an app outside the caller's termination scope. */
   check(): Promise<void>;
   unit(serviceId: string, instanceId: string): string;
   submit(record: Intent, argv: string[], root: string): Promise<void>;
   state(record: Intent): Promise<UnitState>;
-  /** Every listener on the record's port is loopback and belongs to this unit's processes. */
   ownsListener(record: Intent, state: UnitState): Promise<boolean>;
-  /** Returns once the unit's processes are gone; throws if that cannot be established. */
   stop(record: Intent, state: UnitState, root: string): Promise<void>;
-  /** Removes anything the supervisor kept for the record, once it no longer runs. */
   forget(record: Intent, root: string): Promise<void>;
   logs(record: Intent, root: string): Promise<string>;
 }
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-/** An intent as callers see it: the owner without its endpoint, env names without values. */
 const publicIntent = (record: Intent) => ({
   ...record,
   owner: record.owner
@@ -111,12 +98,6 @@ const publicIntent = (record: Intent) => ({
   spec: { ...record.spec, env: Object.keys(record.spec.env) },
 });
 
-/**
- * An app observation: the public intent with its state, readiness and where opening it works.
- * Every observation, including a launch's first `starting` progress, is built here, so a
- * consumer reading one (PreviewProjection) never sees two shapes. A loopback origin is opened on
- * this host, exactly where readiness was observed.
- */
 const observation = <
   Rest extends {
     state: string;
@@ -137,7 +118,6 @@ const observation = <
   observedAt: Date.now() / 1000,
 });
 
-/** A start that failed after saving its launch intent: `instance` may be running, or not. */
 export class PreviewStartError extends Error {
   readonly instance: ReturnType<typeof publicIntent>;
   constructor(cause: unknown, record: Intent) {
@@ -148,12 +128,10 @@ export class PreviewStartError extends Error {
 const code = (error: unknown) => (error as NodeJS.ErrnoException).code;
 const exitStatus = (error: unknown) => (error as { status?: number }).status;
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
-/** Longer than any bounded submission, so an orphaned submission has finished or failed. */
 const SUBMISSION_GRACE_SECONDS = 120;
 const unsupported =
   "Managed previews unsupported: require Linux with a lingering systemd user manager, or macOS with a logged-in user session (launchd). No detached fallback.";
 
-/** Bounded tails, bounded execution, and no caller credentials, even for supervisor clients. */
 function hostRun(platform: string): Run {
   const env =
     platform === "darwin"
@@ -224,15 +202,12 @@ async function close(server: Server) {
   if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve()));
 }
 
-/** The account-wide lock stayed held past its wait: nothing was observed or attempted. */
 export class PreviewBusyError extends Error {
   constructor() {
     super("Preview operation busy. Re-observe status before retrying; no launch attempted.");
   }
 }
 
-/** An exclusive SQLite transaction is a kernel file lock on Linux and macOS alike: released on
- * exit or SIGKILL, with no stale file or PID-reuse race. All helpers share one state root. */
 async function lock(root: string, wait: number) {
   const deadline = performance.now() + wait;
   const database = new DatabaseSync(join(root, "lock.sqlite"));
@@ -258,7 +233,6 @@ function unlock(database: DatabaseSync) {
   }
 }
 
-/** Sends the Host a browser sends through the preview URL, so a framework's host check is seen. */
 function httpStatus(
   port: number,
   path: string,
@@ -266,7 +240,6 @@ function httpStatus(
   timeout = READY_REQUEST_TIMEOUT_MS,
 ): Promise<number> {
   return new Promise((resolve, reject) => {
-    // Absolute wall deadline, not a socket inactivity timeout (a slow responder must not extend it).
     const request = httpRequest(
       { hostname: "127.0.0.1", port, path, method: "GET", agent: false, headers: { host } },
       (response) => {
@@ -284,8 +257,6 @@ function httpStatus(
   });
 }
 
-/** Only kernel refusal/absence proves the old generation endpoint is gone. A timeout or any
- * other observation failure is unknown, so another session must still report a conflict. */
 function ownerGone(endpoint: string): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = createConnection(endpoint);
@@ -302,8 +273,7 @@ function ownerGone(endpoint: string): Promise<boolean> {
 const loopbackOrigin = /^http:\/\/(localhost|127\.0\.0\.1)$/;
 const exeDevOrigin = /^https:\/\/[a-zA-Z0-9-]+\.exe\.xyz$/;
 
-/** Probes each address alone. macOS lets a wildcard bind share a port that another process holds
- * on 127.0.0.1, so the app's own loopback address is probed as well as the wildcards. */
+/* macOS can bind a wildcard over an occupied loopback port; probe both. */
 async function free(port: number) {
   const probes: Parameters<Server["listen"]>[0][] = [
     { host: "127.0.0.1", port },
@@ -315,7 +285,6 @@ async function free(port: number) {
     try {
       await listen(server, probe);
     } catch (error) {
-      // A host without IPv6 cannot conflict on it; only a busy address disqualifies the port.
       const ipv6Missing = ["EAFNOSUPPORT", "EADDRNOTAVAIL"].includes(code(error) ?? "");
       if (!(probe.host === "::" && ipv6Missing)) return false;
     } finally {
@@ -326,13 +295,11 @@ async function free(port: number) {
 }
 
 async function choosePort(config: PreviewConfig, root: string, origin: string) {
-  // Piano's own defaults: backend 7070, Vite 5173, exe.dev units 8000/8001.
   const reserved = new Set([5173, 7070, 8000, 8001, ...(config.reservedPorts ?? [])]);
   for (const file of (await readdir(root)).filter((name) => name.endsWith(".json"))) {
     reserved.add((JSON.parse(await readFile(join(root, file), "utf8")) as Intent).port);
   }
   const ports = config.ports ?? Array.from({ length: 7000 }, (_, i) => 3000 + i);
-  // exe.dev's proxy serves 3000–9999; a loopback origin needs only an unprivileged port.
   const [low, high] = loopbackOrigin.test(origin) ? [1024, 65535] : [3000, 9999];
   if (!ports.length || ports.some((p) => !Number.isInteger(p) || p < low || p > high)) {
     throw new Error(`ports must be integers in the origin's supported range ${low}–${high}`);
@@ -352,7 +319,6 @@ async function runnableFile(path: string) {
   }
 }
 
-/** A bare name resolves against the app's own PATH, so the saved launch names an absolute file. */
 async function executable(name: string, path: string) {
   if (name.includes("/")) {
     if (!isAbsolute(name)) throw new Error("command[0] must be a bare name or an absolute path");
@@ -365,8 +331,6 @@ async function executable(name: string, path: string) {
   throw new Error(`command[0] "${name}" is not an executable on the app's PATH (${path})`);
 }
 
-/** A launch Piano is about to submit must name a runnable file, checked before anything stops.
- * Reuse skips this: a running app keeps its launch even if the file has since changed. */
 async function checkRunnable(command: string[]) {
   if (!(await runnableFile(command[0])))
     throw new Error(
@@ -379,7 +343,6 @@ async function launchSpec(
   config: PreviewConfig,
   platform: string,
 ): Promise<LaunchSpec> {
-  // A local Mac serves its previews on localhost; a remote host needs its explicit exe.dev origin.
   const origin = config.origin ?? (platform === "darwin" ? "http://localhost" : "");
   if (!loopbackOrigin.test(origin) && !exeDevOrigin.test(origin))
     throw new Error(
@@ -394,7 +357,6 @@ async function launchSpec(
     throw new Error(
       "command must be a nonempty argv array; use {port} and strict binding, not shell backgrounding",
     );
-  // `env` would read a first argument containing "=" as an assignment, not the executable.
   if (command[0].includes("=")) throw new Error("command[0] must not contain '='");
   const env = request.env ?? {};
   if (
@@ -409,7 +371,6 @@ async function launchSpec(
   if (Object.hasOwn(env, "PORT"))
     throw new Error("PORT is allocated by Piano; use {port} in argv or the injected PORT");
   const readyPath = request.readyPath ?? "/";
-  // Node's HTTP client rejects a path outside \x21–\xff, which could never become ready.
   if (typeof readyPath !== "string" || !readyPath.startsWith("/") || /[^\x21-\xff]/.test(readyPath))
     throw new Error("readyPath must be an HTTP path");
   const path = config.path ?? "/usr/local/bin:/usr/bin:/bin";
@@ -422,8 +383,6 @@ async function launchSpec(
   };
 }
 
-/** Admission catches identifiable unsupported launches, not what arbitrary scripts do. The
- * agent must inspect the checkout's real app entry point; this is not an execution sandbox. */
 async function admitLaunch(command: string[], workspace: string) {
   const refuse = (reason: string): never => {
     throw new Error(
@@ -435,7 +394,6 @@ async function admitLaunch(command: string[], workspace: string) {
   const program = basename(command[0]);
   let tool = program;
   let args = command.slice(1);
-  // Recognize direct package invocations only; do not interpret scripts or shell programs.
   if (program === "npx") {
     args = args.filter((arg) => !["--yes", "-y", "--no-install", "--"].includes(arg));
     tool = args.shift() ?? "";
@@ -468,10 +426,6 @@ async function admitLaunch(command: string[], workspace: string) {
     return child !== ".." && !child.startsWith(`..${sep}`) && !isAbsolute(child);
   };
   const checkRoot = async (value: string) => {
-    // Resolve existing ancestors too: a missing child beneath an outward symlink is outside.
-    // Canonical comparison also accepts symlinked checkout spellings (e.g. /var on macOS).
-    // Keep the spelling unnormalized: the kernel follows `link/..` through the link, so
-    // collapsing it lexically (as `resolve` does) would check a different file than runs.
     let ancestor = isAbsolute(value) ? value : `${checkout}${sep}${value}`;
     for (;;) {
       try {
@@ -480,7 +434,6 @@ async function admitLaunch(command: string[], workspace: string) {
         break;
       } catch (error) {
         if (code(error) !== "ENOENT") throw error;
-        // `missing/..` has no destination until `missing` exists; refuse rather than guess.
         if (basename(ancestor) === "..")
           refuse("an explicit launch root climbs out of a missing directory");
         if (resolve(ancestor) === checkout) throw error;
@@ -507,13 +460,10 @@ async function admitLaunch(command: string[], workspace: string) {
       await checkRoot(root);
     }
   }
-  // Unambiguous positional roots in common dev CLIs; options and opaque wrappers stay opaque.
   if (frameworks.includes(tool.replace(/@[^/]+$/, ""))) {
     const root = ["dev", "start", "preview", "serve"].includes(args[0]) ? args[1] : args[0];
     if (root && !root.startsWith("-")) await checkRoot(root);
   }
-  // An explicitly named application file must belong to this checkout. Installed executables
-  // still resolve on PATH; this does not restrict a language or inspect imported application code.
   const entry = python
     ? pythonArgs[0]
     : program === "node" && tool === program
@@ -522,7 +472,6 @@ async function admitLaunch(command: string[], workspace: string) {
   if (entry && /\.(?:[cm]?js|tsx?|py)$/.test(entry)) await checkRoot(entry);
 }
 
-/** The app as `env -i` launches it: only PATH, PORT and the explicitly requested environment. */
 function appArgv(record: Intent) {
   return [
     "/usr/bin/env",
@@ -536,7 +485,6 @@ function appArgv(record: Intent) {
   ];
 }
 
-/** Linux: a transient unit of the lingering user manager, outside Piano's service cgroup. */
 class Systemd implements Supervisor {
   private readonly run: Run;
   private readonly uid: number;
@@ -644,7 +592,6 @@ class Systemd implements Supervisor {
       try {
         rows = (await readFile(`/proc/net/${table}`, "utf8")).trim().split("\n").slice(1);
       } catch (error) {
-        // A kernel booted without IPv6 has no tcp6 table, hence no IPv6 listener to check.
         if (table === "tcp6" && code(error) === "ENOENT") continue;
         throw error;
       }
@@ -667,19 +614,14 @@ class Systemd implements Supervisor {
           try {
             const target = await readlink(`/proc/${pid}/fd/${fd}`);
             if (target.startsWith("socket:[")) owned.add(target.slice(8, -1));
-          } catch {
-            /* The process may close an FD while observed. */
-          }
+          } catch {}
         }
-      } catch {
-        /* Processes can exit or be inaccessible. Fail closed on ownership. */
-      }
+      } catch {}
     }
     return [...inodes].every((inode) => owned.has(inode));
   }
 
   async stop(record: Intent) {
-    // KillMode=control-group: stop returns once every process in the unit's cgroup is gone.
     await this.run(["systemctl", "--user", "stop", record.unit], 15000);
     const after = await this.state(record);
     if (!["exited", "failed", "not-loaded"].includes(after.state))
@@ -710,12 +652,9 @@ class Systemd implements Supervisor {
 const plistString = (value: string) =>
   `<string>${value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")}</string>`;
 
-/** macOS: a job of the user's launchd GUI domain. Its parent is launchd, not Piano, and it leads
- * its own process group, which `bootout` signals as a whole. Not loaded again at login. */
 class Launchd implements Supervisor {
   private readonly run: Run;
   private readonly uid: number;
-  /** Whether any process of the group remains; injectable because tests own no real job. */
   private readonly groupAlive: (group: number) => boolean;
   constructor(run: Run, uid: number, groupAlive: (group: number) => boolean) {
     this.run = run;
@@ -775,11 +714,9 @@ class Launchd implements Supervisor {
     try {
       output = await this.run(["/bin/launchctl", "print", `${this.domain}/${record.unit}`]);
     } catch (error) {
-      // 113: "Could not find service" in this domain.
       if (exitStatus(error) === 113) return { state: "not-loaded", raw: {} };
       throw error;
     }
-    // Only the job's own top-level fields; nested sections are indented further.
     const raw: Record<string, string> = Object.fromEntries(
       [...output.matchAll(/^\t([a-z ]+) = (.*)$/gm)].map((match) => [match[1], match[2]]),
     );
@@ -805,8 +742,7 @@ class Launchd implements Supervisor {
     if (state.state !== "running" || !Number.isInteger(leader) || leader <= 1) return false;
     let output: string;
     try {
-      // -b skips stat/readlink of every mount (a slow network mount stalls lsof past the run
-      // timeout); -w drops the warnings that causes. Socket listings need neither.
+      // lsof -b avoids stalls on network mounts; -w suppresses the resulting warnings.
       output = await this.run([
         "/usr/sbin/lsof",
         "-b",
@@ -817,7 +753,7 @@ class Launchd implements Supervisor {
         "-Fpn",
       ]);
     } catch (error) {
-      if (exitStatus(error) === 1) return false; // No listener at all.
+      if (exitStatus(error) === 1) return false;
       throw error;
     }
     const pids = new Set<string>();
@@ -830,12 +766,11 @@ class Launchd implements Supervisor {
       pids.add(pid);
     }
     if (!pids.size) return false;
-    // Every listening process must be in the job's process group, which launchd made it lead.
     let groups: string;
     try {
       groups = await this.run(["/bin/ps", "-o", "pid=,pgid=", "-p", [...pids].join(",")]);
     } catch {
-      return false; // A listener exited while observed. Fail closed on ownership.
+      return false;
     }
     const rows = groups
       .trim()
@@ -848,10 +783,8 @@ class Launchd implements Supervisor {
     try {
       await this.run(["/bin/launchctl", "bootout", `${this.domain}/${record.unit}`], 15000);
     } catch (error) {
-      // 3: "No such process": the job left the domain on its own.
       if (exitStatus(error) !== 3) throw error;
     }
-    // bootout returns at once; launchd sends TERM, then KILL after ExitTimeOut (5s).
     const leader = Number(state.raw.pid ?? record.processGroup);
     if (Number.isInteger(leader) && leader > 1) {
       const deadline = performance.now() + 10000;
@@ -877,7 +810,6 @@ class Launchd implements Supervisor {
   }
 
   async logs(record: Intent, root: string) {
-    // The app's own log file is unbounded; read only its last 64 KiB, then the last 30 lines.
     let file: Awaited<ReturnType<typeof open>>;
     try {
       file = await open(this.files(record, root).log, "r");
@@ -906,8 +838,6 @@ function processGroupAlive(group: number) {
   }
 }
 
-/** The only substituted boundary is the host: supervisor commands and platform facts.
- * Filesystem, locking, allocation, reconciliation and Linux listener checks stay real in tests. */
 export class PreviewAdapter {
   private readonly platform: string;
   private readonly uid: number;
@@ -920,7 +850,6 @@ export class PreviewAdapter {
       uid?: number;
       callerGroup?: () => Promise<string>;
       groupAlive?: (group: number) => boolean;
-      /** How long to wait for the account-wide lock; tests shorten it. */
       lockWait?: number;
     } = {},
   ) {
@@ -953,7 +882,6 @@ export class PreviewAdapter {
     }
   }
 
-  /** The unit's state, refusing a supervisor invocation other than the one this intent adopted. */
   private async current(supervisor: Supervisor, record: Intent, path: string) {
     const state = await supervisor.state(record);
     const invocation = state.invocation;
@@ -974,12 +902,9 @@ export class PreviewAdapter {
     path: string,
     root: string,
     withLogs = true,
-    /** Caps this observation's readiness request, e.g. at a start's remaining wait. */
     requestTimeout = READY_REQUEST_TIMEOUT_MS,
   ) {
     const state = await this.current(supervisor, record, path);
-    // Only reconcile after native termination, never while the supervisor is still cleaning
-    // descendants. In particular launchd's group SIGKILL is not the application's exit cause.
     const termination =
       record.owner && ["exited", "failed", "not-loaded"].includes(state.state)
         ? await readOutcome(
@@ -992,7 +917,7 @@ export class PreviewAdapter {
       ? outcomeFailed(termination)
         ? "failed"
         : this.platform === "linux" && state.state === "failed"
-          ? "failed" // Do not hide native cleanup failures (e.g. a cgroup stop timeout).
+          ? "failed"
           : "exited"
       : state.state;
     const loopback = loopbackOrigin.test(record.spec.origin);
@@ -1022,8 +947,6 @@ export class PreviewAdapter {
       record.readyAt = Date.now() / 1000;
       await save(path, record);
     }
-    // A 4xx/5xx response is not readiness; keep checking within the warm-up window. Once an
-    // app has been ready, losing readiness must not make it look like a fresh cold start.
     const warming =
       !ready &&
       !record.readyAt &&
@@ -1045,26 +968,20 @@ export class PreviewAdapter {
     });
   }
 
-  /** `progress` hears what a start has already changed before it returns: the replaced instance
-   * once its stop is confirmed, then the new launch intent as starting, never yet ready. */
   async request(
     request: PreviewRequest,
     stateRoot: string,
     config: PreviewConfig,
     owner?: PreviewOwnerIdentity,
     progress?: (result: unknown) => void,
-    /** False for a status read that only needs the app's state, not its recent output. */
     logs = true,
   ) {
-    // Unsupported hosts fail before locking or any launch intent, without affecting Piano.
     const supervisor = this.supervisor;
     if (!supervisor || this.uid <= 0) throw new Error(unsupported);
     await supervisor.check();
     await mkdir(stateRoot, { recursive: true, mode: 0o700 });
     const root = await realpath(stateRoot);
     let mutex: DatabaseSync | undefined = await lock(root, this.lockWait);
-    // A start releases the lock while it waits between readiness checks, so its wait never
-    // holds up another workspace's operations, nor its lock wait depend on a start's budget.
     const pause = async (ms: number) => {
       if (mutex) unlock(mutex);
       mutex = undefined;
@@ -1078,15 +995,11 @@ export class PreviewAdapter {
     }
   }
 
-  /** Serializes owner retirement with every launch/replace, using retained canonical identity.
-   * On idle, errors mean active/unknown, never proof of absence. Explicit cleanup throws. */
   async retire(owner: PreviewOwnerIdentity, stateRoot: string, idle = false): Promise<boolean> {
     let mutex: DatabaseSync | undefined;
     try {
       await mkdir(stateRoot, { recursive: true, mode: 0o700 });
       const root = await realpath(stateRoot);
-      // Idle asks while holding its session's ownership: a busy lock is not idle, and the next
-      // sweep asks again. Explicit cleanup waits its turn.
       mutex = await lock(root, idle ? 0 : this.lockWait);
       const serviceId = `piano-preview-${hash(owner.workspace).slice(0, 24)}`;
       const path = join(root, `${serviceId}.json`);
@@ -1115,7 +1028,6 @@ export class PreviewAdapter {
     }
   }
 
-  /** Stops exactly this record's unit, or clears the record when the unit is gone. */
   private async stop(
     supervisor: Supervisor,
     record: Intent,
@@ -1125,8 +1037,6 @@ export class PreviewAdapter {
   ) {
     const before = await this.current(supervisor, record, path);
     if (before.state === "not-loaded") {
-      // Gone after reboot, logout or a failed submission: nothing to stop. An intent never seen
-      // running may still have an orphaned submission in flight, so it waits out a grace period.
       const terminated = record.owner
         ? await readOutcome(
             outcomePath(path, record.instanceId),
@@ -1169,14 +1079,11 @@ export class PreviewAdapter {
     owner?: PreviewOwnerIdentity,
     progress: (result: unknown) => void = () => {},
     logs = true,
-    /** Waits between readiness checks without the account-wide lock, then holds it again. */
     pause: (ms: number) => Promise<void> = delay,
   ) {
-    // Retained canonical identity also works after the checkout is removed.
     const workspace =
       owner?.workspace ??
       (await realpath(request.workspace).catch((error) => {
-        // Recovery of a legacy intent may need its saved canonical path after checkout removal.
         if (code(error) === "ENOENT" && request.action !== "start" && isAbsolute(request.workspace))
           return request.workspace;
         throw error;
@@ -1194,8 +1101,6 @@ export class PreviewAdapter {
         ? this.observe(supervisor, record, path, root, logs)
         : { serviceId, workspace, status: "absent" };
     if (record && record.owner?.generation !== owner?.generation) {
-      // A restart may clear a *confirmed dead* generation, never adopt its app. Legacy records
-      // have no owner and always require an explicit stop with the pre-upgrade helper.
       if (owner && request.action === "start" && record.owner) {
         const state = await this.current(supervisor, record, path);
         if (
@@ -1226,7 +1131,6 @@ export class PreviewAdapter {
         "Start requires a live Piano session owner. Use piano_preview in that session.",
       );
     if (!(await stat(workspace)).isDirectory()) throw new Error("workspace must be a directory");
-    // Without a command, a start means "the launch this workspace already has".
     const requested =
       record && request.command === undefined
         ? {
@@ -1240,7 +1144,6 @@ export class PreviewAdapter {
       if (!record || request.replace !== record.instanceId)
         return { serviceId, status: "not-current", replaced: false };
     } else if (record) {
-      // Reuse never depends on the caller restating the launch exactly; a difference is reported.
       const result = await this.observe(supervisor, record, path, root);
       if (isDeepStrictEqual(record.spec, await launchSpec(requested, config, this.platform)))
         return { ...result, reused: true };
@@ -1268,8 +1171,6 @@ export class PreviewAdapter {
     if (record) {
       const stopped = await this.stop(supervisor, record, path, root, serviceId);
       replaced = stopped.instanceId;
-      // The old app is gone now, not when the replacement's readiness wait ends: its URL may
-      // soon reach the replacement on the same port.
       progress(stopped);
     }
     const port = await choosePort(config, root, spec.origin);
@@ -1284,7 +1185,7 @@ export class PreviewAdapter {
       port,
       createdAt: Date.now() / 1000,
     };
-    await save(path, record); // Durable intent BEFORE submission; never blindly replay it.
+    await save(path, record);
     progress(
       observation(record, {
         state: "starting",
@@ -1320,8 +1221,6 @@ export class PreviewAdapter {
       const deadline = performance.now() + timeout * 1000;
       for (;;) {
         const probed = performance.now();
-        // Logs are read once, for the observation returned, not on every poll. One slow request
-        // never stretches the start's own deadline.
         const remaining = Math.max(1000, deadline - probed);
         const result = await this.observe(
           supervisor,
@@ -1346,8 +1245,6 @@ export class PreviewAdapter {
             ...(replaced && { replaced }),
           };
         await pause(Math.max(0, READY_INTERVAL_MS - (performance.now() - probed)));
-        // Unlocked, the record may have changed: another observer saved what it saw, or a
-        // reopened generation cleared this launch after its owner ended.
         const saved: Intent | undefined = await readFile(path, "utf8").then(
           (text) => JSON.parse(text),
           (error) => {

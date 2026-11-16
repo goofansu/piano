@@ -1,27 +1,11 @@
-/**
- * One sign-in dialog's attempt: a provider's or an MCP server's, through the same request shape.
- * Opening it reads the server's attempt and starts a new one unless one is already running, once,
- * however often `start` is called, so a remounted dialog re-attaches instead of signing in twice.
- * A running attempt is polled while nothing else is in flight; an answer, retry or cancellation
- * supersedes any poll in flight, so a read that started before the change never overwrites the
- * change's result. A failed poll reports a lost connection until the next poll answers. `signedIn`
- * runs once per attempt, including when only the cancellation's reply shows the attempt had
- * already succeeded. Explicit dismissal cancels a running attempt; stopping (a browser leaving)
- * keeps it. `signInDialogView` derives what the dialog shows from the attempt's state. Nothing here
- * depends on React.
- */
 import type { LoginPrompt, OAuthProvider, ProviderLoginState } from "@shared/wire";
 import type { SignInRequest } from "./api.ts";
 import { browserEnvironment, type ObservationEnvironment } from "./observation.ts";
 
 export interface SignInAttemptState {
-  /** The server's attempt as last read; `null` when it has none. */
   attempt: ProviderLoginState | null;
-  /** Opening, an answer, a retry or a cancellation is in flight. */
   busy: boolean;
-  /** The last action's failure, cleared by the next action or an attempt that stopped running. */
   error: string;
-  /** Set by a failed poll, cleared by the next poll that answers. */
   connectionError: string;
 }
 
@@ -29,11 +13,8 @@ export type SignInApi = (request?: SignInRequest) => Promise<ProviderLoginState 
 
 export interface SignInAttemptOptions {
   api: SignInApi;
-  /** Start this provider's sign-in on opening unless an attempt is already running. */
   provider: string;
-  /** The attempt succeeded; runs once per attempt. */
   signedIn: () => void;
-  /** The dialog should close. */
   close: () => void;
   environment?: Pick<ObservationEnvironment, "setTimeout" | "clearTimeout">;
 }
@@ -41,12 +22,9 @@ export interface SignInAttemptOptions {
 export interface SignInAttempt {
   getState: () => SignInAttemptState;
   subscribe: (listener: () => void) => () => void;
-  /** Opens the attempt on first call and polls while running; returns the stop function, which keeps the attempt. */
   start: () => () => void;
   answer: (promptId: string, value: string) => void;
-  /** Starts a new attempt for the same provider after one failed or was cancelled. */
   retry: () => void;
-  /** Cancels a running attempt and closes; ignored while anything is in flight. */
   dismiss: () => void;
 }
 
@@ -69,11 +47,8 @@ export function createSignInAttempt({
   let active = false;
   let opened = false;
   let dismissing = false;
-  /** The attempt `signedIn` last ran for. */
   let notified: string | undefined;
-  /** Bumped by every action and stop; a poll applies only within the generation it started in. */
   let generation = 0;
-  /** The generation whose poll loop is running. */
   let looping = -1;
   let timer: unknown;
 
@@ -88,13 +63,11 @@ export function createSignInAttempt({
     signedIn();
   };
 
-  /** A read or action's result becomes the attempt; success is announced while the dialog is open. */
   const apply = (patch: Partial<SignInAttemptState> & { attempt: ProviderLoginState | null }) => {
     publish(patch);
     if (active) notify(patch.attempt);
   };
 
-  /** Supersede any poll: drop its timer and its reply. */
   const halt = () => {
     generation++;
     if (timer !== undefined) environment.clearTimeout(timer);
@@ -149,7 +122,6 @@ export function createSignInAttempt({
     }
   };
 
-  /** Runs once per dialog however often `start` does, so a remount never signs in twice. */
   const open = async () => {
     opened = true;
     try {
@@ -197,7 +169,6 @@ export function createSignInAttempt({
       void change({ method: "POST", body: { provider: attempt.provider } });
     },
     dismiss: () => {
-      // Do not abandon an opening or answer whose resulting attempt is not known yet.
       if (state.busy || dismissing) return;
       dismissing = true;
       const { attempt } = state;
@@ -210,7 +181,6 @@ export function createSignInAttempt({
       void (async () => {
         try {
           const result = await api({ method: "DELETE", body: { id: attempt.id } });
-          // Authorization may have completed before cancellation reached the server.
           notify(result);
           close();
         } catch {
@@ -226,7 +196,6 @@ export function createSignInAttempt({
   };
 }
 
-/** The sign-in page's address when it is safe to link: http(s) without credentials. */
 function safeUrl(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
   try {
@@ -241,44 +210,31 @@ function safeUrl(raw: string | undefined): string | undefined {
 
 export interface SignInDialogView {
   title: string;
-  /** The dialog's one line beneath its title; absent when the prompt's field says it all. */
   description: string | undefined;
-  /** The attempt succeeded; `message` is then the success detail. */
   success: boolean;
-  /** Pi's progress or instructions; absent while a typed prompt's label already says them. */
   message: string | undefined;
-  /** The sign-in page to open, only when the attempt runs and it is a safe http(s) link. */
   url: string | undefined;
-  /** Where "Open sign-in page" shows: beside a prompt, in the footer, or nowhere. */
   link: "body" | "footer" | null;
   deviceCode: string | undefined;
-  /** The running attempt's question; its form replaces the footer. */
   prompt: LoginPrompt | undefined;
-  /** The prompt's field label: "Method" for a choice, else Pi's question in Piano's words. */
   label: string | undefined;
   busy: boolean;
-  /** Something is in flight and no prompt is showing. */
   loading: boolean;
-  /** The last action's failure, else a lost connection. */
   alert: string | undefined;
-  /** Absent while a prompt shows its own Cancel and Continue. */
   footer: { dismissLabel: string; dismissPrimary: boolean; retry: boolean } | undefined;
 }
 
-/** Pi's question as a field label: "sign-in" where Pi says "login", without its trailing colon. */
 const promptLabel = (message: string) =>
   message
     .replace(/\blog ?in\b/gi, (word) => (word[0] === "L" ? "Sign-in" : "sign-in"))
     .replace(/:\s*$/, "");
 
-/** What the sign-in dialog shows. Pure; the component renders it. */
 export function signInDialogView({
   state: { attempt, busy, error, connectionError },
   provider,
   providers,
 }: {
   state: SignInAttemptState;
-  /** The provider the dialog was opened for, named until the attempt names its own. */
   provider: string;
   providers: readonly OAuthProvider[];
 }): SignInDialogView {
@@ -292,15 +248,13 @@ export function signInDialogView({
   return {
     title: `Sign in to ${name}`,
     description: select
-      ? // The one fact the choice's names leave out.
-        (prompt.options?.length ?? 0) > 1
+      ? (prompt.options?.length ?? 0) > 1
         ? "On another machine, choose a device-code or copy-code method."
         : undefined
       : url && !prompt
         ? "Waiting for authorization…"
         : "Follow the steps to connect your account.",
     success,
-    // A typed prompt's label repeats Pi's instructions, so the field says them once.
     message: prompt && !select ? undefined : attempt?.message,
     url,
     link: url ? (prompt ? "body" : "footer") : null,
@@ -320,8 +274,6 @@ export function signInDialogView({
   };
 }
 
-/** A prompt's answer may be sent: nothing is in flight and a select has a choice. The Continue
- * button and the form's submit guard both read this. */
 export function canSubmitAnswer({
   prompt,
   busy,

@@ -1,8 +1,3 @@
-/** Real locked-CLI checkpoint through PiSessions, no paid model calls.
- * Run: node test/phase0-checkpoint.ts /tmp/piano-phase0-evidence/runtime
- * Exit 0: all observed contracts pass; 2: known compatibility gaps; 1: unexpected check/fixture failure.
- * This is deliberately separate from npm test: known incompatibility must not become a passing assertion.
- */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -178,7 +173,6 @@ try {
       ),
     );
   }
-  // Demonstrate the connecting assertion rejects both false-positive configurations.
   for (const mode of ["disabled", "broken"] as const) {
     fixture.configureSentinel(mode);
     await check(`negative control: globally ${mode} sentinel`, () =>
@@ -323,7 +317,6 @@ try {
       }),
     ),
   );
-  // This is a compatibility observation, not an assertion that abandoned dialogs are acceptable.
   const abortObservation = await run(
     Effect.gen(function* () {
       const session = yield* (yield* PiSessions).open({
@@ -347,7 +340,6 @@ try {
       packets.push({ label: "dialog-after-abort-ack", events: [...after] });
       const retained = after[0].snapshot.dialogs.some((pending) => pending.id === dialog.dialog.id);
       const pendingAcknowledgement = (yield* session.state).submission?.outcome === "submitting";
-      // Recover explicitly so the check never abandons a fixture child or extension.
       if (retained)
         yield* session.act({
           _tag: "answer",

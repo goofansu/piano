@@ -6,8 +6,6 @@ import {
   type HtmlPreviewLink,
 } from "../web/src/lib/html-preview-bridge.ts";
 
-// Browser messaging is the boundary: exercise the registered listener with delivery facts.
-// Real isTrusted/source/origin and script containment are separately checked in Chromium.
 test("only the current opaque frame's exact indexed click message can open a destination", () => {
   const listeners = new Set<(event: MessageEvent) => void>();
   const host = {
@@ -55,7 +53,6 @@ test("only the current opaque frame's exact indexed click message can open a des
   deliver(valid, { origin: "https://piano.invalid" });
   deliver(valid, { isTrusted: false });
   assert.equal(opened.length, 0);
-  // A reused iframe WindowProxy cannot make a previous document's queued click current.
   dispose();
   const next = listenHtmlPreviewLinks(
     host,

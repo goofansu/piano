@@ -1,8 +1,3 @@
-/**
- * Pure selectors for "where and how is the selected session": its folder, checkout, workspace,
- * project and readiness. Header, palette, sidebar and session view read these instead of each
- * looking the session up in the folder list themselves.
- */
 import type {
   FolderView,
   HostInfo,
@@ -11,7 +6,6 @@ import type {
   SessionReference,
   Workspace,
 } from "@shared/wire";
-// Relative, not @shared: module tests load this file directly in Node.
 import { isWorking } from "../../../shared/sessionProjection.ts";
 import { workUnderWay } from "../../../shared/sessionStatus.ts";
 import { sameSession } from "../../../shared/wire.ts";
@@ -26,38 +20,23 @@ import { submissionReceipt } from "./submissionReceipt.ts";
 
 export type SessionRef = { cwd: string; sessionId: string };
 
-/** What the New session directory picker's trigger names. */
 export type DirectoryTrigger =
   | { kind: "none" }
-  /** A registered checkout: its folder, plus its branch unless it is the folder's root. */
   | { kind: "checkout"; folder: string; branchLabel?: string }
-  /** A directory no registered folder contains, as a home-abbreviated path. */
   | { kind: "path"; label: string };
 
 export interface DirectoryRoot {
   path: string;
-  /** The folder's name. */
   label: string;
   selected: boolean;
 }
 
 export interface DirectoryChoices {
   trigger: DirectoryTrigger;
-  /**
-   * Every registered folder's root checkout a session may start in (`MachineOffers.startsSessionIn`).
-   * A missing root is left out rather than shown disabled: the folder stays registered and returns
-   * once its directory does.
-   */
   roots: DirectoryRoot[];
-  /** The folder whose worktrees the picker offers: only when `cwd` is one of its checkouts. */
   worktreesFolder: FolderView | undefined;
 }
 
-/**
- * Where a first message is spoken from the New page: the names voice input spells by. The folder
- * is named as the session it starts will be (see `sessionDirectories`), and the branch is the
- * checkout's.
- */
 export function startPlace(
   state: AppState,
   cwd: string,
@@ -71,7 +50,6 @@ export function startPlace(
   };
 }
 
-/** The New session directory picker: its trigger, folder roots and the folder its Worktrees open. */
 export function directoryChoices(
   state: AppState,
   cwd: string,
@@ -101,24 +79,10 @@ export function directoryChoices(
   return { trigger, roots, worktreesFolder: checkout ? folder : undefined };
 }
 
-/**
- * The registry's workspace for a directory. The registry keeps a workspace for every folder,
- * worktree and session directory, and keeps it when the folder is closed, so this is the one
- * identity behind both the Changes preview and the session's pull request.
- */
 export function workspaceFor(state: AppState, cwd: string | undefined): Workspace | undefined {
   return cwd === undefined ? undefined : state.workspaces.find((w) => w.path === cwd);
 }
 
-/**
- * Pi cannot be asked about `cwd`: the selected session there reports its checkout gone, the
- * registry marks a session reference in that directory's checkout unavailable, or the folder list
- * reports a folder's root missing. Only a root's "missing" counts: an "unknown" or "non-git"
- * directory is not known to be gone (INV-06), and a linked worktree is "missing" also when Git
- * merely stops listing it, which leaves its directory, and the sessions there, usable. The one
- * rule behind Trust, Rename, the focused directory, both composers and the announced status, and
- * the checkout half of where a session may start (`MachineOffers.startsSessionIn`).
- */
 export function checkoutMissingAt(state: AppState, cwd: string): boolean {
   return (
     (state.session?.cwd === cwd && !!state.session.state.checkoutMissing) ||
@@ -131,11 +95,9 @@ export function checkoutMissingAt(state: AppState, cwd: string): boolean {
 
 export interface FocusedDirectory {
   cwd: string;
-  /** The directory's checkout is gone (`checkoutMissingAt`), so Pi cannot be asked about it. */
   checkoutMissing: boolean;
 }
 
-/** The directory the main pane is about: the New page's or project home's, else the selected session's. */
 export function focusedDirectory(state: AppState): FocusedDirectory | undefined {
   const page = startPage(state.view);
   if (page)
@@ -148,19 +110,12 @@ export function focusedDirectory(state: AppState): FocusedDirectory | undefined 
     : undefined;
 }
 
-/** Where slash completion discovers commands; a new revision invalidates pending discovery. */
 export interface CompletionTarget {
   cwd: string;
-  /** Only for a live child, addressed by its registry IDs; discovery must not start a saved session. */
   session?: { workspaceId: string; sessionId: string };
   revision: string;
 }
 
-/**
- * Slash completion for the focused directory, once it can be asked: on the New page while
- * connected, for a session once its attachment is ready. The revision changes when the
- * attachment, its child, the directory's trust or its model catalog is replaced.
- */
 export function completionTarget(state: AppState): CompletionTarget | undefined {
   const focus = focusedDirectory(state);
   const session = state.view.kind === "session" ? state.session : null;
@@ -173,14 +128,12 @@ export function completionTarget(state: AppState): CompletionTarget | undefined 
     state.catalogs[focus.cwd]?.fetchedAt,
   ].join(":");
   if (!session?.hosted || !session.sessionId) return { cwd: focus.cwd, revision };
-  // A running session answers only for itself; until its workspace is known there is nothing to ask.
   const workspaceId = workspaceFor(state, session.cwd)?.id;
   return workspaceId
     ? { cwd: focus.cwd, session: { workspaceId, sessionId: session.sessionId }, revision }
     : undefined;
 }
 
-/** The registry reference behind a session row, so membership is read from one place. */
 export function sessionReference(
   state: AppState,
   session: SessionRef,
@@ -195,103 +148,61 @@ export function sessionProject(
   return findProject(state, session && sessionReference(state, session)?.projectId);
 }
 
-/** Session actions go out only on a current, settled attachment. */
 export function sessionReady(state: AppState): boolean {
   return state.connected && !state.resync && !state.selecting && state.selectionId !== null;
 }
 
-/** The session is the one selected or being selected, whose attachment `sessionReady` describes. */
 export function isSelectedSession(state: AppState, target: SessionRef): boolean {
   const current = state.session ?? state.selecting;
   return isSession(current, target);
 }
 
-/**
- * Registry mutations (rename, archive, delete) may be sent for this session: always over a live
- * connection, and for the selected session only once its attachment is settled, so a resync or a
- * selection in flight cannot race the change. Other sessions do not wait on the selected one.
- */
 export function sessionMutable(state: AppState, target: SessionRef): boolean {
   return state.connected && (!isSelectedSession(state, target) || sessionReady(state));
 }
 
-/** The background host entry for a session, where its working and preview flags are read. */
 export function hostOf(state: AppState, target: SessionRef): HostInfo | undefined {
   return state.hosts.find((host) => sameSession(host, target));
 }
 
-/** Whether a session is working (`workUnderWay`), the selected one by its own state and any other
- * by its host's: the same rule either way, so where it is shown changes nothing. */
 export function sessionWorking(state: AppState, target: SessionRef): boolean {
   const session = state.session;
   if (session && isSession(session, target)) return workUnderWay(session.state);
   return !!hostOf(state, target)?.working;
 }
 
-/** Pi cannot run where the checkout or history is gone, and renaming starts Pi. */
 export function sessionCheckoutMissing(state: AppState, target: SessionRef): boolean {
   const reference = sessionReference(state, target);
   return checkoutMissingAt(state, target.cwd) || (!!reference && !sessionOpenable(reference));
 }
 
 export interface SessionContext {
-  /** The selected session's directory, or the one a first message is starting in. */
   cwd: string | undefined;
   folder: FolderView | undefined;
-  /** Where the session runs, named as its sidebar row names it; undefined without `cwd`. */
   folderName: string | undefined;
-  /** The server's session branch: Git's when listed (none when detached or non-Git), otherwise the
-   * last branch Git reported for the worktree. */
   branch: string | undefined;
-  /** Current detached commit from Git, never a cached branch or directory name. */
   detachedHead: string | undefined;
-  /** The folder's GitHub repository (`owner/name`), when discovery found one. */
   githubRepo: string | undefined;
-  /** `branch` on GitHub, where it pushes and by its name there; undefined until it is pushed. */
   branchUrl: string | undefined;
   title: string;
   sessionId: string | undefined;
-  /** Registry identity of the selected session's directory. */
   workspace: Workspace | undefined;
-  /** The workspace Changes previews: none for a non-Git folder. */
   changesWorkspace: Workspace | undefined;
-  /** Changes can open: a Git workspace whose checkout is still there. */
   canOpenChanges: boolean;
-  /**
-   * Why Changes cannot open: set exactly when a session is selected and `canOpenChanges` is false.
-   * A removed checkout or no Git says so; a directory the registry has no workspace for yet says
-   * only that Changes is unavailable.
-   */
   changesUnavailable: string | undefined;
-  /**
-   * Where the selected session's pull request is addressed: set exactly when Changes can open and
-   * the session has an ID, since the pull request is linked, read and unlinked in Changes. Without
-   * it, nothing offers the pull request or asks GitHub about it.
-   */
   pullRequestTarget: PullRequestTarget | undefined;
-  /**
-   * The registry's pull request link for the selected session: `null` once it was removed,
-   * `undefined` while nothing is linked or the session is not in the registry yet.
-   */
   pullRequest: SessionPullRequestLink | null | undefined;
   checkoutMissing: boolean;
-  /**
-   * The selected session's draft while its composer takes input; `null` once it is read-only, so
-   * quoting, Ask and extensions cannot add to a draft nobody can see or send.
-   */
   draftKey: DraftKey | null;
 }
 
-/** The Changes workspace and session ID a session's pull request is linked, read and unlinked by. */
 export interface PullRequestTarget {
   workspaceId: string;
   sessionId: string;
 }
 
-/** Everything the header, palette and session view show about the selected session's location. */
 export function sessionContext(state: AppState): SessionContext {
   const session = state.session;
-  // Before the session exists, a first message is on its way in the directory it starts in.
   const cwd = session?.cwd ?? state.pendingCreate?.cwd;
   const ref = session?.sessionId ? { cwd: session.cwd, sessionId: session.sessionId } : undefined;
   const reference = ref && sessionReference(state, ref);
@@ -301,7 +212,6 @@ export function sessionContext(state: AppState): SessionContext {
   const changesWorkspace = checkout?.status === "non-git" ? undefined : workspace;
   const canOpenChanges = !!changesWorkspace && !checkoutMissing;
   const branch = reference?.branch ?? undefined;
-  // Only the branch shown: the facts describe the checkout's branch as Git last listed it.
   const github = checkout?.facts?.branch === branch ? checkout?.facts?.github : undefined;
   return {
     cwd,
@@ -314,7 +224,6 @@ export function sessionContext(state: AppState): SessionContext {
     branchUrl: github
       ? `https://github.com/${github.repo}/tree/${github.branch.split("/").map(encodeURIComponent).join("/")}`
       : undefined,
-    // Pi's live name outranks the registry's saved title.
     title: sessionLabel(session?.state.sessionName || reference?.title),
     sessionId: session?.sessionId ?? undefined,
     workspace,
@@ -338,18 +247,12 @@ export function sessionContext(state: AppState): SessionContext {
   };
 }
 
-/** Where a session runs: its repository or folder, then its branch or detached commit. The phone
- * header's line and the rail's Environment rows both read this. */
 export interface SessionPlace {
-  /** The GitHub repository ("owner/name"), else the folder's name as the sidebar row shows it. */
   name: string;
-  /** Whether `name` is a GitHub repository rather than a folder. */
   repository: boolean;
-  /** The branch, or the first ten characters of a detached commit; none for a non-Git folder. */
   ref: { kind: "branch" | "commit"; name: string } | undefined;
 }
 
-/** Where the session runs; none before the session has a directory. */
 export function sessionPlace({
   folderName,
   githubRepo,
@@ -373,17 +276,13 @@ export function sessionPlace({
 export type ReplyActivity = "starting" | "working";
 
 export interface SessionActivity {
-  /** One word or phrase for the session's state, announced to screen readers. */
   status: string;
-  /** What the reply area's Piano keys show, if anything. */
   replyActivity: ReplyActivity | undefined;
 }
 
-/** The selected session's activity. `messagesOnly` is the transcript display, which hides pending text. */
 export function sessionActivity(state: AppState, messagesOnly: boolean): SessionActivity {
   const t = state.session;
   const receipt = submissionReceipt(state);
-  // Pi streaming drives the reply keys; the status says Working by the sidebar's rule.
   const streaming = !!t && isWorking(t.state);
   const working = !!t && workUnderWay(t.state);
   const activity = [
@@ -395,12 +294,10 @@ export function sessionActivity(state: AppState, messagesOnly: boolean): Session
     .join(" · ");
   const starting = receipt?.phase === "starting";
   let replyActivity: ReplyActivity | undefined;
-  // Messages only hides pending text, so it cannot replace the working indicator.
   if (messagesOnly || !t?.pending?.text) {
     if (starting) replyActivity = "starting";
     else if (streaming) replyActivity = "working";
   }
-  // A dialog the first input opened needs the user, so it outranks startup.
   const status =
     starting && !t?.dialogs.length
       ? "Starting"
@@ -424,11 +321,6 @@ export function sessionActivity(state: AppState, messagesOnly: boolean): Session
   return { status, replyActivity };
 }
 
-/**
- * The selected session is archived, as the registry last told this browser: another tab may
- * archive it while it is open. Piano refuses its input, so the composer keeps the draft but sends
- * nothing.
- */
 const sessionArchived = (state: AppState): boolean => {
   const t = state.session;
   return (
@@ -437,31 +329,15 @@ const sessionArchived = (state: AppState): boolean => {
 };
 
 export interface SessionPane {
-  /** The transcript is mounted: the selected session's, or a first message shown before it. */
   list: boolean;
-  /**
-   * The loading skeleton shows while the session is fetched or its first input is on its way.
-   * It never shows for a first message or a failed selection, which show instead, nor once the
-   * transcript or its empty state can show.
-   */
   skeleton: boolean;
-  /** The empty transcript's text; omitted while anything is shown or on its way. */
   placeholder: string | undefined;
   composerDisabled: boolean;
 }
 
-/**
- * Pi has the session's input but it is not in the transcript yet: submitting or running. Pi's own
- * submission, not the browser's receipt: only Pi's input reaches the transcript.
- */
 const inputOnItsWay = (t: NonNullable<AppState["session"]>): boolean =>
   t.state.submission?.outcome === "submitting" || isWorking(t.state);
 
-/**
- * What the main session pane shows while the session loads or a first message is on its way
- * (INV-03): the browser's submitted input renders at once outside Pi's history, an ordinary
- * history load uses the skeleton, and "No messages yet." only describes a settled empty session.
- */
 export function sessionPane(state: AppState): SessionPane {
   const t = state.session;
   const input = state.pendingCreate;

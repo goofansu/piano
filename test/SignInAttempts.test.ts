@@ -9,7 +9,6 @@ import {
   type SignInState,
 } from "../server/SignInAttempts.ts";
 
-// The attempt lifecycle both provider and MCP sign-in share, driven by a scripted source in place of Pi.
 const until = (attempts: SignInAttempts, predicate: (state: SignInState) => boolean) =>
   Effect.gen(function* () {
     for (;;) {
@@ -70,7 +69,6 @@ test("INV-04: an answer is claimed once; stale, foreign and invalid answers fail
           yield* detail(attempts.answer("other", method.prompt!.id, "device")),
           "This sign-in prompt has already closed. Refresh and try again.",
         );
-        // Competing tabs answer the same prompt at once: exactly one wins.
         const competing = yield* Effect.all(
           [0, 1, 2].map(() =>
             Effect.result(attempts.answer(started.id, method.prompt!.id, "device")),
@@ -79,7 +77,6 @@ test("INV-04: an answer is claimed once; stale, foreign and invalid answers fail
         );
         assert.deepEqual(competing.map((r) => r._tag).sort(), ["Failure", "Failure", "Success"]);
         const code = yield* until(attempts, (s) => s.prompt?.message === "Code");
-        // A refused answer keeps the prompt open.
         assert.equal(
           yield* detail(attempts.answer(started.id, code.prompt!.id, "typo")),
           "Paste the code.",
@@ -169,7 +166,6 @@ test("an attempt expires at its deadline, and closing the scope cancels a runnin
           { status: expired.status, message: expired.message },
           { status: "cancelled", message: "Sign-in expired. Please try again." },
         );
-        // The lane is free again once the flow has ended.
         yield* until(attempts, () => !attempts.busy());
       }),
     ),
@@ -202,7 +198,6 @@ test("INV-11: a thrown flow error is replaced by the source's failure; success r
     Effect.scoped(
       Effect.gen(function* () {
         let invalidated = 0;
-        // A slow invalidation: success reported before it finishes would be seen with the count still 0.
         const attempts = yield* lane({
           afterSuccess: Effect.delay(
             Effect.sync(() => {

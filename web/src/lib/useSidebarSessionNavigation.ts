@@ -4,21 +4,17 @@ import { sessionNavigationKey } from "./keys.ts";
 import type { Navigation } from "./navigation.ts";
 import { adjacentSidebarSession, type SidebarList } from "./sidebarList.ts";
 
-/** The session composer a key came from, if it came from one. */
 const sessionComposer = (target: EventTarget | null) =>
   target instanceof HTMLTextAreaElement && target.closest('[data-slot="session-composer"]')
     ? target
     : null;
 
-/** One machine-local listener over the same list the desktop and mobile sidebars render. */
 export function useSidebarSessionNavigation(
   list: SidebarList,
   client: Pick<Client, "getState">,
   navigation: Navigation,
 ): void {
   const editing = useRef<{ element: HTMLTextAreaElement; selectionId: string | null } | null>(null);
-  // Loading disables the composer, which makes the browser drop its focus. Restore only the
-  // editor this chord came from, after the latest selection commits; never focus a sidebar row.
   useLayoutEffect(() => {
     const pending = editing.current;
     if (!pending) return;
@@ -59,8 +55,6 @@ export function useSidebarSessionNavigation(
       )
         return;
       event.preventDefault();
-      // select updates the client synchronously. Read it at the key, not from a render closure:
-      // a second key can arrive before React commits or the first session finishes opening.
       const state = client.getState();
       const next = adjacentSidebarSession(list, state.session ?? state.selecting, key);
       if (next) {

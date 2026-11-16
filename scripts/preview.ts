@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// Session client, or read-only/explicit legacy-stop recovery without an owner.
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";

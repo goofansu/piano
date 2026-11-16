@@ -1,10 +1,3 @@
-/**
- * Serves the built web client. Three policies live here: a request is answered from the
- * precompressed Brotli or gzip copy the build wrote beside each asset when the client accepts
- * that coding, only Vite's content-hashed names may be cached forever, and every other file —
- * index.html above all — is revalidated. Identity responses come from Effect's static server,
- * which owns path resolution, ranges, conditional requests and content types.
- */
 import { Effect, FileSystem, Layer, Option, Path } from "effect";
 import {
   HttpPlatform,
@@ -16,15 +9,11 @@ import {
   HttpStaticServer,
 } from "effect/http";
 
-/** The codings Piano serves, best first: each names the file the build wrote beside the asset
- * (see the precompression plugin in web/vite.config.ts). */
 const CODINGS = [
   { coding: "br", suffix: ".br" },
   { coding: "gzip", suffix: ".gz" },
 ] as const;
 
-/** Content types for the files that can have a precompressed copy, as Effect's static server
- * states them for the identity copy: both copies of one asset must describe it the same way. */
 const CONTENT_TYPES: Record<string, string> = {
   html: "text/html; charset=utf-8",
   js: "text/javascript; charset=utf-8",
@@ -39,22 +28,12 @@ const CONTENT_TYPES: Record<string, string> = {
   wasm: "application/wasm",
 };
 
-/** Vite writes content-hashed names into assets/ only; every other name (index.html, the public
- * files) survives a rebuild with new content, so the browser has to revalidate it. */
 const HASHED = /^assets[/\\][^/\\]*-[A-Za-z0-9_-]{8,}\.[A-Za-z0-9.]+$/;
 const IMMUTABLE = "public, max-age=31536000, immutable";
 const REVALIDATE = "no-cache";
 
 const cacheControl = (relative: string) => (HASHED.test(relative) ? IMMUTABLE : REVALIDATE);
 
-/**
- * Accept-Encoding as RFC 9110 §12.5.3 reads it. A coding's quality is its own entry, else the
- * `*` entry, else nothing: it is unacceptable. The asset itself is acceptable unless the field
- * refuses it, with `identity;q=0` or with `*;q=0` and no entry of its own; a positive wildcard
- * says what else is welcome, not that the asset is less welcome. `codings` are the codings Piano
- * could answer with, best first, and a client that states its own preference for the asset
- * (`identity;q=1, br;q=0.2`) keeps every coding it ranked below it off that list.
- */
 const preferredCodings = (header: string | undefined) => {
   const qualities = new Map<string, number>();
   for (const entry of (header ?? "").split(",")) {
@@ -68,7 +47,6 @@ const preferredCodings = (header: string | undefined) => {
       const parsed = Number.parseFloat((value ?? "").trim());
       quality = Number.isFinite(parsed) ? Math.min(Math.max(parsed, 0), 1) : 1;
     }
-    // `x-gzip` is the historical spelling of the same coding.
     qualities.set(coding === "x-gzip" ? "gzip" : coding, quality);
   }
   const wildcard = qualities.get("*");
@@ -84,7 +62,6 @@ const preferredCodings = (header: string | undefined) => {
   };
 };
 
-/** A 304 keeps the fields that describe the cached representation (RFC 9110 §15.4.5). */
 const notModified = (response: HttpServerResponse.HttpServerResponse) => {
   const headers: Record<string, string> = {};
   for (const name of ["etag", "cache-control", "last-modified", "vary"] as const) {
@@ -115,10 +92,6 @@ const notModifiedSince = (ifModifiedSince: string, lastModified: string | undefi
   return !Number.isNaN(since) && !Number.isNaN(modified) && modified <= since;
 };
 
-/**
- * The static asset app: `root` is the built client, served as a single-page application whose
- * unknown paths answer with `index`.
- */
 export const makeStaticAssets = Effect.fnUntraced(function* (options: {
   readonly root: string;
   readonly index?: string | undefined;
@@ -128,15 +101,11 @@ export const makeStaticAssets = Effect.fnUntraced(function* (options: {
   const platform = yield* HttpPlatform.HttpPlatform;
   const root = path.resolve(options.root);
   const index = options.index ?? "index.html";
-  // Effect's static server answers everything Piano has no compressed copy for, with the same
-  // root, index and single-page fallback. It resolves the request path itself, so the resolution
-  // below only decides which precompressed file to look for and how long an answer may be kept.
   const identity = yield* HttpStaticServer.make({ root, index, spa: true });
 
   const contentType = (file: string) =>
     CONTENT_TYPES[path.extname(file).slice(1).toLowerCase()] ?? "application/octet-stream";
 
-  /** The file a request names, or undefined when it escapes the root or cannot name one. */
   const resolve = (url: string) => {
     const [requested] = url.split("?");
     let decoded: string;
@@ -145,15 +114,12 @@ export const makeStaticAssets = Effect.fnUntraced(function* (options: {
     } catch {
       return undefined;
     }
-    // A NUL byte truncates a path for the OS, so a name containing one names nothing.
     if (decoded.includes("\u0000")) return undefined;
     const normalized = path.normalize(decoded.startsWith("/") ? decoded.slice(1) : decoded);
     if (normalized === ".." || normalized.startsWith(`..${path.sep}`)) return undefined;
     const resolved = path.join(root, normalized);
     const prefix = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
     if (resolved !== root && !resolved.startsWith(prefix)) return undefined;
-    // A precompressed copy is not a resource of its own: it is only ever a coding of its asset,
-    // and serving one directly would hand the client bytes it never asked to decode.
     if (CODINGS.some(({ suffix }) => resolved.endsWith(suffix))) return undefined;
     return resolved;
   };
@@ -164,8 +130,6 @@ export const makeStaticAssets = Effect.fnUntraced(function* (options: {
       Effect.orElseSucceed(() => false),
     );
 
-  /** The asset a request is answered from, which is the index wherever the single-page fallback
-   * applies: the same choice Effect's static server makes for the identity copy. */
   const target = Effect.fnUntraced(function* (
     request: HttpServerRequest.HttpServerRequest,
     file: string,
@@ -188,8 +152,6 @@ export const makeStaticAssets = Effect.fnUntraced(function* (options: {
       reason: new HttpServerError.RouteNotFound({ request }),
     });
 
-  /** The answer from a precompressed copy of `file`, or undefined when the client accepts no
-   * coding that the build wrote: the best accepted coding with a copy on disk wins. */
   const coded = Effect.fnUntraced(function* (
     request: HttpServerRequest.HttpServerRequest,
     file: string,
@@ -235,7 +197,6 @@ export const makeStaticAssets = Effect.fnUntraced(function* (options: {
       const compressed =
         asset === undefined ? undefined : yield* coded(request, asset, accepted.codings);
       if (compressed !== undefined) return compressed;
-      // No coding left for an asset that exists: a client refusing identity too cannot be served.
       if (asset !== undefined && accepted.identity === 0)
         return HttpServerResponse.text("No acceptable content coding available.", {
           status: 406,
@@ -251,7 +212,6 @@ export const makeStaticAssets = Effect.fnUntraced(function* (options: {
   );
 });
 
-/** Mounts the built web client under the router, after the routes Piano answers itself. */
 export const staticAssets = (options: {
   readonly root: string;
   readonly index?: string | undefined;

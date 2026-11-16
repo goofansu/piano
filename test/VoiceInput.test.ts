@@ -30,7 +30,6 @@ const KEY = "sk-test-0123456789abcdef";
 const URL = "https://openai.example/v1/audio/transcriptions";
 
 type Sent = { url: string; authorization: string | null; form: FormData };
-/** OpenAI's transcription endpoint: records each request and answers with `answer`. */
 const openAi = (
   sent: Sent[],
   answer: () => Response = () => Response.json({ text: " Hello there. " }),
@@ -104,7 +103,6 @@ test("voice input starts off, needs a key to turn on, and keeps the key private 
   assert.deepEqual(saved, { enabled: true, hasKey: true });
   assert.ok(!JSON.stringify(saved).includes(KEY));
 
-  // A new backend on the same database reads what was saved.
   assert.deepEqual(
     await run(
       "toggle",
@@ -115,7 +113,6 @@ test("voice input starts off, needs a key to turn on, and keeps the key private 
       hasKey: true,
     },
   );
-  // Off keeps the key, so on again needs none.
   assert.deepEqual(
     await run(
       "toggle",
@@ -130,7 +127,6 @@ test("voice input starts off, needs a key to turn on, and keeps the key private 
     ),
     { enabled: true, hasKey: true },
   );
-  // Removing the key turns voice input off.
   assert.deepEqual(
     await run(
       "toggle",
@@ -201,7 +197,6 @@ test("transcription sends the recording to OpenAI with the saved key and where i
   assert.equal(file.name, "recording.webm");
   assert.equal(Buffer.from(await file.arrayBuffer()).toString(), "fake audio bytes");
 
-  // The prompt is an instruction followed by where the speaker is, one name per line.
   const prompt = String(request!.form.get("prompt"));
   assert.ok(
     prompt.endsWith(
@@ -252,7 +247,6 @@ test("transcription is refused without calling OpenAI while voice input is off",
     openAi(sent),
   );
   assert.equal(sent.length, 0);
-  // The same request reaches OpenAI once voice input is on.
   await run(
     "off",
     Effect.flatMap(VoiceInput, (v) => v.save({ enabled: true })),
@@ -311,7 +305,6 @@ test("a recording format OpenAI cannot read is refused before upload", async () 
   );
   assert.match(refusal.detail, /cannot read/);
   assert.equal(sent.length, 0);
-  // Safari records mp4, which OpenAI reads.
   await run(
     "format",
     Effect.flatMap(VoiceInput, (v) => v.transcribe(recording({}, "audio/mp4"))),
@@ -321,7 +314,6 @@ test("a recording format OpenAI cannot read is refused before upload", async () 
 });
 
 test("a version-13 database upgrades with voice input off, then saves it", async () => {
-  // Create a current database, then take it back to version 13, before preferences existed.
   await run(
     "upgrade",
     Effect.flatMap(VoiceInput, (v) => v.state),
@@ -446,7 +438,6 @@ test("every format the composer may record in is uploaded to OpenAI", async () =
     "formats",
     Effect.flatMap(VoiceInput, (v) => v.save({ enabled: true, key: KEY })),
   );
-  // Each format the composer picks when a browser supports only that one.
   const chosen = RECORDING_TYPES.map((r) => recordingType((t) => t === r.mimeType)).filter(
     (type): type is string => type !== undefined,
   );

@@ -8,7 +8,6 @@ import { dictation } from "@/lib/browserDictation";
 import { useDrafts } from "@/lib/useMachine";
 import { useVoiceInput } from "@/lib/useVoiceInput";
 
-/** Main-owned dictation into this machine's draft; the user reviews it before sending. */
 export function VoiceInputButton({
   editor,
   session,
@@ -58,7 +57,6 @@ export function VoiceInputButton({
         busy ? dictation.cancel(target, true) : recordingNow ? dictation.stop(target) : start()
       }
     >
-      {/* Recording keeps the mic on a red face: the square belongs to the turn's Stop beside it. */}
       {busy ? <Spinner /> : <MicIcon />}
     </ComposerActionButton>
   );

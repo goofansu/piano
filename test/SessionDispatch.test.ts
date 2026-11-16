@@ -1,9 +1,3 @@
-/**
- * The extension's session dispatch over fake sockets: what it sends, when it stops observing and
- * what it is willing to claim. The risks these cover are the ones a tool call cannot recover
- * from: a second session created for one request, an answer attributed to the wrong input, a
- * session reported finished while Pi still has work, and a connection or timer left behind.
- */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
@@ -29,7 +23,6 @@ import {
 } from "../shared/wire.ts";
 import type { SocketEnvironment, SocketEvents } from "../web/src/lib/ws.ts";
 
-/** Obtain both halves of the equality evidence through the public PiSessions seam. */
 const projected = new Map<string, Promise<{ input: RenderMsg; proof: string | undefined }>>();
 function projectionFor(prompt: string) {
   let result = projected.get(prompt);
@@ -82,11 +75,9 @@ const withProof = (state: Partial<SessionState>) => ({
     : {}),
 });
 
-/** The dispatch observer uses deterministic fake sockets and clock, never model calls. */
 const bounded = { timeout: 5_000 };
 
 const asked = "/scratch/repo/";
-/** Piano answers with its own spelling of the directory. */
 const cwd = "/scratch/repo";
 const sessionId = "sess-1";
 
@@ -96,15 +87,11 @@ interface FakeSocket {
   readonly frame: (message: ServerMessage) => void;
   readonly serverClose: (code: number) => void;
   readonly isClosed: () => boolean;
-  /** The next send of this frame is enqueued, then throws. */
   readonly failAfterSending: (tag: ClientMessage["_tag"]) => void;
-  /** The socket closes while the client handles the next frame: its answer finds it closed. */
   readonly closeWhileHandling: () => void;
-  /** The selection the client is currently awaiting a reply for. */
   readonly selection: () => string;
 }
 
-/** Sockets the test plays Piano on, a clock it advances and the pongs that keep sockets alive. */
 function world() {
   let now = 0;
   let ids = 0;
@@ -153,7 +140,6 @@ function world() {
       return {
         isOpen: () => {
           const now = open && !closed;
-          // Open for the check that delivers the frame, closed for anything after it.
           if (closing && now) {
             closing = false;
             open = false;
@@ -161,12 +147,10 @@ function world() {
           return now;
         },
         send: (data) => {
-          // A closed WebSocket drops what it is handed; only sending before OPEN is an error.
           if (closed) return;
           if (!open) throw new Error("socket is not open");
           const message = JSON.parse(data) as ClientMessage;
           sent.push(message);
-          // Answered on the next clock step, never inside the client's own send.
           if (message._tag === "ping") pending.push({ nonce: message.nonce, deliver: frame });
           if (message._tag === failing) {
             failing = null;
@@ -195,7 +179,6 @@ function world() {
   const pong = () => {
     for (const ping of pending.splice(0)) ping.deliver({ _tag: "pong", nonce: ping.nonce });
   };
-  /** Runs one due timer, answering heartbeats and moving the clock toward `until`. */
   const step = (until: number) => {
     pong();
     const next = [...timers].filter(([, t]) => t.at <= until).sort((a, b) => a[1].at - b[1].at)[0];
@@ -212,7 +195,6 @@ function world() {
     const until = now + ms;
     while (step(until)) {}
   };
-  /** Like the event loop, let promise continuations run between timer callbacks. */
   const advanceAsync = async (ms: number) => {
     const until = now + ms;
     while (step(until)) await settleMicrotasks();
@@ -231,7 +213,6 @@ function world() {
   };
 }
 
-/** Lets already-resolved promise callbacks run without advancing the clock. */
 const settleMicrotasks = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 const message = (
@@ -246,7 +227,6 @@ const message = (
   ...(role === "user"
     ? { inputFingerprint: text === "do the thing" ? defaultProof : "different-input" }
     : {}),
-  // Pi records every finished reply with the reason its turn stopped.
   ...(role === "assistant" ? { stopReason: "stop" } : {}),
   ...over,
 });
@@ -315,7 +295,6 @@ const dialog = (over: Partial<Snapshot["dialogs"][number]> = {}) => ({
   ...over,
 });
 
-/** Obtain handles through the public start contract, not the private attribution algorithm. */
 const handleOf = async (
   baseline: ReadonlyArray<RenderMsg> = [],
   anchorMessageId: string | null = null,
@@ -342,7 +321,6 @@ const handleOf = async (
   return { ...result.handle, anchorMessageId };
 };
 
-/** The transcript of one answered prompt, on an empty baseline. */
 const answered = (
   text = "the thing is done",
   over: Partial<RenderMsg> = {},
@@ -353,8 +331,6 @@ const answered = (
 
 const idle = (messages: ReadonlyArray<RenderMsg>, state: Partial<SessionState> = {}) =>
   snapshotOf({ isQuiescent: true, submission: { id: 1, outcome: "started" }, ...state }, messages);
-
-// ── Starting ────────────────────────────────────────────────────────────────
 
 test(
   "a start creates one session, carries the prompt once and keeps Piano's own facts",
@@ -471,7 +447,6 @@ test(
     h.last().accept();
     const socket = h.last();
     socket.frame(selected(socket.selection(), snapshotOf()));
-    // The error names the input: Piano refused it before Pi saw it, so it may be sent again.
     socket.frame({
       _tag: "error",
       selectionId: socket.selection(),
@@ -501,7 +476,6 @@ test("a dialog on the first prompt returns the handle at once", bounded, async (
   const result = await start;
   assert.equal(result.submission, "needs_input");
   assert.equal(result.handle?.sessionId, sessionId, "the session exists and can be waited on");
-  // What the dialog asks, as status reports it: the question, not the detail under it.
   assert.equal(result.detail, "Run the migration?");
   assert.equal(h.pendingTimers(), 0, "it does not sit on the start deadline");
 });
@@ -513,7 +487,6 @@ test(
     const h = world();
     const start = startSession({ cwd: asked, prompt: "hi" }, h.env);
     h.last().accept();
-    // The acknowledgement is lost after the creation frame was sent.
     h.last().serverClose(1006);
     h.advance(2_000);
     h.last().accept();
@@ -530,7 +503,6 @@ test(
       "",
       "missed input cannot acquire attribution proof",
     );
-    // Give the transport every chance to reconnect and repeat the mutation.
     h.advance(10_000);
     assert.equal(h.sentOf("create_session").length, 1, "the prompt is created at most once");
     assert.deepEqual(
@@ -543,8 +515,6 @@ test(
   },
 );
 
-// Refusing the read (client capacity, a peer's scope) is not the attempt's own outcome: only a
-// rejection naming the attempt says the original start left nothing behind.
 for (const named of [true, false])
   test(
     `a rejected reconciliation read ${named ? "naming the attempt reports nothing started" : "that names no attempt stays uncertain"}`,
@@ -572,8 +542,6 @@ for (const named of [true, false])
     },
   );
 
-// The send boundary: before the creation frame reaches an open socket nothing can exist, so the
-// start says so; once it may have been sent, only uncertainty is honest.
 const unsentStarts: ReadonlyArray<{
   readonly name: string;
   readonly run: (h: ReturnType<typeof world>) => {
@@ -585,7 +553,6 @@ const unsentStarts: ReadonlyArray<{
     name: "a refused connection",
     run: (h) => ({ after: () => h.last().serverClose(1006) }),
   },
-  // The transport gives a socket stuck connecting 10 seconds.
   {
     name: "a connection timeout",
     run: (h) => ({ after: () => h.advance(10_000) }),
@@ -634,7 +601,7 @@ test("a creation send that throws after enqueueing stays uncertain", bounded, as
   const start = startSession({ cwd: asked, prompt: "hi" }, h.env);
   h.last().failAfterSending("create_session");
   h.last().accept();
-  h.advance(30_001); // Unobservable reconciliation stays uncertain at the bounded start deadline.
+  h.advance(30_001);
   const result = await start;
   assert.deepEqual(
     {
@@ -745,7 +712,6 @@ test(
       h.env,
     );
     h.last().accept();
-    // Past a plain start's deadline, Worktrunk may still be creating the checkout.
     h.advance(30_000 + 1);
     const socket = h.last();
     assert.ok(!socket.isClosed(), "a worktree start is still observing");
@@ -762,7 +728,6 @@ test(
     assert.deepEqual(result.worktree, { path: cwd, branch: "task-a" });
     assert.equal(h.pendingTimers(), 0);
 
-    // Piano's creation budget is 60 seconds: a start that hears nothing by then is uncertain.
     const g = world();
     const silent = startSession(
       { cwd: asked, prompt: "do the thing", worktree: { branch: "task-b" } },
@@ -776,8 +741,6 @@ test(
     assert.ok(g.last().isClosed());
   },
 );
-
-// ── Waiting ─────────────────────────────────────────────────────────────────
 
 test(
   "a wait settles from a first snapshot that is already idle and quiescent",
@@ -909,7 +872,6 @@ test(
     const wait = waitSessions([await handleOf()], undefined, h.env);
     h.last().accept();
     const socket = h.last();
-    // No text and no response_completed frame: only the stop reason proves the turn ended.
     socket.frame(socketSnapshot(socket, idle(answered("", { stopReason: "length" }))));
     const [observation] = await wait;
     assert.equal(observation!.status, "settled");
@@ -929,7 +891,6 @@ for (const outcome of ["completed", "interrupted", "unproven"] as const)
     let sequence = 1;
     const emit = (event: SessionEvent) =>
       socket.frame(frameOf(selection, event, { sequence: ++sequence }));
-    // Stop announces intent before clear_queue; a failed clear leaves the run alive.
     emit({ _tag: "state", state: { sessionId, isStreaming: true, isStopping: true, submission } });
     emit({ _tag: "state", state: { sessionId, isStreaming: true, isStopping: false, submission } });
     const messages =
@@ -969,7 +930,6 @@ for (const exit of [
       h.last().accept();
       const socket = h.last();
       const selection = socket.selection();
-      // Mid-turn, a step toward a tool call: only response_completed can prove the turn ended.
       const reply = answered("the thing is", { stopReason: "toolUse" });
       socket.frame(
         selected(
@@ -1125,7 +1085,6 @@ test(
     const [a, b] = h.sockets;
     a!.accept();
     b!.accept();
-    // Pi started the run, then its acknowledgement timed out.
     const working = snapshotOf({
       isStreaming: true,
       submission: { id: 1, outcome: "uncertain", detail: "Pi did not acknowledge in time." },
@@ -1194,7 +1153,6 @@ test(
     const socket = h.last();
     const detail =
       "Dialog response delivery is uncertain. It will not be retried or reopened. Inspect the session; restart Pi if blocked.";
-    // A timed-out write keeps the host from ever reporting quiescence.
     const uncertain = idle(answered(), {
       isQuiescent: false,
       dialogResolution: {
@@ -1233,7 +1191,6 @@ for (const change of ["generation", "submission", "prefix", "later input", "hist
       socketSnapshot(
         socket,
         idle(transcript, {
-          // A mismatch must be reported even while the session is still working.
           isStreaming: true,
           isQuiescent: false,
           submission: { id: change === "submission" ? 2 : 1, outcome: "started" },
@@ -1262,7 +1219,6 @@ for (const closure of [
     const wait = waitSessions([await handleOf()], undefined, h.env);
     h.last().accept();
     const socket = h.last();
-    // Retired hosts attach their remembered closure to saved history, without a live cursor.
     const history = selected(socket.selection(), idle(answered(), { closure }), { hosted: false });
     assert.equal(history._tag, "selected");
     socket.frame({ ...history, cursor: null });
@@ -1323,7 +1279,6 @@ test("an answer already observed survives later input to the same session", boun
     ),
   );
   h.advance(250);
-  // Someone sent the session a new prompt while the wait was confirming quiescence.
   socket.frame(
     socketSnapshot(
       socket,
@@ -1373,7 +1328,6 @@ for (const output of ["final", "partial", "toolUse", "empty newer final"] as con
       });
     await settleMicrotasks();
     assert.equal(resolved, false, "finalized output does not prove execution has settled");
-    // New input arrives before response_completed or an idle state, not during a quiescence recheck.
     emit({ _tag: "submission", submission: { id: 2, outcome: "started" } });
     const [observation] = await wait;
     assert.equal(observation!.status, "unknown", "interference prevents certifying settlement");
@@ -1642,8 +1596,6 @@ test("an observation deadline is not a sibling attention event", bounded, async 
       snapshotOf({ isStreaming: true, submission: { id: 1, outcome: "started" } }),
     ),
   );
-  // The silent connection reaches its deadline first. Its promise callbacks must run before
-  // the sibling's timer, as they do in the real event loop, not in one synchronous clock step.
   await h.advanceAsync(1_000);
   const results = await wait;
   assert.deepEqual(
@@ -1761,8 +1713,6 @@ test("late startup output before the initial user message is not its answer", bo
   assert.equal(result!.status, "unknown");
 });
 
-// The child's user message as Piano really renders it: redacted for display, and a skill brief
-// shown as the skill plus its arguments, the way Pi expanded it.
 const briefs = [
   {
     name: "a token-shaped value",
@@ -1911,8 +1861,6 @@ test(
   },
 );
 
-// ── Following up ────────────────────────────────────────────────────────────
-
 const running = () =>
   snapshotOf({ isStreaming: true, submission: { id: 1, outcome: "started", inputId: "earlier" } });
 
@@ -1975,8 +1923,6 @@ test(
     socket.frame(selected(socket.selection(), snapshotOf()));
     const inputId = h.sentOf("act")[0]!.action;
     assert.ok(inputId._tag === "prompt");
-    // Pi holds a command's acknowledgement while its dialog is open: the submission stays
-    // `submitting` until a person answers.
     socket.frame(
       frameOf(socket.selection(), {
         _tag: "submission",
@@ -2024,7 +1970,6 @@ test("a dialog already open before a follow-up does not answer for it", bounded,
       submission: { id: 2, outcome: "submitting", inputId: act.inputId },
     }),
   );
-  // A fresh view of the session still shows the earlier dialog, and only it.
   socket.frame(
     frameOf(
       socket.selection(),
@@ -2114,7 +2059,6 @@ test(
     const socket = h.last();
     socket.closeWhileHandling();
     socket.frame(selected(socket.selection(), running()));
-    // Every chance to reconnect and send the message again.
     await h.advanceAsync(60_000);
     const result = await sent;
     assert.equal(result.submission, "not_sent", JSON.stringify(result));
@@ -2205,7 +2149,6 @@ test(
     socket.frame(selected(socket.selection(), snapshotOf()));
     const act = h.sentOf("act")[0]!.action;
     assert.ok(act._tag === "prompt");
-    // The error names the input it refused: Pi never saw it (`ServerMessage` `error.inputId`).
     socket.frame({
       _tag: "error",
       selectionId: socket.selection(),

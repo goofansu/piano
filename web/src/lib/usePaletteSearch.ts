@@ -6,7 +6,6 @@ import { createPaletteSearchClient } from "./paletteSearchClient.ts";
 const FIRST_PAGES: PalettePages = {};
 const NO_RESULTS: PalettePage[] = [];
 
-/** One in-flight scan, one replaceable next query. Typing never queues a scan per character. */
 export function usePaletteSearch(groups: PaletteGroup[], query: string, paused: boolean) {
   const [pages, setPages] = useState<PalettePages>(FIRST_PAGES);
   const [answer, setAnswer] = useState<{
@@ -30,8 +29,6 @@ export function usePaletteSearch(groups: PaletteGroup[], query: string, paused: 
     };
   }, []);
 
-  // A new query starts on its first page. Catalog refreshes retain the page (the worker clamps
-  // it if matches disappeared), rather than moving the user on every background update.
   const pageContext = useRef({ groups, query, generation: 0 });
   let currentPages = pages;
   if (pageContext.current.groups !== groups || pageContext.current.query !== query) {
@@ -56,7 +53,6 @@ export function usePaletteSearch(groups: PaletteGroup[], query: string, paused: 
     return () => transport.current?.cancel();
   }, [groups, query, currentPages, generation, paused, error, current]);
 
-  // Blank input is answered here, synchronously; only a search asks the worker.
   const recents = useMemo(() => answerPalette(groups, "", currentPages), [groups, currentPages]);
   const changePage = useCallback(
     (group: PaletteGroup["id"], page: number) => setPages({ ...currentPages, [group]: page }),
@@ -68,7 +64,6 @@ export function usePaletteSearch(groups: PaletteGroup[], query: string, paused: 
   else if (error) displayed.current = NO_RESULTS;
   else if (current && answer) displayed.current = answer.result;
   return {
-    // Recents never wait for the worker (including immediately after clearing).
     result: displayed.current,
     pending: !blank && !current && !error,
     error: !blank && error,

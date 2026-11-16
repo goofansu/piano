@@ -14,7 +14,6 @@ import { CopyButton } from "@/components/CopyButton";
 import { MarkdownWebLink } from "@/components/MarkdownWebLink";
 import { LOCAL_PATH, markdownPlugins, markdownWithinBudget } from "@/lib/markdown";
 
-/** The owning session supplies workspace-scoped preview navigation to every prose surface. */
 export const LocalFileContext = createContext<((path: string) => void) | undefined>(() => {});
 const ImagesContext = createContext<ReadonlyMap<string, string> | undefined>(undefined);
 const DiagramsContext = createContext(true);
@@ -37,13 +36,10 @@ type MarkdownProps = {
   className?: string;
   images?: ReadonlyMap<string, string>;
   diagrams?: boolean;
-  /** Conversations retain streaming block identities after completion; files use static mode. */
   mode?: "static" | "streaming";
   streaming?: boolean;
 };
 
-/** Keep unexpected render/layout-effect failures inside this prose surface, not the session or
- * file viewer controls. New content retries; unrelated rerenders do not loop on the same error. */
 class MarkdownBoundary extends Component<MarkdownProps & { children: ReactNode }> {
   state = { text: this.props.text, failed: false };
 
@@ -57,7 +53,6 @@ class MarkdownBoundary extends Component<MarkdownProps & { children: ReactNode }
 
   render() {
     if (!this.state.failed) return this.props.children;
-    // Custom escaped-source host: shadcn has no Markdown error fallback. React escapes the text.
     return (
       <div className={this.props.className}>
         <div className="whitespace-pre-wrap break-words">{this.props.text}</div>
@@ -74,7 +69,6 @@ export function Markdown(props: MarkdownProps) {
   );
 }
 
-/** remarkPiano names each image and link's local file once, from its Markdown URL. */
 function localPath(properties: Record<string, unknown> | undefined): string | undefined {
   const path = properties?.[LOCAL_PATH];
   return typeof path === "string" ? path : undefined;
@@ -84,8 +78,6 @@ function MarkdownLink({ href = "", children, title, node }: ComponentProps<"a"> 
   const openFile = useContext(LocalFileContext);
   const path = localPath(node?.properties);
   const images = useContext(ImagesContext);
-  // An enabled local image owns its preview action, not the enclosing link's destination.
-  // Avoid nested controls (or an outer web link opening a tab after the image click).
   if (
     images &&
     node?.children.some(
@@ -95,7 +87,6 @@ function MarkdownLink({ href = "", children, title, node }: ComponentProps<"a"> 
     return <>{children}</>;
   if (path && !openFile) return <>{children}</>;
   if (path && openFile) {
-    // Custom inline action: no shadcn primitive represents a Markdown local-file link.
     return (
       <button
         type="button"
@@ -122,8 +113,6 @@ function MarkdownImage({ alt, node }: ComponentProps<"img"> & ExtraProps) {
   const url = path && images?.get(path);
   const [failed, setFailed] = useState<string>();
   if (!path || !images || !openFile) return <>{alt}</>;
-  // Only workspace-checked blobs, never Markdown resource URLs. Like local-file links, this
-  // inline prose action has no shadcn equivalent; the image itself is the control, not a card.
   return (
     <span data-local-image={path}>
       <button
@@ -193,15 +182,12 @@ function MarkdownPre({ node }: ComponentProps<"pre"> & ExtraProps) {
           image.style.maxWidth = "none";
         }
         setRendered(true);
-      } catch {
-        // Invalid diagrams and failed lazy loads remain readable code.
-      }
+      } catch {}
     })();
     return () => {
       cancelled = true;
     };
   }, [text, language, incomplete, closed, diagrams, resolvedTheme]);
-  // Custom code/diagram host: shadcn has no Markdown renderer or shadow-isolated Mermaid host.
   return (
     <div className="markdown-code-block">
       {!rendered && (
@@ -223,7 +209,6 @@ function MarkdownPre({ node }: ComponentProps<"pre"> & ExtraProps) {
   );
 }
 
-// Keep Piano typography and controls rather than importing Streamdown's alternative visual system.
 const components: Components = {
   a: MarkdownLink,
   img: MarkdownImage,
@@ -255,7 +240,6 @@ const components: Components = {
   td: "td",
 };
 const rehypePlugins: [] = [];
-// The custom link/image components own destination policy; no native URL is emitted unvalidated.
 const urlTransform = (url: string) => url;
 
 function MarkdownContent({

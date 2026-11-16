@@ -1,10 +1,3 @@
-/**
- * The page's one read of voice input: whether it is on and whether a key is saved. Settings and
- * every composer show this value, so a change saved in Settings shows or hides the mic at once,
- * without a reload. A save is a mutation, so a read that started before it cannot overwrite it;
- * focus reads again, for a change another tab saved. Nothing here depends on React.
- */
-// Relative, not @shared: module tests load this file directly in Node.
 import type { VoiceInputSave, VoiceInputState } from "../../../shared/voiceInput.ts";
 import {
   createObservation,
@@ -21,10 +14,8 @@ export interface VoiceInputSettingsOptions {
 export interface VoiceInputSettings {
   getState: () => ObservationState<VoiceInputState>;
   subscribe: (listener: () => void) => () => void;
-  /** Starts reading, once per page; later calls do nothing. */
   start: () => void;
   refresh: () => Promise<VoiceInputState | undefined>;
-  /** Saves `change`; every reader sees the saved state when it resolves. Rejects as the save did. */
   save: (change: VoiceInputSave) => Promise<VoiceInputState | undefined>;
 }
 

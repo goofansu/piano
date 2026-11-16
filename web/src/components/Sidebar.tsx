@@ -73,7 +73,6 @@ interface SessionsProps extends Props {
   toggle: SidebarListModel["toggle"];
 }
 
-/** Row actions sit over the row's end, inside its right padding (`RowActions`). */
 const rowActions = "inset-y-0 right-1";
 const groupRow = cn(
   row,
@@ -82,11 +81,6 @@ const groupRow = cn(
 const groupTrigger =
   "flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-lg pl-(--glyph-pad) text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
 
-/**
- * The sidebar any machine shows, holding what its offers allow: Projects leads the list, and
- * Settings closes it only where it is offered, so a remote's sidebar lists its projects, catalog
- * and New session while the remote's own Piano manages the rest.
- */
 export function Sidebar({ state, list, toggle }: SessionsProps) {
   const { openNew, openProjects, openSettings, setPalette } = useNavigation();
   const offers = useOffers();
@@ -102,12 +96,10 @@ export function Sidebar({ state, list, toggle }: SessionsProps) {
           <SearchIcon />
         </IconButton>
         <ViewMenu />
-        {/* The sidebar's one primary action, filled, at the header's end. */}
         <IconButton size="header" label="New session" variant="default" onClick={() => openNew()}>
           <SquarePenIcon />
         </IconButton>
       </LayoutHeader>
-      {/* The way to the Projects index leads the list; it is the current row while the index is open, as a selected session row is. */}
       <div className="px-(--row-inset) py-2">
         <Button
           variant="ghost"
@@ -125,7 +117,6 @@ export function Sidebar({ state, list, toggle }: SessionsProps) {
         </Button>
       </div>
       <ScrollArea className="min-h-0 flex-1">
-        {/* The list starts 8px below the Projects row and ends 16px above the footer or the sidebar's end. */}
         <nav className="relative px-(--row-inset) pb-4" aria-label="Sessions">
           <SidebarSessions state={state} list={list} toggle={toggle} />
         </nav>
@@ -142,13 +133,6 @@ export function Sidebar({ state, list, toggle }: SessionsProps) {
   );
 }
 
-/**
- * Pinned, then the catalog in this browser's grouping, sort and row details: one list for this
- * machine's catalog and a remote's. On a remote its groups carry no actions, since grouping by
- * folder or project only presents the remote's metadata. A machine that cannot be reached says
- * so in place of the loading rows; where folders are not offered, the empty state names the fact
- * alone, since its hints lead to starting in a folder this browser does not manage.
- */
 function SidebarSessions({ state, list: { pinned, body }, toggle }: SessionsProps) {
   const { select } = useNavigation();
   const offers = useOffers();
@@ -215,7 +199,6 @@ function SidebarSessions({ state, list: { pinned, body }, toggle }: SessionsProp
       case "empty":
         return empty(unavailable ?? (offers.folders ? body.text : "No sessions yet"));
       case "sections": {
-        // Done projects' groups come last; one label says so for all of them.
         return (
           <div className="flex flex-col gap-1">
             {body.sections.map(section)}
@@ -256,7 +239,6 @@ function SidebarSessions({ state, list: { pinned, body }, toggle }: SessionsProp
   );
 }
 
-/** One menu for grouping, sorting and what each row shows; appearance lives here too. Each choice is a global command, as the palette offers it. */
 export function ViewMenu() {
   const { commands, run } = useGlobalCommands();
   const narrow = useNarrowViewport();
@@ -264,7 +246,6 @@ export function ViewMenu() {
   const sortBy = radioChoice(commands, "sort-by");
   const appearance = radioChoice(commands, "appearance");
   const folderAndBranch = commands.find((c) => c.id === "folder-and-branch");
-  // The label takes the slack so the current value sits beside the trigger's own chevron.
   const choice = (label: string, { currentLabel }: RadioChoice<GlobalCommand>) => (
     <>
       <span className="flex-1">{label}</span>
@@ -285,7 +266,6 @@ export function ViewMenu() {
       {items.map(item)}
     </DropdownMenuRadioGroup>
   );
-  // These bounded choices fit one scrollable menu; a side-opening submenu cannot fit a phone.
   const section = (label: string, items: React.ReactNode, current?: RadioChoice<GlobalCommand>) =>
     narrow ? (
       <DropdownMenuGroup aria-label={label}>
@@ -353,7 +333,6 @@ export function ViewMenu() {
         <DropdownMenuSeparator />
         {section(
           "Appearance",
-          // The chosen mode carries the check; the icons say what each one does.
           radio(appearance, (c) => (
             <DropdownMenuRadioItem key={c.id} value={c.id}>
               <GlobalCommandIcon icon={c.icon} /> {c.menuLabel}
@@ -366,7 +345,6 @@ export function ViewMenu() {
   );
 }
 
-/** shadcn's Empty composed down to one list row, so an empty group keeps the list's rhythm and indent. */
 function ListEmpty({ children }: { children: React.ReactNode }) {
   return (
     <Empty
@@ -380,7 +358,6 @@ function ListEmpty({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Skeleton rows in the real row geometry: a folder line, two session lines, another folder. */
 function SidebarSkeleton() {
   return (
     <div aria-hidden className="late-enter flex flex-col gap-1">
@@ -418,11 +395,6 @@ const Chevron = ({ open }: { open: boolean }) => (
   <DisclosureChevron open={open} className="size-4" />
 );
 
-/**
- * The sidebar's one disclosure group: a row whose name folds it, with the group's actions in the
- * hover slot after it, and its session rows beneath. Pinned, each date group, each folder and each
- * project are this group; an empty one (only a folder or project can be) says so in one row.
- */
 function SidebarGroup({
   label,
   selectionId,
@@ -441,17 +413,12 @@ function SidebarGroup({
 }: Omit<GroupProps, "state"> & {
   label: string;
   selectionId: string | null;
-  /** A group that stands for the absence of one (No project) reads quieter. */
   muted?: boolean;
-  /** A done project's group: its name drops to regular weight, quieter without losing contrast. */
   done?: boolean;
-  /** The trigger's tooltip, for a name that shortens something longer (a folder's path). */
   title?: string;
   "aria-label"?: string;
   className?: string;
-  /** The row's actions, each an `icon-xs` button; `false` leaves one out. */
   actions?: readonly (React.ReactElement | false | null | undefined)[];
-  /** A line between the row and its sessions, shown folded or not. */
   notice?: React.ReactNode;
   sessions: readonly SessionEntry[];
 }) {
@@ -505,7 +472,6 @@ function SidebarGroup({
   );
 }
 
-/** A project: the same disclosure group as a folder, whose rows come from any folder. Without a project it is the No project group. */
 function ProjectGroup({
   project,
   done,
@@ -523,8 +489,6 @@ function ProjectGroup({
   const { run } = useCommands();
   const commands = project ? projectCommands(state, project) : [];
   const create = commands.find((c) => c.id === "new-session");
-  // The group's name only folds it; its New session in project button opens the project's home.
-  // A done project reads as quietly as No project: its sessions are listed, the project is set aside.
   return (
     <SidebarGroup
       label={project?.name ?? "No project"}
@@ -572,7 +536,6 @@ function FolderGroup({
   select,
 }: GroupProps & { folder: FolderView; sessions: readonly SessionEntry[] }) {
   const { run } = useCommands();
-  // Where folders are not offered, a folder is presentation, not something to manage.
   const offers = useOffers();
   const { create, close } = folderCommands(state, folder, offers.startsSessionIn);
 
@@ -587,7 +550,6 @@ function FolderGroup({
       details={details}
       select={select}
       actions={[
-        // Left out, not disabled, while the checkout is missing, as the Directory picker leaves it out.
         offers.folders && create.enabled && (
           <IconButton
             key="new"
@@ -618,7 +580,6 @@ function FolderGroup({
       ]}
       notice={
         folder.discovery.status === "error" && (
-          // The detail is the error itself, what the user needs to fix it, so a click shows it.
           <Popover>
             <PopoverTrigger asChild>
               <Badge asChild variant="destructive" className="ml-7 cursor-pointer">

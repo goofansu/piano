@@ -1,7 +1,3 @@
-// Critical path: continue a peer's session, and start one there, without crossing machine
-// identities or owning its run.
-// INV-01, INV-02, INV-05, INV-07: identical cwd/workspace/session IDs on independent backends.
-// node test/browser/remote-session.mjs [evidence-directory]
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -9,8 +5,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { run } from "./harness.mjs";
 import { voiceInputs } from "./voice-input.mjs";
 
-// The voice input checks clear the composer with Meta+A, which headless Chrome on macOS does not
-// treat as Select All when agent-browser sends it. CI runs this journey on Linux.
+// Headless Chrome on macOS ignores agent-browser's Meta+A; run this journey on Linux.
 if (process.platform === "darwin") {
   console.log(
     "SKIP remote-session: needs Select All by keyboard, which headless Chrome on macOS lacks",
@@ -76,7 +71,6 @@ const seed = (machine, { root, history }) => {
             ],
             timestamp: Date.now(),
           },
-          // A file link the peer's own checkout answers.
           ...(id === "remote-only"
             ? [
                 {
@@ -93,7 +87,6 @@ const seed = (machine, { root, history }) => {
   };
 };
 
-// Audit/CDP events have their own clock, independent of a browser rendering an acknowledgement.
 const waitFor = async (claim, observe) => {
   const deadline = Date.now() + 15_000;
   while (!observe()) {
@@ -112,9 +105,6 @@ const send = async (page, text) => {
   await page.click("button", "Send");
 };
 const machine = async (page, name, capture) => {
-  // Find it in the accessibility tree, which skips the hidden desktop sidebar a narrow viewport
-  // keeps mounted. MachineSwitcher's trigger is a button, and the pane copy renders only while the
-  // sidebar is hidden, so exactly one visible "Machine" button exists at a time.
   await page.click("button", "Machine");
   await page.until(
     `[...document.querySelectorAll('[role="menu"], [role="listbox"]')].some(e => e.getAnimations({subtree:true}).every(a => a.playState !== 'running'))`,
@@ -148,7 +138,6 @@ const unsupported = async (page) => {
   for (const label of ["Add folder", "Settings", "Preview", "Open preview in new tab"])
     assert.ok(!controls.includes(label), `remote does not offer unsupported ${label}`);
 };
-// The remote New page starts only in the remote's registered directories, changing nothing else there.
 const remoteNewPage = async (page) => {
   await page.until(`!!document.querySelector('[aria-label="First message"]')`);
   await page.ab("click", '[aria-label="Directory"]');
@@ -174,7 +163,6 @@ await run(
     writeFileSync(invalidFile, "not an image");
     await page.open("/");
     await page.see("Local collision session");
-    // Settings belongs to Local, so its header must not offer a misleading machine switch.
     await page.click("button", "Hide sidebar");
     for (const section of [
       "providers",
@@ -262,9 +250,7 @@ await run(
                 requestId: params.requestId,
                 message: JSON.parse(params.response.payloadData),
               });
-            } catch {
-              /* Ignore non-JSON transport frames. */
-            }
+            } catch {}
           }
         });
         await call("Network.enable");
@@ -309,7 +295,6 @@ await run(
           ),
           false,
         );
-        // Saved history only, Pi not running: the remote lists its folder's commands.
         await catalog(page, "remote", "local", "", "2b-remote-saved-session-commands");
         await imageShown(page, "eng-1");
         assert.equal(
@@ -391,7 +376,6 @@ await run(
           `document.querySelector('main header [aria-label="Machine"]')?.textContent.includes('eng-1')`,
         );
         await page.capture("3a-machine-with-sidebar-hidden");
-        // Switching from a non-Settings header still works while the sidebar is hidden.
         await machine(page, "eng-2", "3b-machine-picker");
         await page.until(
           `document.querySelector('main header [aria-label="Machine"]')?.textContent.includes('eng-2')`,
@@ -399,7 +383,6 @@ await run(
         await page.click("button", "Show sidebar");
         await page.until(`!document.querySelector('main header [aria-label="Machine"]')`);
 
-        // A second independent peer collides with both Local and the first peer by every ID/path.
         await page.see("Second host-only session");
         await page.ab("find", "role", "button", "click", "--name", "Second collision session");
         await page.see("Second collision session saved history");
@@ -426,7 +409,6 @@ await run(
         assert.equal(await draft(page), "REMOTE-DRAFT", "forward retains first peer ownership");
         await catalog(page, "remote", "second", "REMOTE-DRAFT");
 
-        // Sidebar reveal is browser-owned; machine-local sessions and drafts still remount.
         await page.ab("set", "viewport", "700", "850");
         const revealOpen = `document.querySelector('[data-slot="mobile-sidebar"]')?.getAttribute('data-state') === 'open'`;
         await page.click("button", "Show sidebar");
@@ -435,8 +417,6 @@ await run(
           `document.querySelector('[data-slot="mobile-sidebar"]').getAnimations({subtree:true}).every(a => a.playState !== 'running')`,
         );
         await page.evaluate(`window.sidebarDocumentMarker = 'same-document'`);
-        // A sidebar restored open across a remount is simply there: its entrance never runs and
-        // focus never leaves it (the machine menu aside). Polling for the end state would miss both.
         await page.evaluate(`(() => {
           const reveal = () => document.querySelector('[data-slot="mobile-sidebar"]');
           window.sidebarFocusLeft = [];
@@ -500,8 +480,6 @@ await run(
         assert.equal(await draft(page), "REMOTE-DRAFT");
         await page.ab("set", "viewport", "1280", "900");
 
-        // Pause preparation before it reaches main. Switching cancels the send, restoring its
-        // source draft ahead of newer typing, even with identical identities on the other peer.
         await imageEvent(page, "paste", "cancelled.png");
         await call("Fetch.enable", {
           patterns: [{ urlPattern: "*/api/peer/images", requestStage: "Request" }],
@@ -557,7 +535,6 @@ await run(
         await page.press("Escape");
         await page.until(`!document.querySelector('[aria-label="Context usage details"]')`);
 
-        // The remote host also owns pending questions, not the newly selected local runtime.
         await send(page, "question");
         await page.see("Which checks?");
         onRemote = false;
@@ -574,7 +551,6 @@ await run(
         await page.see("Remote collision session");
         await page.ab("find", "role", "button", "click", "--name", "Remote collision session");
         await page.see("Which checks?");
-        // Preparation must not block a Pi dialog on the conversation socket.
         await imageEvent(page, "paste", "dialog-upload.png");
         await call("Fetch.enable", {
           patterns: [{ urlPattern: "*/api/peer/images", requestStage: "Request" }],
@@ -610,8 +586,6 @@ await run(
         await send(page, "stream");
         await page.see("Streaming line");
         await page.until(`!!document.querySelector('button[aria-label="Stop"]')`);
-        // Pi reports text queues, including an empty entry for image-only input. Edit restores
-        // text only; Piano does not hide the row or synthesize an attachment queue.
         await imageEvent(page, "paste", "queued.png");
         await page.ab("fill", composer, "queued image");
         await page.press("Enter");
@@ -694,9 +668,6 @@ await run(
             .filter((entry) => entry.command === "stream")
             .at(-1);
         let disconnectedLine;
-        // Cut the real observer transport by stopping only the scratch main, not either peer.
-        // CDP offline emulation can suppress its physical-close event even after Piano retires
-        // the half-open socket. A gateway outage gives this assertion a deterministic boundary.
         await page.restartBackend({
           beforeRestart: async () => {
             await waitFor("browser socket actually closed", () => sockets.get(connection)?.closed);
@@ -733,9 +704,6 @@ await run(
 
         const beforeReload = selected().length;
         const promptsBeforeStopUpload = page.remote.prompts();
-        // Arm before navigation creates the new document's network factories. Fetch.enable
-        // acknowledges before the renderer applies an update to existing factories; a key
-        // event after reload can otherwise send the upload through the old, unpaused factory.
         await call("Fetch.enable", {
           patterns: [{ urlPattern: "*/api/peer/images", requestStage: "Request" }],
         });
@@ -821,7 +789,6 @@ await run(
         await unsupported(page);
         await page.capture("9-remote-stopped");
 
-        // New session on the remote: the session starts and runs there, under the remote's address.
         await page.click("button", "New session");
         await page.until(`location.pathname === '/m/eng-1/new'`);
         await remoteNewPage(page);
@@ -863,7 +830,6 @@ await run(
         assert.deepEqual(page.prompts(), [], "local Pi receives no remote creation");
         assert.deepEqual(page.peers["eng-2"].prompts(), ["SECOND-ECHO-ONCE"]);
         await page.capture("9b-remote-new-session-reply");
-        // Image-only existing input and image-only first input use the same preparation path.
         await imageEvent(page, "drop", "only.png");
         await page.click("button", "Send");
         await waitFor(
@@ -901,7 +867,6 @@ await run(
         );
         await page.capture("9c-image-only-narrow");
         await page.ab("set", "viewport", "1280", "900");
-        // Opt-in resource/slow-link evidence, not a 50 MiB allocation on every portable CI run.
         if (process.env.PIANO_TEST_LARGE_IMAGES === "1") {
           const big = Buffer.alloc(10 * 1024 * 1024);
           Buffer.from(png, "base64").copy(big);
@@ -967,7 +932,6 @@ await run(
           [],
           "remote UI calls only named main voice utilities, never Local session/file endpoints or socket",
         );
-        // A remote session's rail, Changes and files are read on the peer, through its gateway.
         writeFileSync(join(cwd, "peer-notes.md"), "# Peer notes\n\nRead on eng-1.\n");
         await page.open("/m/eng-1/s/remote-only");
         await page.see("Remote host-only session saved history");
@@ -994,7 +958,6 @@ await run(
           [],
           "a remote session's surfaces never read Local's endpoints",
         );
-        // The peer's projects are its own: created and filled from here, kept in its database.
         await page.open("/m/eng-1/projects");
         await page.see("No projects yet");
         await page.click("button", "New project");
@@ -1006,7 +969,6 @@ await run(
           (await page.evaluate(`location.pathname`)).split("/").at(-1),
         );
         await page.capture("9g-remote-project-home");
-        // An empty project has no member's folder to start in: choose one of the peer's.
         await page.ab("click", '[aria-label="Directory"]');
         await page.until(`!!document.querySelector('[aria-label="Choose a directory"]')`);
         await page.ab("find", "role", "option", "click", "--name", "repo");
@@ -1016,7 +978,6 @@ await run(
         await page.until(`document.querySelector('[aria-label="Send"]')?.disabled === false`);
         await page.click("button", "Send");
         await page.see("echo: PROJECT-ONCE");
-        // Its menu is Local's.
         await page.click("button", "Session information and actions");
         await page.until(`!!document.querySelector('[role="menu"]')`);
         const actions = await page.evaluate(
@@ -1032,7 +993,6 @@ await run(
         await page.see("Session renamed");
         await page.until(`document.querySelector('main h1')?.textContent === 'Renamed on peer'`);
         await page.until(`!document.querySelector('[role="dialog"]')`);
-        // The session header names the project the session joined, and leads back to it.
         await page.click("button", "Project: Peer project");
         await page.until(`location.pathname === '/m/eng-1/projects/${projectId}'`);
         await page.see("Renamed on peer");
@@ -1060,8 +1020,6 @@ await run(
         await page.click("button", "Projects");
         await page.see("No projects yet");
         await page.capture("9j-local-has-no-peer-project");
-        // A registered folder's trust is the peer's own decision, made from here: the same path
-        // on Local keeps Local's.
         mkdirSync(join(cwd, ".agents", "skills", "demo"), { recursive: true });
         writeFileSync(
           join(cwd, ".agents", "skills", "demo", "SKILL.md"),
@@ -1101,8 +1059,6 @@ await run(
         await chooseRepo();
         await pressed(false);
         await page.capture("9l-local-folder-still-untrusted");
-        // Each machine's model list and last directory are remembered under its own ID. On load,
-        // a machine no longer configured and Local's keys from before the prefix are forgotten.
         await page.evaluate(
           `(localStorage.setItem('piano.machine.gone.catalogs', '{}'), localStorage.setItem('piano.catalogs', '{}'), localStorage.setItem('piano.machine.eng-1.location', '/projects'), true)`,
         );
@@ -1123,7 +1079,6 @@ await run(
           "piano.machine.gone.catalogs",
           "piano.catalogs",
           "piano.lastDir",
-          // The page a tab was on is the tab's: a copy left in localStorage is no one's.
           "piano.machine.eng-1.location",
         ])
           assert.ok(!remembered.includes(key), `${key} forgotten`);
@@ -1138,7 +1093,6 @@ await run(
           ).includes(cwd),
           "the peer's model list for that directory outlives the reload",
         );
-        // Where this tab was on a machine outlives a reload too: switching back opens there.
         onRemote = true;
         await machine(page, "eng-1");
         await page.see("Remote collision session");
@@ -1168,7 +1122,6 @@ await run(
         );
         assert.deepEqual(localRequestsFromRemote, [], "an unknown machine cannot mount Local");
         await page.capture("10-unknown-machine");
-        // Without a machine no sidebar is drawn, so Cmd+B must not change one the user cannot see.
         await page.ab("set", "viewport", "1280", "800");
         const collapsedPreference = `localStorage.getItem('piano.sidebar')`;
         const preferenceBefore = await page.evaluate(collapsedPreference);
@@ -1182,7 +1135,6 @@ await run(
         );
         await page.press("Meta+b");
         await page.until(`${collapsedPreference} !== ${JSON.stringify(preferenceBefore)}`);
-        // An open narrow sidebar closes with its machine and does not spring back on the next one.
         await page.ab("set", "viewport", "700", "850");
         const narrowOpen = `document.querySelector('[data-slot="mobile-sidebar"]')?.getAttribute('data-state') === 'open'`;
         await page.click("button", "Show sidebar");
@@ -1200,8 +1152,6 @@ await run(
           "the sidebar stays closed after leaving an unavailable machine",
         );
         await page.capture("10b-after-unknown-machine");
-        // Back across machines to a New page keeps the sidebar open over it, so the composer
-        // beneath must not take focus from the sidebar.
         await page.open("/new");
         await page.until(`!!document.querySelector('[aria-label="First message"]')`);
         await page.click("button", "Show sidebar");

@@ -1,10 +1,3 @@
-/**
- * ADR 0004 declares the remote slice on both sides of the wire: the remote's `peerVerdict` admits
- * or refuses each request, and this browser's `machineOffers` hides what would send anything else.
- * This holds the two together: every message the browser builds for a remote machine, through the
- * real client and builders, is one the remote admits; what Local would add is one it refuses.
- * Otherwise a remote user meets "Not available from another machine" in the middle of their work.
- */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Selection } from "../server/ClientSessions.ts";
@@ -100,7 +93,6 @@ const question: Dialog = {
   toolCallId: "call-1",
 };
 
-/** Everything the browser sends while a person works on `machine`, as sent. */
 async function browserSends(machine: Machine): Promise<ClientMessage[]> {
   const offers = machineOffers(machine);
   const sent: ClientMessage[] = [];
@@ -125,9 +117,6 @@ async function browserSends(machine: Machine): Promise<ClientMessage[]> {
   client.start();
   handlers!.onStatus(true);
   const send = client.send;
-  // The composers' send, through the real image sender: on a remote it prepares the images (HTTP
-  // preparation has its own boundary tests, so this models its successful reference) and sends the
-  // reference instead of the bytes.
   let preparations = 0;
   const sender = createImageSender({
     prepare: async () => ({ id: `prepared-${++preparations}` }),
@@ -139,7 +128,6 @@ async function browserSends(machine: Machine): Promise<ClientMessage[]> {
     start: StartOptions,
     command: (message: DraftMessage, inputId: string, start: StartOptions) => ClientCommand,
   ) => {
-    // A message as the composer drafts it, with an image: every machine offers the attach button.
     const key = target.sessionId
       ? sessionDraftKey({ cwd: target.cwd, sessionId: target.sessionId })
       : NEW_SESSION_DRAFT;
@@ -164,7 +152,6 @@ async function browserSends(machine: Machine): Promise<ClientMessage[]> {
     );
   };
 
-  // Open a listed session; the remote answers, so actions have an attachment.
   client.select(CWD, SESSION);
   const selectionId = client.getState().selectionId!;
   handlers!.onMessage({
@@ -177,7 +164,6 @@ async function browserSends(machine: Machine): Promise<ClientMessage[]> {
     snapshot: { state: { sessionId: SESSION, isStreaming: true }, messages: [], dialogs: [] },
   });
 
-  // The composer: send, steer or follow up with the picker's start options, Stop and Edit.
   const target: ModelTarget = {
     kind: "session",
     cwd: CWD,
@@ -198,14 +184,12 @@ async function browserSends(machine: Machine): Promise<ClientMessage[]> {
       );
   send(STOP);
   send(RESTORE_QUEUE);
-  // The model picker on a running session.
   for (const change of [
     hosted.chooseModel("a/quick"),
     hosted.chooseEffort("low"),
     ...hosted.chooseDefaults(),
   ])
     if (change.kind === "act") send({ _tag: "act", action: change.action });
-  // A question's answer, cancel and abort.
   for (const reply of [
     (a: ReturnType<typeof createDialogAnswer>) => a.answer({ value: "yes" }, 0, selectionId),
     (a: ReturnType<typeof createDialogAnswer>) => a.cancel(0, selectionId),
@@ -213,13 +197,10 @@ async function browserSends(machine: Machine): Promise<ClientMessage[]> {
   ])
     reply(createDialogAnswer({ dialog: question, send }));
 
-  // A trust decision for the registered directory.
   handlers!.onMessage({ _tag: "trust", cwd: CWD, trust: { required: true, trusted: false } });
   const trust = trustCommand(client.getState(), CWD);
   if (trust && offers.command(trust) && trust.intent.kind === "send") send(trust.intent.command);
 
-  // A project's menu, the session's place in one, and the New project dialog filing the session
-  // in the project it creates: each only where the command runs.
   const listed = { cwd: CWD, sessionId: SESSION };
   const project = { id: "p1", name: "Launch" };
   const state = client.getState();
@@ -242,8 +223,6 @@ async function browserSends(machine: Machine): Promise<ClientMessage[]> {
     }
   }
 
-  // A session's menu: Pin sends itself; Rename and Delete leave through their dialogs' answers,
-  // Archive directly when nothing is running. Each only where the command runs.
   for (const command of sessionCommands(state, { ...listed, title: "Session" })) {
     if (!offers.command(command)) continue;
     const { intent } = command;
@@ -260,8 +239,6 @@ async function browserSends(machine: Machine): Promise<ClientMessage[]> {
     }
   }
 
-  // The New page's first message, joining the page's project (NewSessionComposer), with the
-  // picker's start options for the directory.
   const fresh: ModelTarget = { kind: "new", cwd: CWD };
   await compose(
     { cwd: CWD },
@@ -274,7 +251,6 @@ async function browserSends(machine: Machine): Promise<ClientMessage[]> {
   return sent;
 }
 
-/** Each message's verdict, tracking the selection as the peer connection does. */
 function verdicts(sent: readonly ClientMessage[]) {
   let selection: Selection | null = null;
   return sent.flatMap((m) => {
@@ -312,7 +288,6 @@ test("every message the browser builds for a remote is one the remote admits", a
       "remote image input carries no inline bytes",
     );
   }
-  // The journey reached every builder, so admitting all of it covers each one.
   for (const kind of [
     "select",
     "act:steer",
@@ -352,7 +327,6 @@ test("what Local adds to the same journey, the remote refuses", async () => {
 });
 
 test("on a remote, every enabled New session here opens a New page where the remote starts it", () => {
-  // A pinned session in a closed folder stays listed, though the remote starts nothing there.
   const CLOSED = "/closed";
   const withClosed: RegistryData = {
     ...registry,
@@ -418,13 +392,11 @@ test("on a remote, every enabled New session here opens a New page where the rem
       cursor: { cwd, sessionId, generation: "g1", sequence: 1 },
       snapshot: { state: { sessionId, isStreaming: false }, messages: [], dialogs: [] },
     });
-    // As useSessionCommands lists them for this machine.
     const commands = sessionCommands(client.getState(), undefined, {
       startsSessionIn: offers.startsSessionIn,
     }).filter(offers.command);
     for (const command of commands) {
       if (command.intent.kind !== "new-session" || !command.enabled) continue;
-      // What running it does (runCommand's openNew), then the remote's verdict on starting there.
       const target = command.intent.cwd;
       client.dispatch({ type: "open", page: { kind: "new", cwd: target } });
       const view = client.getState().view;

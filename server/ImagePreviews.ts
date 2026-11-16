@@ -7,9 +7,6 @@ import {
 } from "../shared/imagePreviews.ts";
 import { type RenderMsg, type SessionEvent, sessionKey } from "../shared/wire.ts";
 
-/** Bounded, disposable display cache. Pi remains the only durable image store.
- * Reprojecting history repopulates it; image bytes never inflate WS snapshots.
- */
 export interface ImagePreview {
   readonly id: string;
   readonly bytes: Uint8Array;
@@ -38,7 +35,6 @@ export function imagePreview(data: string, mimeType: string): string | undefined
   return imagePreviewAddress(id);
 }
 
-/** Already validated/hashed by this process's projector, possibly in its history worker. */
 export function retainImagePreview({ id, bytes, mimeType }: ImagePreview) {
   if (!bytes.length || bytes.length > limit) return;
   if (!previews.has(id)) {
@@ -57,7 +53,6 @@ export function retainImagePreview({ id, bytes, mimeType }: ImagePreview) {
     size += bytes.length;
   }
 }
-/** Bind only projected transcript images, never caller-provided hashes. Metadata evicts with bytes. */
 export function bindImagePreviews(cwd: string, sessionId: string, messages: readonly RenderMsg[]) {
   const key = sessionKey(cwd, sessionId);
   for (const message of messages)
@@ -65,7 +60,6 @@ export function bindImagePreviews(cwd: string, sessionId: string, messages: read
       const hash = imagePreviewHash(attachment.url);
       const image = hash && previews.get(hash);
       if (!image || image.sessions.has(key)) continue;
-      // Bound metadata globally, not per hash: many tiny images must not multiply provenance.
       if (memberships.size >= membershipLimit) {
         const oldest = memberships.values().next().value!;
         oldest.image.sessions.delete(oldest.key);
@@ -76,7 +70,6 @@ export function bindImagePreviews(cwd: string, sessionId: string, messages: read
       memberships.add(membership);
     }
 }
-/** The transcript images a session event projects; each of them is that session's to serve. */
 function eventMessages(event: SessionEvent): readonly RenderMsg[] {
   switch (event._tag) {
     case "snapshot":

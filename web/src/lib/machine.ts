@@ -1,4 +1,3 @@
-/** Machine identity belongs above a backend's workspace/session projection (INV-07). */
 import { RemoteRequests } from "../../../shared/http.ts";
 import {
   isLocalId,
@@ -13,7 +12,6 @@ import type { AddressBar } from "./navigation.ts";
 
 export { isLocalId, LOCAL, type Machine, machineFrameBytes };
 
-/** `/m/<id>/…` addresses a remote; an ID no machine could take addresses none (`""`). */
 export function machineLocation(pathname: string): { id: string; pathname: string } {
   if (!pathname.startsWith("/m/")) return { id: LOCAL.id, pathname };
   const match = pathname.match(/^\/m\/([^/]+)(\/.*)?$/);
@@ -23,29 +21,19 @@ export function machineLocation(pathname: string): { id: string; pathname: strin
 }
 export const machinePath = (id: string, path: string) =>
   isLocalId(id) ? path : `/m/${encodeURIComponent(id)}${path}`;
-/** Where this Piano's gateway answers for a remote machine. */
 const peerPath = (id: string, path: string) => `/peer/${encodeURIComponent(id)}${path}`;
-/** Local answers on this Piano's own socket; a remote's goes through the gateway. */
 const machineSocketPath = (id: string) => (isLocalId(id) ? "/ws" : peerPath(id, "/ws"));
-/** The one place a machine's socket URL is built from the page's own address. */
 export const machineSocketUrl = (
   id: string,
   { protocol, host }: Pick<Location, "protocol" | "host"> = location,
 ) => `${protocol === "https:" ? "wss:" : "ws:"}//${host}${machineSocketPath(id)}`;
 
-/**
- * Each navigation owns its prefix; late work cannot adopt the newly selected machine. Every page
- * shown on the machine is remembered on arrival (start, push, replace, back/forward onto it), so
- * switching back opens the last one however the user left: a switch, back/forward across
- * machines, or closing the tab.
- */
 export function machineAddress(
   id: string,
   address: AddressBar,
   remembered: Pick<ReturnType<typeof machineLocationMemory>, "write"> = machineLocationMemory(id),
 ): AddressBar {
   const arrive = (path: string) => remembered.write(path.replace(/[?#].*$/, ""));
-  /** The page in the address bar, if it is on this machine. */
   const shown = () => {
     const at = machineLocation(address.location().pathname);
     return at.id === id ? at.pathname : undefined;
@@ -64,7 +52,6 @@ export function machineAddress(
       address.replace(machinePath(id, path));
       arrive(path);
     },
-    // Subscribing is when the navigation starts showing the address: the page there has arrived.
     onPop: (listener) => {
       const start = shown();
       if (start !== undefined) arrive(start);
@@ -83,10 +70,6 @@ const remotePaths = new Set<string>([
   ...IMAGE_PATHS,
 ]);
 
-/**
- * No relative fallback: each supported remote request has an immutable owner. A remote answers
- * only the JSON requests and fixed image routes its gateway relays (ADR 0004).
- */
 export function peerApiPath(id: string, path: string): string {
   if (isLocalId(id)) return path;
   if (!remotePaths.has(path)) throw new Error("Unavailable on this machine.");

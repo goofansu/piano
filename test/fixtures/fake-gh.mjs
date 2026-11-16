@@ -1,4 +1,3 @@
-// Controlled external forge boundary for session PR module/browser checks; no credentials/network.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -28,9 +27,7 @@ if (fixture.malformed) {
   console.log("{}");
   process.exit(0);
 }
-// Like gh, return only requested fields so translation tests catch missing --json selections.
 const fields = args[args.indexOf("--json") + 1].split(",");
-// A token that may read pull requests but not their checks: GitHub refuses only that field.
 if (fixture.checksError && fields.includes("statusCheckRollup")) {
   console.error(fixture.checksError);
   process.exit(1);

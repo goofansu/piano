@@ -1,42 +1,22 @@
-/**
- * One live observation of an HTTP-backed fact, keyed by identity (INV-07). A value belongs to the
- * key it was read for: changing the key aborts that key's reads, drops their late responses and
- * starts from nothing, so an older workspace's or session's value is never shown as current.
- * Reads refresh on demand, on window focus, on an interval and on a debounced trigger. A mutation
- * supersedes in-flight reads and holds new ones off until it settles, so a read that started
- * before a change can never overwrite the change's result. A failure is shown only once settled:
- * a re-read in flight hides the last one, as the first read does. Nothing here depends on React.
- */
-
 export interface ObservationState<T> {
-  /** The identity `value` and `error` belong to; `null` while idle. */
   key: string | null;
   value: T | undefined;
-  /** The last read's failure for this key; cleared by a successful read or a mutation returning a value. */
   error: string | undefined;
-  /** The failure worth showing: `error` once settled, hidden while a re-read is in flight. */
   failure: string | undefined;
-  /** A read is in flight. */
   loading: boolean;
-  /** A mutation is in flight; reads wait for it. */
   mutating: boolean;
 }
 
-/** Timers, focus and visibility, behind a seam so the policy runs in Node. */
 export interface ObservationEnvironment {
   setTimeout: (run: () => void, ms: number) => unknown;
   clearTimeout: (timer: unknown) => void;
-  /** Subscribes to window focus; returns the unsubscribe function. */
   onFocus: (listener: () => void) => () => void;
-  /** Interval reads are skipped while the page is hidden. */
   hidden: () => boolean;
 }
 
 export interface ObservationOptions<T> {
   load: (signal: AbortSignal, key: string) => Promise<T>;
-  /** Milliseconds until the next read after one settles, given the current value; `undefined` stops polling. */
   interval?: (value: T | undefined) => number | undefined;
-  /** Read again whenever the window regains focus. */
   focus?: boolean;
   environment?: ObservationEnvironment;
 }
@@ -44,30 +24,13 @@ export interface ObservationOptions<T> {
 export interface Observation<T> {
   getState: () => ObservationState<T>;
   subscribe: (listener: () => void) => () => void;
-  /**
-   * Follow `key`. A different key discards the old value and aborts its work. Disabling the same
-   * key keeps its value and in-flight mutation, but aborts reads and stops refreshing.
-   */
   observe: (key: string | null, enabled?: boolean) => void;
-  /** Read now only while started, enabled and not mutating, superseding any older read. Returns
-   * the published value, or undefined for a skipped, superseded or failed read. Current read
-   * failures update `error` rather than reject. */
   refresh: () => Promise<T | undefined>;
-  /** Reads after `ms` unless called again first; `ms <= 0` reads now. */
   refreshSoon: (ms: number) => void;
-  /** Re-evaluate the polling interval after external policy changes, without starting a read. */
   reschedule: () => void;
-  /**
-   * Run with the current key's value, even while reads are paused; no key skips `run`. Supersedes
-   * prior work and resolves with the applied result, publishing only non-undefined results.
-   * A later key change, mutation or stop discards this result or error and resolves undefined.
-   * Otherwise a failure rejects without changing the value. Abort signals `run`; it cannot undo
-   * side effects the callback already performed.
-   */
   mutate: (
     run: (signal: AbortSignal, previous: T | undefined) => Promise<T | undefined>,
   ) => Promise<T | undefined>;
-  /** Installs focus and resumes reading; returns the stop function, which aborts all work. */
   start: () => () => void;
 }
 
@@ -96,7 +59,6 @@ export function createObservation<T>(options: ObservationOptions<T>): Observatio
   const listeners = new Set<() => void>();
   let enabled = false,
     running = false;
-  /** The in-flight read or mutation; only the current one may publish. */
   let work: { controller: AbortController; mutation: boolean } | null = null;
   let poll: unknown, soon: unknown, unfocus: (() => void) | undefined;
 
@@ -117,7 +79,6 @@ export function createObservation<T>(options: ObservationOptions<T>): Observatio
     clearTimers();
     if (state.loading || state.mutating) set({ loading: false, mutating: false });
   };
-  /** Pausing keeps a change in flight; it still belongs to this key. */
   const stopReading = () => {
     if (work && !work.mutation) {
       work.controller.abort();
@@ -145,7 +106,6 @@ export function createObservation<T>(options: ObservationOptions<T>): Observatio
   const refresh = async (): Promise<T | undefined> => {
     if (!live() || work?.mutation) return undefined;
     const key = state.key!;
-    // The next poll is due after this read settles, never while it is still in flight.
     if (poll !== undefined) env.clearTimeout(poll);
     poll = undefined;
     work?.controller.abort();

@@ -1,10 +1,6 @@
-/** The bundled radius-artifacts extension's publication contract: versioned confirmation
- * receipts, tool names and results. Piano reads receipts independently of tool output, with
- * direct results retained for legacy sessions. */
 import { arr, int, num, obj, opt, type Schema, type Static, str } from "@earendil-works/pi-schema";
 import { z } from "zod";
 
-/** Written only after the extension verifies the publication, never for an intent or view. */
 export const RADIUS_ARTIFACT_PUBLICATION = "radius-artifact-publication-v1";
 export const ArtifactPublication = z.object({
   artifactId: z.string().min(1),
@@ -29,8 +25,6 @@ export function artifactPublication(entry: unknown): ArtifactPublication | undef
   return parsed.success ? parsed.data : undefined;
 }
 
-/** Latest confirmed revision per identity, newest publication first. Reconciliation of an old
- * operation must not replace a newer title or reorder the list. */
 export function withArtifactPublication(
   publications: readonly ArtifactPublication[],
   publication: ArtifactPublication,
@@ -57,14 +51,11 @@ export {
   publishedArtifact,
 } from "./radiusArtifactTools.ts";
 
-/** `confirmed` is the only status that means Radius holds the publication. */
 const status: Schema<"confirmed" | "unknown" | "error"> = {
-  // `type` with `enum`, as pi-ai's StringEnum emits, for providers without anyOf/const support.
   type: "string",
   enum: ["confirmed", "unknown", "error"],
 };
 
-/** Every radius-artifacts tool's result, as Pi stores it as JSON text and structured content. */
 export const RadiusArtifactResult = obj({
   status,
   message: str(),

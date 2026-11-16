@@ -23,19 +23,10 @@ import type { SessionRowDetails } from "@/lib/sidebarList";
 import { useSidebarWindow } from "@/lib/useSidebarWindow";
 import { sessionKey } from "@/store";
 
-/** Shared rhythm for session rows, group headers and skeletons: pointer, touch desktop, phone. */
 export const sidebarRowClassName = "h-8 pointer-coarse:h-11 max-md:h-12";
-/** A session row with its folder and branch line beneath the title: the same steps, one line taller. */
 const detailedRowClassName = "h-11 pointer-coarse:h-14 max-md:h-15";
-/** Space between session rows: tight on desktop, roomier for fingers on phones. */
 export const sidebarRowGapClassName = "gap-1 md:gap-0.5";
 
-/**
- * One session list in the sidebar's shared ScrollArea/nav. Owns row identity, responsive
- * measurement, window placement and keyboard/menu retention together. Grouping, ordering and
- * whether a closed group mounts its list remain the caller's decisions.
- * shadcn has no windowed list; keep its ScrollArea and disclosures, window only the rows.
- */
 export function SidebarSessionList({
   sessions,
   selectionId,
@@ -44,7 +35,6 @@ export function SidebarSessionList({
   select,
 }: Pick<Navigation, "select"> & {
   sessions: readonly SessionEntry[];
-  /** Selection intent, so A → B → A in one render still reveals the latest A. */
   selectionId: string | null;
   grouped?: boolean;
   details?: SessionRowDetails;
@@ -59,7 +49,6 @@ export function SidebarSessionList({
       onFocusCapture={window.onFocusCapture}
       onBlurCapture={window.onBlurCapture}
     >
-      {/* A non-interactive CSS ruler, not a session: measure responsive row height without mounting content. */}
       <li ref={window.measure} aria-hidden className={cn(rowClassName, "invisible absolute")} />
       {window.indices.map((index) => (
         <SessionRow
@@ -78,10 +67,6 @@ export function SidebarSessionList({
   );
 }
 
-/**
- * One session: its title, and its folder and branch beneath when View options shows them. The
- * project lives in the groupings.
- */
 const SessionRow = memo(
   function SessionRow({
     t,
@@ -103,7 +88,6 @@ const SessionRow = memo(
   } & Pick<Navigation, "select">) {
     const target = { cwd: t.cwd, sessionId: t.sessionId, title: t.title, hint: t.hint };
     const { selected, disabled, hint, activity } = t;
-    // The keys play while the session works; afterwards Herdr's dots: tidal-blue done, hollow sage idle, nothing when no process.
     const dot = activity === "done" ? "bg-done" : activity === "idle" ? "border border-ok" : null;
     return (
       <li
@@ -114,7 +98,6 @@ const SessionRow = memo(
         style={{ position: "absolute", top, left: 0, right: 0 }}
         className={cn(
           rowClassName,
-          // Openable sessions use their sheet on phones; disabled rows need their own recovery menu.
           "group relative flex items-center rounded-lg pr-1 hover:bg-fill-hover",
           disabled ? "[--row-actions:1.75rem]" : "md:[--row-actions:1.75rem]",
           selected && "bg-(--selected) hover:bg-(--selected)",
@@ -126,7 +109,6 @@ const SessionRow = memo(
           aria-current={selected ? "page" : undefined}
           disabled={disabled}
           onClick={() => select(t.cwd, t.sessionId)}
-          // A grid, so the glyph centres on the title's line whether or not a details line follows.
           className="grid h-full min-w-0 flex-1 grid-cols-[1rem_minmax(0,1fr)] content-center items-center gap-x-2 rounded-md pl-(--glyph-pad) text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:text-ink-3"
         >
           <span className="flex size-4 items-center justify-center" aria-hidden>
@@ -177,7 +159,6 @@ const SessionRow = memo(
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
-              // Keep the anchor through Radix's close/focus-restore lifecycle, not just open=false.
               onCloseAutoFocus={() => onMenuChange(sessionKey(t), false)}
             >
               <SessionMenu target={target} />
@@ -195,17 +176,11 @@ const SessionRow = memo(
     previous.index === next.index &&
     previous.count === next.count &&
     previous.onMenuChange === next.onMenuChange &&
-    // Compare every catalog field, not the changing AppState.
     Object.keys(previous.t).every(
       (key) => previous.t[key as keyof SessionEntry] === next.t[key as keyof SessionEntry],
     ),
 );
 
-/**
- * A session row's ⋯ menu, wherever a row lists a session (the sidebar, a project's home): Rename,
- * Pin, then its project rows, then Archive and Delete. Render it inside the open menu's
- * content only: closed row menus must not subscribe to every streamed token or compute commands.
- */
 export function SessionMenu({
   target,
 }: {
@@ -216,7 +191,6 @@ export function SessionMenu({
   const { sections } = sessionRowMenu(commands);
   return (
     <>
-      {/* Why the row cannot open, or what it lacks: its title says it only to a mouse. */}
       {target.hint && (
         <>
           <DropdownMenuLabel className="max-w-72 font-normal text-ink-3">

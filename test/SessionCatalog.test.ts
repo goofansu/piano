@@ -50,7 +50,6 @@ const state: AppState = {
       projectId: "launch",
       branch: "feature",
     }),
-    // The folder holding these was closed.
     ref("/closed/app", "closed-member", "Closed member", {
       projectId: "launch",
       unavailable: "checkout",

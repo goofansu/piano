@@ -1,44 +1,25 @@
 import { useEffect, useSyncExternalStore } from "react";
-/**
- * The Settings pages whose header creates something, and each page's one editor, so the header's
- * button and the command palette's row are one command (`pageCommands`) opening one dialog.
- */
-// Relative, not @shared: module tests load this file directly in Node.
 import type { McpServerSetup } from "../../../shared/mcp.ts";
 import type { Webhook } from "../../../shared/webhooks.ts";
 import type { SettingsSection } from "./routes.ts";
 
-/**
- * One open of the editor: what it is open on (`"new"` for the page's creation, an entry for Edit),
- * and a key no other open shares, so a dialog keyed by it starts fresh on every open, even one that
- * replaces an open dialog (New webhook from the palette while editing one).
- */
 export interface EditorOpen<Entry> {
   target: Entry | "new";
   key: number;
 }
 
-/** The editor's current open, `null` when closed. */
 export type Editing<Entry> = EditorOpen<Entry> | null;
 
 export interface PageEditor<Entry> {
   getState: () => Editing<Entry>;
   subscribe: (listener: () => void) => () => void;
-  /** Open on `"new"` for the page's creation, or on an entry to edit it. */
   open: (target: Entry | "new") => void;
   close: () => void;
-  /** The editor while its page is mounted; leaving the page closes it. */
   useEditing: () => Editing<Entry>;
-  /** Whether the page's creation can run now: yes unless its mounted page reports otherwise. */
   available: () => boolean;
-  /**
-   * The mounted page reports whether its creation can run, such as MCP while Pi's config is
-   * unusable; leaving the page clears it. `pageCommands` reads it, so header and palette agree.
-   */
   useAvailable: (available: boolean) => void;
 }
 
-/** One page's editor; `Entry` is what its Edit opens on (`never` when the page has no Edit). */
 export function pageEditor<Entry = never>(): PageEditor<Entry> {
   let editing: Editing<Entry> = null;
   let opens = 0;
@@ -81,10 +62,6 @@ export function pageEditor<Entry = never>(): PageEditor<Entry> {
   };
 }
 
-/**
- * Each Settings page with a creation editor: its header command's palette ID and name (as
- * [Button names](../../../docs/quiet-ui.md#button-names) gives it), and the editor that command opens.
- */
 export const PAGE_EDITORS = {
   webhooks: { id: "add-webhook", label: "New webhook", editor: pageEditor<Webhook>() },
   mcp: { id: "add-mcp-server", label: "Add MCP server", editor: pageEditor<McpServerSetup>() },
@@ -94,20 +71,14 @@ export const PAGE_EDITORS = {
   Record<SettingsSection, { id: string; label: string; editor: { open: (target: "new") => void } }>
 >;
 
-/** A Settings page whose header creates something. */
 export type EditorPage = keyof typeof PAGE_EDITORS;
 
 export const isEditorPage = (page: SettingsSection): page is EditorPage => page in PAGE_EDITORS;
 
-/** Open `page`'s editor on a new entry, as its header's button does. */
 export const openPageEditor = (page: EditorPage) => PAGE_EDITORS[page].editor.open("new");
 
 const editors = Object.values(PAGE_EDITORS).map((p) => p.editor);
 
-/**
- * Which pages' creations can run, as one snapshot, so a surface listing `pageCommands` (the
- * palette's host) re-renders when a page reports a change.
- */
 export const pageAvailability = {
   subscribe: (listener: () => void) => {
     const stops = editors.map((editor) => editor.subscribe(listener));

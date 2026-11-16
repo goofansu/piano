@@ -1,6 +1,3 @@
-/** Session-owned PR associations. Git discovers candidates; GitHub owns live facts, read only
- * through the GitHubPullRequests adapter. This module keeps the link policy. Transcript contents never participate. Registry retains only identity and user preference.
- */
 import { Context, Effect, Layer } from "effect";
 import {
   type PullRequestBranches,
@@ -21,14 +18,10 @@ export { PullRequestError };
 
 const failure = (detail: string) => new PullRequestError({ detail });
 
-/** How long one answer may take, Git and GitHub together; PULL_REQUEST_TIMEOUT_MS unless a test
- * shortens it. */
 export const PullRequestTimeoutMs = Context.Reference<number>("piano/PullRequestTimeoutMs", {
   defaultValue: () => PULL_REQUEST_TIMEOUT_MS,
 });
 
-/** Answers within PullRequestTimeoutMs, else refuses with a retry. A registry write already begun
- * finishes first, so the saved link is never half-written. */
 const bounded = <A, E, R>(answer: Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
     const ms = yield* PullRequestTimeoutMs;
@@ -43,8 +36,6 @@ const bounded = <A, E, R>(answer: Effect.Effect<A, E, R>) =>
     });
   });
 
-/** The checkout's branch on GitHub, or null outside Git, without a remote or when detached.
- * Discovery needs a GitHub remote. */
 const checkout = Effect.fn("SessionPullRequests.checkout")(function* (cwd: string) {
   const remote = yield* observeBranchRemote(cwd);
   if (!remote || remote.on === "none") return null;
@@ -55,8 +46,6 @@ const checkout = Effect.fn("SessionPullRequests.checkout")(function* (cwd: strin
   return remote.head && { ...remote.head, apiHost: remote.apiHost };
 });
 
-/** Callers pass the session entry they resolved by ID; this module never looks a session up by path.
- * Each answer comes within PullRequestTimeoutMs or is refused with a retry. */
 export class SessionPullRequests extends Context.Service<
   SessionPullRequests,
   {
@@ -75,7 +64,6 @@ export const SessionPullRequestsLive = Layer.effect(
   Effect.gen(function* () {
     const registry = yield* Registry;
     const github = yield* GitHubPullRequests;
-    // Returns the saved entry, so an answer reflects what the registry now holds.
     const save = Effect.fn("SessionPullRequests.save")(function* (
       expected: SessionEntry,
       link: SessionEntry["pullRequest"],
@@ -89,22 +77,15 @@ export const SessionPullRequestsLive = Layer.effect(
         );
       return saved;
     });
-    /** Qualified branches, never inferred from a manual association or a bare branch name. */
     const branchesOf = (pr: PullRequest): PullRequestBranches =>
       pr.head && pr.base
         ? { head: pr.head, base: pr.base, headRepo: pr.headRepo, baseRepo: pr.baseRepo }
         : {};
-    /**
-     * Keep the saved link's qualified branches as GitHub last reported them (a retarget moves the base
-     * Changes compares with). A refused compare-and-set keeps the link as it was.
-     */
     const recordBranches = Effect.fn("SessionPullRequests.recordBranches")(function* (
       s: SessionEntry,
       pr: PullRequest,
     ): Effect.fn.Return<SessionPullRequestLink, RegistryError> {
       const link = s.pullRequest!;
-      // Every fact named, so an explicit undefined clears one no longer proven (e.g. a deleted
-      // head repository).
       const branches = pullRequestBranches(branchesOf(pr));
       if (pullRequestBranchesKey(link) === pullRequestBranchesKey(branches)) return link;
       const saved = yield* Effect.uninterruptible(
@@ -121,7 +102,6 @@ export const SessionPullRequestsLive = Layer.effect(
       if (!forceDiscovery && s.pullRequest === null) return { link: null, pullRequest: null };
       if (!forceDiscovery && s.pullRequest) {
         const pullRequest = yield* github.view(s.pullRequest, s.cwd).pipe(Effect.result);
-        // A failed lookup retains the association, not stale success/checks.
         if (pullRequest._tag === "Failure")
           return { link: s.pullRequest, pullRequest: null, error: pullRequest.failure.detail };
         return {
@@ -171,8 +151,6 @@ export const SessionPullRequestsLive = Layer.effect(
       get: (s) => bounded(result(s)),
       change: Effect.fn("SessionPullRequests.change")(function* (s, action) {
         if (action.action === "link") {
-          // Explicit association is the user's choice, not a claim that GitHub is reachable.
-          // A new explicit choice follows its URL/workspace route, not a previous link's route.
           const link: SessionPullRequestLink = {
             ...(yield* github.link(action.url, s.cwd)),
             source: "manual",

@@ -1,7 +1,3 @@
-/** Ephemeral peer-owned preparations. No files, database rows or second image history.
- * Two slots reserve the full 50 MiB policy each, from ingestion through operation settlement.
- * Abandoned preparations expire; consuming removes replay authority before any Pi work starts.
- */
 import { randomUUID } from "node:crypto";
 import { Context, Effect, Layer, Schema } from "effect";
 import { imageType, MAX_ATTACHMENT_BYTES } from "../shared/attachments.ts";
@@ -168,7 +164,6 @@ export const PreparedImagesLive = Layer.effect(
         mimeType: i.mimeType,
         data: i.bytes.toString("base64"),
       }));
-      // The slot stays reserved, but raw bytes need not coexist with the Pi input.
       entry.images = [];
       return {
         attachments,

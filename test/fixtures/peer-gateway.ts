@@ -32,12 +32,10 @@ export const registry = {
   ],
 };
 
-/** A cookie the fake remote sets, as a real one would, so tests can show the gateway never forwards it. */
 const upstreamCookie = "upstream-secret=never-forward; HttpOnly; Secure; SameSite=Strict";
 
 type PeerSpec = { id: string; name?: string; vmToken?: string; commandName?: string };
 
-/** Independent fake network boundary; every peer may intentionally reuse the same session identity. */
 async function peerServer(t: TestContext, spec: PeerSpec) {
   const state = {
     mode: "ready",
@@ -146,7 +144,6 @@ async function peerServer(t: TestContext, spec: PeerSpec) {
       return;
     }
     res.setHeader("content-type", "application/json");
-    // The owning peer refuses a target it no longer lists, in its own words or in none.
     if (req.url === "/api/peer/images" && state.mode.startsWith("image-refused")) {
       res
         .writeHead(404)
@@ -170,8 +167,6 @@ async function peerServer(t: TestContext, spec: PeerSpec) {
       } else respond();
       return;
     }
-    // A session's surfaces as the remote's own browser reads them. Changes answers with its
-    // method, so a test can tell the read from the saved comparison on the same path.
     const workspace = { id: identity.workspaceId, path: identity.cwd, folder: identity.cwd };
     if (req.url?.startsWith("/api/session/changes")) {
       res.end(
@@ -229,7 +224,6 @@ async function peerServer(t: TestContext, spec: PeerSpec) {
       } else respond();
       return;
     }
-    // The remote's own settings endpoint: it refuses a model its catalog does not offer.
     if (req.url === "/api/settings/defaults") {
       const defaults = JSON.parse(body);
       if (defaults.model === "remote/unknown")
@@ -348,7 +342,6 @@ async function peerServer(t: TestContext, spec: PeerSpec) {
 
 export async function gatewayFixture(
   t: TestContext,
-  /** `checkout`: also register a folder that exists on disk, where a session can start. */
   options: { vmToken?: string; peers?: PeerSpec[]; checkout?: boolean; nodeArgs?: string[] } = {},
 ) {
   const root = mkdtempSync(join(tmpdir(), "piano-peer-"));
@@ -427,9 +420,7 @@ export async function gatewayFixture(
   while (true) {
     try {
       if ((await fetch(`${base}/api/machines`)).ok) break;
-    } catch {
-      /* startup */
-    }
+    } catch {}
     assert.ok(Date.now() < deadline && child.exitCode === null, log);
     await new Promise((resolve) => setTimeout(resolve, 50));
   }

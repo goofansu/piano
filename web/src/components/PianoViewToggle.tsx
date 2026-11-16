@@ -2,7 +2,6 @@ import { cn } from "cn";
 import type { ComponentProps } from "react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
-/** Quiet view controls in a toolbar: small text like its other actions, Radix selection and arrow keys, no boxed segment. */
 export function PianoViewToggle({ className, ...props }: ComponentProps<typeof ToggleGroup>) {
   return <ToggleGroup {...props} spacing={1} className={cn("rounded-none", className)} />;
 }

@@ -8,8 +8,6 @@ import { Effect } from "effect";
 import { defaultPiCli, PiCli } from "../server/PiCli.ts";
 import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
 
-// The locked Pi and bundled provider are real; only Claude's auth-status boundary is fake.
-// No developer settings, credentials, real Claude executable or model requests are used.
 for (const status of ["signed-in", "signed-out", "missing"] as const) {
   test(
     `bundled Claude Code: ${status} availability leaves another provider usable`,

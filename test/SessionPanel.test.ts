@@ -47,7 +47,6 @@ test("retained HTML viewer stops admitting links under Settings and resumes with
     }
   });
 
-  // Use the actual viewer, navigation, acquisition and preparation. Only HTTP is substituted.
   const reads: string[] = [];
   t.mock.method(globalThis, "fetch", async (_url: unknown, options: RequestInit) => {
     const requested = JSON.parse(String(options.body)).path as string;
@@ -152,11 +151,8 @@ test("retained HTML viewer stops admitting links under Settings and resumes with
         ),
       ),
     );
-    // Resolve lazy loading before asserting the viewer's observable listener lifetime.
     await vite!.ssrLoadModule("/src/components/FileHtml.tsx");
   });
-  // Preparation includes asynchronous WebCrypto work. Loading the lazy module is not the
-  // ready event: drain React on event-loop turns until the actual viewer commits its frame.
   const deadline = performance.now() + 10_000;
   while (!dom.window.document.querySelector("iframe") && performance.now() < deadline)
     await act(() => setImmediate());

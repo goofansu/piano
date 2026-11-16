@@ -43,23 +43,17 @@ import { useSetupActions } from "@/lib/useSetupActions";
 
 const mcpServerEditor = PAGE_EDITORS.mcp.editor;
 
-// Locally bundled brand marks, one per catalog server; any other server shows the server icon.
 const SERVER_LOGOS: Record<McpCatalogId, string> = {
   linear: "/mcp-logos.svg#linear",
   jira: "/mcp-logos.svg#jira",
 };
-/** The sign-in dialog's subject: the entry, named as the user knows it. */
 interface SignInSubject {
   id: string;
   name: string;
 }
 
-/** Pi's global MCP servers on this machine: connect a catalog server, add the user's own, and
- * manage each (edit, then disconnect or delete after confirming), all through Pi. A URL server is saved only once it
- * connects; the sign-in it asks for first opens straight away. */
 export function McpSettings() {
   const setup = useObservation("mcp", (signal) => mcpSetup({ signal }));
-  // Add MCP server comes from `pageCommands` (the header and the palette); both open this editor.
   const editing = mcpServerEditor.useEditing();
   const actions = useSetupActions<McpServerRow, SignInSubject>({
     refresh: () => void setup.refresh(),
@@ -73,17 +67,14 @@ export function McpSettings() {
     running: actions.running,
     loading: setup.loading,
   });
-  // Pi's config is unusable, so a save would be refused: the header and the palette both say so.
   mcpServerEditor.useAvailable(!view.problem);
   const titleOf = (name: string) =>
     view.rows?.find((row) => row.setup.name === name)?.title ?? name;
-  /** Sign in to the server a change left waiting, which the sign-in saves. */
   const signInAfter = (reply: McpSetupChange | undefined, name: string) => {
     if (reply?.signIn) actions.openSignIn({ id: reply.signIn, name });
   };
   const act = (request: McpSetupRequest, done: (reply: McpSetupChange) => string | undefined) =>
     actions.run({
-      // A connect names its server, so only that row's button turns.
       id: request.action === "connect" ? `connect:${request.server}` : request.action,
       run: async () => {
         let reply: McpSetupChange | undefined;
@@ -149,7 +140,6 @@ export function McpSettings() {
       <SettingsLoadState
         view={settingsLoadView({
           ...setup,
-          // Pi's problem is the page's message, so it shows in place of the empty line.
           isEmpty: (state) => !state.problem && !state.servers.length && !view.available?.length,
         })}
         noun="MCP servers"
@@ -247,8 +237,6 @@ function McpServerItem({
       </DropdownMenuItem>
     </RowMenu>
   );
-  // The name, its endpoint or command, then its state: ready, or a problem the user must fix in Pi.
-  // Reconnect is the row's call to action, so its menu stays beside it rather than over it.
   return (
     <ListRow
       media={<Logo catalog={catalog} />}

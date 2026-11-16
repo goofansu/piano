@@ -3,7 +3,6 @@ import { test } from "node:test";
 import { markdownImages } from "../web/src/lib/markdown.ts";
 import { renderMarkdown } from "./fixtures/markdown.ts";
 
-// Assertions cover semantic output, not incidental Streamdown wrappers or whitespace.
 test("tab-indented fenced commands stay inside their numbered step", () => {
   const source =
     "1. Install dependencies:\n\n\t```bash\n\tnpm install\n\tnpm run build\n\tnpm start\n\t```\n\n2. Open the app.";
@@ -198,7 +197,6 @@ test("loaded local images are inline preview actions with a file action as their
 });
 
 test("the image a document loads is the image it shows, whatever its name's characters", () => {
-  // A stray % names itself; %XX escapes decode; spaces and Unicode survive either form.
   for (const [destination, path] of [
     ["100%.png", "100%.png"],
     ["bad%ZZ.png", "bad%ZZ.png"],
@@ -257,7 +255,6 @@ test("image discovery leaves escaped, encoded and incomplete syntax to the Markd
     assert.deepEqual(markdownImages(source), [], source);
     assert.ok(!renderMarkdown(source, true).includes("data-local-image"), source);
   }
-  // An escaped backslash does not escape the image that follows it.
   assert.deepEqual(markdownImages(String.raw`\\![shot](./shot.png)`), ["./shot.png"]);
 });
 

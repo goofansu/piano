@@ -1,7 +1,3 @@
-/** Fixed trusted code, hashed into the preview CSP. Never interpolate document text here.
- * No hrefs, eval, network, inbound messages, or document-controlled property lookup on globals.
- * The opaque frame may report only an index on a real user activation; the parent owns URLs.
- */
 export const htmlPreviewBridge = `(() => {
   const token = document.currentScript.getAttribute("data-piano-token");
   const links = new Map(Array.from(document.querySelectorAll("a[data-piano-link],a[data-piano-fragment]"), a => [a, {
@@ -46,9 +42,6 @@ export interface HtmlPreviewDocument {
   readonly links: readonly HtmlPreviewLink[];
 }
 
-/** Install for exactly one committed frame/document. Cleanup closes admission synchronously.
- * Origin "null" alone is NOT identity. Neither destinations nor workspace IDs come from messages.
- */
 export function listenHtmlPreviewLinks(
   host: Window,
   frame: HTMLIFrameElement,

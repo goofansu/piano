@@ -50,7 +50,6 @@ test("a machine remembers the last page shown on it, however the user then leave
   address.onPop(() => {});
   assert.equal(remembered(), "/new", "the page shown when the machine's navigation starts");
   address.push("/s/x");
-  // Back to Local's page: no switch, and no page left on eng-1 to write on the way out.
   path = "/s/a";
   pop();
   assert.equal(remembered(), "/s/x");
@@ -117,7 +116,6 @@ test("machine-qualified session navigation survives reload; late navigation keep
 });
 
 test("same cwd/session IDs retain separate drafts, questions and model catalogs, each machine's catalogs in its own storage", () => {
-  // This browser's storage, as `machineStores` asks for it: one place per machine.
   const stored = new Map<string, Catalogs>();
   const catalogStorage = (id: string) => ({
     read: () => stored.get(id) ?? {},
@@ -192,7 +190,6 @@ test("same cwd/session IDs retain separate drafts, questions and model catalogs,
   unfollowSecond();
   closeSecond();
   close();
-  // A reload: drafts start over, and each machine's picker opens on its own stored catalog.
   const reloaded = createMachineStores(() => {}, catalogStorage);
   assert.notEqual(reloaded("eng-1"), remote);
   assert.equal(reloaded("eng-1").drafts.get(key).text, "", "a page reload has no remote draft");
@@ -256,8 +253,6 @@ test("HTTP request captures its peer; unsupported remote reads never fall throug
   assert.deepEqual(urls, [
     "/peer/eng-1/api/session/commands?workspaceId=same-workspace&sessionId=same-id",
   ]);
-  // Browsing the remote's directories is not offered: `listDirectory` takes no machine, and its
-  // path is refused here, before any request.
   assert.throws(() => peerApiPath("eng-1", Endpoints.listDirectory.path), /Unavailable/);
   assert.equal(urls.length, 1);
   finish(
@@ -266,7 +261,6 @@ test("HTTP request captures its peer; unsupported remote reads never fall throug
     }),
   );
   assert.deepEqual(await pending, []);
-  // A session's file is the remote's: asked through its gateway, never Local's endpoint.
   const file = workspaceFile("same-workspace", "notes.md", { machineId: "eng-1" });
   assert.equal(urls.at(-1), "/peer/eng-1/api/workspace/file?workspaceId=same-workspace");
   finish(Response.json({ error: "File not found." }, { status: 400 }));

@@ -1,14 +1,3 @@
-/**
- * What Pi will do in a directory before any session runs there: its project trust, its model
- * catalog and its slash commands. Every caller names a directory in its own spelling (`~/x`,
- * `/home/me/x/`); this module turns it into one path before reading or caching, so one directory
- * has one cache entry. Pi stays the authority (INV-12): trust is read and saved through Pi's own
- * store, and the catalog and commands come from a one-shot Pi probe, already in wire terms,
- * cached per directory until something that changes Pi's resources (trust, credentials,
- * defaults, packages, MCP config) invalidates it. Commands always probe afresh, because Piano is not
- * told when a skill or prompt template file changes; the probe replaces the cached entry. A running
- * session's commands come from that session, not from here.
- */
 import { homedir } from "node:os";
 import { Context, Data, Effect, Fiber, Layer, PubSub, type Scope, Semaphore, Stream } from "effect";
 import {
@@ -21,13 +10,11 @@ import { directoryPath } from "./PiEnv.ts";
 import { PiSessions } from "./PiSessions.ts";
 import { type ProjectTrustError, projectTrust, setProjectTrust } from "./ProjectTrust.ts";
 
-/** Pi's trust outcome for a directory, with the directory as this module spells it. */
 export interface DirectoryTrust {
   readonly cwd: string;
   readonly trust: ProjectTrust;
 }
 
-/** The directory's probe gave no command list; `detail` is Pi's reason. */
 export class DirectoryCommandsError extends Data.TaggedError("DirectoryCommandsError")<{
   readonly detail: string;
 }> {}
@@ -35,29 +22,20 @@ export class DirectoryCommandsError extends Data.TaggedError("DirectoryCommandsE
 export class DirectoryFacts extends Context.Service<
   DirectoryFacts,
   {
-    /** What Pi will do with the directory's protected resources when a session starts there. */
     readonly trust: (raw: string) => Effect.Effect<DirectoryTrust>;
-    /** The directory's cached model catalog, loading it on first use; `refresh` re-runs the probe. */
     readonly catalog: (
       raw: string,
       options?: { readonly refresh?: boolean },
     ) => Effect.Effect<ModelCatalog>;
-    /** Global resources only, for machine-wide settings. */
     readonly global: Effect.Effect<ModelCatalog>;
-    /** Slash commands from a fresh probe, for a session not yet started; it also refreshes the
-     * catalog. Refused past SLASH_COMMANDS_TIMEOUT_MS, while the probe runs on to refresh it. */
     readonly commands: (
       raw: string,
     ) => Effect.Effect<ReadonlyArray<SlashCommand>, DirectoryCommandsError>;
-    /** Save Pi's trust decision for sessions started from now; answers with fresh trust and catalog. */
     readonly setTrust: (
       raw: string,
       trusted: boolean,
     ) => Effect.Effect<DirectoryTrust & { readonly catalog: ModelCatalog }, ProjectTrustError>;
-    /** Pi's resources changed (credentials, defaults, packages, MCP config); every catalog must re-probe. */
     readonly invalidate: Effect.Effect<void>;
-    /** Fires after each invalidation; every client re-requests its pickers. Subscribes now, so
-     * nothing invalidated after this returns is missed. */
     readonly changes: Effect.Effect<Stream.Stream<void>, never, Scope.Scope>;
   }
 >()("piano/DirectoryFacts") {}
@@ -67,7 +45,6 @@ export const DirectoryFactsLive = Layer.effect(
   Effect.gen(function* () {
     const sessions = yield* PiSessions;
     const scope = yield* Effect.scope;
-    // null is the global catalog, separate even from a probe of the same cwd.
     const cache = new Map<string | null, ModelCatalog>();
     const locks = new Map<string | null, Semaphore.Semaphore>();
     const changes = yield* PubSub.sliding<void>(1);
@@ -98,7 +75,6 @@ export const DirectoryFactsLive = Layer.effect(
         const loadingEpoch = epoch;
         const cwd = key ?? homedir();
         const probe = yield* sessions.probe(cwd, { globalSettingsOnly: key === null });
-        // An invalidation while Pi was starting must not return or cache old defaults.
         if (loadingEpoch !== epoch) return yield* load(key);
         const catalog: ModelCatalog = {
           cwd,
@@ -122,7 +98,6 @@ export const DirectoryFactsLive = Layer.effect(
             };
             return Effect.succeed(failed);
           }),
-          // A failed probe is not cached, so the next request retries it.
           Effect.tap((c) =>
             Effect.sync(() => {
               if (c.error) cache.delete(key);
@@ -154,8 +129,6 @@ export const DirectoryFactsLive = Layer.effect(
       catalog,
       global: locked(null),
       commands: Effect.fn("DirectoryFacts.commands")(function* (raw) {
-        // The probe belongs to the directory, not the requester: one that gives up waiting leaves
-        // it to finish, so the next request queues behind it rather than starting over.
         const probe = yield* Effect.forkIn(locked(directoryPath(raw), true), scope);
         const probed = yield* Fiber.join(probe).pipe(
           Effect.timeoutOrElse({
@@ -174,12 +147,8 @@ export const DirectoryFactsLive = Layer.effect(
       setTrust: Effect.fn("DirectoryFacts.setTrust")(function* (raw, trusted) {
         const cwd = directoryPath(raw);
         yield* setProjectTrust(cwd, trusted);
-        // Pi resolves trust from the nearest saved ancestor, so a decision here can change any
-        // directory beneath it: every catalog re-probes, not only this one.
         yield* invalidate;
         const catalog = yield* locked(cwd);
-        // Personal extensions can save a different decision while Pi reloads. Report the
-        // resulting trust, not the value saved before the probe ran.
         return { ...(yield* trust(cwd)), catalog };
       }),
       invalidate,

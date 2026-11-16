@@ -1,9 +1,3 @@
-/** One catalog entry in Pi's global `mcp.json`: finding it, adding or merging it, and removing it.
- * Pi owns the file format and its loader; this module wraps Pi's helpers with the rules both
- * machine-wide setups share (INV-01/12): match a catalog entry by endpoint, refuse duplicates
- * and name clashes, report Pi's disable switches, bind removal to the configuration the user
- * reviewed, and read how Pi authenticates an entry. Callers keep their own policy for what a ready
- * entry must contain. */
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import {
@@ -12,10 +6,7 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { Data, Effect } from "effect";
-// Pi 1.4.0 exports neither its MCP configuration loader nor its writer. This is the only import of
-// these pinned compatibility dependencies; McpConfigEntries tests exercise the installed helpers.
-// Recheck on every Pi upgrade and replace with a public interface when one exists. Do not
-// reproduce Pi's loader or move configuration into Registry (INV-01/12).
+// Pi's MCP config helpers are private imports; replace when a public API exists.
 import { validateMcpServerConfig } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/mcp-servers.js";
 import {
   addMcpServerConfig,
@@ -25,15 +16,12 @@ import {
 import type { McpField } from "../shared/mcp.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 
-/** What a setup offers: `id` is the entry's default name, `name` its label, `url` its endpoint.
- * A configured entry is matched by its endpoint, so a renamed entry is still the same setup. */
 export interface McpCatalogEntry {
   readonly id: string;
   readonly name: string;
   readonly url: string;
 }
 
-/** The entry as Pi would load it. `removalKey` identifies the reviewed configuration. */
 export type McpConfigObservation =
   | { readonly status: "missing"; readonly entry?: undefined; readonly removalKey?: undefined }
   | { readonly status: "ready"; readonly entry: McpServerEntry; readonly removalKey: string }
@@ -44,23 +32,16 @@ export type McpConfigObservation =
       readonly removalKey?: string;
     };
 
-/** How Pi authenticates an entry, in Pi's order: a stdio server needs nothing; an HTTP server sends
- * a `/login` provider's token when `auth` names one, else its own `Authorization` header, else
- * signs in with MCP OAuth at its URL. `competing` marks a provider entry that also carries OAuth
- * settings or an `Authorization` header: credentials that would compete with the provider's. */
 export type McpAuth =
   | { readonly _tag: "stdio" }
   | { readonly _tag: "provider"; readonly provider: string; readonly competing: boolean }
   | { readonly _tag: "header" }
   | { readonly _tag: "oauth"; readonly url: string };
 
-/** Whether `header` is the `Authorization` header, as HTTP names it: case-insensitively. */
 export const isAuthorization = (header: string) => header.toLowerCase() === "authorization";
 
 const offIn = (name: string) =>
   `MCP ${name} is disabled or hidden in Pi. Enable it in Pi before continuing.`;
-/** Why Pi would not offer `entry`'s tools, when one of its own switches turns it off; `name` is
- * how the user knows it. */
 export const switchedOff = (entry: McpServerEntry, name: string) =>
   entry.config.enabled === false || entry.config.exposure === "hidden" ? offIn(name) : undefined;
 
@@ -76,8 +57,6 @@ export const authOf = (config: McpServerConfig): McpAuth => {
   return header ? { _tag: "header" } : { _tag: "oauth", url: config.url };
 };
 
-/** `config` (or a new entry) at `url`, authenticated by `provider` alone: the user's other keys
- * are kept; OAuth settings and `Authorization` headers are dropped. */
 export const withProviderAuth = (
   config: McpServerConfig | undefined,
   url: string,
@@ -96,63 +75,43 @@ export const withProviderAuth = (
 
 export class McpConfigEntryError extends Data.TaggedError("McpConfigEntryError")<{
   readonly detail: string;
-  /** The form field the refusal belongs to, when a user's input caused it. */
   readonly field?: string;
 }> {}
 
-/** A named entry to write, in Pi's `mcpServers` shape as the user or a form supplied it. */
 export interface McpNamedConfig {
   readonly name: string;
   readonly config: unknown;
 }
 
 export interface McpConfigEntries {
-  /** Every global entry in file order. Throws when Pi's configuration is unreadable. */
   readonly list: () => McpServerEntry[];
-  /** Why no entry can be used or changed: Pi's MCP switched off, or an unreadable file. */
   readonly problem: () => string | undefined;
-  /** The global entry named `name`. Throws when Pi's configuration is unreadable. */
   readonly named: (name: string) => McpServerEntry | undefined;
-  /** Adds entries under new names, each validated by Pi, all or none: a taken or repeated name,
-   * or an invalid configuration, writes nothing. */
   readonly add: (servers: readonly McpNamedConfig[]) => Effect.Effect<void, McpConfigEntryError>;
-  /** The entry `add` would write for `server`, validated by Pi and checked against taken names,
-   * without writing it. */
   readonly prepare: (server: McpNamedConfig) => McpServerEntry;
-  /** The entry `update` would write, without writing it. */
   readonly prepareUpdate: (
     name: string,
     removalKey: string,
     rename: string | undefined,
     configure: (existing: McpServerConfig) => McpServerConfig,
   ) => McpServerEntry;
-  /** Replaces the entry named `name` with `configure(existing)`, under `rename` when given, only
-   * while it still matches the reviewed `removalKey`. Pi validates the result. */
   readonly update: (
     name: string,
     removalKey: string,
     rename: string | undefined,
     configure: (existing: McpServerConfig) => McpServerConfig,
   ) => Effect.Effect<McpServerEntry, McpConfigEntryError>;
-  /** Removes the entry named `name` only while it still matches the reviewed `removalKey`.
-   * `before` runs on the confirmed entry ahead of the write; when it throws, the entry stays. */
   readonly removeNamed: (
     name: string,
     removalKey: string,
     before?: (entry: McpServerEntry) => void,
   ) => Effect.Effect<McpServerEntry, McpConfigEntryError>;
-  /** The global entry for `catalog`, matched by endpoint, else by its default name.
-   * Throws when Pi's configuration is unreadable or the match is ambiguous. */
   readonly find: (catalog: McpCatalogEntry) => McpServerEntry | undefined;
   readonly observe: (catalog: McpCatalogEntry) => McpConfigObservation;
-  /** Writes `configure(existing)` under the existing name, or the default name when missing.
-   * `configure` returns undefined when the entry already satisfies the caller; nothing is written. */
   readonly save: (
     catalog: McpCatalogEntry,
     configure: (existing: McpServerEntry | undefined) => McpServerConfig | undefined,
   ) => Effect.Effect<void, McpConfigEntryError>;
-  /** Removes the entry only when it still matches the reviewed `removalKey`, and checks it is gone.
-   * `before` runs on the confirmed entry ahead of the write; when it throws, the entry stays. */
   readonly remove: (
     catalog: McpCatalogEntry,
     removalKey: string,
@@ -161,7 +120,6 @@ export interface McpConfigEntries {
 }
 
 const normalize = (url: string) => url.replace(/\/+$/, "");
-/** The same setup as `catalog`, whatever the entry is named. */
 export const isTarget = (config: McpServerConfig, catalog: McpCatalogEntry) =>
   "url" in config && normalize(config.url) === normalize(catalog.url);
 export const removalKey = (entry: McpServerEntry) =>
@@ -176,7 +134,6 @@ export const McpConfigEntries = Effect.fn("McpConfigEntries")(function* (
 ): Effect.fn.Return<McpConfigEntries, never, DirectoryFacts> {
   const facts = yield* DirectoryFacts;
   const file = join(directory, "mcp.json");
-  // Only the global file: Piano writes nowhere else, and a project entry must not redirect a credential.
   const globalEntries = () => {
     const loaded = loadMcpConfig({ agentDir: directory, cwd: directory, projectTrusted: false });
     if (loaded.errors.length)
@@ -200,7 +157,6 @@ export const McpConfigEntries = Effect.fn("McpConfigEntries")(function* (
   const builtinDisabled = () => {
     const settings = SettingsManager.create(directory, directory, { projectTrusted: false });
     const disabled = settings.getGlobalSettings().extensions?.includes("-builtin:mcp");
-    // An unreadable settings file would hide a deliberate `-builtin:mcp`.
     if (settings.drainErrors().length)
       throw new Error("Check Pi's settings.json for invalid entries before continuing.");
     return disabled;
@@ -218,9 +174,6 @@ export const McpConfigEntries = Effect.fn("McpConfigEntries")(function* (
       return { status: "blocked", detail: message(cause, "Check Pi's global MCP configuration.") };
     }
   };
-  /** Runs one synchronous read/merge/write, with no await at which another Piano tab can replace
-   * the entry. A change to the file can change every directory's tools and commands, so DirectoryFacts
-   * is invalidated once a write was attempted, and only then. */
   const writing = <A>(change: (write: (run: () => void) => void) => A, fallback: string) =>
     Effect.suspend(() => {
       let wrote = false;
@@ -230,7 +183,6 @@ export const McpConfigEntries = Effect.fn("McpConfigEntries")(function* (
             wrote = true;
             run();
           }),
-        // A refusal of the user's input keeps its field; anything else reads as the operation's failure.
         catch: (cause) =>
           cause instanceof McpConfigEntryError
             ? cause
@@ -251,13 +203,11 @@ export const McpConfigEntries = Effect.fn("McpConfigEntries")(function* (
   const named = (name: string) => globalEntries().find((entry) => entry.name === name);
   const refuse = (detail: string, field?: McpField) =>
     new McpConfigEntryError({ detail, ...(field ? { field } : {}) });
-  /** Pi's own validation of one entry, as its loader applies it. */
   const validated = (name: string, raw: unknown) => {
     if (!name.trim()) throw refuse("Enter a name.", "name");
     const result = validateMcpServerConfig(name, raw);
     if (typeof result === "string")
       throw refuse(result, result.startsWith("invalid server name") ? "name" : "config");
-    // Pi would start an empty command and fail later; the dialog's field is where to say so.
     if ("command" in result && !result.command.trim()) throw refuse("Enter a command.", "config");
     return result;
   };
@@ -271,14 +221,12 @@ export const McpConfigEntries = Effect.fn("McpConfigEntries")(function* (
       throw new Error("Configuration changed since confirmation.");
     return entry;
   };
-  /** Pi's loader shape for a validated entry, in the only file Piano writes. */
   const entryOf = (name: string, config: McpServerConfig): McpServerEntry => ({
     name,
     config,
     source: file,
     scope: "global",
   });
-  /** Runs a check that writes nothing, refusing as `writing` does. */
   const checking = <A>(run: () => A, fallback: string) => {
     try {
       const blocked = problem();
@@ -356,7 +304,6 @@ export const McpConfigEntries = Effect.fn("McpConfigEntries")(function* (
         if (before.status === "blocked") throw new Error(before.detail);
         const existing = before.status === "ready" ? before.entry : undefined;
         const config = configure(existing);
-        // Pi's helper retains unrelated entries, keys and indentation.
         if (config) write(() => addMcpServerConfig(file, existing?.name ?? catalog.id, config));
         if (observe(catalog).status !== "ready") throw new Error("Configuration was not saved.");
       }, "Could not save the MCP configuration."),

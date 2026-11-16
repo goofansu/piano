@@ -1,12 +1,3 @@
-/**
- * Saves a Piano-owned skill or prompt only after the user approves the proposed file (INV-04/11).
- * Cancellation before approval writes nothing. Once approval is accepted, the save request is
- * not tied to the tool's abort signal: stopping the tool must not interrupt an approved write.
- * Updates include the reviewed file so the server can refuse a concurrent edit.
- *
- * The extension supplies the dialog and HTTP transport; this module neither loads Pi resources
- * nor writes files directly.
- */
 import { DRAFT_FIELDS, isName, NAME_RULE } from "../../shared/drafts.ts";
 import { type Endpoint, Endpoints, readRefusal } from "../../shared/http.ts";
 import {
@@ -22,14 +13,11 @@ export interface LibraryDraft {
   name: string;
   description: string;
   instructions: string;
-  /** Skills only; an update that omits it keeps the saved skill's. */
   disableModelInvocation?: boolean;
 }
 
 export interface LibraryDeps {
-  /** A request to the Piano that started this Pi, with its Origin: a path and the request's init. */
   request: (path: string, init: RequestInit) => Promise<Response>;
-  /** The user's decision on the proposal; true only for Save. */
   confirm: (title: string, message: string, signal: AbortSignal | undefined) => Promise<boolean>;
 }
 
@@ -44,7 +32,6 @@ interface Saved {
   disableModelInvocation?: boolean;
 }
 
-/** What Piano answers a proposal with (`UserSkillProposal`, `PromptProposal`). */
 interface Planned {
   change: LibraryChange;
   name: string;
@@ -52,13 +39,11 @@ interface Planned {
   previous?: string;
 }
 
-/** A refusal's sentence, as the Settings page reads it from the server's answer. */
 async function refusal(response: Response, fallback: string) {
   const { error, field } = readRefusal(await response.json().catch(() => undefined), fallback);
   return { detail: error, field };
 }
 
-/** The save tool's result for a refused request, with its draft field when it names one. */
 async function refusedBy(
   kind: LibraryKind,
   name: string,
@@ -73,7 +58,6 @@ async function refusedBy(
     : { status: "refused", kind, name, detail };
 }
 
-/** Read only Piano's catalog, by name; never accept a filesystem path or search Pi's other resources. */
 export async function readFromLibrary(
   kind: LibraryKind,
   name: string,
@@ -105,8 +89,6 @@ export async function saveToLibrary(
 ): Promise<LibraryResult> {
   const endpoints = ENDPOINTS[kind];
   const name = draft.name.trim();
-  // Validate before asking for approval. The server checks again on save because name
-  // availability and file contents may change while the proposal is open.
   const proposed = await deps.request(endpoints.propose.path, {
     method: endpoints.propose.method,
     headers: { "content-type": "application/json" },
@@ -129,11 +111,9 @@ export async function saveToLibrary(
   if (signal?.aborted) return { status: "cancelled", kind, name: proposal.name };
   const dialog = proposalDialog(proposal);
   const approved = await deps.confirm(dialog.title, dialog.message, signal);
-  // A reply racing a stop is never taken as approval.
   if (!approved || signal?.aborted) return { status: "cancelled", kind, name: proposal.name };
 
   const endpoint = proposal.change === "update" ? endpoints.update : endpoints.create;
-  // The draft the proposal was made from: Piano writes the file it proposed, settings kept.
   const saved = {
     name: proposal.name,
     description: draft.description,
@@ -142,10 +122,7 @@ export async function saveToLibrary(
       ? { disableModelInvocation: draft.disableModelInvocation }
       : {}),
   };
-  // An update replaces only the file the user approved a change to: one changed since is refused.
   const body = proposal.previous !== undefined ? { ...saved, previous: proposal.previous } : saved;
-  // Deliberately omit the abort signal after approval. A lost response can still leave a saved
-  // file, so transport failure must not be treated as proof that nothing was written.
   const response = await deps.request(endpoint.path, {
     method: endpoint.method,
     headers: { "content-type": "application/json" },

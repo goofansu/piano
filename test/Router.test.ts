@@ -8,22 +8,18 @@ import { SessionHosts } from "../server/SessionHosts.ts";
 import { type Endpoint, Endpoints } from "../shared/http.ts";
 import { type RouterFixture, startRouter } from "./fixtures/router.ts";
 
-// The router's half of shared/http.ts, observed over HTTP the way any client sees it.
 let server: RouterFixture;
 before(async () => {
-  // Settings that refuse one model and fail unexpectedly for any other, to observe failure statuses.
   const failingSettings = Layer.succeed(PiSettings, {
     saveDefaults: ({ model }) =>
       model === "refused"
         ? Effect.fail(new PiSettingsError({ detail: "Choose an available model." }))
         : Effect.die(new Error("EACCES: /home/someone/.pi/agent/settings.json")),
   });
-  // A Radius setup that answers outside its response contract, to observe that contract.
   const offContractRadius = Layer.succeed(RadiusSetup, {
     state: Effect.succeed({ candidate: "not a setup" } as never),
     change: () => Effect.die("unused"),
   });
-  // Pi's providers fail to load with an error that names a local file.
   const unreadableProviders = Layer.succeed(ProviderLoginRuntime, {
     create: () => Promise.reject(new Error("EACCES: /home/someone/.pi/agent/auth.json")),
     deviceId: () => "unused",
@@ -81,13 +77,11 @@ test("written files: each path a session wrote, as sent, is outside, ignored by 
   assert.deepEqual(body.result, {
     status: "ready",
     files: [
-      // Neither ignored file was ever written in this checkout: Git's verdict comes first.
       { path: "scratch/notes.md", verdict: "ignored", placed: "scratch/notes.md" },
       { path: "src/app.ts", verdict: "listed", placed: "src/app.ts" },
       { path: `${server.repo}/build.log`, verdict: "ignored", placed: "build.log" },
       { path: "/elsewhere/x.ts", verdict: "outside" },
       { path: "../sibling.ts", verdict: "outside" },
-      // README.md matches a pattern but is tracked, so Git does not ignore it.
       { path: "README.md", verdict: "listed", placed: "README.md" },
     ],
   });
@@ -367,7 +361,6 @@ test("a session's slash commands are addressed by IDs; a stopped session's refus
       hosts.create({ cwd: server.repo, options: {} }).pipe(Effect.map((s) => s.spec.sessionId)),
     ),
   );
-  // The fake Pi lists `live-only` in a session and `probe-only` when started without one.
   const live = await names(await commands());
   assert.ok(live.includes("live-only") && !live.includes("probe-only"), live.join());
   await server.run(Effect.flatMap(SessionHosts, (hosts) => hosts.release(server.repo, sessionId)));
@@ -414,7 +407,6 @@ test("INV-11: a listed directory's path and name round-trip, however token-like;
     listing.body.entries.map((entry: { name: string; path: string }) => [entry.name, entry.path]),
     names.map((name) => [name, join(parent, name)]).sort((a, b) => a[0].localeCompare(b[0])),
   );
-  // The browser opens an entry by sending its path back.
   const opened = await reply(
     await post("/api/ls", JSON.stringify({ path: listing.body.entries[0].path })),
   );

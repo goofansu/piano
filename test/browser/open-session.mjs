@@ -1,12 +1,7 @@
-// Critical path 2: continue a session. Click it in the sidebar to read its transcript, jump to an
-// earlier message, read the session's cost, send a follow-up and see the reply and the updated
-// cost, then stop a running reply.
-// node test/browser/open-session.mjs [evidence-directory]
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { run } from "./harness.mjs";
 
-/** Every row of every list on the page is a list item, whatever element the row is. */
 const listsOwnTheirItems = async (page, where) => {
   const strays = await page.evaluate(`[...document.querySelectorAll('[role="list"]')]
     .flatMap((list) => [...list.children].filter((row) => row.getAttribute("role") !== "listitem"))
@@ -52,7 +47,6 @@ await run(
       cwd,
       createdAt: now,
       updatedAt: now,
-      // Pi's last statistics, which Piano keeps for each session it has run.
       stats: { cost, statsUpdatedAt: Date.now() },
     });
     history({
@@ -60,8 +54,6 @@ await run(
       cwd,
       messages: [
         ...[1, 2, 3, 4, 5, 6].flatMap(exchange),
-        // A tall tool output at the end, where a freshly opened transcript follows the bottom. The
-        // call carries no usage, so the cost figures below stay those of the six replies.
         {
           ...exchange(6)[1],
           usage: undefined,
@@ -79,7 +71,6 @@ await run(
         },
       ],
     });
-    // Alternating prompts and Markdown replies expose per-row forced layout on session switches.
     const release = Array.from({ length: 60 }, (_, i) => exchange(i + 1)).flat();
     release.splice(
       60,
@@ -114,7 +105,6 @@ await run(
       history({ sessionId: name, cwd: path, messages: exchange(1) });
       return { folder: cwd, path, branch: `feat-${name}` };
     });
-    // Enough rows to put a destination outside the virtual window, in a separate date group.
     const navigation = Array.from({ length: 80 }, (_, n) => {
       const sessionId = `nav-${String(n).padStart(3, "0")}`;
       history({
@@ -157,8 +147,6 @@ await run(
     await page.see("Answer 6.");
     await page.capture("1-transcript");
 
-    // Cmd+B uses Piano's column/reveal controller, even from the composer. Meta is explicit:
-    // Mod on Linux is Ctrl, which must remain the browser/text field's shortcut.
     const sidebarDraft = "Keep the Cmd+B draft";
     const sidebarColumn = `document.querySelector('[data-slot="layout-sidebar"]')`;
     const sidebarReveal = `document.querySelector('[data-slot="mobile-sidebar"][role="dialog"]')`;
@@ -198,7 +186,6 @@ await run(
     for (const width of [767, 768, 769, 1146, 1280]) {
       await sidebarChord(width, width < 768, "default-font");
     }
-    // Media-query rem follows the browser default font, not documentElement.style.fontSize.
     await page.cdp(async (cdp) => {
       await cdp("Page.setFontSizes", { fontSizes: { standard: 20 } });
       try {
@@ -209,16 +196,12 @@ await run(
         await cdp("Page.setFontSizes", { fontSizes: { standard: 16 } });
       }
     });
-    // Alt arrows share the sidebar's default order (equal activity falls back to names).
-    // Gone worktree still opens its saved history; only missing history is unopenable.
     await page.press("Alt+ArrowDown");
     await page.until(`location.pathname === '/s/gone'`);
     await page.press("Alt+ArrowUp");
     await page.until(
       `location.pathname === '/s/login-bug' && document.querySelector('[aria-label="Message"]')?.value === ${JSON.stringify(sidebarDraft)}`,
     );
-    // One browser task, with no render/server completion between keys, catches stale selection
-    // closures. After three steps Down, one step Up must land at Live, not repeat Gone.
     await page.evaluate(`(() => {
       for (const key of ['ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowUp'])
         window.dispatchEvent(new KeyboardEvent('keydown', { key, altKey: true, cancelable: true }));
@@ -230,8 +213,6 @@ await run(
       `location.pathname === '/s/login-bug' && document.querySelector('[aria-label="Message"]')?.value === ${JSON.stringify(sidebarDraft)}`,
     );
     await page.capture("sidebar-alt-arrows-draft-restored");
-    // Releasing Alt and pressing it again for the next chord is not another action: a chord that
-    // arrives while the first destination still loads keeps the composer's focus to restore.
     await page.ab("focus", '[aria-label="Message"]');
     await page.evaluate(`(() => {
       const composer = document.querySelector('[aria-label="Message"]');
@@ -254,8 +235,6 @@ await run(
     await page.ab("fill", '[aria-label="Message"]', "");
     await page.ab("set", "viewport", "1280", "900");
 
-    // Reveal is independent of mounting, conversation loading and focus. Scrolling away from
-    // the current row is allowed; the next navigation, not every render, reveals once.
     const selectedVisible = `(() => {
       const nav = document.querySelector('nav[aria-label="Sessions"]');
       const row = nav.querySelector('[aria-current="page"]')?.getBoundingClientRect();
@@ -301,7 +280,6 @@ await run(
       `location.pathname === '/s/nav-050' && document.querySelector('[aria-label="Message"]')?.value === 'Offscreen draft' && ${selectedVisible}`,
     );
     await page.capture("sidebar-alt-hidden-return");
-    // Even A → B → A in one render is a new reveal intent, not the old satisfied A.
     await page.evaluate(
       `document.querySelector('nav[aria-label="Sessions"]').closest('[data-radix-scroll-area-viewport]').scrollTop = 0`,
     );
@@ -314,7 +292,6 @@ await run(
     await page.see("History nav-050");
     await page.press("Meta+b");
     await page.until(selectedVisible);
-    // Collapsed contents stay excluded, including Pinned. Boundary keys make no navigation.
     await page.click("button", "Older");
     await page.press("Alt+ArrowUp");
     await page.until(`location.pathname === '/s/release-notes'`);
@@ -333,9 +310,6 @@ await run(
     await page.see("Answer 6.");
     await page.ab("fill", '[aria-label="Message"]', "");
 
-    // Opening a tool reads it from its header: the output grows below the header the reader
-    // clicked. A fresh transcript follows the bottom, and used to follow this growth too, so the
-    // first open showed the output's tail with its header pinned at the top.
     const tailTool = '[role="group"][aria-label="bash tool call"]';
     const tailToolGeometry = () =>
       page.evaluate(`(() => {
@@ -401,7 +375,6 @@ await run(
       await page.until("!document.querySelector('[data-radix-popper-content-wrapper]')");
       return row;
     };
-    // Before Pi runs it: the last response's cost and Pi's last total for the session.
     assert.match(
       await sessionCost("3-cost"),
       /\$0\.0105\s+\$0\.0630/,
@@ -410,14 +383,12 @@ await run(
 
     await page.ab("fill", '[aria-label="Message"]', "Add a regression test");
     await page.ab("press", "Enter");
-    // A reply below the window is still present in the full-history jump list.
     await page.click("button", "Jump to message");
     await page.see("echo: Add a regression test");
     await page.ab("press", "Escape");
     assert.equal(await inView("Question 1:"), true, "a reply does not move a reader who jumped up");
     await page.capture("4-follow-up");
 
-    // Pi now runs the session, so its fresh total includes the follow-up.
     assert.match(
       await sessionCost("5-cost-after-reply"),
       /\$0\.0063\s+\$0\.0693/,
@@ -426,7 +397,6 @@ await run(
 
     await page.ab("fill", '[aria-label="Message"]', "hold");
     await page.ab("press", "Enter");
-    // Submission returns before Pi's running state necessarily reaches the browser.
     await page.ab("wait", 'button[aria-label="Stop"]');
     await page.click("button", "Stop");
     await page.until(`!!document.querySelector('[aria-label="Send"]')`);
@@ -441,7 +411,6 @@ await run(
     );
     await page.capture("6-stopped");
 
-    // Switching through the palette must not execute a stale row while a new query is pending.
     await page.press("Mod+k");
     await page.press("Alt+ArrowDown");
     assert.equal(await page.evaluate("location.pathname"), "/s/login-bug", "palette owns its keys");
@@ -449,7 +418,6 @@ await run(
     await page.until(
       "document.querySelector('[cmdk-list]')?.getAttribute('aria-busy') === 'false'",
     );
-    // One task deliberately races input with Enter; separate browser commands would hide the race.
     await page.evaluate(`(() => {
       const input = document.querySelector('[cmdk-input]');
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'zzzzzzz');
@@ -473,8 +441,6 @@ await run(
     await page.see("Answer 60.");
     await page.capture("7-palette-switch");
 
-    // Reopening a long session must not force a transcript layout for every prompt. Counting
-    // browser layouts catches read/write thrashing without a flaky wall-clock performance limit.
     await page.click("button", "Fix the login bug");
     await page.see("echo: Add a regression test");
     const layouts = await page.layouts(async () => {
@@ -489,10 +455,6 @@ await run(
       return t.scrollHeight - t.scrollTop - t.clientHeight < 2;
     })()`);
 
-    // Deferred overflow measurement still offers long prompts' complete text and works again
-    // after collapsing and resizing. The adjacent reply's code copy stays visible without
-    // hover or focus, then copies only the fence.
-    // Scoped to the transcript: the sidebar's open groups are expanded disclosure buttons too.
     await page.click("button", "Show more");
     await page.until(
       `document.querySelector('[data-slot="transcript"] button[aria-expanded="true"][aria-controls]')?.textContent.includes('Show less')`,
@@ -511,9 +473,6 @@ await run(
     const collapsed = await promptSize();
     assert.ok(collapsed.height < collapsed.content, "collapsed prompt is capped again");
     await page.ab("set", "viewport", "800", "900");
-    // The label already exists before resize. Wait for the pinned transcript to follow its
-    // remeasured rows before the pointer driver reads the button's coordinates; otherwise the
-    // scroll correction can move it between that read and mouse-down, losing the click.
     await page.until(`(() => {
       const t = document.querySelector('[data-slot="transcript"]');
       return t.scrollHeight - t.scrollTop - t.clientHeight < 2;
@@ -544,9 +503,7 @@ await run(
       `Number(getComputedStyle(document.querySelector('button[aria-label="Code copied"]')).opacity) === 1`,
     );
     await page.capture("code-copy-copied");
-    // Headless Chrome on macOS never pastes from the clipboard: a synthetic Cmd+V does nothing
-    // and clipboard reads are denied, even with the permission granted over CDP. CI (Linux)
-    // checks the copied content.
+    // Headless Chrome on macOS cannot paste or read the clipboard, even with CDP permission.
     if (process.platform === "darwin") {
       console.log(
         "SKIP copied-content check on macOS (headless Chrome cannot paste); CI covers it",
@@ -579,7 +536,6 @@ await run(
       await page.click("button", "Jump to message");
       await page.ab("find", "role", "button", "click", "--name", label);
     };
-    // Far index jump: earlier unmeasured heights are estimates, then the target is refined.
     await jump("You said Question 31: why does login fail?");
     await page.until(`(() => {
       const t = document.querySelector('[data-slot="transcript"]');
@@ -616,9 +572,6 @@ await run(
       "one disclosure opens the tool's entire output",
     );
     await page.capture("10-expanded-tool");
-    // A tool fold changes height without an animation, so the rows below it move before the
-    // first frame paints: the previous spacing would paint once as a gap under a collapsed tool
-    // or an overlap under an opened one.
     assert.equal(
       await page.evaluate(`(async () => {
         const tool = document.querySelector('${tool}');
@@ -653,8 +606,6 @@ await run(
       "the expanded output stays expanded across remount",
     );
     await page.capture("11-remounted-tool");
-    // Layout coordinates, not virtual-row transforms: a tall tool pins to the transcript's
-    // edge, and collapsing it keeps that header in view instead of skipping past the tool.
     await page.evaluate(`(() => {
       const t = document.querySelector('[data-slot="transcript"]');
       const tool = document.querySelector('${tool}');
@@ -667,8 +618,6 @@ await run(
       return h.getBoundingClientRect().top - t.getBoundingClientRect().top;
     })()`);
     assert.ok(Math.abs(await headerOffset()) < 1, "the tool header pins at the transcript edge");
-    // The title stays inside the disclosure even while expanded and pinned (not just a
-    // separate Collapse button). Pinning must not change the compact header's geometry.
     assert.deepEqual(await headerGeometry(), compact, "pinning does not change header height");
     await page.ab("click", `${tool} [data-slot="tool-header"] .font-medium`);
     await page.until(`document.querySelector('${tool}').dataset.state === 'closed'`);
@@ -726,15 +675,12 @@ await run(
     await page.capture("13-streaming-pinned");
     await page.click("button", "Stop");
 
-    // PIN-88: opening a project member keeps the branch shown on its home card, even after
-    // Git stops listing its worktree. The header holds the project crumb and title, not the branch.
     await page.ab("set", "viewport", "1280", "900");
     for (const [id, title] of [
       ["live", "Live worktree"],
       ["gone", "Gone worktree"],
     ]) {
       await page.open("/projects/qa");
-      // The named menu identifies the row independently of its element type or list position.
       const card = `[role="listitem"]:has([aria-label=${JSON.stringify(`Session menu for ${title}`)}])`;
       await page.ab("wait", card);
       await listsOwnTheirItems(page, "project home");
@@ -746,15 +692,12 @@ await run(
       await page.see("Answer 1.");
       await listsOwnTheirItems(page, `session ${id}`);
       const header = await page.evaluate("document.querySelector('header').textContent");
-      // One line: the project crumb and the title; the sidebar row and rail say where it runs.
       assert.match(header, /Project: QA Project/);
       assert.doesNotMatch(header, new RegExp(`feat-${id}`));
       console.log(`Session header (${id}): ${header}`);
       await page.capture(`9-header-${id}`);
     }
 
-    // #557: a wide viewport can still be one-area-at-a-time. Protect the actual measured
-    // capacity → navigation → header/tabs seam, not just a supplied layout boolean.
     await page.open("/s/live");
     await page.see("Answer 1.");
     await page.ab("fill", '[aria-label="Message"]', "Keep the boundary draft");
@@ -773,7 +716,6 @@ await run(
     assert.ok(
       await page.evaluate(`document.querySelector('main header nav button').checkVisibility()`),
     );
-    // The title's second line is the sidebar row's folder and branch line, each part named.
     assert.match(
       await page.evaluate(`document.querySelector('main header').textContent`),
       /Folder:\s*api\s*Git branch:\s*feat-live/,
@@ -824,9 +766,6 @@ await run(
     );
     await page.capture("20-one-area-return");
 
-    // PIN-125: Space on a focused button activates it once; the type-anywhere shortcut must not
-    // take it into the composer. Wide, the header toggles the side-by-side rail; narrow, the
-    // session menu, a sheet there, opens. The unsent draft stays byte-for-byte.
     await page.open("/s/login-bug");
     await page.see("echo: Add a regression test");
     const draft = "Keep  this draft ";
@@ -877,8 +816,6 @@ await run(
     }
     await page.ab("set", "viewport", "1280", "900");
 
-    // An extension can pause the session for an inline answer. Form keys must not be stolen
-    // by the composer's type-anywhere shortcut, and selecting must not submit prematurely.
     await page.open("/s/login-bug");
     await page.see("echo: Add a regression test");
     await page.ab("fill", '[aria-label="Message"]', "question");
@@ -886,9 +823,7 @@ await run(
     await page.see("Which checks?");
     assert.equal(await page.evaluate("!!document.querySelector('[role=dialog]')"), false);
     const answers = () => page.received().filter((r) => r.command === "extension_ui_response");
-    // Radix checks a radio that arrow focus reaches only while the key is still down, and
-    // agent-browser releases it before that deferred focus: wait for each key's own effect, and
-    // let Space, which belongs to the focused radio, make the choice.
+    // agent-browser releases arrows before Radix's deferred radio focus; select with Space.
     const radio = (name, checked) =>
       `[...document.querySelectorAll('[role=radio]')].some((r) => r === document.activeElement && r.getAttribute('aria-checked') === '${checked}' && document.querySelector('label[for="' + r.id + '"]')?.innerText.trim() === ${JSON.stringify(name)})`;
     await page.click("radio", "Quick checks");

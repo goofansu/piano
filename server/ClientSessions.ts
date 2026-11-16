@@ -1,17 +1,3 @@
-/**
- * One browser client's sessions: which session it has selected, the live attachment that
- * forwards that session's frames, and the session requests that touch them — create, act and
- * retire. Each request runs its SessionHosts step and delivers its results (`selected`,
- * `action_result`) to this client through its output.
- *
- * Selections are claimed in receive order, so a slow lookup for an older selection never shows
- * or acts on a newer one. Attaching delivers the snapshot, then contiguous frames (INV-05), and
- * returns only once the snapshot is delivered, so a fast first prompt is observed. Only `create`
- * creates a session: SessionHosts registers the folder, the reference and its project first, and
- * records each prompt's activity before Pi sees it (INV-01). `act` may restart an existing
- * session; SessionHosts keeps one child per session (INV-02). A selected session shown stopped
- * attaches once another client starts it, without starting Pi itself.
- */
 import { Data, Deferred, Effect, Exit, Scope, Semaphore, Stream } from "effect";
 import { emptySnapshot } from "../shared/sessionProjection.ts";
 import {
@@ -29,7 +15,6 @@ import { bindSessionEvent } from "./ImagePreviews.ts";
 import { type PiSession, PiSessionError, sessionActionPolicy } from "./PiSessions.ts";
 import { type CreateSpec, SessionHosts, type SessionNotCreated } from "./SessionHosts.ts";
 
-/** A new session and the first message to send it, if any. */
 export interface CreateSessionRequest extends Omit<CreateSpec, "attempt"> {
   readonly attemptId?: string;
   readonly text?: string;
@@ -41,19 +26,15 @@ export type RetireMode = "archive" | "delete";
 export interface Selection {
   readonly attemptId?: string;
   readonly cwd: string;
-  /** `null` is a new session that is not created yet. */
   readonly sessionId: string | null;
   readonly selectionId: string;
 }
 
-/** Where one client's messages go. */
 export interface ClientOutput {
   readonly send: (message: ServerMessage) => Effect.Effect<void>;
-  /** The client fell behind the attached session; the connection should close. */
   readonly overflow: (error: DeliveryOverflow) => Effect.Effect<void>;
 }
 
-/** Why an action was not sent to Pi. Nothing was started or created. */
 export class ActRefused extends Data.TaggedError("ActRefused")<{
   readonly reason: "stale" | "not_running" | "no_session";
   readonly detail: string;
@@ -64,16 +45,10 @@ const refused = {
   not_running: "Session is not running; start it first.",
   no_session: "No session is selected. Create a session before sending to it.",
 } as const;
-/**
- * A prompt or steer refused before Pi saw it (stale selection, archived or unregistered session,
- * a start that failed): never delivered, so its sender may return it to the draft. `detail` is
- * the refusal's own.
- */
 export class InputNotSent extends Data.TaggedError("InputNotSent")<{
   readonly inputId: string;
   readonly detail: string;
   readonly cause: ActRefused | PiSessionError;
-  /** A new session's first input: the session that was created and still awaits it. */
   readonly session?: { readonly cwd: string; readonly sessionId: string };
 }> {}
 
@@ -81,40 +56,20 @@ const refuse = (reason: ActRefused["reason"], detail: string = refused[reason]) 
   Effect.fail(new ActRefused({ reason, detail }));
 
 interface ClientSessions {
-  /** The selection last claimed or shown; a created session's ID once it is shown. */
   readonly selection: Effect.Effect<Selection | null>;
-  /** Claims the selection at once; the returned effect loads it and shows it if it is still current. */
   readonly select: (selection: Selection) => Effect.Effect<Effect.Effect<void, PiSessionError>>;
-  /**
-   * Claims a new-session selection at once; the returned effect creates the session (folder,
-   * reference and project first) and shows it if this selection is still current.
-   */
   readonly create: (
     request: CreateSessionRequest & { readonly selectionId: string },
   ) => Effect.Effect<Effect.Effect<void, PiSessionError | SessionNotCreated | InputNotSent>>;
-  /**
-   * Sends `action` to the selected session, starting it with `start` when it is not running,
-   * and delivers any `action_result`. Never creates a session. Reuse the current select or
-   * create selectionId; a new request id is refused as stale, even for the same hosted session.
-   * Starting does not hold this client's navigation: if another selection is made meanwhile, the
-   * action is still sent and its result delivered, but the started session is not shown.
-   */
   readonly act: (
     selectionId: string,
     action: SessionAction,
     start?: StartOptions,
   ) => Effect.Effect<void, ActRefused | PiSessionError | InputNotSent>;
-  /**
-   * Shows the selected session again when its checkout has since gone or come back: no Pi watches
-   * a saved session's checkout, and a live one's Pi keeps running without it, so its view would
-   * otherwise keep the answer it was shown with.
-   */
   readonly recheck: Effect.Effect<void>;
-  /** Clear this client's saved selection after its bulk retention change. Other clients retain the Archived view. */
   readonly clearArchived: (
     references: ReadonlyArray<Pick<SessionReference, "cwd" | "sessionId" | "archived">>,
   ) => Effect.Effect<void>;
-  /** Detaches a session, stops Pi and archives or deletes it, then clears the selection if it showed that session. */
   readonly retire: (
     cwd: string,
     sessionId: string,
@@ -122,7 +77,6 @@ interface ClientSessions {
   ) => Effect.Effect<void, PiSessionError>;
 }
 
-/** Lives until the surrounding scope closes, which detaches the attachment. */
 export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
   output: ClientOutput,
 ) {
@@ -130,7 +84,6 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
   const attempts = yield* CreationAttempts;
   const { send } = output;
   let selected: Selection | null = null;
-  /** The session last shown, live or saved, with the checkout answer its view carries. */
   let shown: {
     selectionId: string;
     cwd: string;
@@ -141,7 +94,6 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     scope: Scope.Closeable;
     selectionId: string;
   } | null = null;
-  // Serializes attach, detach and the stale checks that decide between them.
   const navigation = yield* Semaphore.make(1);
   const navigate = Semaphore.withPermits(navigation, 1);
   const current = (selection: Selection) => selected?.selectionId === selection.selectionId;
@@ -157,7 +109,6 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
   });
   yield* Effect.addFinalizer(() => detach);
 
-  // Caller holds navigation; slow lookup/start happens before stale-result checks.
   const attachTo = Effect.fn("ClientSessions.attachTo")(function* (
     session: PiSession,
     selection: Selection,
@@ -199,7 +150,6 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
       ),
       Effect.catchTag("DeliveryOverflow", output.overflow),
       Effect.ensuring(Deferred.succeed(ready, undefined)),
-      // The stream ends when Pi is gone; the next action will start it again.
       Effect.ensuring(
         Effect.sync(() => {
           if (attachment === mine) attachment = null;
@@ -208,12 +158,9 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
       Effect.ignore,
       Effect.forkIn(scope),
     );
-    // A fast first prompt must not complete before this client observes it.
     yield* Deferred.await(ready);
   });
 
-  // Caller holds navigation and has just opened `session`. Two acts that both started the
-  // selected session attach it once.
   const attachOpened = Effect.fn("ClientSessions.attachOpened")(function* (
     selectionId: string,
     session: PiSession,
@@ -229,12 +176,6 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     yield* attachTo(session, selection);
   });
 
-  // The one place a request brings up Pi for a selection. Opening (Pi readiness can take 30 s, a
-  // new worktree a minute) runs outside navigation, so this client can show other sessions
-  // meanwhile; navigation is taken only to attach the result. If the selection changed in the
-  // meantime, the newer view stays: the opened session is not shown, but the request still
-  // completes (create sends its first prompt, act its action and `action_result`), because it
-  // was accepted while its selection was current.
   const openThenAttach = <A extends { readonly session: PiSession }, E>(
     selectionId: string,
     opening: Effect.Effect<A, E>,
@@ -243,7 +184,6 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
   const show = Effect.fn("ClientSessions.show")(function* (
     selection: Selection,
   ): Effect.fn.Return<void, PiSessionError> {
-    // A pending read may have been superseded by creation or another selection before it ran.
     if (!current(selection)) return;
     if (selection.attemptId) return yield* reconcile(selection);
     const { cwd, sessionId, selectionId } = selection;
@@ -254,7 +194,6 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
       Effect.gen(function* () {
         if (!current(selection)) return;
         if (view._tag === "live") {
-          // An act that started this session, or a follow, may have attached it already.
           if (attachment?.selectionId === selectionId && attachment.session === view.session)
             return;
           return yield* attachTo(view.session, selection);
@@ -320,10 +259,6 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     }
   });
 
-  // Another client may start the session this one shows stopped. Its live frames arrive only
-  // through an attachment, so attach once it is running: reading never starts Pi (INV-02), and
-  // `show` drops the result if the selection changed meanwhile. Runs one change at a time, so a
-  // burst of changes attaches once.
   const follow = Effect.fn("ClientSessions.follow")(function* (running: ReadonlyArray<HostInfo>) {
     const selection = selected;
     const view = shown;
@@ -346,9 +281,6 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     Effect.forkScoped,
   );
 
-  // Draft choices travel with the input. Pi took them as launch arguments if this request
-  // launched it; a session that was already running, here or in another tab, takes them as
-  // actions in order before submission. A name only names a session Pi launches.
   const applyChoices = Effect.fn("ClientSessions.applyChoices")(function* (
     session: PiSession,
     start: StartOptions | undefined,
@@ -362,12 +294,6 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     return session;
   });
 
-  // With `start`, the selected session as SessionHosts starts it: its live host, or a new Pi when
-  // none is running or the attached one is closing (SessionHosts decides under the session's
-  // lock, after any close completes; the attachment here may be stale). Without `start`, only the
-  // attached session. Only the decision holds navigation; starting runs outside it (see
-  // `openThenAttach`). Two quick acts may both start the session: SessionHosts shares its one
-  // host, and the act that did not launch Pi applies its choices as actions.
   const target = Effect.fn("ClientSessions.target")(function* (
     selectionId: string,
     start: StartOptions | undefined,
@@ -383,7 +309,6 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
         if (!start && attached?.selectionId === selectionId)
           return { _tag: "attached" as const, session: attached.session };
         const { cwd, sessionId } = selected;
-        // Creating belongs to `create`, which registers the folder and project first.
         if (sessionId === null) return yield* refuse("no_session");
         if (!start) return yield* refuse("not_running");
         return { _tag: "start" as const, cwd, sessionId, start };
@@ -391,7 +316,6 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     );
     if (decided._tag === "attached") return yield* applyChoices(decided.session, start);
     const { cwd, sessionId, start: options } = decided;
-    // A start reaches browsers as a `hosts` update.
     const { session, launched } = yield* openThenAttach(
       selectionId,
       hosts.start({
@@ -405,9 +329,6 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     return launched ? session : yield* applyChoices(session, options);
   });
 
-  // Sends `action` to a host. A host that refuses an input before Pi sees it (closing for an
-  // archive another client asked for or Pi's exit, a checkout that went) names it, for a
-  // follow-up and a new session's first message alike.
   const deliver = (session: PiSession, action: SessionAction) =>
     session.act(action).pipe(
       Effect.mapError((cause) =>
@@ -426,9 +347,6 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     action: SessionAction,
     start?: StartOptions,
   ) {
-    // An action its policy forbids from starting Pi ignores start options, even when an old or
-    // malformed client sends them.
-    // Until `session.act`, Pi has not seen the input: a refusal before it names the input.
     const inputId = "inputId" in action ? action.inputId : undefined;
     const session = yield* target(
       selectionId,
@@ -448,9 +366,6 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
       });
   });
 
-  // One stat per call; the session is read again only when the answer changed, and reading stops
-  // a live host whose checkout is gone. Show forgets the view first, so a session that can no
-  // longer be read is not retried on every refresh.
   const recheck = Effect.gen(function* () {
     const view = shown;
     if (!view || !selected || selected.selectionId !== view.selectionId) return;
@@ -469,7 +384,6 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     sessionId: string,
     mode: RetireMode,
   ) {
-    // Detach first, so this client sees no frames from a session being stopped.
     yield* navigate(
       Effect.suspend(() =>
         attachment && sameSession(attachment.session.spec, { cwd, sessionId })
@@ -478,7 +392,6 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
       ),
     );
     yield* (mode === "delete" ? hosts.delete(cwd, sessionId) : hosts.archive(cwd, sessionId)).pipe(
-      // A refused retire leaves Pi running: show the selection again, so this client reattaches.
       Effect.tapError(() =>
         selected?.cwd === cwd && selected.sessionId === sessionId
           ? show(selected).pipe(
@@ -504,9 +417,6 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     }
   });
 
-  // Caller has claimed the new-session selection. Creating runs outside navigation (see
-  // `openThenAttach`). A client acts only after its `selected`, which attaching sends, so no act
-  // waits on a pending creation.
   const create = Effect.fn("ClientSessions.create")(function* (
     selectionId: string,
     { text, attachments, attemptId, ...spec }: CreateSessionRequest,
@@ -519,8 +429,6 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
         );
         const trimmed = text?.trim() ?? "";
         if (!trimmed && !attachments?.length) return;
-        // Sent only once this client has attached, so it observes the prompt. A refusal names
-        // the session that exists, so the input returns to its draft and not to a second start.
         yield* deliver(session, {
           _tag: "prompt",
           text: trimmed,
@@ -539,11 +447,7 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
           ),
         );
       });
-    // A selection ID lives only as long as its connection: a client that names no attempt gets
-    // no durable claim, so a reused ID is never mistaken for an earlier creation.
     if (attemptId === undefined) return first(hosts.create(spec));
-    // A duplicate observes the original; it never takes ownership of that request's first
-    // input, even after a restart or reference deletion.
     const begun = yield* attempts.begin({ ...spec, id: attemptId, text, attachments }, (attempt) =>
       hosts.create({ ...spec, attempt }),
     );

@@ -6,8 +6,6 @@ import { browserSidebarEnvironment, createSidebarLayout } from "../web/src/lib/s
 import { useNarrowViewport } from "../web/src/lib/useNarrowViewport.ts";
 import { isWideViewport, subscribeViewport } from "../web/src/lib/viewportLayout.ts";
 
-// The browser boundary supplies query results, including when rounded innerWidth disagrees.
-// Real CSS/media-query evaluation is checked in the scratch browser, not reimplemented here.
 function browser(t: TestContext) {
   let matches = true;
   const listeners = new Set<() => void>();
@@ -58,8 +56,6 @@ test("viewport observers and sidebar actions follow CSS's decision, not rounded 
   });
   const stopLayout = layout.start();
 
-  // CSS oracle: at the default 16px baseline, 767 and 767.5 are narrow; 768 and 769 wide.
-  // At a 20px browser baseline, 768 and 959.5 are narrow; 960 is wide.
   for (const [label, wide] of [
     ["16px / 769px", true],
     ["16px / 768px", true],
@@ -80,7 +76,6 @@ test("viewport observers and sidebar actions follow CSS's decision, not rounded 
   }
   assert.deepEqual(narrow, [true, false, true, false]);
 
-  // A browser crossing cancels an active column resize without saving its transient width.
   layout.startResize(288);
   layout.resizeTo(400);
   cross(false);

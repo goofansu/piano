@@ -6,10 +6,8 @@ import {
   type ViewportElement,
 } from "../web/src/lib/transcriptViewport.ts";
 
-/** A scroll container like the browser's: scrollTop stays within [0, scrollHeight - clientHeight]. */
 class FakeElement implements ViewportElement {
   #top = 0;
-  /** Message tops measured from the content's top edge. */
   anchors = new Map<string, number>();
   scrollHeight: number;
   clientHeight: number;
@@ -40,7 +38,6 @@ const setup = ({ height = 2000, client = 500 } = {}) => {
   return { viewport, el };
 };
 
-/** The reader scrolls to `top`; the browser then reports the scroll. */
 const scroll = (el: FakeElement, viewport: ReturnType<typeof setup>["viewport"], top: number) => {
   el.scrollTop = top;
   viewport.scrolled();
@@ -72,7 +69,7 @@ for (const update of ["render", "resize"] as const) {
     for (const distance of [40, 300]) {
       const { viewport, el } = setup();
       const readingTop = el.scrollTop - distance;
-      el.scrollTop = readingTop; // Native movement is immediate; its scroll event is deferred.
+      el.scrollTop = readingTop;
       el.scrollHeight += 600;
       if (update === "render") viewport.rendered();
       else {
@@ -80,7 +77,7 @@ for (const update of ["render", "resize"] as const) {
         viewport.resized({ container: true });
       }
       assert.equal(el.scrollTop, readingTop, "following must consume the pending move up");
-      viewport.scrolled(); // The delayed event must not undo the decision either.
+      viewport.scrolled();
       el.scrollHeight += 600;
       viewport.rendered();
       assert.equal(el.scrollTop, readingTop, "later output leaves the reader in place");
@@ -126,7 +123,6 @@ test("a shrinking container follows the bottom only while pinned", () => {
   assert.equal(reading.viewport.atBottom(), false);
 });
 
-/** The content shrinks; the browser keeps the reader within the new range, as a scroller does. */
 const shrinkContent = (el: FakeElement, scrollHeight: number) => {
   const top = el.scrollTop;
   el.scrollHeight = scrollHeight;
@@ -134,9 +130,6 @@ const shrinkContent = (el: FakeElement, scrollHeight: number) => {
 };
 
 test("content shrinking under a reader who scrolled up never pins them, even clamped to the end", () => {
-  // A windowed transcript measures rows above the reader smaller than it estimated. On iOS it
-  // shrinks the list before it can write the corrected position, so the browser clamps the
-  // reader to the new end in between; the correction then restores their row.
   const { viewport, el } = setup();
   scroll(el, viewport, 1200);
   shrinkContent(el, 1500);
@@ -185,8 +178,6 @@ test("a jump to the end re-pins a reader who had scrolled up, so new output foll
 });
 
 test("a reader who opened a fold stays on its header while it grows the content", () => {
-  // A transcript that fits its window sits at the end, so it is pinned; opening a tall tool
-  // output there must not follow the growth to the output's tail.
   const fits = setup({ height: 500, client: 500 });
   let measured = false;
   fits.viewport.fold(true, () => {
@@ -217,17 +208,15 @@ test("a reader who opened a fold stays on its header while it grows the content"
 test("collapsing a fold whose header sticks to the edge moves its header there in the flow", () => {
   const { viewport, el } = setup({ height: 5000 });
   scroll(el, viewport, 2000);
-  // The fold starts 700px above the container's edge; its sticky header sits on that edge.
   viewport.fold(false, () => ({ top: -700, header: 0 }));
   assert.equal(el.scrollTop, 1300, "the fold's top, and so its header, is now on the edge");
-  el.scrollHeight = 4300; // The body goes.
-  viewport.scrolled(); // The browser reports the correction at the position already decided.
+  el.scrollHeight = 4300;
+  viewport.scrolled();
   viewport.rendered();
   assert.equal(el.scrollTop, 1300, "the header stays where the reader saw it");
 
   const scrolledPast = setup({ height: 5000 });
   scroll(scrolledPast.el, scrolledPast.viewport, 2000);
-  // A short fold scrolled partly out above the edge: its header is above the edge too.
   scrolledPast.viewport.fold(false, () => ({ top: -30, header: -30 }));
   assert.equal(scrolledPast.el.scrollTop, 1970, "the header comes back to the edge");
 });
@@ -247,9 +236,9 @@ test("collapsing a stuck header at the end does not follow the shrinking transcr
   viewport.fold(false, () => ({ top: -1500, header: 0 }));
   assert.equal(el.scrollTop, 3000);
   assert.equal(viewport.atBottom(), false);
-  el.scrollHeight = 3600; // The body goes; the end is now 100px below the view.
+  el.scrollHeight = 3600;
   viewport.rendered();
-  el.scrollHeight = 4000; // New output arrives.
+  el.scrollHeight = 4000;
   viewport.rendered();
   assert.equal(el.scrollTop, 3000, "the reader stays on the header they collapsed");
 });
@@ -258,7 +247,7 @@ test("collapsing a fold in view at the end keeps following", () => {
   const { viewport, el } = setup({ height: 5000 });
   viewport.fold(false, () => ({ top: 200, header: 200 }));
   el.scrollHeight = 4800;
-  el.scrollTop = 4300; // The browser clamps the view to the new end.
+  el.scrollTop = 4300;
   viewport.rendered();
   el.scrollHeight = 5200;
   viewport.rendered();
@@ -267,7 +256,7 @@ test("collapsing a fold in view at the end keeps following", () => {
 
 test("a fold cannot swallow a reader scroll whose event is still queued", () => {
   const { viewport, el } = setup({ height: 5000 });
-  el.scrollTop = 4000; // The reader moved up; the scroll event is not yet dispatched.
+  el.scrollTop = 4000;
   viewport.fold(false, () => ({ top: 100, header: 100 }));
   el.scrollHeight = 5600;
   viewport.rendered();
@@ -299,7 +288,7 @@ test("a message jump has landed at the margin, or at the end when the message ca
   el.anchors.set("last", 1900);
   scroll(el, viewport, 0);
   assert.equal(viewport.landed("u2"), false, "a message still below has not landed");
-  el.scrollTop = 600; // Mid-flight, short of the margin.
+  el.scrollTop = 600;
   assert.equal(viewport.landed("u2"), false);
   viewport.jump({ kind: "user", id: "u2", label: "Second", messageId: "u2" });
   assert.equal(viewport.landed("u2"), true);
@@ -337,7 +326,7 @@ test("explicit virtual jumps supersede native scrolls whose events are still que
     return true;
   };
 
-  el.scrollTop = 1200; // Pending move up, followed by an explicit request to follow the end.
+  el.scrollTop = 1200;
   assert.equal(viewport.jump(BOTTOM_ENTRY), true);
   viewport.scrolled();
   el.scrollHeight = 2600;
@@ -345,7 +334,7 @@ test("explicit virtual jumps supersede native scrolls whose events are still que
   assert.equal(el.scrollTop, 2100, "the jump to the end wins over the earlier move up");
 
   scroll(el, viewport, 1000);
-  el.scrollTop = 2100; // Pending arrival at the end, followed by a jump to an earlier message.
+  el.scrollTop = 2100;
   assert.equal(
     viewport.jump({ kind: "user", id: "earlier", messageId: "earlier", label: "Earlier" }),
     true,
@@ -362,13 +351,13 @@ test("a missing virtual destination preserves the reader's latest follow intent"
   virtual.jumpToMessage = () => false;
   const missing: JumpEntry = { kind: "user", id: "gone", messageId: "gone", label: "Gone" };
 
-  el.scrollTop = 1200; // The queued move up must not be lost when the lookup fails.
+  el.scrollTop = 1200;
   assert.equal(viewport.jump(missing), false);
   el.scrollHeight = 2600;
   viewport.rendered();
   assert.equal(el.scrollTop, 1200);
 
-  el.scrollTop = 2100; // Nor may a failed lookup unpin a reader who just reached the end.
+  el.scrollTop = 2100;
   assert.equal(viewport.jump(missing), false);
   el.scrollHeight = 3000;
   viewport.rendered();
@@ -396,7 +385,7 @@ test("measurement compensation preserves follow intent in both directions", () =
 
 test("measurement compensation cannot swallow a native scroll whose event is still queued", () => {
   const { viewport, el } = setup();
-  el.scrollTop = 1200; // Reader moves up; ResizeObserver runs before the scroll event.
+  el.scrollTop = 1200;
   viewport.correct(() => {
     el.scrollTop += 100;
   });
@@ -405,7 +394,7 @@ test("measurement compensation cannot swallow a native scroll whose event is sti
   viewport.rendered();
   assert.equal(el.scrollTop, 1300, "the pending move up must unpin");
 
-  el.scrollTop = 2100; // Reader reaches the bottom, again before its event is dispatched.
+  el.scrollTop = 2100;
   viewport.correct(() => {
     el.scrollTop -= 100;
   });
@@ -444,7 +433,6 @@ test("current is bottom near the end, top near the start, else the last message 
   assert.equal(viewport.current(entries), "top", "nothing rendered above the line");
 });
 
-/** A wheel handed to the transcript; the browser then reports the move as a scroll of its own. */
 const wheel = (viewport: ReturnType<typeof setup>["viewport"], deltaY: number, deltaMode = 0) => {
   viewport.wheel(deltaY, deltaMode);
   viewport.scrolled();

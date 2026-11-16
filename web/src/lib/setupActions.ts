@@ -1,56 +1,31 @@
-/**
- * What a Settings section does when the user changes setup: one change at a time, a confirmation
- * before a destructive one, a sign-in dialog, a failure answered with its error's toast, and a
- * re-read of the section's facts once a change settles either way. A confirmation exists only
- * while its dialog is on screen; the dialog keeps its own face while it animates closed. Each
- * sign-in gets a fresh key, so reopening the dialog starts it afresh. Nothing here renders: the
- * toast is sonner's, which works without a Toaster on screen.
- */
 import { toast } from "sonner";
 
 export interface SetupActionsState<C, S> {
-  /** The id of the change in flight; every setup control waits for it. */
   running: string | undefined;
-  /** The last change's failure, cleared when another starts. */
   error: string;
-  /** The confirmation on screen, until it is cancelled or a change settles. */
   confirmation: C | undefined;
-  /** The sign-in dialog's subject, with the key that names this opening of it. */
   signIn: { subject: S; key: string } | undefined;
 }
 
 export interface SetupActionsOptions {
-  /** Re-reads the section's facts; called after every change, whether it succeeded or failed. */
   refresh: () => void;
-  /** Announces a finished change, given the change's id. */
   success: (message: string, id: string) => void;
-  /**
-   * Where a failed change's message goes: the error's toast unless this says otherwise, so a
-   * section never fails silently. A function reports it instead; `"keep"` keeps it in `error`, for
-   * a form in an open dialog that shows the failure on its fields.
-   */
   failure?: ((message: string) => void) | "keep";
-  /** Names one opening of the sign-in dialog. */
   newKey?: () => string;
 }
 
 export interface SetupChange<A> {
-  /** Which change runs, so its control can show progress. */
   id: string;
   run: () => Promise<A>;
-  /** Announced after the change succeeds, given its result. */
   done?: string | ((result: A) => string | undefined);
-  /** Shown when the change fails without a message of its own. */
   fallback: string;
 }
 
 export interface SetupActions<C, S> {
   getState: () => SetupActionsState<C, S>;
   subscribe: (listener: () => void) => () => void;
-  /** Runs one change unless another is in flight; resolves with its result, or `undefined` if it failed or did not run. */
   run: <A>(change: SetupChange<A>) => Promise<A | undefined>;
   confirm: (confirmation: C) => void;
-  /** Closes the confirmation, unless its change is still running. */
   cancel: () => void;
   openSignIn: (subject: S) => void;
   closeSignIn: () => void;
@@ -99,7 +74,6 @@ export function createSetupActions<C = never, S = never>(
         report(text);
         return undefined;
       } finally {
-        // The re-read starts first, so no moment shows the change settled on facts it may have changed.
         options.refresh();
         set({ running: undefined, confirmation: undefined });
       }

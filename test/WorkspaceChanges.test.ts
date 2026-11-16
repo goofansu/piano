@@ -49,7 +49,6 @@ function fixture(t: TestContext) {
   return { repo, git, gitInput, preview, read };
 }
 
-/** The result of a read whose scope cannot be read, or the test fails. */
 function unavailable(value: Observation) {
   assert.equal(value.result.status, "unavailable", JSON.stringify(value.result));
   if (value.result.status !== "unavailable") throw new Error("Preview did not refuse");
@@ -74,7 +73,6 @@ test("written files: internal directory aliases share identity without poisoning
         "alias/a.ts",
         "build.log",
         "src/removed.ts",
-        // The OS follows `away` first, so this is the sibling's file, not `src/../a.ts`.
         "away/../a.ts",
         "alias/../src/a.ts",
       ]);
@@ -179,8 +177,6 @@ test("live changes: metadata overflow is an error, never a partial or empty file
   assert.equal(existsSync(join(untracked.repo, ".git/index")), false);
 
   const { repo, git, gitInput, preview } = fixture(t);
-  // Deleted index-only paths overflow numstat without creating/removing 28k files.
-  // Avoid needless filesystem event pressure on unrelated strict capture tests.
   const directory = join("d".repeat(200), "e".repeat(200), "f".repeat(200));
   const blob = gitInput("base\n", "hash-object", "-w", "--stdin").trim();
   const entries = Array.from(
@@ -198,10 +194,7 @@ test("live changes: metadata overflow is an error, never a partial or empty file
   assert.deepEqual(readFileSync(join(repo, ".git/index")), index);
 });
 
-// A remote's gateway relays an answer only up to its own bound; a list larger than the answer
-// budget must be refused where it is answered, alike for Local and a remote.
 test("live changes: an answer past the answer budget is an error, never a partial file list", async (t) => {
-  // Index-only paths, deleted from the worktree, list without writing thousands of files.
   const directory = join("d".repeat(200), "e".repeat(200), "f".repeat(200));
   const commitPaths = (count: number) => {
     const fixed = fixture(t);
@@ -214,7 +207,6 @@ test("live changes: an answer past the answer budget is an error, never a partia
     fixed.git("commit", "-qm", "index-only base");
     return fixed;
   };
-  // Each listed path costs more than its 600 bytes of name once encoded.
   const over = commitPaths(Math.ceil(CHANGES_ANSWER_BYTES / 600));
   const refused = await over.preview();
   assert.equal(refused.result.status, "error");
@@ -223,7 +215,6 @@ test("live changes: an answer past the answer budget is an error, never a partia
       refused.result.detail,
       "Changes are too large to list; no partial file list is shown.",
     );
-  // One file's read of the same checkout is small and still answers.
   assert.equal((await over.preview(`${directory}/7.txt`)).result.status, "ready");
 
   const count = Math.floor(CHANGES_ANSWER_BYTES / 1_000);
@@ -274,14 +265,12 @@ test("branch scope: a commit or push keeps the branch's patch; advancing only th
     { scope: "branch", available: true, target: before.comparison.target },
     { scope: "uncommitted", available: true },
   ]);
-  // The comparison is content-preserving: committing changes nothing a reader sees.
   git("add", ".");
   git("commit", "-qm", "work");
   const committed = ready(await read({ scope: "branch", hints }));
   assert.equal(committed.diff, before.diff);
   assert.equal(committed.comparison.base, before.comparison.base);
   assert.deepEqual(ready(await read({ scope: "uncommitted" })).files, []);
-  // Only the target moves: the branch's patch is unchanged and the new target commit is not in it.
   git("switch", "-q", "main");
   writeFileSync(join(repo, "c"), "elsewhere\n");
   git("add", ".");
@@ -290,14 +279,11 @@ test("branch scope: a commit or push keeps the branch's patch; advancing only th
   const advanced = ready(await read({ scope: "branch", hints }));
   assert.equal(advanced.diff, before.diff);
   assert.equal(advanced.comparison.base, before.comparison.base);
-  // Without a scope, Uncommitted stays the default even when Branch can be read.
   assert.equal(ready(await read({ hints })).comparison.scope, "uncommitted");
   assert.deepEqual(ready(await read({})).files, []);
-  // Explicit Branch still resolves a local main when there is no hint or remote.
   const assumed = ready(await read({ scope: "branch" }));
   assert.equal(assumed.comparison.target?.from, "assumed");
   assert.equal(assumed.comparison.target?.ref, "refs/heads/main");
-  // A per-file read names the same comparison, so the browser can refuse one that moved.
   const single = ready(await read({ scope: "branch", hints, path: "a" }));
   assert.deepEqual(single.comparison, advanced.comparison);
   assert.match(single.diff, /\+edited/);
@@ -325,7 +311,6 @@ test("branch scope: the target is the pull request's base for its own head, else
     [fromPr.comparison.target?.name, fromPr.comparison.target?.from],
     ["release", "pull-request"],
   );
-  // A pull request for another branch never retargets this one.
   const other = ready(
     await read({
       scope: "branch",
@@ -336,7 +321,6 @@ test("branch scope: the target is the pull request's base for its own head, else
     [other.comparison.target?.name, other.comparison.target?.from],
     ["main", "worktree"],
   );
-  // Older callers' bare hints and untrusted rev expressions do not acquire repository authority.
   for (const hint of [
     { head: "feature", base: "release" },
     { ...pullRequest, base: "release~0" },
@@ -347,7 +331,6 @@ test("branch scope: the target is the pull request's base for its own head, else
     );
     assert.equal(ignored.comparison.target?.from, "worktree");
   }
-  // The remote's default branch as Git holds it locally, never fetched.
   const main = git("rev-parse", "main").trim();
   git("update-ref", "refs/remotes/origin/main", main);
   git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
@@ -356,7 +339,6 @@ test("branch scope: the target is the pull request's base for its own head, else
     [remote.comparison.target?.ref, remote.comparison.target?.from],
     ["refs/remotes/origin/main", "remote-default"],
   );
-  // A hinted base Git does not hold falls through to the next rule, named.
   const missing = ready(await read({ scope: "branch", hints: { worktreeBase: "gone" } }));
   assert.equal(missing.comparison.target?.from, "remote-default");
 });
@@ -383,7 +365,6 @@ test("branch scope: a pull request applies to the branch by its name on its remo
       }),
     ).comparison.target?.from;
   assert.equal(await target("james/feat"), "pull-request");
-  // The local name is not what GitHub knows this branch as.
   assert.equal(await target("feat"), "worktree");
 });
 
@@ -405,10 +386,8 @@ test("branch scope: a fork's pull request into a same-named base compares with t
     ["refs/remotes/upstream/main", "pull-request"],
   );
   assert.equal(fork.pullRequestFromBranch, true);
-  // Its own remote-tracking ref is still this branch.
   git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
   assert.equal(unavailable(await read({ scope: "branch" })).detail, "main is the base branch.");
-  // A branch started from its remote's default tracks it under another name: that is its target.
   git("switch", "-qc", "feat", "--track", "origin/main");
   git("commit", "-q", "--allow-empty", "-m", "feat");
   const started = ready(await read({ scope: "branch" }));
@@ -428,7 +407,6 @@ test("Changes says whether the linked pull request is from this branch, by its n
   git("config", "branch.feat.remote", "origin");
   git("config", "branch.feat.merge", "refs/heads/james/feat");
   git("config", "push.default", "upstream");
-  // Git holds no ref for the base: the PR cannot be the target, yet it is still this branch's.
   const pullRequest = { base: "release", headRepo: "example/repo", baseRepo: "example/repo" };
   const fromBranch = async (hint: object, scope: "uncommitted" | "branch" = "uncommitted") => {
     const { result } = await read({
@@ -447,11 +425,9 @@ test("Changes says whether the linked pull request is from this branch, by its n
   );
   assert.equal(await fromBranch({ head: "james/feat" }, "branch"), true);
   assert.equal(ready(await read({ scope: "uncommitted" })).pullRequestFromBranch, false);
-  // Its remote pushes to a fork: the fork's pull request is this branch's.
   git("remote", "set-url", "--push", "origin", "https://github.com/fork/repo.git");
   assert.equal(await fromBranch({ head: "james/feat", headRepo: "fork/repo" }), true);
   assert.equal(await fromBranch({ head: "james/feat" }), false, "it fetches from, not pushes to");
-  // Its base is still proven by where Git fetched it from.
   git("update-ref", "refs/remotes/origin/release", "main");
   const hints = { pullRequest: { ...pullRequest, head: "james/feat", headRepo: "fork/repo" } };
   const branch = ready(await read({ scope: "branch", hints }));
@@ -491,14 +467,12 @@ test("branch scope: unavailable states are named, never another comparison", asy
   git("switch", "-qc", "solo");
   git("branch", "-qD", "main");
   assert.equal(unavailable(await read({ scope: "branch" })).detail, "No base branch known.");
-  // Unrelated history: an orphan branch shares nothing with the target.
   git("branch", "-q", "main");
   git("switch", "-q", "--orphan", "orphan");
   writeFileSync(join(repo, "o"), "orphan\n");
   git("add", ".");
   git("commit", "-qm", "orphan");
   assert.equal(unavailable(await read({ scope: "branch" })).detail, "No common history with main.");
-  // A criss-cross merge has two merge bases: ambiguous, not one picked quietly.
   git("switch", "-q", "main");
   writeFileSync(join(repo, "m1"), "");
   git("add", ".");
@@ -547,7 +521,6 @@ test("a merge conflict leaves the scope unavailable, keeping the scopes and loca
   assert.equal(conflicted.branch, "feature");
   assert.deepEqual(conflicted.local, { commitsNotPushed: null, uncommitted: true });
   assert.ok(conflicted.scopes.some((s) => s.scope === "uncommitted"));
-  // A file outside the conflict still reads.
   assert.equal(ready(await preview("b")).files.length, 0);
 });
 
@@ -559,7 +532,6 @@ test("local work: commits not pushed count against the branch's upstream, not a 
   git("switch", "-qc", "feat");
   git("commit", "-q", "--allow-empty", "-m", "pushed");
   git("update-ref", "refs/remotes/origin/james/feat", "HEAD");
-  // An unrelated `origin/feat` must not be what the branch is counted against.
   git("update-ref", "refs/remotes/origin/feat", "main");
   git("config", "branch.feat.remote", "origin");
   git("config", "branch.feat.merge", "refs/heads/james/feat");
@@ -586,12 +558,10 @@ test("a branch started from a remote branch compares and counts by its own name 
   git("switch", "-qc", "main");
   git("commit", "-q", "--allow-empty", "-m", "base");
   git("branch", "-q", "release");
-  // Without `refs/remotes/origin/HEAD`, as `git remote add` and `git fetch` leave it.
   git("remote", "add", "origin", "https://github.com/example/repo.git");
   git("update-ref", "refs/remotes/origin/main", "main");
   git("update-ref", "refs/remotes/origin/release", "release");
   git("config", "push.default", "simple");
-  // `git switch -c feat origin/main`, then `git push origin feat` without `-u`.
   git("switch", "-qc", "feat", "--track", "origin/main");
   git("commit", "-q", "--allow-empty", "-m", "pushed");
   git("update-ref", "refs/remotes/origin/feat", "HEAD");
@@ -615,7 +585,6 @@ test("a branch pushed to a fork compares with the base on the remote it started 
   const { repo, git, read } = fixture(t);
   git("switch", "-qc", "main");
   git("commit", "-q", "--allow-empty", "-m", "base");
-  // The fork is `origin` and the repository it came from is `upstream`, one commit ahead.
   git("remote", "add", "origin", "https://github.com/me/repo.git");
   git("update-ref", "refs/remotes/origin/main", "HEAD");
   git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
@@ -626,7 +595,6 @@ test("a branch pushed to a fork compares with the base on the remote it started 
   git("update-ref", "refs/remotes/upstream/main", "HEAD");
   git("symbolic-ref", "refs/remotes/upstream/HEAD", "refs/remotes/upstream/main");
   git("config", "remote.pushDefault", "origin");
-  // `git switch -c feat upstream/main`: the work goes to the fork.
   git("switch", "-qc", "feat", "--track", "upstream/main");
   writeFileSync(join(repo, "f"), "feat\n");
   git("add", "f");
@@ -648,8 +616,6 @@ test("a branch pushed to a fork compares with the base on the remote it started 
   }
 });
 
-// The fork fixture's other half is in Worktrees and SessionPullRequests: all three name the same
-// repository and branch.
 test("INV-01: Changes reads the pull request from the branch where its own worktree pushes it", async (t) => {
   const { repo, worktree } = forkWorktree(t);
   const fromBranch = async (headRepo: string) => {
@@ -681,8 +647,6 @@ test("INV-06: Changes honors the user's global core.excludesFile and nothing els
   git("commit", "-qm", "base");
   const index = readFileSync(join(repo, ".git/index"));
 
-  // An isolated HOME whose global config points core.excludesFile at a custom path (through `~`)
-  // and also carries traps the hardened reads must not pick up.
   const home = mkdtempSync(join(tmpdir(), "piano-excludes-home-"));
   const decoy = mkdtempSync(join(tmpdir(), "piano-excludes-decoy-"));
   execFileSync("git", ["init", "-q", decoy]);
@@ -723,7 +687,6 @@ test("INV-06: Changes honors the user's global core.excludesFile and nothing els
   });
   writeFileSync(join(repo, ".git/info/attributes"), "* filter=trap\n");
 
-  // Git itself, with that HOME and none of the inherited overrides, ignores the file.
   const userGit = (...args: string[]) =>
     execFileSync("git", ["-C", repo, ...args], {
       encoding: "utf8",
@@ -761,7 +724,6 @@ test("INV-06: Changes honors the user's global core.excludesFile and nothing els
     files: [{ path: "credentials.local", verdict: "ignored", placed: "credentials.local" }],
   });
 
-  // An ordinary untracked file still appears; a tracked file the rule matches still shows edits.
   writeFileSync(join(repo, "notes.txt"), "ordinary\n");
   writeFileSync(join(repo, "secret.tracked"), "changed\n");
   const busy = ready(await preview());

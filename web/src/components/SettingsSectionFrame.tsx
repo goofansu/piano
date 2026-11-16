@@ -35,23 +35,17 @@ const ICONS: Record<SettingsSectionIconName, LucideIcon> = {
   archive: ArchiveIcon,
 };
 
-/** A Settings section's icon, as navigation and the command palette show it. */
 export function SettingsSectionIcon({
   icon,
   ...props
 }: {
   icon: SettingsSectionIconName;
-  /** A Button's leading or trailing icon, which sets its padding. */
   "data-icon"?: "inline-start" | "inline-end";
 }) {
   const Icon = ICONS[icon];
   return <Icon {...props} />;
 }
 
-/**
- * One Settings page: the header, titled with the section's label, with its actions, a scrolling
- * column of content, and the page's dialogs. No intro line: the rows say what the page does.
- */
 export function SettingsSectionFrame({
   section,
   actions,
@@ -85,7 +79,6 @@ export function SettingsSectionFrame({
   );
 }
 
-/** A titled group on a Settings page: its name and its rows. */
 export function SettingsGroup({
   id,
   title,
@@ -95,7 +88,6 @@ export function SettingsGroup({
 }: {
   id: string;
   title: React.ReactNode;
-  /** A control at the title's end, such as Refresh. */
   actions?: React.ReactNode;
   className?: string;
   children: React.ReactNode;
@@ -116,20 +108,12 @@ export function SettingsGroup({
   );
 }
 
-/**
- * Rows in one bordered list, split by hairlines rather than spaced as cards, as Linear's settings
- * lists are. Rows are `Item`s with `settingsRow`. The list makes each child a list item, so a row
- * never decides its own role, and a row that is a button stays one. The hairline is the item's
- * bottom border; the row's own border is cleared, since `Item` draws a transparent one on every
- * side.
- */
 export function SettingsList({
   className,
   children,
   ...props
 }: React.ComponentProps<"div"> & { children: React.ReactNode }) {
   return (
-    // Its rows are shadcn Items (divs), which a <ul> cannot hold; the roles name the list.
     <div
       role="list"
       className={cn(
@@ -148,10 +132,8 @@ export function SettingsList({
   );
 }
 
-/** The classes an `Item` takes to sit in a `SettingsList`. */
 export const settingsRow = "flex-nowrap rounded-none px-4 py-3";
 
-/** A section's problem the user can act on. */
 export function SettingsAlert({
   title,
   icon,
@@ -170,17 +152,11 @@ export function SettingsAlert({
   );
 }
 
-/**
- * A section whose facts could not be read: what failed, and Retry, which turns while a read is in
- * flight. A failed first read shows it in place of the loading placeholder, a failed re-read above
- * the rows already read (see `settingsLoadView`); a change's failure is a toast instead.
- */
 export function SettingsLoadFailure({
   title,
   retrying,
   retry,
 }: {
-  /** "Could not load …", naming what the section lists. */
   title: string;
   retrying: boolean;
   retry: () => void;
@@ -192,7 +168,6 @@ export function SettingsLoadFailure({
     >
       <AlertCircleIcon />
       <AlertTitle className="min-w-0 flex-1">{title}</AlertTitle>
-      {/* Keep Retry in flow so its height and busy width contribute to the alert's layout. */}
       <Button variant="outline" size="sm" disabled={retrying} aria-busy={retrying} onClick={retry}>
         {retrying && <Spinner data-icon="inline-start" />}
         Retry
@@ -201,7 +176,6 @@ export function SettingsLoadFailure({
   );
 }
 
-/** Placeholder rows while a section's facts load; screen readers hear `label`. */
 export function SettingsSkeleton({
   label,
   className,
@@ -219,11 +193,6 @@ export function SettingsSkeleton({
   );
 }
 
-/**
- * A section's load as `settingsLoadView` decides it: placeholder rows, the failure with Retry,
- * the empty line, or the rows `children` draws from the value read, below the failure when a
- * re-read failed. `noun` names what the section lists ("webhooks") in all three lines.
- */
 export function SettingsLoadState<T>({
   view,
   noun,
@@ -236,7 +205,6 @@ export function SettingsLoadState<T>({
   noun: string;
   retry: () => void;
   skeletonRows?: number;
-  /** The section's icon on its empty line; needed only where the value can list nothing. */
   emptyIcon?: LucideIcon;
   children: (value: T) => React.ReactNode;
 }) {
@@ -273,10 +241,6 @@ export function SettingsLoadState<T>({
   );
 }
 
-/**
- * An outgoing link in Settings: opens in a new tab and always carries the external-link icon, so
- * leaving Piano is visible before the click. Pass `className` for color; size and weight inherit.
- */
 export function SettingsExternalLink({
   href,
   className,

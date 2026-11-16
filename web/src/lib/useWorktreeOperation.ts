@@ -6,7 +6,6 @@ import {
   type WorktreeOperationState,
 } from "./worktreeOperation.ts";
 
-/** One worktree operation for the directory picker, listening while mounted; `ready` may change between renders. */
 export function useWorktreeOperation(
   client: WorktreeOperationOptions["client"],
   ready: (path: string) => void,

@@ -11,7 +11,6 @@ import {
 import { previewQuery } from "../shared/remoteImages.ts";
 import { remoteImageUrl } from "../web/src/lib/remoteImages.ts";
 
-// A byte-only cache cap cannot bound provenance for many small images and sessions.
 test("disposable preview bytes and provenance are globally bounded and can be reprojected", () => {
   const url = imagePreview(Buffer.from([255, 216, 255, 0]).toString("base64"), "image/jpeg")!;
   const id = url.split("/").at(-1)!;
@@ -53,8 +52,6 @@ test("disposable preview bytes and provenance are globally bounded and can be re
   assert.ok(sessionImagePreview("/same", "session-0", id));
 });
 
-// A context readback reprojects the whole transcript after every settle; an image it re-caches
-// after eviction must stay that session's, or the peer answers its preview with 404.
 test("a context event binds the images it reprojects to its session", () => {
   const data = Buffer.from([255, 216, 255, 2]).toString("base64");
   const url = imagePreview(data, "image/jpeg")!;
@@ -84,8 +81,6 @@ test("a context event binds the images it reprojects to its session", () => {
   assert.ok(sessionImagePreview("/ctx", "session", id), "the readback restores provenance");
 });
 
-// Cross-machine: the address one Piano projects is the one a browser and the peer accept, or a
-// remote session's image renders blank.
 test("a projected preview address reaches the owning peer as the same hash", () => {
   const bytes = Buffer.from([255, 216, 255, 1]);
   const url = imagePreview(bytes.toString("base64"), "image/jpeg")!;

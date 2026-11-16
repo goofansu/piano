@@ -1,7 +1,4 @@
 #!/usr/bin/env node
-/** Start a Piano session, send a running one a follow-up, or read sessions' status, from a
- * terminal, over the same dispatch modules the Pi extension uses. Piano places the directory: a linked worktree is listed under its main
- * checkout's folder, and `--worktree` has Piano create a new one first. */
 import { closeSync, openSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -55,7 +52,6 @@ class CliError extends Error {
   }
 }
 
-/** A status read's sessions; a session or project Piano does not list is invalid input (2). */
 function sessionsOf(reply: StatusReply) {
   if (reply.status === "ready") return reply.sessions;
   throw new CliError(reply.status === "unlisted" ? 2 : 1, reply.detail);
@@ -82,7 +78,6 @@ function argumentsFromCommandLine() {
   }
 }
 
-/** The prompt file's text; an unreadable or blank file is invalid input. */
 function promptFrom(file: string) {
   try {
     const prompt = readFileSync(file, "utf8");
@@ -127,7 +122,6 @@ async function main() {
     const sessionId = positionals[1]!;
     const text = promptFrom(positionals[2]!);
     const { origin } = configured();
-    // The status read names the session's directory, and refuses a session Piano does not list.
     const [session] = sessionsOf(
       await readStatus({ sessionId }, nodeSocketEnvironment(configured())),
     );
@@ -178,7 +172,6 @@ async function main() {
   let output: number | undefined;
   if (outFile !== undefined) {
     try {
-      // Reserve before any network side effect, including concurrent invocations.
       output = openSync(outFile, "wx", 0o600);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "EEXIST")
@@ -205,8 +198,6 @@ async function main() {
     if (output !== undefined) writeFileSync(output, `${json}\n`);
     console.log(json);
   } finally {
-    // Once creation was attempted, even an empty file is a guard against blind retry. A refused
-    // start's file holds that result, which says nothing was started.
     if (output !== undefined) closeSync(output);
   }
 }

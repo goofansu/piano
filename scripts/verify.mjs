@@ -1,4 +1,3 @@
-// One baseline, no test-selection policy: focused checks and journeys keep their existing CLIs.
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, openSync, closeSync, writeSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -51,7 +50,6 @@ Evidence defaults to .scratch/verify/<timestamp>-<pid>; a pass covers only this 
     record.phase = "cancelling";
     saveRun(evidence, record);
     if (active?.pid) {
-      // npm spawns tsc/the test runner. Signal only this invocation's process group, not by name.
       try {
         process.kill(-active.pid, "SIGTERM");
       } catch {}
@@ -128,8 +126,6 @@ Evidence defaults to .scratch/verify/<timestamp>-<pid>; a pass covers only this 
     record.outcome = signal ? "cancelled" : "error";
     record.error = String(error.stack ?? error);
   } finally {
-    // On cancellation leave the escalation armed until it has run, even if npm exited before
-    // a descendant. There is no detached background continuation of a cancelled baseline.
     if (killTimer) {
       clearTimeout(killTimer);
       try {

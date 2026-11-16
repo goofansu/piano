@@ -1,6 +1,3 @@
-// Opt-in native evidence: PIANO_TEST_NATIVE_PREVIEW=1 node --test test/PreviewNative.test.ts
-// Needs a lingering systemd user manager or a logged-in launchd GUI domain. Never uses real
-// Piano state: each case owns a temporary workspace, owner socket, state root and unique unit.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";

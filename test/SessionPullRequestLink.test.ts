@@ -9,7 +9,6 @@ import type {
 import type { ObservationEnvironment } from "../web/src/lib/observation.ts";
 import { createSessionPullRequest } from "../web/src/lib/sessionPullRequest.ts";
 
-/** Timers that never fire on their own and a focus nobody gives, so every read here is one the test caused. */
 const environment: ObservationEnvironment = {
   setTimeout: () => undefined,
   clearTimeout: () => {},
@@ -24,7 +23,6 @@ const registered: SessionPullRequestLink = { url: URL, source: "manual" };
 const unlinked: SessionPullRequest = { link: null, pullRequest: null };
 const linked: SessionPullRequest = { link: registered, pullRequest: null };
 
-/** Piano's PR endpoint, answered by the test one request at a time. */
 function server() {
   const requests: {
     action: SessionPullRequestAction | undefined;
@@ -47,7 +45,6 @@ function server() {
   };
 }
 
-/** A caller's snapshot, like the hook's props: selection and presentation travel together. */
 function reader(options: Parameters<typeof createSessionPullRequest>[0]) {
   type Snapshot = Parameters<ReturnType<typeof createSessionPullRequest>["observe"]>;
   let snapshot: Snapshot = [
@@ -77,7 +74,6 @@ function reader(options: Parameters<typeof createSessionPullRequest>[0]) {
   };
 }
 
-/** Observes session s1 with the registry link the catalog reports for it. */
 function setup(link: SessionPullRequestLink | null | undefined, env = environment, now = Date.now) {
   const pi = server();
   const notes: { error: string[]; info: string[]; success: string[] } = {
@@ -237,7 +233,6 @@ test("opening while unlinked offers the link form; a link found when work stops 
   pr.present({ visible: false, dialog: true });
   assert.equal(pr.getState().surface, "link-form");
 
-  // The session's turn ends: the background search asks the server, which saves what it finds.
   pr.observe("w1", "s1", undefined, true);
   assert.equal(pi.requests.length, 0, "starting work searches nothing");
   pr.observe("w1", "s1", undefined, false);
@@ -247,7 +242,6 @@ test("opening while unlinked offers the link form; a link found when work stops 
   await settle();
   assert.equal(pr.getState().surface, "link-form", "the search's own answer shows nothing");
 
-  // The catalog reports the saved link; that starts reading, and the link closes the form.
   pr.observe("w1", "s1", registered, false);
   assert.equal(pi.requests.length, 2);
   pi.last().resolve(linked);
@@ -259,7 +253,6 @@ test("opening while unlinked offers the link form; a link found when work stops 
 });
 
 test("a link removed or added elsewhere closes the open dialog, with or without a read in flight", async () => {
-  // Removed elsewhere: the edit goes with the link rather than turn into the link form.
   {
     const { pi, pr, closes } = setup(registered);
     pi.last().resolve(linked);
@@ -272,7 +265,6 @@ test("a link removed or added elsewhere closes the open dialog, with or without 
     assert.equal(closes(), 1, "whoever owns the dialog learns it closed");
     assert.equal(pi.requests.length, asked, "an unlinked session is not read");
   }
-  // Added elsewhere: the link form closes on the link itself, before the read it starts lands.
   {
     const { pi, pr, closes } = setup(null);
     pr.present({ visible: true, dialog: true });
@@ -293,7 +285,6 @@ test("the dialog closes when its session can no longer be addressed, rather than
     assert.equal(pr.getState().surface, link ? "editing" : "link-form");
     const asked = pi.requests.length;
 
-    // The checkout is removed: Changes cannot open, so the session has no workspace to address.
     pr.observe(undefined, "s1", link, false);
     assert.equal(pr.getState().surface, "closed");
     assert.equal(closes(), 1, "whoever owns the dialog learns it closed");
@@ -370,7 +361,6 @@ test("opening details reuses the loaded facts without replacing a background rea
   assert.deepEqual(pr.getState().value, unavailable, "the refresh updates the open details");
 });
 
-/** A controllable clock: no real minute-long sleeps or browser focus needed. */
 function clock() {
   let time = 0;
   let hidden = false;
@@ -756,7 +746,6 @@ test("Find from branch with nothing found reports it exactly once", async () => 
   assert.deepEqual(pi.last().action, { action: "discover" });
   pi.last().resolve(unlinked);
   assert.deepEqual(await finding, { _tag: "not-found" });
-  // A later background search of the same absence stays silent.
   pr.observe("w1", "s1", undefined, true);
   pr.observe("w1", "s1", undefined, false);
   pi.last().resolve(unlinked);
@@ -881,8 +870,6 @@ test("a blank URL, or one sent while another change is in flight, sends nothing"
 
 test("a session selected mid-turn is read once; its work stopping reads it again", async () => {
   const { pi, pr } = setup(undefined);
-  // The hook used to tell the module "work started" on selection; that aborted the first read
-  // and sent a second. The module now knows a selection from an edge.
   pr.observe("w1", "s2", registered, true);
   await settle();
   assert.equal(pi.requests.length, 1, "selecting a working, linked session reads exactly once");

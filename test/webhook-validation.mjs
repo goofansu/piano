@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-// Focused UI regression, not part of the critical-path browser suite.
-// node test/webhook-validation.mjs [evidence-directory]
 import { run } from "./browser/harness.mjs";
 
 await run(

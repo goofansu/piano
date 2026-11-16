@@ -4,8 +4,6 @@ import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { localFilePath } from "./file-link.ts";
 
-/** Refuse excessive input before either parser runs. The tree budget below bounds generated
- * structure as well. Fallback is readable source, with no discovered links or image requests. */
 export function markdownWithinBudget(source: string): boolean {
   if (source.length > 256 * 1024) return false;
   let work = source.length;
@@ -34,12 +32,10 @@ function linkKind(source: string): LinkKind {
   return source.startsWith("[") ? "markdown" : source.startsWith("<") ? "autolink" : "bare";
 }
 
-/** The element properties remark-rehype gives a node (its types live in mdast-util-to-hast). */
 function hProperties(node: Node): Record<string, unknown> | undefined {
   return (node.data as { hProperties?: Record<string, unknown> } | undefined)?.hProperties;
 }
 
-/** Shared remark policy for Streamdown and discovery. No HTML is interpreted. */
 export function remarkPiano() {
   return (tree: Root, file: { value: unknown }) => {
     const source = String(file.value);
@@ -49,7 +45,6 @@ export function remarkPiano() {
     });
     walk(tree, (node) => {
       if (node.type === "html") {
-        // Keep raw markup readable, never executable.
         Object.assign(node, { type: "text" });
       }
       if (node.type === "code") {
@@ -72,8 +67,6 @@ export function remarkPiano() {
         const raw = source.slice(node.position?.start.offset, node.position?.end.offset);
         node.data = { ...node.data, hProperties: { "data-link-kind": linkKind(raw) } };
       }
-      // Each image and link's local file, decided once here from the Markdown URL, before
-      // rendering re-encodes it: the images loaded are the images shown.
       const url =
         node.type === "image" || node.type === "link"
           ? node.url
@@ -91,7 +84,6 @@ export function remarkPiano() {
   };
 }
 
-/** The rendered element property naming an image or link's local file, if it has one. */
 export const LOCAL_PATH = "data-local-path";
 
 export const markdownPlugins = [remarkGfm, remarkPiano];
@@ -99,16 +91,12 @@ const parser = unified().use(remarkParse).use(remarkGfm);
 function parse(source: string): Root {
   if (!markdownWithinBudget(source)) throw new Error("Markdown budget exceeded");
   const tree = parser.parse(source);
-  // Validate the whole tree before exposing any partial discovery.
   walk(tree, () => {});
   remarkPiano()(tree, { value: source });
   return tree;
 }
 
-/** Only local document images may be fetched, through the workspace-scoped file API. */
 export function markdownImages(source: string): string[] {
-  // Inline and reference images both require this opener. Escapes, code and references
-  // still belong to the parser; this only rejects prose that cannot contain an image.
   if (!source.includes("![")) return [];
   try {
     const tree = parse(source);

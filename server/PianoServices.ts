@@ -1,16 +1,3 @@
-/**
- * Piano's production service graph, wired once for `main.ts` and the tests alike.
- *
- * Some services must exist once per server, and the wiring here is what guarantees it:
- * `SessionHostsLive` and `SidebarViewLive` are functions, so building one a second time
- * silently makes a second instance. One SessionHosts owns every Pi child (INV-02) and also
- * provides the SessionReferences every caller shares, so all of them see one alias memory, and
- * the FolderWorktrees that both it and WorkspaceCommands create worktrees through.
- *
- * Callers supply only what lies outside Piano: the platform (child processes, files), the
- * external adapters in `PianoAdaptersLive`, and the Context references with defaults (PiCli,
- * RegistryDatabasePath, ...). Tests replace those, never the wiring.
- */
 import { Layer } from "effect";
 import { CreationAttemptsLive } from "./CreationAttempts.ts";
 import { DirectoryFactsLive } from "./DirectoryFacts.ts";
@@ -34,14 +21,9 @@ import { WorkspaceChangesLive } from "./WorkspaceChanges.ts";
 import { WorkspaceCommandsLive } from "./WorkspaceCommands.ts";
 
 export interface PianoServicesOptions extends SidebarViewOptions {
-  /** How long a quiescent session keeps its Pi child before retirement; 0 never retires one. */
   readonly idleMs: number;
 }
 
-/**
- * Workspaces and sessions: the registry, Pi, the session hosts over them, creation attempts,
- * directory facts, the sidebar view and the workspace commands. Every service in the graph is exposed.
- */
 export const PianoCoreLive = (options: PianoServicesOptions) =>
   WorkspaceCommandsLive.pipe(
     Layer.provideMerge(SidebarViewLive({ discover: options.discover })),
@@ -53,11 +35,8 @@ export const PianoCoreLive = (options: PianoServicesOptions) =>
     Layer.provideMerge(PreparedImagesLive),
   );
 
-/** The network services Piano calls; a test replaces one by providing its own. */
 export const PianoAdaptersLive = GitHubPullRequestsLive;
 
-/** Everything the router answers from: the core plus settings, setup, skills, voice input, changes,
- * pull requests, session status and provider sign-in. */
 export const PianoServicesLive = (options: PianoServicesOptions) =>
   Layer.mergeAll(
     PiSettingsLive,

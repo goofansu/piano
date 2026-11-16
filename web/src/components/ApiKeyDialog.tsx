@@ -14,11 +14,6 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { useSetupActions } from "@/lib/useSetupActions";
 
-/**
- * Enters an API key: a password field, Cancel and Save. It never loads the saved key, and keeps
- * what is typed only while it is open, never in browser storage. A refused save shows under the
- * field and the dialog stays open; a saved one closes it and announces `done`.
- */
 export function ApiKeyDialog({
   title,
   description,
@@ -28,18 +23,12 @@ export function ApiKeyDialog({
   close,
   refresh,
 }: {
-  /** Names the change and whose key it is, such as "Add OpenAI API key". */
   title: string;
-  /** The one line only words can carry: where the key is kept or what it is sent to. */
   description: string;
-  /** Saves the trimmed key; rejects with the refusal to show. */
   save: (key: string) => Promise<unknown>;
-  /** The toast after a save. */
   done: string;
-  /** Shown when a save fails without a message of its own. */
   fallback: string;
   close: () => void;
-  /** Reads the section again once a save settles either way. */
   refresh: () => void;
 }) {
   const id = useId();

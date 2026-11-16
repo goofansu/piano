@@ -1,9 +1,3 @@
-/**
- * Sending a draft with images to a remote: the images are prepared on the peer first, then one
- * input carries the reference. These hold the rules a person relies on while that upload runs:
- * moving away abandons it and gives the draft back, a reference no input uses is discarded, one
- * upload runs at a time, and the model pick is spent only by input that was sent.
- */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { PreparedImages } from "../shared/remoteImages.ts";
@@ -78,7 +72,6 @@ test("moving away while images upload discards them, gives the draft back and ke
   assert.equal(h.drafts.get(KEY).text, "", "the draft is preparing, not editable");
   h.sender.abandon();
   assert.ok(h.uploads[0]!.signal.aborted, "the upload is abandoned");
-  // The peer finishes the upload anyway: its reference must not be used or kept.
   h.uploads[0]!.resolve({ id: "late" });
   await done;
   assert.deepEqual(h.sent, [], "nothing goes to the old or new target");
@@ -104,7 +97,6 @@ for (const disposition of ["not-sent", "sent", "uncertain"] as const) {
       assert.equal(h.consumed(), 0);
       assert.equal(h.drafts.get(KEY).images.items.length, 1, "the draft comes back");
     } else {
-      // Pi may hold the input: the reference is its, never reused or resubmitted.
       assert.deepEqual(h.discarded, []);
       assert.equal(h.consumed(), 1);
     }
@@ -114,7 +106,6 @@ for (const disposition of ["not-sent", "sent", "uncertain"] as const) {
 test("a second send while images upload is ignored", async () => {
   const h = await harness();
   const first = h.send();
-  // A newer image typed in while the first one uploads: sending it now would race the first.
   h.drafts.setText(KEY, "And this one");
   await addImage(h.drafts);
   await h.send();

@@ -1,5 +1,3 @@
-// INV-01/03: the installed Pi CLI must cancel tools without consuming queued steering.
-// Local model only; no credentials or credits. Complements native dialog abort coverage.
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
@@ -18,7 +16,6 @@ test("real Pi Stop takes tool-wait steering and follow-up without consuming or r
   let requests = 0;
   const server = createServer(async (request, response) => {
     for await (const _chunk of request) {
-      /* consume scratch request */
     }
     requests++;
     response.writeHead(200, { "content-type": "text/event-stream" });
@@ -132,7 +129,6 @@ await import(${JSON.stringify(cli)});`,
         stopping = true;
         const restored = yield* session.act({ _tag: "stop" });
         yield* Deferred.await(settled);
-        // Bounded observation catches late continuation after the first idle frame.
         yield* Effect.sleep(300);
         const [snapshot] = yield* session.events.pipe(Stream.take(1), Stream.runCollect);
         assert.equal(snapshot._tag, "snapshot");

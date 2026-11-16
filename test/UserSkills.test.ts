@@ -20,10 +20,6 @@ import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
 import { UserSkills, UserSkillsEnvironment, UserSkillsLive } from "../server/UserSkills.ts";
 import { checkDraft, TEXT_MAX } from "../shared/drafts.ts";
 
-/**
- * A throwaway home: Piano's skills folder, and the folders Pi loads user skills from besides it.
- * Pi reads `~/.agents/skills` from `HOME`, so the test's home is `HOME` until it ends.
- */
 function home(t: { after: (fn: () => void) => void }) {
   const root = mkdtempSync(join(tmpdir(), "piano-skills-"));
   const previousHome = process.env.HOME;
@@ -61,7 +57,6 @@ const refusal = (result: { _tag: string; failure?: unknown }) => {
 
 test("a created skill is one Pi loads as written, and is listed with its instructions", async (t) => {
   const { directory, run } = home(t);
-  // Quotes, a colon and a newline would break a hand-written YAML scalar.
   const description = 'Writes "release notes": use when asked.\nAlso changelogs.';
   const instructions = "# Notes\n\nRead PRs.";
   for (const [name, disableModelInvocation] of [
@@ -101,7 +96,6 @@ test("a created skill is one Pi loads as written, and is listed with its instruc
   assert.match(file, /Read PRs\.\n$/);
   assert.doesNotMatch(file, /created-by/, "Piano's folder marks its skills; the file need not");
   const listed = await run((skills) => skills.list);
-  // Each skill comes with its SKILL.md exactly as saved, which View shows and copies.
   const saved = (name: string) => readFileSync(join(directory, name, "SKILL.md"), "utf8");
   assert.deepEqual(listed._tag === "Success" && listed.success, [
     {
@@ -121,19 +115,16 @@ test("a created skill is one Pi loads as written, and is listed with its instruc
 
 test("only skills in Piano's folder are listed or deleted", async (t) => {
   const { directory, agentsDirectory, run } = home(t);
-  // A skill in another folder Pi loads, even one an earlier Piano marked, is not Piano's to list.
   write(
     agentsDirectory,
     "elsewhere",
     "name: elsewhere\ndescription: Not here.\nmetadata:\n  created-by: piano",
   );
-  // A linked directory in Piano's folder is the user's repository.
   const repo = mkdtempSync(join(tmpdir(), "piano-skills-repo-"));
   t.after(() => rmSync(repo, { recursive: true, force: true }));
   write(repo, "linked", "name: linked\ndescription: Linked.");
   mkdirSync(directory, { recursive: true });
   symlinkSync(join(repo, "linked"), join(directory, "linked"));
-  // Written by hand into Piano's folder: no marker, still Piano's.
   write(directory, "by-hand", "name: by-hand\ndescription: By hand.");
   await run((skills) => skills.create({ name: "mine", description: "Mine.", instructions: "Go." }));
 
@@ -154,7 +145,6 @@ test("only skills in Piano's folder are listed or deleted", async (t) => {
 
 test("a skill whose SKILL.md names it differently from its directory is listed, updated and deleted as Pi loads it", async (t) => {
   const { directory, run } = home(t);
-  // Edited by hand (or by an agent): the directory says notes, the file says other.
   write(directory, "notes", "name: other\ndescription: Renamed.");
   assert.deepEqual(
     loadSkillsFromDir({ dir: directory, source: "user" }).skills.map((skill) => skill.name),
@@ -184,7 +174,6 @@ test("a skill whose SKILL.md names it differently from its directory is listed, 
 
 test("of two skills in Piano's folder that declare one name, only the one Pi loads is acted on", async (t) => {
   const { directory, run } = home(t);
-  // Pi reads the nested one first and drops the top-level one as a collision.
   write(join(directory, "a-group"), "x", "name: x\ndescription: Nested.");
   write(directory, "x", "name: x\ndescription: Top level.");
   assert.deepEqual(
@@ -207,7 +196,6 @@ test("a Piano skill Pi loads another of first is refused an update and can still
     skills.create({ name: "deploy", description: "Mine.", instructions: "Go." }),
   );
   const mine = readFileSync(join(directory, "deploy", "SKILL.md"), "utf8");
-  // Installed later into a folder Pi loads before Piano's: every session now runs this one.
   write(agentsDirectory, "deploy", "name: deploy\ndescription: Theirs.");
   const draft = { name: "deploy", description: "Mine.", instructions: "Changed." };
   const hidden = ["Pi loads another skill named deploy instead of this one.", "name"];
@@ -225,7 +213,6 @@ test("a Piano skill Pi loads another of first is refused an update and can still
 
 test("a name Pi loads from a folder or package its settings list is refused; one it turns off is free", async (t) => {
   const { root, directory, piDirectory, run } = home(t);
-  // Pi's settings add a folder and a package before Piano's, and turn off one of Pi's own skills.
   const listed = join(root, "listed-skills");
   write(listed, "listed", "name: listed\ndescription: From settings.");
   const pkg = join(root, "a-package");
@@ -275,7 +262,6 @@ test("a create names the field it refuses and never overwrites a skill", async (
   assert.equal(refusal(await create("ok", "D.", `${max}x`)).field, "instructions");
   assert.equal(refusal(await create("ok", "d".repeat(1025))).field, "description");
   assert.match(readFileSync(join(directory, "taken", "SKILL.md"), "utf8"), /Original\./);
-  // The limit counts what is saved: surrounding whitespace does not push a body over it.
   assert.equal((await create("at-limit", "D.", `\n${max}\n\n`))._tag, "Success");
   assert.equal(existsSync(join(directory, "ok")), false);
 });
@@ -318,7 +304,6 @@ test("an update replaces only the SKILL.md the person saw, and of two from one f
   assert.ok(matching._tag === "Success", "an update from the file on disk is written");
   assert.equal(readFileSync(path, "utf8"), matching.success.file);
 
-  // Two sessions proposed from the same file: the second no longer replaces what it showed.
   const [a, b] = await Promise.all([
     update("Three.", matching.success.file),
     update("Four.", matching.success.file),
@@ -351,7 +336,6 @@ test("a name YAML would read as a number is written and listed as the skill's na
     loadSkillsFromDir({ dir: directory, source: "user" }).skills.map((skill) => skill.name),
     ["123"],
   );
-  // A skill written before names were quoted: Pi falls back to the directory's name, and so does Piano.
   write(directory, "2024", 'name: 2024\ndescription: "D."\nmetadata:\n  created-by: piano');
   const listed = await run((skills) => skills.list);
   assert.deepEqual(listed._tag === "Success" && listed.success.map((skill) => skill.name), [
@@ -372,7 +356,6 @@ test("Pi loads the skills in Piano's folder through --skill, and only Piano's Pi
   );
   const root = mkdtempSync(join(tmpdir(), "piano-skills-pi-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  // A Pi isolated from this machine's settings, credentials and network.
   const shim = join(root, "cli.mjs");
   writeFileSync(
     shim,
@@ -416,7 +399,6 @@ test("an update replaces only a skill Piano created, and a new Pi loads the new 
       instructions: "Old.",
     }),
   );
-  // Each update replaces the file as it is on disk; a name with no Piano skill has none.
   const shown = (name: string) => {
     const path = join(directory, name, "SKILL.md");
     return existsSync(path) ? readFileSync(path, "utf8") : "";
@@ -451,7 +433,6 @@ test("an update replaces only a skill Piano created, and a new Pi loads the new 
   assert.equal(existsSync(join(directory, "missing")), false, "an update never creates");
   assert.equal(refusal(await update("notes", "  ")).field, "description");
 
-  // A real, isolated Pi started from now loads what the update wrote.
   const root = mkdtempSync(join(tmpdir(), "piano-skills-update-pi-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const shim = join(root, "cli.mjs");

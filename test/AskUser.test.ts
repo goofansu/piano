@@ -179,11 +179,9 @@ test("Piano reads a call's questions only when Pi accepts the call, with the arg
       `Piano and Pi read ${JSON.stringify(args)} alike`,
     );
   }
-  // The control: the reader can disagree with Pi, by its own rule on top of Pi's.
   const duplicate = { questions: [question, question] };
   assert.ok(piReads(duplicate), "Pi accepts duplicate IDs; the tool refuses them itself");
   assert.equal(askUserQuestions(duplicate), undefined);
-  // A blank choice is the tool's refusal too, so Piano never tracks a batch the tool will not ask.
   const blankChoice = { questions: [{ ...question, options: ["Yes", "  "] }] };
   assert.ok(piReads(blankChoice), "Pi accepts a whitespace choice; the tool refuses it itself");
   assert.equal(askUserQuestions(blankChoice), undefined);

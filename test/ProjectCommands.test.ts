@@ -191,7 +191,6 @@ test("a draft's over-limit fields and whether it saves agree, counting what is s
     );
     assert.equal(check.saved !== undefined, !over.name && !over.instructions, `${why}: saves`);
   }
-  // The count is the saved length.
   assert.equal(
     checkProjectDraft({ name: "Launch", instructions: `${"x".repeat(PROJECT_INSTRUCTIONS_MAX)}\n` })
       .instructions.length,

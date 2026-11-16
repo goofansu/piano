@@ -18,7 +18,6 @@ const failed = (result: Awaited<ReturnType<typeof node>>) => {
   return result.failure;
 };
 
-// Real children record readiness/PIDs so deadlines exercise installed signal handlers.
 async function stubborn(reason: "timeout" | "limit" | "aborted", group = false) {
   const directory = await mkdtemp(join(tmpdir(), "piano-subprocess-"));
   const ready = join(directory, "ready");
@@ -42,7 +41,6 @@ async function stubborn(reason: "timeout" | "limit" | "aborted", group = false) 
       },
       controller.signal,
     );
-    // Attach rejection handling immediately, including before readiness is observed.
     const outcome = pending.catch((error) => error);
     for (let i = 0; i < 200; i++) {
       const value = await readFile(ready, "utf8").catch(() => "");
@@ -69,9 +67,7 @@ async function stubborn(reason: "timeout" | "limit" | "aborted", group = false) 
     if (pid) {
       try {
         process.kill(group ? -pid : pid, "SIGKILL");
-      } catch {
-        /* exited */
-      }
+      } catch {}
     }
     await rm(directory, { recursive: true, force: true });
   }
@@ -120,7 +116,6 @@ for (const group of [false, true]) {
       assert.equal(result.reason, "aborted");
       assert.throws(() => process.kill(pids[0], 0), { code: "ESRCH" });
       if (group) {
-        // Linux may retain a killed orphan as a zombie until PID 1 reaps it.
         let running = true;
         for (let i = 0; i < 100 && running; i++) {
           try {
@@ -136,7 +131,6 @@ for (const group of [false, true]) {
         }
         assert.equal(running, false, "group descendant terminated");
       } else {
-        // Direct-child mode deliberately does not claim ownership of descendants.
         process.kill(pids[1], 0);
       }
     } finally {
@@ -144,9 +138,7 @@ for (const group of [false, true]) {
       for (const pid of pids) {
         try {
           process.kill(pid, "SIGKILL");
-        } catch {
-          /* exited */
-        }
+        } catch {}
       }
       await rm(directory, { recursive: true, force: true });
     }
@@ -173,9 +165,7 @@ test("terminated runner releases inherited pipe handles so its host can exit", a
     if (pid) {
       try {
         process.kill(pid, "SIGKILL");
-      } catch {
-        /* exited */
-      }
+      } catch {}
     }
     await rm(directory, { recursive: true, force: true });
   }

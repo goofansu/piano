@@ -6,8 +6,6 @@ import { JSDOM } from "jsdom";
 import type { FilePreview } from "../shared/files.ts";
 import { prepareHtmlPreview, type HtmlPreviewReadFile } from "../web/src/lib/html-preview.ts";
 
-// This checks the module's public output and acquisition contract, not browser sandbox behavior.
-// The scratch-browser journey must separately observe no requests during parsing or rendering.
 const dom = new JSDOM("<!doctype html>", { url: "https://piano.invalid/" });
 before(() => {
   Object.defineProperty(globalThis, "document", { configurable: true, value: dom.window.document });
@@ -137,7 +135,6 @@ test("relative stylesheets, media imports and CSS/HTML images share a bounded re
   `,
       async (path) => {
         requested.push(path);
-        // This fixture has no symlinks; the real file seam resolves physical paths.
         const resolved = posix.normalize(path);
         assert.ok(files[resolved], `Unexpected read: ${path}`);
         return files[resolved]!;

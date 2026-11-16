@@ -1,5 +1,3 @@
-// Extension of the remote critical path, not a separate journey. Browser device APIs and the
-// transcription response are controlled boundaries; no microphone, real key or paid call.
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -57,7 +55,6 @@ export async function voiceInputs(page, call, onEvent, switchMachine) {
     await page.until(`!!document.querySelector('[aria-label="Cancel transcription"]')`);
   };
   const requested = async () => {
-    // A busy control precedes FileReader and HTTP; wait for the actual paused request.
     for (let n = 0; !pending.length; n++) {
       assert.ok(n < 100, "transcription request reaches main-origin HTTP");
       await new Promise((resolve) => setTimeout(resolve, 20));
@@ -88,8 +85,6 @@ export async function voiceInputs(page, call, onEvent, switchMachine) {
       await page.until(`!document.querySelector('[data-sonner-toast]')`);
     }
   };
-  // Check both composer components, not the preference × machine cross-product.
-  // VoiceInputSettings.test.ts owns propagation rules; dictation below proves source wiring.
   const checkComposers = async (machine, title, enabled, step) => {
     await switchMachine(machine);
     await page.see(title);
@@ -111,7 +106,6 @@ export async function voiceInputs(page, call, onEvent, switchMachine) {
     }
   };
   try {
-    // Default-off on Local, then main Settings controls a peer's existing and new composers.
     await preferences();
     await page.until(
       `document.querySelector('[role="switch"]')?.getAttribute('aria-checked') === 'false'`,
@@ -128,7 +122,6 @@ export async function voiceInputs(page, call, onEvent, switchMachine) {
     await page.see("Voice input turned on");
     await page.click("button", "Home");
     await checkComposers("eng-2", "Second collision session", true, "on");
-    // Turning off only hides idle controls, not an already committed operation's Cancel.
     await begin();
     await stop();
     await requested();
@@ -144,7 +137,6 @@ export async function voiceInputs(page, call, onEvent, switchMachine) {
     await page.until(`!document.querySelector('[aria-label="Cancel transcription"]')`);
     assert.equal(await value(), "");
     await checkComposers("eng-2", "Second collision session", false, "off-again");
-    // Re-enable with the saved dummy key for the existing source-isolation checks below.
     await preferences();
     await page.click("switch", "Voice input");
     await page.until(
@@ -155,7 +147,6 @@ export async function voiceInputs(page, call, onEvent, switchMachine) {
     await page.see("Local collision session saved history");
     await page.ab("fill", field, "LOCAL-DRAFT");
 
-    // Local and two peers use colliding session/cwd/workspace IDs. Stop then switch keeps source.
     await switchMachine("eng-1");
     await page.see("Remote collision session");
     await page.click("button", "Remote collision session");
@@ -177,14 +168,11 @@ export async function voiceInputs(page, call, onEvent, switchMachine) {
     assert.equal(requests.at(-1).hints.session, "Remote collision session");
     assert.deepEqual(page.remote.prompts(), [], "review is required before remote Send");
 
-    // The UI cancels recording on machine navigation (module tests cannot prove this hookup).
-    // Dictation.test.ts owns late permission, stale completion, insertion and failure rules.
     const before = requests.length;
     await begin();
     await switchMachine("eng-2");
     assert.equal(await page.evaluate(`window.voiceFixture.tracks.some(t => t.live)`), false);
     await switchMachine("eng-1");
-    // Closing the machine menu precedes the target composer's connection and draft restoration.
     await page.until(
       `location.pathname === '/m/eng-1/s/same-session' && document.querySelector('${field}')?.value === 'REMOTE spoken'`,
     );
@@ -192,7 +180,6 @@ export async function voiceInputs(page, call, onEvent, switchMachine) {
     assert.equal(await value(), "REMOTE spoken");
     await clear();
 
-    // New-session keys also collide. A remote transcript survives a switch to Local's New page.
     await page.click("button", "New session");
     await page.until(`!!document.querySelector('[aria-label="First message"]')`);
     await begin();
@@ -238,7 +225,6 @@ export async function voiceInputs(page, call, onEvent, switchMachine) {
         2,
       ),
     );
-    // The parent uses this reviewed transcript for its existing image+text Send assertion.
     return async (text) => {
       await call("Fetch.enable", {
         patterns: [{ urlPattern: "*/api/voice/transcribe", requestStage: "Request" }],

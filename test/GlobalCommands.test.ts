@@ -130,7 +130,6 @@ test("on a remote machine the View options, New session and Projects stay, and n
   const groups = new Set<string>(remote.map((command) => command.group));
   for (const group of ["group-by", "sort-by", "row-details", "appearance"])
     assert.ok(groups.has(group), `${group} offered`);
-  // The View options change only this browser's presentation, wherever it is run.
   const changes = remote
     .filter((command) => command.intent.kind === "view")
     .map((command) => command.label);
@@ -142,12 +141,10 @@ test("on a remote machine the View options, New session and Projects stay, and n
     "Sort by name",
     "Show folder and branch",
   ]);
-  // Starting a session in a directory the remote registered changes nothing else there.
   assert.ok(
     remote.some((command) => command.label === "New session"),
     "New session offered",
   );
-  // The remote's projects are managed from here; its settings stay on its own Piano.
   assert.ok(
     remote.some((command) => command.label === "Projects"),
     "Projects offered",
@@ -241,7 +238,6 @@ test("on the Projects index the palette offers New project, which opens the New 
 });
 
 test("every open of a page editor is its own, so the dialog keyed by it starts fresh", () => {
-  // New webhook from the palette while editing one replaces that open without closing it first.
   const editor = pageEditor<{ name: string }>();
   const a = { name: "a" };
   const opens = [];
@@ -257,7 +253,6 @@ test("every open of a page editor is its own, so the dialog keyed by it starts f
 });
 
 test("each Settings page's header creation is a palette command that opens that page's editor", () => {
-  // As each page's header button is named (docs/quiet-ui.md#button-names); every other page offers none.
   const creation: Partial<Record<SettingsSection, { label: string; page: EditorPage }>> = {
     webhooks: { label: "New webhook", page: "webhooks" },
     mcp: { label: "Add MCP server", page: "mcp" },
@@ -265,7 +260,6 @@ test("each Settings page's header creation is a palette command that opens that 
     prompts: { label: "New prompt", page: "prompts" },
   };
   const creations = new Set(Object.values(creation).map((c) => c.label));
-  // The host's effect, and only it: running the command must reach the page's editor through it.
   const effects = new Proxy({ openPageEditor } as CommandEffects, {
     get: (target, name) => {
       if (name in target) return target[name as keyof CommandEffects];
@@ -377,7 +371,6 @@ test("a page reporting its creation unavailable disables its row until the page 
       else Reflect.deleteProperty(globalThis, key);
     }
   });
-  // As MCP reports while Pi's config is unusable (`view.problem`).
   function McpPage({ available }: { available: boolean }) {
     PAGE_EDITORS.mcp.editor.useAvailable(available);
     return null;

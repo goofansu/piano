@@ -1,31 +1,18 @@
-/**
- * The one rule a skill and a prompt created in Piano share: a name in the Agent Skills form, a
- * description and instructions, each trimmed and within its limit. The Add skill and Add prompt
- * dialogs enable Add by this check, and the server refuses by it; only whether a name is free is
- * left to the server.
- */
 import { Schema } from "effect";
 
-/** The Agent Skills name rule Pi checks: lowercase letters, digits and single hyphens between them. */
 export const NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export const NAME_MAX = 64;
-/** Why a name breaks `NAME`, as both dialogs and the server say it. */
 export const NAME_RULE =
   "Use lowercase letters, numbers and single hyphens, not at the start or end.";
 export const DESCRIPTION_MAX = 1024;
-/** As project instructions: the instructions are read whole each time Pi loads them. */
 export const TEXT_MAX = 20_000;
-/** Bounds one request's raw fields; `checkDraft` applies each field's limit to its trimmed text. */
 export const REQUEST_FIELD_MAX = 2 * TEXT_MAX;
 
-/** A name Piano can save, and so the only names a delete may reach: it keeps a path in its folder. */
 export const isName = (name: string) => name.length <= NAME_MAX && NAME.test(name);
 
-/** The editor fields a refused create can belong to; a refusal without one is about the create as a whole. */
 export const DRAFT_FIELDS = ["name", "description", "instructions"] as const;
 export type DraftField = (typeof DRAFT_FIELDS)[number];
 
-/** A create request's draft fields, as both the skill and the prompt create carry them. */
 export const draftFields = {
   name: Schema.String.check(Schema.isMaxLength(REQUEST_FIELD_MAX)),
   description: Schema.String.check(Schema.isMaxLength(REQUEST_FIELD_MAX)),
@@ -33,9 +20,6 @@ export const draftFields = {
 };
 export type Draft = Record<DraftField, string>;
 
-/** What saving a draft would do, before anyone is asked, as both kinds answer it: make a new entry
- * or replace the file of one Piano created (`previous`), and the file it would write. A draft the
- * save would refuse gets the save's refusal instead. */
 export const proposalFields = {
   change: Schema.Literals(["create", "update"]),
   name: Schema.String,
@@ -49,13 +33,9 @@ export interface FieldCheck {
   over: boolean;
 }
 
-/** What `checkDraft` decides: each field against its limit, and what creating it saves. */
 export interface DraftCheck extends Record<DraftField, FieldCheck> {
-  /** The name is filled but breaks `NAME`. */
   malformedName: boolean;
-  /** The first invalid field, in DRAFT_FIELDS order; undefined when local validation passes. */
   problem: { field: DraftField; detail: string } | undefined;
-  /** The trimmed draft when local validation passes; name availability is still server-owned. */
   saved: Draft | undefined;
 }
 

@@ -1,11 +1,3 @@
-/**
- * Refreshes session facts from Pi without overwriting newer operations, published metadata or
- * output (INV-03/05). Requests coalesce per readback kind; context reads raced by Pi output have a
- * bounded retry budget. Failures are exposed in the corresponding session-state error fields.
- *
- * Internal to PiSessions, which supplies the transport reads and operation boundaries. Results
- * and freshness checks share SessionPublication's lock with other session updates.
- */
 import { Clock, Effect, type Scope } from "effect";
 import type { SessionEvent } from "../shared/wire.ts";
 import {
@@ -21,39 +13,26 @@ import type { SessionPublication } from "./SessionPublication.ts";
 import type { SessionRecordProgress } from "./SessionRecordProgress.ts";
 
 export interface SessionReadbacksOptions {
-  /** Workers belong to the session, not to the requesting browser. */
   readonly scope: Scope.Scope;
   readonly read: <A>(readback: PiReadback<A>) => Effect.Effect<A, PiSessionError>;
-  /** Pi's live state, failing once Pi no longer holds the hosted session. */
   readonly readState: Effect.Effect<RawState, PiSessionError>;
-  /** Pi records received and processed; whether Pi's context may replace projected history. */
   readonly progress: SessionRecordProgress;
-  /** Pi's current context as the event replacing projected history; called under the lock. */
   readonly context: (messages: ReadonlyArray<RawMessage>) => SessionEvent;
   readonly publication: SessionPublication;
 }
 
-/** An operation token: a state readback owed to one is dropped once a later one starts. */
 export type ReadbackOperation = number;
 
 export interface SessionReadbacks {
-  /** Run each kind in the background, one worker per kind; requests made while it runs
-   * coalesce into one more run. Never awaits Pi. */
   readonly schedule: (...kinds: ReadonlyArray<RefreshKind>) => Effect.Effect<void>;
-  /** Run one readback now and wait for it. It never fails: a failure lands in its error field.
-   * A state readback is owed to `operation`, by default the current one. */
   readonly refresh: (kind: RefreshKind, operation?: ReadbackOperation) => Effect.Effect<void>;
-  /** Start a new operation, superseding state readbacks owed to earlier ones. */
   readonly supersede: () => ReadbackOperation;
-  /** The current operation, for work that continues it rather than starting a new one. */
   readonly operation: () => ReadbackOperation;
-  /** No scheduled worker is running; direct `refresh` calls are not counted. */
   readonly idle: () => boolean;
 }
 
 const metadataFields = ["model", "thinkingLevel", "sessionName", "sessionFile"] as const;
 
-/** Readback attempts before a context raced by Pi output becomes a projection error. */
 const contextAttempts = 3;
 
 export const makeSessionReadbacks = ({
@@ -70,14 +49,11 @@ export const makeSessionReadbacks = ({
   let contextPending = false;
   let operationVersion = 0;
   const { announced, patchState } = publication;
-  // A readback started before a published change keeps the newer model, effort, name and file.
   publication.onStateChange((previous, next) => {
     for (const field of metadataFields)
       if (next[field] !== previous[field]) factVersions[field] += 1;
   });
 
-  // Usage describes persisted context and billed cost, not partial response deltas. Output
-  // arriving during the read makes the context figure last-known, even if the read succeeds.
   const refreshStats = Effect.gen(function* () {
     const version = ++statsVersion;
     const modelVersion = factVersions.model;
@@ -112,10 +88,6 @@ export const makeSessionReadbacks = ({
     );
   });
 
-  /** Read command-controlled facts back from Pi. Do not replace session-level
-   * activity with get_state.isStreaming (which describes the low-level run).
-   * Neither a stale observation nor an old command may overwrite newer facts.
-   */
   const refreshState = Effect.fn("SessionReadbacks.refreshState")(
     function* (operation: ReadbackOperation) {
       if (operation !== operationVersion) return;
@@ -125,7 +97,6 @@ export const makeSessionReadbacks = ({
         if (operation !== operationVersion || announced()) return {};
         const observed = stateFactsOf(raw);
         const patch: Partial<Record<(typeof metadataFields)[number], string | undefined>> = {};
-        // Unrelated streaming/queue events must not discard a model observation.
         for (const field of metadataFields)
           if (versions[field] === factVersions[field]) patch[field] = observed[field];
         return { ...patch, stateRefreshError: undefined };
@@ -141,9 +112,6 @@ export const makeSessionReadbacks = ({
       ),
   );
 
-  /** Replace current context, never concatenate raw history. Active work defers to a
-   * later boundary without a projection error: the user can do nothing about it, and the
-   * boundary retries. Only snapshots raced by Pi output spend the bounded retry budget. */
   const refreshContext = Effect.fn("SessionReadbacks.refreshContext")(function* () {
     const version = ++contextVersion;
     contextPending = false;
@@ -167,8 +135,6 @@ export const makeSessionReadbacks = ({
         const open = yield* publication.transaction(() => Effect.sync(progress.messageOpen));
         if (before.isStreaming || open) return yield* defer;
         const messages = yield* read(piReadbacks.messages);
-        // Pi installs finalized agent history before awaiting message_end extension handlers.
-        // Even a drained, unchanged output watermark is not sufficient during an active run.
         const state = yield* readState;
         if (version !== contextVersion || announced()) return;
         if (state.isStreaming) return yield* defer;
@@ -204,12 +170,9 @@ export const makeSessionReadbacks = ({
         ? refreshContext()
         : Effect.suspend(() => refreshState(operation ?? operationVersion));
 
-  // At most one worker per readback kind. Never await RPC inspection from the
-  // record consumer: Pi may need a later dialog answered before replying.
   const refreshing = new Set<RefreshKind>();
   const requested = new Set<RefreshKind>();
   const schedule = Effect.fnUntraced(function* (...kinds: ReadonlyArray<RefreshKind>) {
-    // Retry an unresolved context at the next persisted boundary, not in an unbounded loop.
     const retry = contextPending && kinds.includes("stats") ? ["context" as const] : [];
     for (const kind of new Set([...kinds, ...retry])) {
       requested.add(kind);

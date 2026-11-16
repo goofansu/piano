@@ -1,7 +1,3 @@
-// Runs one critical-path journey against a scratch Piano: its own folders, registry, Pi history
-// and fake Pi (no model calls), a backend and the Vite UI on free ports, and an agent-browser session.
-// PIANO_BROWSER_PRODUCTION=1 serves the existing web/dist build from the backend instead.
-// The real registry, Pi config and ports 8000/8001 are never touched.
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -28,7 +24,6 @@ import { seedRegistry } from "../fixtures/registry.ts";
 
 const ROOT = resolve(import.meta.dirname, "../..");
 
-/** A committed Git repository in the scratch root. */
 function repository(root, name) {
   const path = join(root, name);
   const git = (...args) =>
@@ -43,9 +38,6 @@ function repository(root, name) {
   return path;
 }
 
-/** Pi history for one session, in Pi's JSONL session format. An item `{ compaction: { summary } }`
- * among the messages becomes a compaction entry that keeps the message before it, and an item
- * `{ custom: { customType, data } }` an extension's custom entry. */
 function history(sessions, { sessionId, cwd, messages }) {
   const timestamp = new Date().toISOString();
   let parentId = null;
@@ -75,7 +67,6 @@ function history(sessions, { sessionId, cwd, messages }) {
   );
 }
 
-/** One machine's state. A peer may share a throwaway checkout, never its database or Pi dirs. */
 async function fixture(root, setup) {
   const sessions = join(root, "sessions");
   for (const dir of ["sessions", "agent", "home", "config", "cache", "state", "data"])
@@ -98,12 +89,6 @@ async function fixture(root, setup) {
   return { root, sessions, database, audit, received };
 }
 
-/**
- * `setup({ root, repository, history })` returns the main machine's registry seed.
- * `options.peers = [{ id, name, setup, backendEnv? }]` adds independent headless peers, seeded
- * with the same helpers. `remote` remains the one-peer shorthand. Only main gets PIANO_PEER_CONFIG.
- * `journey(page)` drives the browser; a thrown error fails the run after capturing the page.
- */
 export async function run(name, setup, journey, options = {}) {
   const evidence = resolve(process.argv[2] ?? join(ROOT, ".scratch/browser", name));
   mkdirSync(evidence, { recursive: true });
@@ -255,8 +240,6 @@ async function runJourney(name, setup, journey, options, owned, record) {
   saveRun(evidence, record);
   const local = (owned.local = await fixture(root, setup));
   owned.check();
-  // Record npm/Worktrunk when present, but direct Node browser journeys only require Git and
-  // agent-browser. The baseline still requires Worktrunk for its real lifecycle module test.
   const missing = Object.entries(record.environment.tools).filter(
     ([tool, version]) => ["git", "agent-browser"].includes(tool) && typeof version !== "string",
   );
@@ -289,7 +272,6 @@ async function runJourney(name, setup, journey, options, owned, record) {
   const peerConfig = join(root, "peers.json");
   if (peers.length)
     writeFileSync(peerConfig, JSON.stringify({ peers: peers.map((peer) => peer.config) }));
-  // Do not inherit a live backend's socket, peers, integration paths or Worktrunk overrides.
   const inherited = Object.fromEntries(
     Object.entries(process.env).filter(([key]) => !/^(PIANO_|WORKTRUNK_)/.test(key)),
   );
@@ -407,7 +389,6 @@ async function runJourney(name, setup, journey, options, owned, record) {
             .received()
             .filter((r) => r.command === "prompt")
             .map((r) => r.text),
-        /** Stop only this fixture's recorded backend to observe a single-machine outage. */
         stop: async () => {
           if (peer.child.exitCode !== null || peer.child.signalCode !== null) return;
           const exited = new Promise((done) => peer.child.once("exit", done));
@@ -460,7 +441,6 @@ async function runJourney(name, setup, journey, options, owned, record) {
     evidence,
     peers: peerViews,
     remote: peers.length ? peerViews[peers[0].config.id] : undefined,
-    /** Restart only this harness's recorded backend; retain its isolated database and Pi history. */
     restartBackend: async ({ signal = "SIGTERM", beforeRestart = async () => {} } = {}) => {
       const previous = children[0];
       const exited =
@@ -482,19 +462,15 @@ async function runJourney(name, setup, journey, options, owned, record) {
     open: (path) => ab("open", `${web}${path}`),
     evaluate: async (js) => {
       const result = await ab("eval", js);
-      // A no-return script prints the non-JSON literal undefined.
       return result === "undefined" ? undefined : JSON.parse(result);
     },
-    /** Click the control a user would: by its role and accessible name. */
     click: (role, label) => ab("find", "role", role, "click", "--name", label, "--exact"),
-    /** Open a picker, pick one option, and wait until the picker has closed. */
     choose: async (picker, option) => {
       await ab("find", "role", "combobox", "click", "--name", picker, "--exact");
       await ab("wait", "--text", option);
       await ab("find", "role", "option", "click", "--name", option, "--exact");
       await ab("wait", "--fn", "!document.querySelector('[data-radix-popper-content-wrapper]')");
     },
-    /** Press a key; a leading `Mod+` is the platform's primary modifier, as `web/src/lib/keys.ts` reads it. */
     press: async (key) => {
       if (key.startsWith("Mod+")) {
         mod ??= JSON.parse(
@@ -507,7 +483,6 @@ async function runJourney(name, setup, journey, options, owned, record) {
     see: (text) => ab("wait", "--text", text),
     until: (js) => ab("wait", "--fn", js),
     capture: (step) => ab("screenshot", join(evidence, `${step}.png`)),
-    /** Keep a page CDP session attached for the whole observation (emulation resets on detach). */
     cdp: async (observe) => {
       const socket = new WebSocket(await ab("get", "cdp-url"));
       let id = 0;
@@ -541,7 +516,6 @@ async function runJourney(name, setup, journey, options, owned, record) {
           targetId: target.targetId,
           flatten: true,
         });
-        // Optional event observation is scoped to this page and ends when the CDP socket closes.
         const onEvent = (listener) =>
           socket.addEventListener("message", ({ data }) => {
             const event = JSON.parse(data);
@@ -552,7 +526,6 @@ async function runJourney(name, setup, journey, options, owned, record) {
         socket.close();
       }
     },
-    /** Count actual browser layouts across an interaction, without a machine-speed threshold. */
     layouts: (interaction) =>
       page.cdp(async (call) => {
         await call("Performance.enable");
@@ -564,7 +537,6 @@ async function runJourney(name, setup, journey, options, owned, record) {
         await interaction();
         return (await count()) - before;
       }),
-    /** What the fake Pis received, in order: `{ command, text?, args?, sessionId }`. */
     received: local.received,
   });
   page.prompts = () =>

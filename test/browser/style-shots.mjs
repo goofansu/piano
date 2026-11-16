@@ -1,7 +1,3 @@
-// Screenshots of the surfaces a shadcn upgrade or style change touches, for before/after comparison
-// (docs/shadcn-ui.md §Upgrade procedure). Evidence only, not a critical-path journey, so it is not
-// part of `npm run test:browser`. Run it before and after the change into two folders and compare.
-// node test/browser/style-shots.mjs <evidence-directory>
 import { run } from "./harness.mjs";
 
 const timestamp = Date.now();
@@ -131,7 +127,6 @@ await run(
       await page.ab("wait", "--fn", "!!document.querySelector('[role=menu]')");
       await page.capture(`05-session-menu-${scheme}`);
       await page.ab("press", "Escape");
-      // Changes at the header's end opens in the Surface area beside the Agent area.
       await page.click("button", "Changes");
       await page.until("!!document.querySelector('[data-slot=surface-area]:not([inert])')");
       await page.capture(`05c-changes-${scheme}`);
@@ -167,10 +162,7 @@ await run(
     await page.press("Mod+k");
     await page.ab("wait", "--fn", "!!document.querySelector('[role=dialog]')");
     await page.capture("10-mobile-palette");
-    // One area at a time on a phone: Changes takes the session's full width under its tab.
     await page.ab("type", "[cmdk-input]", "Changes");
-    // Changes also exists in the unfiltered list. Wait for this search to settle:
-    // the palette deliberately refuses selection of results from a pending query.
     await page.until(
       `document.querySelector('[cmdk-list]')?.getAttribute('aria-busy') === 'false' && [...document.querySelectorAll('[cmdk-item]')].some((i) => i.textContent.trim() === 'Changes')`,
     );

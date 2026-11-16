@@ -14,8 +14,6 @@ export {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
-/** A popover scales in from its trigger and exits on its last open face; `still` drops that for
- * one opened by a shortcut. */
 export function PopoverContent({
   className,
   onCloseAutoFocus,

@@ -4,7 +4,6 @@ import type { VoiceInputSave, VoiceInputState } from "../shared/voiceInput.ts";
 import type { ObservationEnvironment } from "../web/src/lib/observation.ts";
 import { createVoiceInputSettings } from "../web/src/lib/voiceInputSettings.ts";
 
-/** Timers that never fire and a focus the test gives, so every read here is one the test caused. */
 function browser() {
   const focus = new Set<() => void>();
   const environment: ObservationEnvironment = {
@@ -21,7 +20,6 @@ function browser() {
 
 const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 
-/** Piano's voice input endpoints, answered by the test one request at a time. */
 function server() {
   const reads: ((state: VoiceInputState) => void)[] = [];
   const saves: { change: VoiceInputSave; answer: (state: VoiceInputState) => void }[] = [];
@@ -40,11 +38,10 @@ const on: VoiceInputState = { enabled: true, hasKey: true };
 test("a save in Settings reaches every reader on the page without reading again", async () => {
   const api = server();
   const settings = createVoiceInputSettings({ ...api, environment: browser().environment });
-  // Settings and a composer both read the one shared state.
   let composerSaw: VoiceInputState | undefined;
   settings.subscribe(() => (composerSaw = settings.getState().value));
   settings.start();
-  settings.start(); // A second reader starts nothing new.
+  settings.start();
   assert.equal(api.reads.length, 1);
   api.reads[0]!(off);
   await settle();
@@ -65,7 +62,6 @@ test("a read that started before a save cannot undo it", async () => {
   settings.start();
   api.reads[0]!(on);
   await settle();
-  // Focus starts a read; turning voice input off happens while it is in flight.
   page.focus();
   assert.equal(api.reads.length, 2);
   const saved = settings.save({ enabled: false });

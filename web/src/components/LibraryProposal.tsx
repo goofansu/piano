@@ -20,15 +20,8 @@ const CodeTextDiff = lazy(() =>
   ),
 );
 
-/** Texts that differ only in a final newline have no text changes. */
 const sameLines = (a: string, b: string) => a.replace(/\n$/, "") === b.replace(/\n$/, "");
 
-/**
- * What a save tool would write, asked where `ask_user` asks: the new file as plain text, or a diff
- * against the saved one, and Create (or Save, for an update) or Cancel. The card carries no explanation; where the save
- * applies is the transcript row's fact. A proposal Piano had to redact (`dialog.concealed`) shows
- * what is hidden as hidden and offers only Cancel: confirming would write text the person never saw.
- */
 export function LibraryProposalCard({
   dialog,
   proposal,

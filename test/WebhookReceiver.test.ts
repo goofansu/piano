@@ -11,7 +11,6 @@ import {
   webhookFetch,
 } from "../server/WebhookReceiver.ts";
 
-/** The transport's own refusal, with the sentence a delivery row shows for it. */
 const refusal = (detail: string) => (error: unknown) =>
   error instanceof ReceiverRefusal && error.message === detail;
 
@@ -83,7 +82,6 @@ test("public answers reach the connector unchanged; later DNS changes fail, redi
       answers.map((address) => ({ address, family: address.includes(":") ? 6 : 4 })),
     );
   });
-  // Fake only the socket/HTTP boundary; exercise the production resolver and URL policy.
   t.mock.method(https, "request", (url: URL, options: https.RequestOptions, respond: Respond) => {
     assert.equal(url.hostname, "receiver.example", "TLS retains the original hostname");
     assert.equal(options.agent, false);

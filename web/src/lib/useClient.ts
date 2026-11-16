@@ -3,7 +3,6 @@ import type { AppState } from "../store.ts";
 import { type Client, type ClientOptions, createClient, type Notify } from "./client.ts";
 import { openConnection } from "./ws.ts";
 
-/** One client for the page, connected while mounted; components read its state and call it directly. */
 export function useClient(
   initial: () => AppState,
   notify: Notify,
@@ -22,10 +21,6 @@ export function useClient(
         listener();
       };
       const unsubscribe = client.subscribe((update) => {
-        // useSyncExternalStore renders synchronously. Painting every wire frame
-        // can starve acknowledgements and overflow an otherwise healthy socket.
-        // Only paints are coalesced: projection, notices and protocol work stay
-        // synchronous, even in a background tab where animation frames pause.
         if (update === "immediate") flush();
         else if (frame === undefined) frame = requestAnimationFrame(flush);
       });

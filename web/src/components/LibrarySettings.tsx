@@ -31,10 +31,7 @@ import { settingsLoadView } from "@/lib/settingsLoadView";
 import { useObservation } from "@/lib/useObservation";
 import { useSetupActions } from "@/lib/useSetupActions";
 
-/** Settings › Skills or Settings › Prompts: the entries created in Piano, kept in Piano's own
- * folder; Pi's own folders are not listed. */
 export function LibrarySettings({ kind }: { kind: LibraryKind }) {
-  // Keyed by kind, so moving between the two pages starts the other page afresh.
   return kind === "skill" ? (
     <LibraryPage key={kind} {...skillPage} />
   ) : (
@@ -42,16 +39,12 @@ export function LibrarySettings({ kind }: { kind: LibraryKind }) {
   );
 }
 
-/** What one kind's page does that the other does not; the words come from `LIBRARY_KINDS`. */
 interface LibraryPageKind<Entry extends { name: string; description: string; file: string }> {
   kind: LibraryKind;
-  /** The empty list's icon. */
   icon: LucideIcon;
   list: (signal: AbortSignal) => Promise<ReadonlyArray<Entry>>;
   remove: (name: string) => Promise<unknown>;
-  /** The creation dialog, opened by the header's New command or the palette's. */
   NewDialog: (props: { close: () => void; refresh: () => void }) => ReactNode;
-  /** Marks after an entry's name, such as a skill's Model invocation off. */
   badge?: (entry: Entry) => ReactNode;
 }
 
@@ -92,7 +85,6 @@ function LibraryPage<Entry extends { name: string; description: string; file: st
   const { Noun } = LIBRARY_KINDS[kind];
   const plural = `${kind}s` as const;
   const observed = useObservation(plural, list);
-  // New comes from `pageCommands` (the header and the palette); both open this editor.
   const editor = editors[kind];
   const editing = editor.useEditing();
   const [viewing, setViewing] = useState<Entry>();
@@ -172,7 +164,6 @@ function LibraryPage<Entry extends { name: string; description: string; file: st
   );
 }
 
-/** One entry: its name, any badge and its description; the row opens View, its menu holds Delete. */
 function LibraryRow({
   Noun,
   name,
@@ -209,7 +200,6 @@ function LibraryRow({
   );
 }
 
-/** New skill: the shared draft, and whether only `/skill:<name>` loads it. */
 function SkillEditor({ close, refresh }: { close: () => void; refresh: () => void }) {
   const [disableModelInvocation, setDisableModelInvocation] = useState(false);
   return (

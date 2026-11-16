@@ -11,19 +11,16 @@ const Config = Schema.Struct({
   origin: Schema.String,
   vmTokenFile: Schema.optional(Schema.String),
 });
-/** Startup-owned credential, not a browser header or an environment variable passed to Pi. */
 export type PeerConfig = Omit<typeof Config.Type, "vmTokenFile"> & {
   readonly vmToken?: Redacted.Redacted<string>;
 };
 
 const ConfigFile = Schema.Union([Config, Schema.Struct({ peers: Schema.Array(Config) })]);
 
-/** Explicit startup destinations, not discovery or browser-supplied endpoints. */
 export const ConfiguredPeers = Context.Reference<readonly PeerConfig[]>("piano/ConfiguredPeers", {
   defaultValue: () => [],
 });
 
-/** Bound reads on the opened descriptor; a token must be a private, owned, non-symlink file. */
 function readConfigFile(file: string, secret = false): string {
   if (!isAbsolute(file)) throw new Error();
   const fd = openSync(
@@ -49,7 +46,6 @@ function readConfigFile(file: string, secret = false): string {
   }
 }
 
-/** Called before startup side effects. Invalid configuration never degrades to Local. */
 export function loadPeerConfigs(
   file: string | undefined,
   { allowHttpLoopbackForTests = false } = {},
@@ -80,7 +76,6 @@ export function loadPeerConfigs(
   } catch {
     throw invalid();
   }
-  // Validate and load every entry before startup: a bad peer cannot leave a partial configuration.
   return entries.map((configured) => {
     try {
       if (
@@ -108,15 +103,12 @@ export function loadPeerConfigs(
       )
         throw invalid();
     } catch {
-      // Neither file contents, endpoint credentials nor filesystem errors reach diagnostics.
       throw invalid();
     }
     const { vmTokenFile, ...peer } = configured;
     if (vmTokenFile === undefined) return peer;
     try {
       const endpoint = new URL(peer.endpoint);
-      // VM credentials must not accidentally go to an integration, third party or cleartext host.
-      // The explicit loopback exception is only for fixtures with dummy credentials.
       if (
         !(
           endpoint.protocol === "https:" &&
@@ -126,7 +118,6 @@ export function loadPeerConfigs(
       )
         throw new Error();
       const token = readConfigFile(vmTokenFile, true).trim();
-      // Opaque Bearer credential; exe.dev, not Piano, validates its VM scope and expiry.
       if (!/^[A-Za-z0-9._~+/-]+=*$/.test(token)) throw new Error();
       return { ...peer, vmToken: Redacted.make(token) };
     } catch {

@@ -1,7 +1,3 @@
-/**
- * Piano: start or continue Pi sessions across folders and worktrees.
- * Every running session is one `pi --mode rpc` child (see PiSessions).
- */
 import { createServer } from "node:http";
 import type { Duplex } from "node:stream";
 import { fileURLToPath } from "node:url";
@@ -30,12 +26,10 @@ const HOST = process.env.HOST ?? "127.0.0.1";
 const listener = { host: HOST, port: PORT };
 const origins = configuredOrigins(PORT, process.env.PIANO_ALLOWED_ORIGINS);
 const peers = loadPeerConfigs(process.env.PIANO_PEER_CONFIG, {
-  // A dedicated switch: a shell or service manager exporting NODE_ENV=test must not admit cleartext.
   allowHttpLoopbackForTests: process.env.PIANO_TEST_HTTP_LOOPBACK_PEERS === "1",
 });
 const IDLE_MS = Number(process.env.PIANO_IDLE_MINUTES ?? 30) * 60_000;
 const WEB_DIST = fileURLToPath(new URL("../web/dist", import.meta.url));
-// Every Pi child loads Piano's extensions, prompts and skills and is told how to reach this instance.
 const endpoint = sessionEndpoint(listener, origins);
 ensurePianoFolders();
 const Launch = Layer.succeed(PiCli, {
@@ -45,10 +39,6 @@ const Launch = Layer.succeed(PiCli, {
   ...(endpoint ? { env: sessionEnvironment(endpoint) } : {}),
 });
 
-// Closing the HTTP server waits for its connections, and browsers hold WebSockets open
-// indefinitely. The platform starts that close the moment a signal arrives, before any
-// finalizer runs, so the sockets are torn down on the signal itself; otherwise Ctrl-C
-// waits for the whole grace timeout.
 const server = createServer();
 const upgraded = new Set<Duplex>();
 server.on("upgrade", (_req, socket) => {
@@ -61,7 +51,6 @@ const drain = () => {
 };
 process.once("SIGINT", drain);
 process.once("SIGTERM", drain);
-// ws bounds the complete inflated message while assembling fragments, before JSON parsing.
 const Infra = NodeHttpServer.layer(() => server, {
   port: PORT,
   host: HOST,
@@ -69,8 +58,6 @@ const Infra = NodeHttpServer.layer(() => server, {
   websocket: {
     maxPayload: inboundLimits.frameBytes,
     perMessageDeflate: {
-      // Independent messages avoid retaining a cross-message compression dictionary.
-      // ws applies the threshold only with no context takeover: leave token/control frames alone.
       serverNoContextTakeover: true,
       clientNoContextTakeover: true,
       threshold: 1024,
@@ -80,8 +67,6 @@ const Infra = NodeHttpServer.layer(() => server, {
 });
 const Drain = Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(drain)));
 
-// provideMerge, not provide: the HTTP handlers that open sessions read PiCli from their own
-// context, so the launch configuration has to leave this layer as well as enter it.
 const Services = PianoServicesLive({ idleMs: IDLE_MS }).pipe(
   Layer.provideMerge(Launch),
   Layer.provide(PianoAdaptersLive),
@@ -96,7 +81,6 @@ const Server = HttpRouter.serve(Routes, { disableLogger: true, disableListenLog:
     Layer.mergeAll(
       Layer.succeed(AllowedOrigins, origins),
       Layer.succeed(ConfiguredPeers, peers),
-      // Webhooks link to sessions by the same rule the session endpoint hands Pi.
       Layer.succeed(SessionLinkOrigin, sessionLinkOrigin(origins, listener)),
     ),
   ),

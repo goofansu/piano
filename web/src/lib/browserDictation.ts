@@ -19,7 +19,6 @@ const base64 = (blob: Blob, signal: AbortSignal) =>
     reader.readAsDataURL(blob);
   });
 
-/** One microphone per page. Transcription always uses main, never the selected peer's APIs. */
 export const dictation = createDictation({
   supported: () => !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== "undefined",
   microphone: () => navigator.mediaDevices.getUserMedia({ audio: true }),
@@ -75,7 +74,6 @@ export const dictation = createDictation({
   nextFrame: (run) => requestAnimationFrame(run),
 });
 
-/** Hidden/locked pages discard live recordings; committed transcripts survive ordinary switches. */
 export function observeDictationPage() {
   const hidden = () => {
     if (document.hidden) dictation.cancelRecording();

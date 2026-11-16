@@ -27,7 +27,6 @@ export const ImageSessionContext = createContext<
 >(undefined);
 import { wheelSideways } from "@/lib/wheelSideways";
 
-/** Reads a file as base64 with the browser's native encoder. */
 const encode = (file: File) =>
   new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -35,8 +34,6 @@ const encode = (file: File) =>
     reader.onerror = () => reject(new Error(`Could not read ${file.name}. Try again.`));
     reader.readAsDataURL(file);
   });
-/** A draft's images (`null` while no draft is addressed) with the moves these controls offer, in
- * the store of the machine that owns the draft; messageDraft owns them and their policy. */
 export function attachmentDraft(key: DraftKey | null, images: ImageDraft, store: Drafts) {
   return {
     ...images,
@@ -46,7 +43,6 @@ export function attachmentDraft(key: DraftKey | null, images: ImageDraft, store:
 }
 export type AttachmentDraft = ReturnType<typeof attachmentDraft>;
 
-/** Native file input + shadcn controls; same validation for picker, drop and paste. */
 export function AttachButton({ draft, disabled }: { draft: AttachmentDraft; disabled: boolean }) {
   const input = useRef<HTMLInputElement>(null);
   const id = useId();
@@ -98,11 +94,7 @@ export function AttachmentDraftView({
           ref={wheelSideways}
         >
           {draft.items.map((a, i) => (
-            /* Index keys: drafts may repeat a file name and only append or clear. */ <Attachment
-              key={`${a.name}-${i}`}
-              data-motion="enter"
-              orientation="vertical"
-            >
+            <Attachment key={`${a.name}-${i}`} data-motion="enter" orientation="vertical">
               <AttachmentMedia variant="image">
                 <img src={`data:${a.mimeType};base64,${a.data}`} alt={a.name} />
               </AttachmentMedia>
@@ -143,7 +135,6 @@ export function AttachmentDraftView({
     </>
   );
 }
-/** The drop target lights up while files hover over it (styled by `.composer-card[data-dragging]`). */
 export function attachmentEvents(draft: AttachmentDraft, disabled: boolean) {
   const settle = (e: React.DragEvent<HTMLElement>) => {
     delete e.currentTarget.dataset.dragging;
@@ -203,20 +194,19 @@ function ImagePreview({ url }: { url: string }) {
     </Attachment>
   );
 }
-/** The group clips overflow, so inline padding (offset by the margin) keeps the first tile's focus ring visible. */
 export function MessageAttachments({
   items,
   draft = false,
 }: {
   items: RenderMsg["attachments"];
-  /** Browser-created first input, never a peer's transcript. */ draft?: boolean;
+  draft?: boolean;
 }) {
   const machineId = useMachineId();
   const target = useContext(ImageSessionContext);
   return items?.length ? (
     <AttachmentGroup className="scroll-fade-none -mx-1 mt-2 px-1" ref={wheelSideways}>
       {items.map((a, i) => (
-        /* Index keys: a message's attachments are fixed and may repeat a URL. */ <ImagePreview
+        <ImagePreview
           key={`${a.url}-${i}`}
           url={draft ? a.url : remoteImageUrl(machineId, a.url, target)}
         />

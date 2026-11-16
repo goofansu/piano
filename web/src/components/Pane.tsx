@@ -1,9 +1,3 @@
-/**
- * The main pane's chrome, shared by every page in it (a session, the New page, the Projects index,
- * a project's home, Settings): the header row, the scrolling page body, and the page shown when
- * the address names nothing. Each carries the Show sidebar control, so no page can be left without
- * a way back to the sidebar once it is collapsed or below the breakpoint.
- */
 import { cn } from "cn";
 import { PaneMachineSwitcher } from "@/components/MachineSwitcher";
 import { ShowSidebarButton } from "@/components/ShowSidebarButton";
@@ -16,16 +10,9 @@ import {
 } from "@/components/ui/empty";
 import { useSidebarLayoutState } from "@/lib/useSidebarLayout";
 
-/** The one header row, shared by every pane and the sidebar (`LayoutHeader`). */
 export const paneHeaderRow =
   "flex h-12 shrink-0 items-center gap-3 border-b border-line px-(--gutter) py-0";
 
-/**
- * A header's leading cluster: the sidebar toggle, its glyph on the gutter, then the machine picker
- * beside it. What follows the toggle sits 4px from its target, for every pointer: the picker by
- * this gap; without one, a pane's title, by closing the header row's wider gap. Set here alone, so
- * the toggle and the picker stand still between the sidebar, a session and the New page.
- */
 export function HeaderLead({
   toggle,
   children,
@@ -48,7 +35,6 @@ export function HeaderLead({
   );
 }
 
-/** The pane's leading cluster, gone with both its controls while the sidebar shows them. */
 function PaneLead({
   className,
   showMachineSwitcher = true,
@@ -64,11 +50,6 @@ function PaneLead({
   );
 }
 
-/**
- * The pane's header: Show sidebar, the title block, then the controls at the end. Every pane's
- * header shares this height and edge. The title block takes the free width itself (`flex-1`);
- * a header whose controls are laid out with its title passes them among `children` instead.
- */
 export function PaneHeader({
   children,
   actions,
@@ -76,11 +57,9 @@ export function PaneHeader({
 }: {
   children: React.ReactNode;
   actions?: React.ReactNode;
-  /** Local-only pages such as Settings do not offer machine switching. */
   showMachineSwitcher?: boolean;
 }) {
   return (
-    // No shadcn component is a page header; this row is Piano's own.
     <header className={paneHeaderRow}>
       <PaneLead showMachineSwitcher={showMachineSwitcher} />
       {children}
@@ -89,12 +68,10 @@ export function PaneHeader({
   );
 }
 
-/** A title with a line of context beneath it, as a header's title block. */
 export function PaneHeading({ children }: { children: React.ReactNode }) {
   return <div className="flex min-w-0 flex-1 flex-col gap-1">{children}</div>;
 }
 
-/** The page beneath a header: a scrolling column that clears the home indicator. */
 export function PaneBody({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-(--gutter) py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] md:py-8">
@@ -103,10 +80,8 @@ export function PaneBody({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Show sidebar for a page without a header, where the header's control would be. */
 export function PaneShowSidebar() {
   return (
-    // The same header geometry, without a visible rule or a row that blocks page content.
     <div
       className={cn(
         paneHeaderRow,
@@ -118,7 +93,6 @@ export function PaneShowSidebar() {
   );
 }
 
-/** The page for an address that names nothing Piano knows: what is missing, one line, and a way on. */
 export function PaneNotFound({
   title,
   description,

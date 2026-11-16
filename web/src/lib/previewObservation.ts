@@ -1,9 +1,3 @@
-/**
- * Re-observes the selected session's own app on attachment, focus and explicit refresh, never by
- * polling or launching anything. Details are disposable projections, not
- * another authority for app lifetime. Nothing here depends on React.
- */
-// Relative, not @shared: module tests load this file directly in Node.
 import type { ClientCommand, ServerMessage, SessionPreview } from "../../../shared/wire.ts";
 import { type AppState, isSession } from "../store.ts";
 import { browserEnvironment, type ObservationEnvironment } from "./observation.ts";
@@ -16,7 +10,6 @@ import {
 } from "./sessionPreview.ts";
 import type { SendDisposition } from "./ws.ts";
 
-/** The last details answer for one session's app. */
 export interface PreviewDetails {
   cwd: string;
   sessionId: string;
@@ -26,20 +19,11 @@ export interface PreviewDetails {
 }
 
 export interface PreviewObservationState {
-  /** A re-observation of the session on screen is in flight. */
   refreshing: boolean;
   details: PreviewDetails | null;
-  /** The app whose last read ended unanswered, so its status is unknown until a read answers. */
   unconfirmed: string | null;
 }
 
-/**
- * The selected session's app as this page sees it, which the session rail, Preview, Details and
- * palette all show. The store's app, unless this page cannot vouch for its status: without an
- * attachment (`sessionReady`), or after its last status read went unanswered (`unconfirmed`), it
- * is unknown, without its link, until a read answers. Neither says anything about the
- * server-owned app's lifetime: it is not stopped.
- */
 export function seenPreview(
   page: AppState,
   observed: Pick<PreviewObservationState, "unconfirmed">,
@@ -50,10 +34,6 @@ export function seenPreview(
   return { ...preview, state: "unknown", ready: false, warming: false, url: null, detail: "" };
 }
 
-/**
- * The app the user chose to inspect, as `seenPreview` shows it, while `claim` still holds: none
- * once a new attachment, a restarted Pi or a replaced app ends the claim (`previewClaimHolds`).
- */
 export function claimedPreview(
   page: AppState,
   observed: Pick<PreviewObservationState, "unconfirmed">,
@@ -62,14 +42,9 @@ export function claimedPreview(
   return claim && previewClaimHolds(page, claim) ? seenPreview(page, observed) : undefined;
 }
 
-/** Whether a record was taken for the session the page shows now: same checkout, same session. */
 const ofSession = (page: AppState, record: { cwd: string; sessionId: string }) =>
   record.cwd === page.session?.cwd && record.sessionId === page.session?.sessionId;
 
-/**
- * The details answer for the app `seenPreview` shows, or undefined when the last answer belongs to
- * another session, checkout or app instance, or there is no app to inspect.
- */
 export function seenDetails(
   page: AppState,
   observed: Pick<PreviewObservationState, "details" | "unconfirmed">,
@@ -81,7 +56,6 @@ export function seenDetails(
     : undefined;
 }
 
-/** The client to follow; the page's `Client` is one. */
 export interface PreviewObservationSource {
   getState: () => AppState;
   subscribe: (listener: () => void) => () => void;
@@ -94,13 +68,10 @@ export type PreviewNotify = (message: string, level: "success" | "info") => void
 export interface PreviewObservation {
   getState: () => PreviewObservationState;
   subscribe: (listener: () => void) => () => void;
-  /** Re-observe the selected session's app now, sharing any outstanding read. */
   refresh: () => void;
-  /** Follows `source`; returns the stop function. */
   follow: (source: PreviewObservationSource, notify: PreviewNotify) => () => void;
 }
 
-/** Returning to the page re-observes at most this often. */
 const FOCUS_MS = 10_000;
 const empty = (): PreviewObservationState => ({
   refreshing: false,
@@ -180,7 +151,6 @@ export function createPreviewObservation({
       const read = () => {
         reconcile();
         if (!attachment || !instanceId || pending) return;
-        // Claim before sending: send may synchronously disconnect or deliver its answer.
         const request = newRequestId();
         pending = request;
         set({ ...state, refreshing: true });
@@ -203,8 +173,6 @@ export function createPreviewObservation({
         if (m._tag === "preview_unobserved") {
           reconcile();
           const page = followed.getState();
-          // Only this attachment's outstanding read: an unrelated error or a late refusal of an
-          // earlier read leaves it pending.
           if (
             !attachment ||
             !pending ||
@@ -233,8 +201,6 @@ export function createPreviewObservation({
         reconcile();
         const onScreen = attachment !== null && isSession(followed.getState().session, m);
         if (m.result._tag === "preview_observed") {
-          // Both the exact app and the outstanding read must match: a same-instance answer
-          // from an earlier attachment must not settle this attachment's newer read.
           if (
             !onScreen ||
             !pending ||

@@ -20,7 +20,6 @@ import { type LibraryResult, storedLibraryResult } from "../../../shared/library
 import { abbrevHome, DETACHED_HEAD, stripAnsi, toolArgsText } from "./format.ts";
 import { type MessageError, messageError } from "./messageError.ts";
 
-/** DOM id of a message's article, so a jump can find it without a shared ref. */
 export const messageAnchorId = (id: string) => `msg-${id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
 
 export type JumpEntry =
@@ -30,121 +29,79 @@ export type JumpEntry =
 
 type ToolCall = NonNullable<RenderMsg["toolCalls"]>[number];
 
-/** What became of a tool call: still running, settled with or without a result, or not heard from yet. */
 export type ToolOutcome = "running" | "failed" | "incomplete" | "done" | "pending";
 
 export type Badge = "destructive" | "secondary" | "success" | "warning";
 
-/** A tool call folded together with the result it produced and the calls it made. */
 export interface ToolRow {
   call: ToolCall;
   result: RenderMsg | undefined;
   outcome: ToolOutcome;
-  /** The result's text, else the latest execution preview. */
   output?: string;
-  /** Calls made inside this one (codemode): recorded with its result, then any still streaming in. */
   nested: NestedView;
-  /** What the call did, in the tense its outcome calls for ("Running", "Read", "Failed"). */
   verb: string;
-  /** False for a tool without its own verb, whose name then follows the generic one. */
   knownTool: boolean;
-  /** The command, path or pattern the call acted on. */
   summary: string;
-  /** Set when the call started or waited on Piano sessions: it renders one row per session. */
   dispatch?: DispatchFacts[];
-  /** Completed ask_user results, paired with the original questions in Pi's history. */
   answers?: QuestionAnswers;
-  /** A finished save of a skill or a prompt (`piano_save_skill`, `piano_save_prompt`). */
   library?: LibraryResult;
 }
 
 export type QuestionAnswers = AskUserOutcome;
 
-/** One call a script made, as its line in the parent's row reads. */
 export interface NestedCall {
   call: ToolExecution;
   outcome: ToolOutcome;
-  /** Input retention detail, shown only inside this call’s disclosure. */
   inputNote?: string;
-  /** The command, path or pattern it acted on. */
   summary: string;
 }
 
-/** What a tool row shows of the calls made inside it. */
 export interface NestedView {
-  /** Every call, in call order. */
   calls: NestedCall[];
-  /** In call order: those that stay in view while the rest are folded away. */
   folded: NestedCall[];
-  /** The fold line's words, to show every call and to fold back; absent when nothing folds. */
   fold?: { showAll: string; showFewer: string };
-  /** Failed calls among all of them, shown or folded. */
   failed: number;
-  /** While the parent runs: its newest running call, else its newest call. */
   latest?: NestedCall;
-  /** False when Pi's saved record lost arguments, calls, or terminal statuses. */
   complete: boolean;
   warning?: string;
 }
 
-/** One session a dispatch tool started or waited on, as the parent observed it. */
 export interface DispatchFacts {
-  /** Null until Piano names the session, and when it was never created. */
   sessionId: string | null;
-  /** The brief's first line: what the session was asked to do. */
   title: string;
-  /** The branch of the worktree the session works in, when the parent knows it; the detached
-   * label once a status read finds the checkout on no branch. */
   branch?: string;
-  /** The parent's observation, never the child's current state. */
   status: string;
   badge: Badge;
-  /** The call's arguments as `key: value` lines, as other tool calls show them. Start rows only. */
   params?: string;
-  /** The session's answer, as a wait observed it. */
   answer?: string;
-  /** Why the observation is limited, in the tool's own words. */
   detail?: string;
 }
 
-/**
- * One rendered transcript row. `jump` is the row's Jump to label: a row is a destination
- * exactly when it carries one, so the jump list and the transcript cannot disagree.
- */
 export type TranscriptRow =
   | { kind: "user"; key: string; msg: RenderMsg; text: string; jump?: string }
   | {
       kind: "reply";
       key: string;
       msg: RenderMsg;
-      /** Visible prose; empty when messages-only hides an intermediate reply. */
       text: string;
       tools: ToolRow[];
       error?: MessageError;
       streaming: boolean;
-      /** Set on a reply that ended a turn: it is offered for copying and listed in Jump to. */
       jump?: string;
     }
   | { kind: "context"; key: string; msg: RenderMsg }
-  /** A result whose call never reached us. */
   | { kind: "orphan"; key: string; msg: RenderMsg; tool: ToolRow };
 
 export interface TranscriptOptions {
-  /** The message Pi is still writing; never a Jump to destination. */
   pending?: RenderMsg | null;
   tools?: Readonly<Record<string, ToolExecution>>;
-  /** The current turn has not settled, including gaps between assistant messages. */
   working?: boolean;
-  /** False shows only Jump to destinations and errors, without changing authoritative history. */
   showTools?: boolean;
 }
 
-/** How a context row reads: Pi's summaries are Markdown it wrote; shell output and extension
- * context are shown as they came. The label is the server's wire vocabulary for the row. */
 export interface ContextFacts {
   kind: "compaction" | "branch" | "shell" | "extension";
   title: string;
-  /** The shell command, beside the title. */
   note?: string;
   markdown: boolean;
 }
@@ -157,7 +114,6 @@ export function contextFacts(label: string | undefined): ContextFacts {
   return { kind: "extension", title: label || "Extension context", markdown: false };
 }
 
-/** One line of a message, with markdown prefixes and extra whitespace folded away. */
 function messageLabel(text: string, max = 80): string {
   const line = text
     .replace(/\s+/g, " ")
@@ -187,13 +143,11 @@ const parsed = (text: string | undefined) => {
   try {
     return recordOf(JSON.parse(text));
   } catch {
-    // Partial arguments while streaming, or a failure the tool reported as text.
     return undefined;
   }
 };
 const stringOf = (value: unknown) => (typeof value === "string" ? value : undefined);
 
-/** Only a matching, complete result replaces raw tool output. Damaged/foreign records stay inspectable. */
 function questionAnswersOf(
   call: ToolCall,
   output: string | undefined,
@@ -202,7 +156,6 @@ function questionAnswersOf(
   return askUserOutcome(parsed(call.args), parsed(output));
 }
 
-/** What became of a dispatch's first prompt, in the words the badge shows. */
 const SUBMISSION: Record<SessionSubmission, [status: string, badge: Badge]> = {
   started: ["Started", "secondary"],
   queued: ["Queued", "secondary"],
@@ -212,7 +165,6 @@ const SUBMISSION: Record<SessionSubmission, [status: string, badge: Badge]> = {
   not_sent: ["Not sent", "warning"],
   uncertain: ["Uncertain", "warning"],
 };
-/** What a wait observed. Finished is settlement, which does not say the task succeeded. */
 const OBSERVED: Record<WaitStatus, [status: string, badge: Badge]> = {
   running: ["Running", "secondary"],
   settled: ["Finished", "secondary"],
@@ -222,7 +174,6 @@ const OBSERVED: Record<WaitStatus, [status: string, badge: Badge]> = {
   unknown: ["Unknown", "warning"],
 };
 
-/** What a status read reported. Finished is settlement, which does not say the task succeeded. */
 const DISPOSITION: Record<Disposition, [status: string, badge: Badge]> = {
   running: ["Running", "secondary"],
   needs_input: ["Needs input", "warning"],
@@ -231,12 +182,6 @@ const DISPOSITION: Record<Disposition, [status: string, badge: Badge]> = {
   unknown: ["Unknown", "warning"],
 };
 
-/**
- * A dispatch tool's JSON as a saved session gives it back: the shared shape, but any field may be
- * missing, so an older or damaged record renders what it can. Each reader keeps a field only when
- * it has the right kind, and spells its name through the shared type, so a renamed field fails
- * the type check here instead of emptying the row.
- */
 type Recovered<T> = {
   readonly [K in keyof T]?: NonNullable<T[K]> extends ReadonlyArray<infer E>
     ? Recovered<E>[]
@@ -246,7 +191,6 @@ type Recovered<T> = {
 };
 const oneOf = <T extends string>(names: Record<T, unknown>, value: unknown): T | undefined =>
   typeof value === "string" && Object.hasOwn(names, value) ? (value as T) : undefined;
-/** Sessions saved before the start and wait tools said `needs_input` carry its earlier name. */
 const renamed = (value: unknown) => (value === "waiting_for_input" ? "needs_input" : value);
 const creationOf = (value: unknown): SessionCreation | undefined =>
   value === "created" || value === "refused" || value === "uncertain" ? value : undefined;
@@ -262,7 +206,6 @@ const waitArgumentsOf = (args: string | undefined): Recovered<WaitArguments> | u
   const a = parsed(args);
   return a && { sessions: Array.isArray(a.sessions) ? a.sessions.map(handleOf) : [] };
 };
-/** Undefined when the output is not the tool's JSON (a refused brief). */
 const startResultOf = (text: string | undefined): Recovered<StartToolResult> | undefined => {
   const r = parsed(text);
   return (
@@ -275,12 +218,10 @@ const startResultOf = (text: string | undefined): Recovered<StartToolResult> | u
     }
   );
 };
-/** A status's Git view: absent outside a checkout, and named as Changes names a detached one. */
 const changesOf = (value: unknown) => {
   const changes = recordOf(value);
   return changes && { branch: changes.branch === null ? DETACHED_HEAD : stringOf(changes.branch) };
 };
-/** Undefined when the output is not the tool's JSON (an unknown session). */
 const statusResultOf = (text: string | undefined): Recovered<SessionStatus> | undefined => {
   const r = parsed(text);
   return (
@@ -293,7 +234,6 @@ const statusResultOf = (text: string | undefined): Recovered<SessionStatus> | un
     }
   );
 };
-/** Undefined when the output is not the tool's JSON. */
 const waitResultOf = (text: string | undefined): Recovered<WaitToolResult> | undefined => {
   const r = parsed(text);
   return (
@@ -313,13 +253,11 @@ const waitResultOf = (text: string | undefined): Recovered<WaitToolResult> | und
   );
 };
 
-/** What this transcript dispatched to a session: its brief, and the branch of its new worktree. */
 interface Dispatched {
   readonly brief: string;
   readonly branch?: string;
 }
 
-/** Every session this transcript dispatched, so a wait or a status can name what it reads. */
 function dispatchBriefs(messages: ReadonlyArray<RenderMsg>): Map<string, Dispatched> {
   const briefs = new Map<string, Dispatched>();
   const calls = new Map<string, string>();
@@ -337,8 +275,6 @@ function dispatchBriefs(messages: ReadonlyArray<RenderMsg>): Map<string, Dispatc
   return briefs;
 }
 
-/** The sessions a dispatch call started or waited on; undefined for any other call, or a result
- * that is not the tool's JSON (a refused brief), which then shows as an ordinary tool call. */
 function dispatchFacts(
   call: ToolCall,
   output: string | undefined,
@@ -429,9 +365,6 @@ function dispatchFacts(
   });
 }
 
-/** One line that says what a tool call did: the command, the path, or the pattern. A one-line
- * command is its own description. A multi-line command (a heredoc script, a `&&` chain) shows
- * how it starts and how many lines follow; those wait in the row's details. */
 function summarize(args: string): string {
   try {
     const a = JSON.parse(args) as Record<string, unknown>;
@@ -443,13 +376,10 @@ function summarize(args: string): string {
       const more = lines.length - 1;
       return more > 0 ? `${head} (+${more} ${more === 1 ? "line" : "lines"})` : head;
     }
-  } catch {
-    /* partial JSON while streaming */
-  }
+  } catch {}
   return "";
 }
 
-/** What became of a nested call, in the outcome vocabulary of top-level tool rows. */
 function nestedOutcome(status: ToolExecution["status"]): ToolOutcome {
   switch (status) {
     case "running":
@@ -463,11 +393,8 @@ function nestedOutcome(status: ToolExecution["status"]): ToolOutcome {
   }
 }
 
-/** A call's nested calls that stay in view while the rest are folded away. */
 const NESTED_TAIL = 8;
 
-/** Projects a call's nested calls into what its row shows. A long run folds to its last few; a
- * running call is never folded away, however old: it is what the script is waiting on. */
 function nestedView(
   calls: ReadonlyArray<ToolExecution>,
   running: boolean,
@@ -492,7 +419,6 @@ function nestedView(
       ? {
           fold: {
             showAll: `Show all ${all.length} tool calls`,
-            // Folding back keeps an older running call too: the line counts what it will show.
             showFewer:
               folded.length === NESTED_TAIL
                 ? `Show last ${NESTED_TAIL} tool calls`
@@ -511,11 +437,6 @@ const turnLabel = (m: RenderMsg) =>
   messageLabel(m.skill ? `/skill:${m.skill.name} ${m.text}` : m.text) ||
   (m.attachments?.length ? "Image" : "");
 
-/**
- * The transcript as rows, in one pass over history. Tool results are folded under the call
- * that produced them; a prompt, and a reply that ended a turn, are Jump to destinations.
- * Tool-only replies and intermediate reasoning text are not destinations.
- */
 export function transcriptRows(
   messages: ReadonlyArray<RenderMsg>,
   options: TranscriptOptions = {},
@@ -525,15 +446,11 @@ export function transcriptRows(
   return pending ? [...projection.rows, pending] : projection.rows;
 }
 
-/** History and the optional live tail share row rules, but have different update lifetimes. */
 export interface TranscriptProjection {
   history: readonly TranscriptRow[];
   pending: TranscriptRow | undefined;
 }
 
-/** One mounted transcript's current immutable inputs only; never a session/history store.
- * Any authoritative input change rebuilds everything, including context replacement and tool
- * updates. Pending-only updates reuse history and its lookup tables, not just its row keys. */
 export function createTranscriptProjector() {
   let current:
     | {
@@ -575,11 +492,7 @@ function projectHistory(
   const results = new Map<string, RenderMsg>();
   const callIds = new Set<string>();
   const briefs = dispatchBriefs(messages);
-  // Destinations, with their labels: every labelled prompt, and every labelled reply that
-  // ended a turn (the next prompt or reply is not another reply).
   const destinations = new Map<string, string>();
-  // The tail cannot be a final reply until the agent settles.
-  // A completed message alone is not enough: another assistant message may follow.
   let nextTurn: RenderMsg["role"] | undefined = working ? "assistant" : undefined;
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i]!;
@@ -593,8 +506,6 @@ function projectHistory(
     if (m.role === "tool_result" && m.toolCallId) results.set(m.toolCallId, m);
     for (const call of m.toolCalls ?? []) callIds.add(call.id);
   }
-  // Live calls made inside another call, by the call that made them: named as its parent, or
-  // under its id as a "parent/child" path. Built once so each row finds its own in one lookup.
   const children = new Map<string, ToolExecution[]>();
   const adopt = (parent: string, child: ToolExecution) =>
     children.set(parent, [...(children.get(parent) ?? []), child]);
@@ -678,7 +589,6 @@ function projectHistory(
           )
         : undefined;
       const calls = showTools ? (m.toolCalls ?? []) : [];
-      // Pi starts a message before its first visible text or tool block arrives.
       if (!text && !error && !calls.length) return;
       const toolRows = calls.map((call) =>
         toolRow(
@@ -708,7 +618,6 @@ function projectHistory(
   };
   const rows: TranscriptRow[] = [];
   messages.forEach((m, index) => {
-    // A result that found its call is shown under the call.
     if (m.role === "tool_result" && m.toolCallId && callIds.has(m.toolCallId)) return;
     const jump = destinations.get(m.id);
     if (!showTools && !jump && !m.errorMessage) return;
@@ -717,8 +626,6 @@ function projectHistory(
   });
   return {
     rows,
-    // The server gives a partial reply the id of the message it becomes, so its row keeps its
-    // key (and its open folds) when it ends. History wins even when that row is hidden.
     pending: (pending: TranscriptOptions["pending"]) =>
       pending && !messageIds.has(pending.id)
         ? row(pending, pending.id, undefined, true, () => messages)
@@ -726,14 +633,12 @@ function projectHistory(
   };
 }
 
-/** The end of the conversation: a jump there leaves the reader pinned to it. */
 export const BOTTOM_ENTRY: JumpEntry = {
   kind: "bottom",
   id: "bottom",
   label: "End of conversation",
 };
 
-/** What a reader can jump to: the transcript's destination rows, with "Top" and "End of conversation" around them. */
 export function jumpEntries(rows: ReadonlyArray<TranscriptRow>): JumpEntry[] {
   const entries: JumpEntry[] = [{ kind: "top", id: "top", label: "Top of conversation" }];
   for (const row of rows) {

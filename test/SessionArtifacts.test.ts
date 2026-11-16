@@ -9,8 +9,6 @@ import {
 import type { RenderMsg } from "../shared/wire.ts";
 import { sessionArtifacts } from "../web/src/lib/sessionArtifacts.ts";
 
-// Shapes as the radius-artifacts extension's calls and results reach the browser (PiRecords). Results
-// are typed by the shared contract the extension returns, so renaming a field fails typecheck here.
 let next = 0;
 function publish(
   tool: string,

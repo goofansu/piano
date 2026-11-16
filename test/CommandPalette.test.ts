@@ -30,7 +30,6 @@ const worktree = (path: string, branch: string, root: boolean): WorktreeView => 
   root,
   status: "current",
 });
-// Ten sessions, s0 the oldest; s9 runs in a worktree and belongs to a project.
 const references = Array.from({ length: 10 }, (_, i) =>
   sessionReference(i === 9 ? "/work/repo.feature" : "/repo", `s${i}`, {
     title: i === 3 ? undefined : `Session ${i}`,
@@ -71,7 +70,6 @@ const ctx: GlobalCommandContext = {
   view: { groupBy: "date", sortBy: "recent", folderAndBranch: false },
   theme: "dark",
 };
-/** The palette as the host feeds it: global commands from the shared context, the selected session's commands. */
 const palette = (state: AppState, search = "", c = ctx) =>
   searchPalette(
     commandPalette(state, {
@@ -137,7 +135,6 @@ test("a command only the other layout offers is left out, while an unavailable o
   assert.equal("Agent" in wide, false, "Agent is a narrow layout's tab");
   const narrow = rows(true);
   assert.equal("Show session rail" in narrow, false, "the session menu holds the rail's facts");
-  // Saved history has not named the session's file yet: a reason, so the row stays, greyed.
   assert.equal(narrow["Copy session path"], false);
 });
 
@@ -166,7 +163,7 @@ test("groups come in order, with Session commands only while a session is select
 test("Projects offers active projects by name on every page, with navigation-only intents", () => {
   const projects = [
     { id: "z", name: "Zebra" },
-    { id: "done", name: "Finished", doneAt: "" }, // Presence, not truthiness, marks done.
+    { id: "done", name: "Finished", doneAt: "" },
     { id: "a", name: "Alpha" },
     { id: "other-a", name: "Alpha" },
   ];
@@ -240,7 +237,6 @@ test("standalone ! answers with only the project filter row, selected, without s
     sessionCommands: sessionCommands(inSession),
     sessionProject: sessionProjectMenu(inSession, { cwd: "/repo", sessionId: "s1" }),
   });
-  // A literal bang in a title must not leak into discovery.
   const sessions = groups.find((g) => g.id === "sessions")!;
   sessions.rows[0].value = "!";
   const worker = createPaletteSearch();
@@ -268,7 +264,6 @@ test("standalone ! answers with only the project filter row, selected, without s
       answer.map((p) => p.group),
       filters,
     );
-    // The filter row is chosen by default, as the first row of any answer is.
     assert.equal(paletteSelection(answerPalette(groups, query), "", true), "filters:!p");
     assert.equal(paletteSelection(answerPalette(groups, query), "sessions:x", false), "filters:!p");
   }
@@ -334,7 +329,7 @@ test("worker project-only browsing keeps bounded pages and switches back to ordi
   const matched = search({ id: 3, query: "!p Launch 50", pages: {} });
   assert.deepEqual(
     matched.pages.map((p) => [p.group.id, p.group.rows.map((r) => r.key)]),
-    [["projects", ["p50", "p5"]]], // Existing fuzzy ranking allows the 50/05 transposition.
+    [["projects", ["p50", "p5"]]],
   );
   assert.ok(
     search({ id: 4, query: "session", pages: {} }).pages.some((p) => p.group.id === "sessions"),
@@ -543,7 +538,6 @@ test("search uses direct command synonyms, not related topics or opposite displa
       .filter((c) => paletteFilter(c.label, query, c.keywords ? [...c.keywords] : undefined) > 0)
       .map((c) => c.id);
   assert.ok(commands.some((c) => c.label === "Untrust folder"));
-  // Settings › Skills matches by its label; Trust folder, a related topic, does not.
   assert.deepEqual(matches("skill"), ["settings-skills"]);
   assert.ok(!matches("settings").includes("trust"));
   assert.ok(!matches("session").includes("home"));
@@ -644,7 +638,6 @@ test("search pages replace rows, preserve stable ties and reach the oldest match
     "a choice no longer on the page is replaced",
   );
   assert.equal(paletteSelection([], "sessions:next", false), "");
-  // The list draws what selection reads: the range heading and the controls around the rows.
   const drawn = (page: number) => {
     const { heading, items } = paletteItems(pagePalette(ranked, { sessions: page })[0]);
     return [heading, items[0].value, items.length, items.at(-1)!.value];

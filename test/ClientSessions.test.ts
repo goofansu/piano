@@ -60,7 +60,6 @@ const run = <A, E>(
   );
 };
 
-/** A client whose messages are recorded in order and can be awaited. */
 const client = Effect.gen(function* () {
   const sent: ServerMessage[] = [];
   const queue = yield* Queue.unbounded<ServerMessage>();
@@ -84,7 +83,6 @@ const started = (id?: string) =>
     yield* (yield* Registry).addSession(cwd, sessionId);
     return yield* (yield* SessionHosts).open({ cwd, sessionId });
   });
-/** An action whose result (an empty restored queue) reaches only its requester. */
 const restoreQueue = { _tag: "restore_queue" } as const;
 const resultFor = (sent: ServerMessage[]) =>
   sent
@@ -104,7 +102,6 @@ test("INV-01/02: selecting saved history spends one discovery read budget withou
           id: sessionId,
           cwd,
           timestamp: "2026-10-05T00:00:00Z",
-          // Small files fit within a header read; their combined size defines a one-pass budget.
           padding: "x".repeat(2048),
         },
         {
@@ -120,8 +117,6 @@ test("INV-01/02: selecting saved history spends one discovery read budget withou
     writeFileSync(join(store, `${sessionId}.jsonl`), contents);
     discoveryBytes += Buffer.byteLength(contents);
   }
-  // Observe real filesystem bytes at the selection boundary, not calls between services.
-  // Allow a little slack, but not a second directory discovery. Pi's saved-view read is sync.
   const read = fs.read;
   let bytes = 0;
   t.mock.method(fs, "read", (...args: unknown[]) => {
@@ -172,7 +167,6 @@ test("INV-05: a lookup that finishes after a reselect shows nothing and keeps th
         b = yield* started();
       yield* hosts.release(cwd, a);
       const { sessions, sent, next } = yield* client;
-      // Both selections are claimed in receive order; the older lookup finishes last.
       const showA = yield* sessions.select({ cwd, sessionId: a, selectionId: "A" });
       const showB = yield* sessions.select({ cwd, sessionId: b.spec.sessionId, selectionId: "B" });
       yield* showB;
@@ -183,7 +177,6 @@ test("INV-05: a lookup that finishes after a reselect shows nothing and keeps th
         [selected.selectionId, selected.sessionId, selected.hosted],
         ["B", b.spec.sessionId, true],
       );
-      // B stays attached: its live frames still arrive.
       yield* b.act({ _tag: "prompt", text: "for B" });
       yield* next(
         (m) =>
@@ -368,7 +361,6 @@ test("INV-02: a pick reaches a session another client started after this one sho
       yield* hosts.release(cwd, id);
       const { sessions, next } = yield* client;
       yield* yield* sessions.select({ cwd, sessionId: id, selectionId: "B" });
-      // Another tab starts the session; this one still shows the saved snapshot.
       yield* hosts.open({ cwd, sessionId: id });
       yield* sessions.act(
         "B",
@@ -388,7 +380,6 @@ test("INV-02: a pick reaches a session another client started after this one sho
   );
 });
 
-/** The turns one selection's view holds: its last live snapshot, then the frames after it. */
 const liveTurns = (sent: ServerMessage[], selectionId: string) => {
   const mine = sent.filter((m) => "selectionId" in m && m.selectionId === selectionId);
   const from = mine.findLastIndex((m) => m._tag === "selected" && m.hosted);
@@ -403,11 +394,6 @@ const liveTurns = (sent: ServerMessage[], selectionId: string) => {
       ),
   ];
 };
-/**
- * Waits until a selection's view shows the assistant's turn. A follow attaches whenever the
- * other client's resume is announced: before the reply, which then arrives as a live frame, or
- * after a fast reply, which the snapshot already holds. Either way the turn shows once.
- */
 const shownReply = ({ sent, next }: Effect.Success<typeof client>, selectionId: string) =>
   next(() => liveTurns(sent, selectionId).includes("assistant"));
 
@@ -428,7 +414,6 @@ test("INV-02/05: a session shown stopped follows another client's resume and sho
       assert.deepEqual(yield* hosts.list, [], "watching a stopped session starts no Pi");
 
       yield* b.sessions.act("B", { _tag: "prompt", text: "from B" }, {});
-      // A neither selects nor acts again.
       yield* shownReply(a, "A");
       yield* b.next(
         (m) =>
@@ -461,7 +446,6 @@ test("INV-05: a session resumed elsewhere after this client selected another sho
       yield* yield* a.sessions.select({ cwd, sessionId: first, selectionId: "first" });
       yield* a.next((m) => m._tag === "selected");
       yield* yield* b.sessions.select({ cwd, sessionId: first, selectionId: "B" });
-      // A claims the second session; its lookup has not run when B resumes the first.
       const showSecond = yield* a.sessions.select({
         cwd,
         sessionId: second,
@@ -484,7 +468,6 @@ test("INV-05: a session resumed elsewhere after this client selected another sho
         "nothing from the first session reaches A after its read-only view",
       );
 
-      // The newer selection still follows its own resume.
       yield* yield* b.sessions.select({ cwd, sessionId: second, selectionId: "B2" });
       yield* b.sessions.act("B2", { _tag: "prompt", text: "second from B" }, {});
       yield* shownReply(a, "second");
@@ -549,7 +532,6 @@ test("a live session's view follows its checkout going and coming back", async (
       yield* yield* sessions.select({ cwd: path, sessionId, selectionId: "A" });
       const attached = yield* next((m) => m._tag === "selected");
       assert.ok(attached._tag === "selected" && attached.hosted, "the running session is live");
-      // Each recheck completes its show before returning, so the last view is already sent.
       const lastView = () => {
         const m = sent.findLast((m) => m._tag === "selected" && m.sessionId === sessionId);
         return m?._tag === "selected"
@@ -600,7 +582,6 @@ test("a new-session selection shows what it creates only while it is still selec
         "the stale session was still created and registered; it is only not shown",
       );
       assert.equal((yield* hosts.list).length, 2);
-      // The shown session is the new selection's own.
       yield* sessions.act("new", restoreQueue);
       assert.deepEqual(resultFor(sent), [selected.sessionId]);
     }),
@@ -632,8 +613,6 @@ test(
       "-m",
       "baseline",
     );
-    // The installed Worktrunk, isolated from the user's configuration, held at `switch` until the
-    // test releases it (or 20 seconds pass, so a failing run cannot leave it waiting).
     const config = join(root, "creating-wt", "config", "worktrunk");
     mkdirSync(config, { recursive: true });
     writeFileSync(join(config, "config.toml"), "");
@@ -678,7 +657,6 @@ const r=spawnSync(${JSON.stringify(real)},a,{stdio:'inherit',env:{...process.env
         assert.equal(existsSync(release), false, "B was shown while Worktrunk was still held");
         writeFileSync(release, "");
         yield* Fiber.join(creating);
-        // The finished creation is registered but not shown, and B stays the attached selection.
         assert.ok((yield* (yield* Registry).get).sessions.some((s) => s.cwd !== cwd));
         assert.deepEqual(
           sent.filter((m) => "selectionId" in m && m.selectionId === "creating"),
@@ -694,10 +672,6 @@ const r=spawnSync(${JSON.stringify(real)},a,{stdio:'inherit',env:{...process.env
   },
 );
 
-/**
- * Pi from the lifecycle fixture, holding `held`'s readiness until `release`, so a start of that
- * session is observably in flight.
- */
 const holdingStart = (held: string) => {
   const dir = mkdtempSync(join(root, "holding-start-"));
   const audit = join(dir, "audit.jsonl");
@@ -712,7 +686,6 @@ const holdingStart = (held: string) => {
       )
       .filter((r) => r.sessionId === held);
   const pid = () => records().find((r) => r.event === "spawn")?.pid;
-  /** The commands `held`'s Pi received, in order. */
   const commands = () => records().flatMap((r) => (r.event === "command" ? [r.command] : []));
   const launched = Effect.gen(function* () {
     for (let n = 0; !pid(); n++) {
@@ -761,8 +734,6 @@ test("INV-05: selecting another session while an act is still starting the selec
       yield* held.release;
       yield* Fiber.join(selecting);
       yield* Fiber.join(acting);
-      // The act was accepted while A was selected, so it completes and its result reaches its
-      // requester; A is started but not shown over the newer selection.
       assert.deepEqual(resultFor(sent), ["A"]);
       assert.deepEqual(
         sent.filter((m) => "selectionId" in m && m.selectionId === "a").map((m) => m._tag),
@@ -826,8 +797,6 @@ test("INV-02/05: input with start options that arrives while the attached Pi clo
           JSON.parse(line) as { event: string; pid: number; text?: string; previewOwner?: string },
       );
   const spawns = () => records().filter((r) => r.event === "spawn");
-  // Holds the close in its first step, preview cleanup, while the session's lock is held, the
-  // host is not yet closing and this client is still attached to it.
   let entered!: () => void, finish!: () => void;
   const cleaning = new Promise<void>((resolve) => (entered = resolve));
   const cleaned = new Promise<void>((resolve) => (finish = resolve));
@@ -846,7 +815,6 @@ test("INV-02/05: input with start options that arrives while the attached Pi clo
       const hosts = yield* SessionHosts;
       const id = (yield* started()).spec.sessionId;
       const [first] = spawns();
-      // A preview start makes this owner ask its adapter before release.
       yield* Effect.promise(() =>
         assert.rejects(
           ownerRequest(first.previewOwner!, {
@@ -859,7 +827,6 @@ test("INV-02/05: input with start options that arrives while the attached Pi clo
       yield* yield* sessions.select({ cwd, sessionId: id, selectionId: "S" });
       const shown = yield* next((m) => m._tag === "selected");
       assert.ok(shown._tag === "selected" && shown.hosted, "the live session is attached");
-      // Another tab, or the idle sweep, stops Pi.
       const closing = yield* hosts.release(cwd, id).pipe(Effect.forkChild);
       yield* Effect.promise(() => cleaning);
       const acting = yield* sessions
@@ -945,7 +912,6 @@ test("INV-02: retiring the selected session detaches before Pi stops, clears the
         [[a.spec.sessionId, true]],
         "archive keeps the reference; delete forgets it",
       );
-      // A stale link cannot show a retired conversation, even when archive kept its history.
       const shown = sent.filter((m) => m._tag === "selected").length;
       for (const [sessionId, detail] of [
         [a.spec.sessionId, /archived/],
@@ -983,7 +949,6 @@ test("INV-02: a refused archive leaves the selected session attached and control
     Effect.gen(function* () {
       const hosts = yield* SessionHosts;
       const id = (yield* started()).spec.sessionId;
-      // A preview start makes this owner ask its adapter, which fails, before release.
       yield* Effect.promise(() =>
         assert.rejects(
           ownerRequest(owner(), {
@@ -1009,7 +974,6 @@ test("INV-02: a refused archive leaves the selected session attached and control
         [["S", id, true]],
         "shown live again",
       );
-      // An action that cannot start Pi reaches the running session.
       yield* sessions.act("S", { _tag: "restore_queue" });
       yield* next((m) => m._tag === "action_result");
     }).pipe(
@@ -1099,7 +1063,6 @@ test("INV-02: a durable claim interrupted before startup stays uncertain after r
   await run(
     Effect.gen(function* () {
       const hosts = yield* SessionHosts;
-      // The server stops right after writing the claim, before its creation does anything.
       const { sessions } = yield* client.pipe(
         Effect.provideService(SessionHosts, { ...hosts, create: () => Effect.never }),
       );
@@ -1130,7 +1093,6 @@ test("INV-02: a duplicate that arrives before the original's work runs waits for
         b = yield* client;
       const request = { cwd, options: {}, text: "one input", attemptId: "early-duplicate" };
       const first = yield* a.sessions.create({ ...request, selectionId: "first" });
-      // The original is claimed but its client has not run its work yet.
       yield* yield* b.sessions.create({ ...request, selectionId: "second" });
       const [ref] = (yield* (yield* Registry).get).sessions;
       assert.ok(ref, "the claimed creation started without waiting for its requester");
@@ -1150,7 +1112,6 @@ test("a creation that names no attempt makes no lasting claim on its selection I
   await run(
     Effect.gen(function* () {
       const request = { cwd, options: {}, text: "one input", selectionId: "s1" };
-      // A scripted client reuses the same selection ID on each connection.
       for (const _ of [1, 2]) {
         const { sessions, sent } = yield* client;
         yield* yield* sessions.create(request);
@@ -1184,7 +1145,6 @@ test("INV-02/05: duplicate creation identities across clients attach once and ne
       assert.equal(snapshot.messages.filter((m) => m.role === "user").length, 1);
       assert.equal(snapshot.state.submission?.inputId, "stable-attempt");
       assert.ok(b.sent.some((m) => m._tag === "selected" && m.sessionId === ref.sessionId));
-      // Navigation after a claimed duplicate remains newer, even though the duplicate still finishes.
       const stale = yield* a.sessions.create({ ...request, selectionId: "stale" });
       yield* yield* a.sessions.select({ cwd, sessionId: null, selectionId: "newer" });
       yield* stale;
@@ -1237,7 +1197,6 @@ test("INV-01/02: creating registers the folder, reference and project, attaches,
         "attached",
         "activity prompted=false",
       ]);
-      // The trimmed prompt reaches Pi and this client observes it.
       for (;;) {
         const m = yield* Queue.take(queue);
         if (
@@ -1276,7 +1235,6 @@ test("INV-01/02/07: an interrupted creation keeps its project membership and sen
               published.push(s.projectId);
         }),
       );
-      // The browser has opened Pi but disconnects before its snapshot is delivered.
       const opened = yield* Deferred.make<string>();
       const sessions = yield* makeClientSessions({
         send: (m) =>
@@ -1347,8 +1305,6 @@ test("PIN-132: a prompt its host refuses because another client archived the ses
       const hosts = yield* SessionHosts;
       const live = yield* started();
       const { sessionId } = live.spec;
-      // This client's start resolved the live host just before another client's archive took
-      // the session's lock; the prompt then reaches a host that is closing.
       const { sessions } = yield* client.pipe(
         Effect.provideService(SessionHosts, {
           ...hosts,
@@ -1363,7 +1319,6 @@ test("PIN-132: a prompt its host refuses because another client archived the ses
         [refused._tag, refused._tag === "InputNotSent" && refused.inputId],
         ["InputNotSent", "a-1"],
       );
-      // An action without input stays an ordinary failure.
       const plain = yield* Effect.flip(sessions.act("A", restoreQueue, {}));
       assert.equal(plain._tag, "PiSessionError");
     }),

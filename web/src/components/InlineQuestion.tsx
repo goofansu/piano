@@ -21,7 +21,6 @@ import { type PendingDialogs } from "@/lib/piDialogs";
 import { useDialogAnswer } from "@/lib/useDialogAnswer";
 import { useQuestionReplies } from "@/lib/useMachine";
 
-/** The queue head alone owns the answer surface; confirmations stay in DialogHost. */
 export function InlineQuestion({
   pending: { head, surface, more, attachment, session },
   send,
@@ -30,7 +29,6 @@ export function InlineQuestion({
   send: Client["send"];
 }) {
   if (!head || surface !== "inline") return null;
-  // A save tool's proposal (`piano-library`) is a confirmation asked here, as a card.
   const proposal = readProposal(head);
   if (proposal)
     return (
@@ -69,7 +67,6 @@ function Question({
 }) {
   const questionReplies = useQuestionReplies();
   const id = useId();
-  // The reply outlives this view (another session shown, a resync) while the question stays open.
   const reply = useSyncExternalStore(questionReplies.subscribe, () =>
     questionReplies.get(session, d),
   );
@@ -77,7 +74,6 @@ function Question({
   const { answer, cancel, abort, submitted, disabled, abortDisabled, title, deadline, waiting } =
     useDialogAnswer(d, attachment, send);
   const choice = d.method === "select";
-  // Indices distinguish an unselected group from an option whose value is an empty string.
   const [value, selected] = choice ? ["", reply] : [reply, ""];
 
   return (
@@ -91,14 +87,8 @@ function Question({
           answer({ value: choice ? d.options?.[Number(selected) - 1] : value });
         }}
       >
-        {/* A legend holds phrasing content only; the question is Markdown blocks, so it names the
-            group by reference instead. */}
         <FieldSet disabled={disabled} aria-labelledby={`${id}-title`} className="min-w-0 gap-3">
-          {/* The title, message and field scroll as one bounded region, so a long question (the
-              model writes paragraphs) leaves the actions and the composer on a phone's screen: the
-              card sits in the pane's non-scrolling column under the transcript. A div, not the
-              fieldset, scrolls: iOS Safari does not scroll a fieldset's overflow reliably. The 1px
-              inset keeps focus rings inside the clip. */}
+          {/* iOS Safari cannot reliably scroll fieldset overflow; scroll a div instead. */}
           <div className="flex max-h-[min(24rem,50dvh)] min-h-0 flex-col gap-3 overflow-y-auto overscroll-contain p-1">
             <QuestionText id={`${id}-title`} text={title} />
             <FieldGroup className="gap-3">
@@ -116,7 +106,6 @@ function Question({
                 >
                   {(d.options ?? []).map((option, index) => (
                     <Field
-                      // Index keys: Pi's immutable option strings may repeat.
                       key={`${index}-${option}`}
                       orientation="horizontal"
                       data-disabled={disabled}
@@ -153,8 +142,6 @@ function Question({
           </div>
         </FieldSet>
         <div className="flex flex-wrap items-center gap-2">
-          {/* A question its tool call owns has no deadline to report, and the composer's Stop is
-              its escape; only an estimated deadline is a fact worth a popover. */}
           {deadline && (
             <Popover>
               <PopoverTrigger asChild>

@@ -36,14 +36,8 @@ import { useMachineId } from "@/lib/useMachine";
 import { useObservation } from "@/lib/useObservation";
 import type { SessionView } from "@/store";
 
-/** One file's fresh patch under the comparison its list was read with. */
 type ReadFile = (path: string, signal: AbortSignal) => Promise<LoadedFile>;
 
-/**
- * The session's Changes, live while shown: on showing, focus and edits (a quiet 600 ms after the
- * checkout may have moved); a response for another workspace never shows. Reads use the
- * session's saved scope; choosing one saves it and the answer replaces the view.
- */
 function useSessionChanges(
   workspace: Workspace | undefined,
   sessionId: string | null | undefined,
@@ -104,22 +98,16 @@ export function ChangesPanel({
   pullRequest,
 }: {
   workspace: Workspace | undefined;
-  /** Why Changes cannot open; it then shows that alone and reads nothing until it can. */
   unavailable: string | undefined;
   session: SessionView | null;
-  /** Shown on screen: Git is read only then, and a hidden panel keeps its last observation. */
   active: boolean;
-  /** Receives review text for the composer draft; the caller decides how to confirm. Omitted
-   * while the draft takes no additions, which hides Ask. */
   onAsk: ((text: string) => void) | undefined;
-  /** The session's pull request: a toolbar action until linked, then a row below it. */
   pullRequest: PullRequestControl;
 }) {
   const { observation, error, busy, refresh, setScope, readFile } = useSessionChanges(
     unavailable ? undefined : workspace,
     session?.sessionId,
     active && !unavailable,
-    // Linking or changing the pull request can change the target and whether it is this branch's.
     `${refreshKey(session)}|${pullRequest.changesTrigger}`,
   );
   const [disclosure, setDisclosure] = useState<Disclosure>(initialDisclosure);
@@ -274,8 +262,6 @@ function LiveFile({
       initial ? { file: { ...initial, ...metadata }, observedAt, truncated: false } : undefined,
     [initial, metadata, observedAt],
   );
-  // Read when first expanded; collapsing before it arrives abandons the read, and a loaded patch
-  // stays (collapsed or not) until the parent observes the checkout again and remounts this file.
   const [kept, setKept] = useState(false);
   const fetched = useObservation(
     JSON.stringify([workspace.id, workspace.path, metadata.path]),
@@ -320,15 +306,12 @@ function FileSection({
   file: DiffFile;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Ask shows at all; `onAsk` is set once the open file's patch can be quoted. */
   canAsk: boolean;
   onAsk?: () => void;
   message?: string;
   retry?: () => void;
 }) {
   const large = isLarge(file);
-  // A new or deleted file shows by its name's colour (and in its label); a binary file's kind sits
-  // beside the size; notes that need a sentence go beneath.
   const status =
     file.status === "added" ? "new" : file.status === "deleted" ? "deleted" : undefined;
   const description = [
@@ -340,12 +323,8 @@ function FileSection({
   return (
     <Collapsible open={open} onOpenChange={onOpenChange} asChild>
       <li className="border-b border-line" data-path={file.path}>
-        {/* Hand-written: no standard component fits a flat, hairline-divided diff row. Collapsible
-         * supplies disclosure semantics only; this grid owns spacing, without Item/Button borders.
-         * Sticky within the sheet so the file name stays in view while its hunks scroll. */}
         <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-1 bg-conversation px-2 py-1">
           <CollapsibleTrigger
-            // A 16px line with even padding is 36px (44px on touch).
             className="grid min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-start gap-2 rounded-md px-2 py-2.5 text-left text-xs leading-4 outline-none select-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 pointer-coarse:py-3.5"
             aria-label={`${file.path}${status ? `, ${status}` : ""}${file.binary ? "" : `, ${file.additions} added, ${file.deletions} removed`}: ${open ? "collapse" : "expand"}`}
           >
@@ -371,7 +350,6 @@ function FileSection({
             </span>
           </CollapsibleTrigger>
           {canAsk && (
-            // Centre Ask on the name line.
             <div className="flex h-9 items-center pointer-coarse:h-11">
               <IconButton
                 size="list"
@@ -429,7 +407,6 @@ const CodePatch = lazy(() =>
   ),
 );
 
-/** One file's patch, as `@pierre/diffs` renders it with the shared wrap preference. */
 function Hunks({ file }: { file: DiffFile }) {
   return (
     <Suspense fallback={null}>

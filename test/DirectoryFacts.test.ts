@@ -13,7 +13,6 @@ import {
 import { PiCli } from "../server/PiCli.ts";
 import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
 
-// HOME is the scratch root, so `~/checkout` and the absolute path name one directory.
 const root = realpathSync(mkdtempSync(join(tmpdir(), "piano-facts-")));
 const cwd = join(root, "checkout");
 mkdirSync(cwd);
@@ -27,7 +26,6 @@ after(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-/** The real module over the fake Pi child; `probes()` counts Pi probes, the observable cost of a cache miss. */
 const run = <A, E>(
   work: (facts: DirectoryFacts["Service"], probes: () => number) => Effect.Effect<A, E>,
 ) => {
@@ -78,12 +76,10 @@ test("one directory, however a caller spells it, has one catalog entry and one t
 test("commands before a session starts come from a probe, models in wire terms", async () => {
   await run((facts, probes) =>
     Effect.gen(function* () {
-      // The fake Pi lists `probe-only` when started without a session and `live-only` in a session.
       const probed = (yield* facts.commands("~/checkout")).map((c) => c.name);
       assert.ok(probed.includes("probe-only") && !probed.includes("live-only"), probed.join());
       const catalog = yield* facts.catalog(cwd);
       assert.equal(probes(), 1, "the catalog reuses the commands' probe");
-      // Pi's effort table, already translated: minimal is mapped off and xhigh is mapped in.
       assert.deepEqual(
         catalog.models.map((m) => [m.ref, m.thinkingLevels]),
         [
@@ -125,7 +121,6 @@ test("a subscriber hears an invalidation that happens before it reads the stream
     Effect.scoped(
       Effect.gen(function* () {
         const changes = yield* facts.changes;
-        // As when a browser connects: Pi's resources change before anything reads the stream.
         yield* facts.invalidate;
         const heard = yield* changes.pipe(Stream.take(1), Stream.runCollect);
         assert.equal([...heard].length, 1);
@@ -135,7 +130,6 @@ test("a subscriber hears an invalidation that happens before it reads the stream
 });
 
 test("INV-01/12: a trust decision answers with Pi's fresh trust and a freshly probed catalog", async () => {
-  // A project skill makes the directory's trust matter to Pi.
   mkdirSync(join(cwd, ".agents/skills/hello"), { recursive: true });
   writeFileSync(
     join(cwd, ".agents/skills/hello/SKILL.md"),
@@ -160,7 +154,6 @@ test("INV-01/12: a trust decision answers with Pi's fresh trust and a freshly pr
           trusted.catalog,
           "and that probe is what is cached",
         );
-        // Pi resolves trust from the nearest saved ancestor, so every directory re-probes.
         yield* facts.catalog(elsewhere);
         assert.equal(probes(), 4);
         assert.deepEqual((yield* facts.setTrust(cwd, false)).trust, {

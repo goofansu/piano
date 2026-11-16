@@ -1,11 +1,3 @@
-/**
- * Dispatch through the installed Pi CLI and a scratch Piano. Unlike fake-protocol tests, this
- * checks tool registration, recovery of the child handle from model-visible tool history, and
- * Piano's ownership of both parent and child processes. The child receives a self-contained brief,
- * not the parent's conversation, and the parent reads its answer through the wait tool.
- *
- * Only the model is scripted over loopback; no credentials, model credits or external traffic.
- */
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
@@ -61,8 +53,6 @@ test(
       assert.match(text, new RegExp(fixture.report.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 
       const requests = fixture.requests();
-      // The parent's own turns are ordered; when the child reaches the model between them is not,
-      // because start returns on the brief's admission rather than on the child's answer.
       assert.deepEqual(
         requests.filter((request) => request.role === "parent").map((request) => request.answered),
         [
@@ -84,7 +74,6 @@ test(
         `a Piano-launched Pi is declared the dispatch tools; it was declared ${parentTools.join(", ") || "none"}`,
       );
 
-      // A self-contained brief: the child is given the brief, never the parent's own conversation.
       const child = requests.find((request) => request.role === "child");
       assert.ok(child, "the brief reached a child session");
       assert.match(child.userText, new RegExp(fixture.brief.slice(0, 20)));
@@ -118,7 +107,6 @@ test(
         "low",
         "dispatch uses the configured default effort, not a supplied override",
       );
-      // The backlink lives in the child's own Pi history, written by `piano-dispatch`.
       assert.equal(
         childView._tag === "selected" && childView.snapshot.state.dispatchedFrom,
         parentSessionId,
@@ -158,7 +146,6 @@ test(
         );
       }
 
-      // The child is an ordinary session a user can open, not a hidden worker.
       client.send({ _tag: "registry" });
       const registry = await client.next(
         (message) =>

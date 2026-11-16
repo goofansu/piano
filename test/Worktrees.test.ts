@@ -72,7 +72,6 @@ test("INV-06: discovery reads Git worktrees without Worktrunk and reports failur
   git(repo, "worktree", "add", "--quiet", "--detach", join(root, "detached"));
   git(repo, "worktree", "add", "--quiet", "-b", "gone", join(root, "gone"));
   rmSync(join(root, "gone"), { recursive: true, force: true });
-  // Discovery must not need Worktrunk at all.
   const observe = (path: string) =>
     Effect.runPromise(
       listWorktrees(path).pipe(Effect.provideService(WorktrunkCommand, join(root, "unavailable"))),
@@ -127,8 +126,6 @@ test("discovery exposes only GitHub repository identity from origin, including l
   assert.equal(await repository(repo), undefined);
 });
 
-// A branch's home on GitHub follows Git's push, as pull request discovery and Changes read it
-// (GitCheckout's Upstream); "pushed" is Git holding the ref that push updates.
 test("discovery names each worktree's branch where it was pushed on GitHub, and nothing before", async (t) => {
   const { root, repo } = fixture(t);
   git(repo, "remote", "add", "origin", "git@github.com:Example/Repo.git");
@@ -143,7 +140,6 @@ test("discovery names each worktree's branch where it was pushed on GitHub, and 
   add("forked", "forked");
   git(repo, "config", "branch.forked.pushRemote", "fork");
   git(repo, "update-ref", "refs/remotes/fork/forked", "HEAD");
-  // Its old origin copy is not where it goes now.
   git(repo, "update-ref", "refs/remotes/origin/forked", "HEAD");
   add("renamed", "local-fix", "--track", "origin/feature/x");
   git(repo, "update-ref", "refs/remotes/origin/local-fix", "HEAD");
@@ -161,20 +157,16 @@ test("discovery names each worktree's branch where it was pushed on GitHub, and 
     forked: { repo: "me/repo", branch: "forked" },
     "local-fix": { repo: "example/repo", branch: "feature/x" },
   });
-  // Every branch without an upstream now pushes to the fork, where only `forked` was pushed.
   git(repo, "config", "remote.pushDefault", "fork");
   git(repo, "config", "--unset", "branch.forked.pushRemote");
   const forked = await homes();
   assert.deepEqual(forked.forked, { repo: "me/repo", branch: "forked" });
   assert.equal(forked.plain, undefined);
   assert.equal(forked.draft, undefined);
-  // A remote that pushes elsewhere than it fetches holds the branch where it pushes.
   git(repo, "remote", "set-url", "--push", "fork", "git@github.com:me/pushed.git");
   assert.deepEqual((await homes()).forked, { repo: "me/pushed", branch: "forked" });
 });
 
-// The fork fixture's other half is in SessionPullRequests and WorkspaceChanges: all three name
-// the same repository and branch.
 test("INV-01: a worktree's branch is linked where that worktree's own config pushes it", async (t) => {
   const { repo, worktree } = forkWorktree(t);
   const result = await Effect.runPromise(listWorktrees(repo));
@@ -342,7 +334,6 @@ if(a.includes('--version')) console.log('wt v0.80.0');else{const f=JSON.parse(re
   ]) {
     const result = await create(bad);
     assert.equal(result._tag, "Failure");
-    // Worktrunk ran, so a checkout may exist; the error must say so.
     if (result._tag === "Failure")
       assert.match(result.failure.detail, /Creation was not confirmed/);
   }
@@ -392,7 +383,6 @@ console.log(process.argv.includes('--version')?readFileSync(${JSON.stringify(ver
     assert.equal(result._tag, "Failure", reported);
     if (result._tag === "Failure") {
       assert.match(result.failure.detail, /0\.80\.0 or later/);
-      // The version check runs before Worktrunk creates anything.
       assert.doesNotMatch(result.failure.detail, /Creation was not confirmed/);
     }
   }
@@ -470,7 +460,6 @@ test("INV-06: real Worktrunk custom paths, external edits/detachment, unapproved
       .status,
     1,
   );
-  // Explicit fixture approval, not an adapter behavior. A foreground hook fails after creation.
   execFileSync(wtPath, ["-C", repo, "config", "approvals", "add", "--yes"], { env, stdio: "pipe" });
   const failed = await run(createWorktree(repo, "partial", { hooks: true }).pipe(Effect.flip));
   assert.match(failed.detail, /Creation was not confirmed/);
@@ -479,8 +468,6 @@ test("INV-06: real Worktrunk custom paths, external edits/detachment, unapproved
   observed = await run(listWorktrees(repo));
   assert.ok(observed.status === "ready" && observed.worktrees.some((w) => w.path === partial));
 
-  // Through the actual view caller: registry names never become Git facts and
-  // external deletion/failure must not hide registered session references.
   const layer = PianoCoreLive({ idleMs: 0 }).pipe(Layer.provide(NodeServices.layer));
   await Effect.runPromise(
     Effect.gen(function* () {
@@ -496,11 +483,10 @@ test("INV-06: real Worktrunk custom paths, external edits/detachment, unapproved
       });
       yield* registry.addSession(created.path, "saved-history");
       let view = (yield* buildFolders)[0];
-      assert.equal(view.worktrees.length, 2); // the unselected partial checkout is discovery only
+      assert.equal(view.worktrees.length, 2);
       assert.equal(view.worktrees[1].branch, null);
       assert.equal(view.worktrees[1].facts?.detached, true);
       let [saved] = yield* references;
-      // INV-07: the reference carries its workspace; its branch is Git's (detached: unknown), never the registry's cached name.
       assert.equal(saved?.workspaceId, view.worktrees[1].workspace.id);
       assert.equal(saved?.branch, null);
       git(repo, "worktree", "remove", "--force", created.path);
@@ -508,7 +494,6 @@ test("INV-06: real Worktrunk custom paths, external edits/detachment, unapproved
       assert.equal(view.worktrees[1].status, "missing");
       [saved] = yield* references;
       assert.equal(saved?.sessionId, "saved-history");
-      // Unreadable repository metadata: Git fails, and nothing pretends the project is healthy.
       chmodSync(join(repo, ".git"), 0o000);
       try {
         view = (yield* buildFolders)[0];
@@ -520,7 +505,7 @@ test("INV-06: real Worktrunk custom paths, external edits/detachment, unapproved
       assert.equal(view.worktrees[0].branch, null);
       assert.equal((yield* references).length, 1);
       const data = yield* registry.get;
-      assert.equal(data.worktrees[0].branch, "old-registry-branch"); // no silent migration
+      assert.equal(data.worktrees[0].branch, "old-registry-branch");
       assert.equal(data.worktrees.length, 1);
       assert.equal(data.sessions.length, 1);
     }).pipe(
@@ -564,7 +549,6 @@ console.log(JSON.stringify({action:'created',branch:'feature',path:${JSON.string
     }
   }
   const env = JSON.parse(readFileSync(seen, "utf8"));
-  // The rest of Piano's environment still reaches Worktrunk.
   assert.deepEqual(
     Object.fromEntries(
       Object.keys(inherited).flatMap((key) => (key in env ? [[key, env[key]]] : [])),

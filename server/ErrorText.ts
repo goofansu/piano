@@ -1,8 +1,3 @@
-/**
- * The text a person sees for a failure: the error's own `detail`, which Piano's errors write for
- * people. Without one, `fallback` when the caller has a better sentence, else what the error says
- * about itself.
- */
 export const errorText = (error: unknown, fallback?: string): string => {
   const o =
     error && typeof error === "object"

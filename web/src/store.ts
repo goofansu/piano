@@ -1,4 +1,3 @@
-/** Client state: one reducer over ServerMessages plus local UI actions. */
 import type {
   FolderView,
   HostInfo,
@@ -11,7 +10,6 @@ import type {
   Snapshot,
   Workspace,
 } from "@shared/wire";
-// Relative, not @shared: module tests load this file directly in Node.
 import { type CreationContext, creationVerdictOf } from "../../shared/creationVerdict.ts";
 import { applySessionEvent, cursorStep } from "../../shared/sessionProjection.ts";
 import { sameSession, sessionKey as wireSessionKey } from "../../shared/wire.ts";
@@ -26,7 +24,6 @@ import { startPage } from "./lib/startPage.ts";
 
 export type { PendingCreate } from "./lib/firstMessage.ts";
 
-/** The selected session: the server's snapshot folded forward by its live events, plus where it came from. */
 export interface SessionView extends Snapshot {
   cwd: string;
   sessionId: string | null;
@@ -36,53 +33,36 @@ export interface SessionView extends Snapshot {
 
 export interface AppState {
   connected: boolean;
-  /**
-   * The last socket failed to open or closed, and none has opened since. False while the first
-   * connection is still being made, so "connecting" and "cannot reach" read apart.
-   */
   unreachable: boolean;
   selectionId: string | null;
   resync: boolean;
-  /** What the main pane shows: a session, or a page. */
   view: { kind: "session" } | Page;
   folders: FolderView[];
   projects: Project[];
   sessionReferences: SessionReference[];
   workspaces: Workspace[];
-  /** The server has sent the registry at least once since connecting. */
   registryLoaded: boolean;
   hosts: HostInfo[];
   catalogs: Record<string, ModelCatalog>;
   catalogRevision: number;
-  /** Pi's trust outcome per directory asked about, including directories that are not registered yet. */
   trusts: Record<string, ProjectTrust>;
-  /** In-flight trust decisions on this connection; `directoryTrust.ts` owns how they settle. */
   pendingTrust: readonly PendingTrust[];
   session: SessionView | null;
-  /** Awaiting a correlated snapshot; a same-session refresh retains the visible projection. */
   selecting: { cwd: string; sessionId: string | null } | null;
   selectionFailure: { cwd: string; sessionId: string | null; message: string } | null;
   pendingCreate: FirstMessage.PendingCreate | null;
-  /** Sessions whose turn finished while another one was on screen; cleared when opened. */
   done: string[];
 }
 
-/**
- * A main-pane view other than a session; opening one leaves the session. The `cwd` of the New page
- * and of a project's home is the directory a session started there runs in; it has no other owner.
- */
 export type Page =
   | { kind: "new"; cwd?: string; projectId?: string }
   | { kind: "projects" }
   | { kind: "project"; projectId: string; cwd?: string }
-  /** A session address nothing opens: unknown to Piano's database, or (`reason`) its history is gone. */
   | { kind: "missing-session"; sessionId: string; reason?: "history" };
 
-/** The session's key for sets and maps; a session not yet started has an empty ID. */
 export const sessionKey = (s: { cwd: string; sessionId: string | null }) =>
   wireSessionKey(s.cwd, s.sessionId ?? "");
 
-/** Whether the selected or opened session is the target; a session not yet started is none. */
 export const isSession = (
   current: { cwd: string; sessionId: string | null } | null | undefined,
   target: { cwd: string; sessionId: string },
@@ -116,7 +96,6 @@ export const initialState: AppState = {
 
 export type Action =
   | { type: "dismiss_creation" }
-  /** `lost`: a socket failed or closed, as opposed to a selection landing on a closed connection. */
   | { type: "connected"; connected: boolean; lost?: boolean }
   | { type: "server"; message: ServerMessage }
   | { type: "trust_pending"; cwd: string }
@@ -131,9 +110,7 @@ export type Action =
       options?: FirstMessage.PendingCreate["options"];
       reconciling?: boolean;
     }
-  /** Opens a page, leaving the session; see `opened` for what a page already on screen keeps. */
   | { type: "open"; page: Page }
-  /** Picks the directory of a page that starts sessions (see `startPage`); ignored on any other view. */
   | { type: "new_directory"; cwd: string };
 
 export function reduce(s: AppState, a: Action): AppState {
@@ -143,7 +120,6 @@ export function reduce(s: AppState, a: Action): AppState {
   return pendingCreate === next.pendingCreate ? next : { ...next, pendingCreate };
 }
 
-/** What the browser knows when its creation's result frame arrives. */
 const creationContext = (s: AppState, pending: FirstMessage.PendingCreate): CreationContext => ({
   attemptId: pending.attemptId,
   sessionNamed: !!s.session,
@@ -152,7 +128,6 @@ const creationContext = (s: AppState, pending: FirstMessage.PendingCreate): Crea
 function reduceAction(s: AppState, a: Action): AppState {
   switch (a.type) {
     case "connected":
-      // A reopened socket is not attached until it receives a new selection snapshot.
       return {
         ...(a.connected ? s : dropTrustDecisions(s)),
         connected: a.connected,
@@ -187,7 +162,6 @@ function reduceAction(s: AppState, a: Action): AppState {
         session: s.session && sessionKey(s.session) === sessionKey(a) ? s.session : null,
         done: s.done.filter((k) => k !== sessionKey(a)),
       };
-      // A selection that lands on a closed connection is lost at once, as if the socket closed after it.
       return s.connected ? next : reduceAction(next, { type: "connected", connected: false });
     }
     case "open":
@@ -210,10 +184,6 @@ function reduceAction(s: AppState, a: Action): AppState {
   }
 }
 
-/**
- * The view opening `page` shows. Picking a project, or New session again, on the New page keeps the
- * directory chosen there, as does opening the project home already on screen.
- */
 function opened(view: AppState["view"], page: Page): Page {
   if (page.kind === "new")
     return {
@@ -226,7 +196,6 @@ function opened(view: AppState["view"], page: Page): Page {
   return page;
 }
 
-/** Shared by projection and notifications: rejected frames cannot toast either. */
 export function sessionDelivery(
   s: AppState,
   m: Extract<ServerMessage, { _tag: "session" }>,
@@ -264,7 +233,6 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
         registryLoaded: true,
       };
     case "hosts": {
-      // A host that was working and no longer is has finished a turn. Unless it is on screen, remember that.
       const viewing = s.session
         ? sessionKey(s.session)
         : s.selecting
@@ -282,7 +250,6 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
     case "models":
       return { ...s, catalogs: { ...s.catalogs, [m.catalog.cwd]: m.catalog } };
     case "catalogs_invalidated":
-      // The client re-asks for the focused directory on the revision; the old catalog stays until its replacement arrives, so open pickers do not flash empty.
       return { ...s, catalogRevision: s.catalogRevision + 1 };
     case "trust":
     case "trust_failed":
@@ -296,15 +263,11 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
           m.snapshot.state.sessionId !== m.sessionId)
       )
         return { ...s, resync: true };
-      // The first snapshot for a new attachment may have the same sequence or
-      // a new host generation. Only compare cursors within an established attachment.
       if (!s.selecting && s.session?.cursor && m.cursor) {
         const step = cursorStep(s.session.cursor, m.cursor);
         if (step === "other-generation") return { ...s, resync: true };
         if (step === "duplicate") return s;
       }
-      // A selection without a session (what the server answers after archiving the one
-      // being viewed) has nothing to show; sessions start from the New page.
       if (m.sessionId === null)
         return {
           ...s,
@@ -330,8 +293,6 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
     case "selection_rejected": {
       if (m.selectionId !== s.selectionId || !s.selecting) return s;
       const pending = s.pendingCreate;
-      // A rejection changes the first message only while it awaits the creation's own answer: a
-      // read-back is sent only once it is uncertain, and a re-attachment's session decides it.
       const verdict =
         pending && m._tag === "selection_rejected"
           ? creationVerdictOf(m, creationContext(s, pending))
@@ -340,7 +301,6 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
         ...s,
         selectionId: null,
         selectionFailure: { ...s.selecting, message: m.message },
-        // A refusal names the creation, which put its input back in the draft: return to New.
         ...(pending && verdict?.kind === "refused"
           ? {
               view: { kind: "new" as const, cwd: pending.cwd, projectId: pending.projectId },
@@ -367,14 +327,12 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
           creationVerdictOf(m, creationContext(s, s.pendingCreate)),
         ),
       };
-    // A restored queue goes to its session's draft, which lib/messageDraft keeps (`drafts.follow`).
     case "session": {
       const disposition = sessionDelivery(s, m);
       if (disposition === "ignore") return s;
       if (disposition === "resync") return { ...s, resync: true };
       const t = s.session!;
       const e = m.event;
-      // Advance the cursor even for a notice or an intentionally ignored fact.
       const hosted = e._tag === "snapshot" ? true : e._tag === "closed" ? false : t.hosted;
       return {
         ...s,

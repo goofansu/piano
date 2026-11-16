@@ -14,8 +14,6 @@ for (const mode of ["narrow", "missing", "exports", "dependency", "initializatio
   test(`INV-01/12: saved history SDK compatibility (${mode})`, async (t) => {
     const root = mkdtempSync(join(tmpdir(), "piano-history-sdk-"));
     const runtime = ManagedRuntime.make(PiSessionsLive.pipe(Layer.provide(NodeServices.layer)));
-    // Fault the module-loading boundary in a real worker, not Pi's parser or history projection.
-    // The worker intentionally discards server/test preloads, so give only this worker a loader.
     const RealWorker = Worker;
     t.mock.method(
       workerThreads,
@@ -36,8 +34,6 @@ for (const mode of ["narrow", "missing", "exports", "dependency", "initializatio
     syncBuiltinESMExports();
     try {
       const history = await runtime.runPromise(Effect.map(PiSessions, (pi) => pi.history));
-      // Produce the tree with the installed PUBLIC SDK. Expected projection is a worked example,
-      // not a second call to Pi's projection algorithm.
       const manager = SessionManager.create(root, root);
       manager.appendModelChange("router", "auto");
       manager.appendThinkingLevelChange("low");
@@ -47,8 +43,6 @@ for (const mode of ["narrow", "missing", "exports", "dependency", "initializatio
       manager.branch(kept);
       manager.appendContextEdit(kept, { content: "edited" });
       manager.appendCompaction("summary", kept, 30);
-      // Pi flushes persisted sessions after their first assistant reply. For this user-only tree,
-      // serialize its entries explicitly; all parser, tree and migration logic stays real.
       const file = join(root, "history.jsonl");
       const original =
         [manager.getHeader(), ...manager.getEntries()].map((e) => JSON.stringify(e)).join("\n") +
@@ -69,7 +63,6 @@ for (const mode of ["narrow", "missing", "exports", "dependency", "initializatio
       );
       assert.equal(readFileSync(file, "utf8"), original);
 
-      // Legacy v1 has no tree IDs; Pi supplies them in memory. Malformed lines stay tolerated.
       const legacy =
         [
           { type: "session", version: 1, id: "legacy", cwd: root },

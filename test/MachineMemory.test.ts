@@ -11,7 +11,6 @@ import { browserCatalogStorage } from "../web/src/lib/modelCatalogs.ts";
 import { browserSurfaceMemory } from "../web/src/lib/navigation.ts";
 import { sidebarPreferences } from "../web/src/lib/sidebarList.ts";
 
-/** A whole browser store, for readers that use this browser's own. */
 function browserStore() {
   const held = new Map<string, string>();
   return {
@@ -26,7 +25,6 @@ function browserStore() {
   };
 }
 
-/** A browser store as the cleanup reads it. */
 function store(keys: readonly string[]) {
   const held = new Map(keys.map((key) => [key, "value"]));
   return {
@@ -57,7 +55,6 @@ test("a machine no longer configured is forgotten whole; the rest of this browse
     machineKey("local", "lastDir"),
     machineKey("eng-1", "catalogs"),
     machineKey("eng-1", "openGroups"),
-    // This browser's own preferences are no machine's.
     "piano.sidebarView",
     "piano.details",
     "another-app.machine.eng-2.catalogs",
@@ -66,9 +63,7 @@ test("a machine no longer configured is forgotten whole; the rest of this browse
     machineKey("eng-2", "catalogs"),
     machineKey("eng-2", "lastDir"),
     machineKey("eng-2", "openGroups"),
-    // eng-1 is configured; a machine whose ID merely starts the same is not.
     machineKey("eng-10", "catalogs"),
-    // Where Local's memory lived before machines had prefixes.
     "piano.catalogs",
     "piano.lastDir",
     "piano.surface",
@@ -90,8 +85,6 @@ test("a machine no longer configured is forgotten whole; the rest of this browse
 });
 
 test("a configured machine keeps each memory only in the store it belongs to", () => {
-  // What a tab is showing is the tab's; what outlives it is the browser's. A key left in the
-  // other store (where it lived before it moved), or under a name no longer remembered, goes.
   const local = store([
     machineKey("eng-1", "catalogs"),
     machineKey("eng-1", "location"),
@@ -112,8 +105,6 @@ test("a configured machine keeps each memory only in the store it belongs to", (
 });
 
 test("what every reader remembers for a configured machine survives the sweep", (t) => {
-  // Each reader writes through this browser's stores; the sweep removes a machine key from any
-  // store MACHINE_MEMORY does not name, so a reader whose store disagreed would lose it on load.
   const stores = { local: browserStore(), session: browserStore() };
   for (const [name, value] of [
     ["localStorage", stores.local],
@@ -159,7 +150,6 @@ test("a store that cannot be read forgets nothing and does not stop the other", 
   const open = store([machineKey("eng-2", "surface")]);
   forgetUnconfiguredMachines([{ id: "local" }], { local: blocked, session: open });
   assert.deepEqual([...open.held.keys()], []);
-  // A store this browser does not have at all is skipped.
   forgetUnconfiguredMachines([{ id: "local" }], { session: open });
 });
 
@@ -176,7 +166,6 @@ test("where the user was on a machine is its own, and only a path within a machi
   remote.write("/s/same-session");
   assert.equal(local.read(), "/projects");
   assert.equal(remote.read(), "/s/same-session", "the same session ID elsewhere is another place");
-  // Storage is the browser's, not Piano's: what is not a path within a machine opens nothing.
   for (const stored of [
     "",
     "new",

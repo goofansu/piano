@@ -48,7 +48,6 @@ process.env.PI_CODING_AGENT_DIR = join(root, "agent");
 process.env.PI_CODING_AGENT_SESSION_DIR = join(root, "sessions");
 after(() => rmSync(root, { recursive: true, force: true }));
 
-/** What the client has been sent, in order; each Git discovery reports how much had been sent when it started. */
 const sent: ServerMessage[] = [];
 let discovered: Queue.Queue<number> | undefined;
 const discover = (_folder: string) =>
@@ -57,7 +56,6 @@ const discover = (_folder: string) =>
     return { status: "non-git", observedAt: new Date().toISOString() };
   });
 
-/** A ready app, as a session's state reports it. */
 const app: SessionPreview = {
   instanceId: "i1",
   state: "running",
@@ -71,7 +69,6 @@ const app: SessionPreview = {
   observedAt: 0,
 };
 
-/** A registered session, running. */
 const registered = (sessionId: string) =>
   Effect.gen(function* () {
     yield* (yield* Registry).addSession(cwd, sessionId);
@@ -123,7 +120,6 @@ const client = makeClientDispatch({
     }),
   overflow: (e) => Effect.die(e),
 });
-/** What this client was answered, without the hosts, sidebar and catalog updates every client hears. */
 const answers = (from: number) =>
   sent
     .slice(from)
@@ -242,8 +238,6 @@ test("INV-02/05: cold cross-directory focus cannot fill admission while saved se
           }),
         overflow: (e) => Effect.die(e),
       });
-      // Hold admitted automatic reads before running their real DirectoryFacts/fake-Pi work.
-      // Saved history can finish while cold probes wait; no sleeps or mocked domain services.
       const held: Effect.Effect<void>[] = [];
       for (const n of [0, 1, 0, 2, 3, 4, 1]) {
         browser.select(directories[n], `cold-${n}`);
@@ -300,7 +294,6 @@ test("INV-02/05: superseded navigation is bounded during startup and the latest 
           }),
         overflow: (e) => Effect.die(e),
       });
-      // Hold real startup reads at their admission boundary, not by wall-clock sleeps.
       const startup = [];
       for (let n = 0; n < 6; n++)
         startup.push(yield* receive({ _tag: "directory", cwd, requestId: `startup-${n}` }));
@@ -321,7 +314,6 @@ test("INV-02/05: superseded navigation is bounded during startup and the latest 
             selectionId: `next-${n}`,
           }),
         );
-      // An unrelated mutation still gets an explicit refusal; it is never replayed.
       yield* yield* receive({ _tag: "save_project", project: { id: "refused", name: "Refused" } });
       assert.equal(replies.filter((m) => m._tag === "selection_rejected").length, 0);
       assert.ok(replies.some((m) => m._tag === "error" && /capacity/.test(m.message)));
@@ -347,7 +339,6 @@ test("INV-02/05: superseded navigation is bounded during startup and the latest 
       });
       assert.equal((yield* last.state).thinkingLevel, "high");
       assert.notEqual((yield* first.state).thinkingLevel, "high");
-      // Superseded pending leases and the completed drain leave the whole ordinary lane usable.
       const available = [];
       for (let n = 0; n < inboundLimits.client.messages; n++)
         available.push(yield* receive({ _tag: "registry" }));
@@ -458,7 +449,6 @@ test("INV-05: a peer selection refused at capacity leaves the peer acting on the
         cwd,
         sessionId: session.spec.sessionId,
       });
-      // Admission owns capacity before returned work runs, so this saturates deterministically.
       const held = [];
       for (let n = 0; n < inboundLimits.client.messages; n++)
         held.push(yield* receive({ _tag: "registry" }));
@@ -521,7 +511,6 @@ test("INV-05: browser client recovers from dispatch saturation with a fresh expl
         send: (m) => Effect.sync(() => handlers!.onMessage(m)),
         overflow: (e) => Effect.die(e),
       });
-      // Admission owns capacity before returned work runs, so this saturates deterministically.
       const held = [];
       for (let n = 0; n < inboundLimits.client.messages; n++)
         held.push(yield* dispatch.receive({ _tag: "registry" }));
@@ -559,7 +548,6 @@ for (const refusal of ["client", "session"] as const) {
           overflow: (e) => Effect.die(e),
         });
         yield* yield* receive({ _tag: "select", selectionId: "sel-1", cwd, sessionId });
-        // The browser's attachment to that session, which owns a ready app.
         const page: AppState = {
           ...initialState,
           connected: true,
@@ -675,7 +663,6 @@ for (const outcome of ["refused", "probe failure", "dispatch failure"] as const)
   test(`INV-05: ${outcome} settles a model refresh and allows one explicit retry`, async () => {
     await run(
       Effect.gen(function* () {
-        // Preserve the caller's spelling for correlation even when DirectoryFacts normalizes it.
         const cwd = `${join(root, outcome)}/.`;
         if (outcome !== "probe failure") mkdirSync(cwd, { recursive: true });
         const requests: ClientMessage[] = [];
@@ -769,7 +756,6 @@ test("INV-05: an admitted selection failure settles the browser and permits expl
         send: (m) => Effect.sync(() => handlers!.onMessage(m)),
         overflow: (e) => Effect.die(e),
       });
-      // Real host resolution rejects an unregistered reference, without saturation.
       const sessionId = "admitted-retry";
       browser.select(cwd, sessionId);
       const first = requests.find((m) => m._tag === "select")!;
@@ -778,7 +764,6 @@ test("INV-05: an admitted selection failure settles the browser and permits expl
       assert.equal(browser.getState().selectionId, null);
       assert.ok(browser.getState().selectionFailure?.message);
       assert.equal(requests.filter((m) => m._tag === "select").length, 1, "no automatic retry");
-      // Remove the resolution failure, then retry the exact same reference explicitly.
       yield* registered(sessionId);
       browser.select(cwd, sessionId);
       const selections = requests.filter((m) => m._tag === "select");
@@ -793,7 +778,6 @@ test("INV-05: an admitted selection failure settles the browser and permits expl
 });
 
 test("a trust decision answers the requester with a notice, the new trust and the new models, in that order", async () => {
-  // A project skill makes the directory's trust matter to Pi.
   mkdirSync(join(cwd, ".agents/skills/hello"), { recursive: true });
   writeFileSync(
     join(cwd, ".agents/skills/hello/SKILL.md"),
@@ -855,10 +839,6 @@ test("untrust reports the final outcome when a Pi extension remembers trust agai
   );
 });
 
-/**
- * A browser page's worktree picker against `receive`: `exchange` dispatches what the picker last
- * sent and delivers this client's answers to the page, as the socket would.
- */
 function worktreePicker(receive: (m: ClientRequest) => Effect.Effect<Effect.Effect<void>>) {
   const commands: ClientRequest[] = [];
   let handlers: ConnectionHandlers | undefined;
@@ -937,15 +917,9 @@ test("INV-06: rejected worktree operations settle the picker immediately without
   );
 });
 
-/**
- * One request of every kind, with the reply its sender awaits when client capacity refuses it.
- * Exhaustive by type, so a new request kind needs its refusal reply stated here. `REFUSED` stands
- * for the capacity message.
- */
 const refusals: {
   readonly [K in ClientRequest["_tag"]]: readonly [Extract<ClientRequest, { _tag: K }>, unknown];
 } = {
-  // A heartbeat is never refused: it bypasses capacity and is answered.
   ping: [
     { _tag: "ping", nonce: "n" },
     { _tag: "pong", nonce: "n" },
@@ -1082,7 +1056,6 @@ test("INV-05/06: every request kind refused at capacity gets its own correlated 
       for (const [request, reply] of Object.values(refusals)) {
         const from = sent.length;
         yield* yield* receive(request);
-        // Stand in for the capacity message and the observation time, and drop absent fields.
         const [answer, ...rest] = JSON.parse(
           JSON.stringify(answers(from), (key, value) =>
             typeof value === "string" && /not started/.test(value)
@@ -1292,7 +1265,6 @@ test("INV-01: a browser's checkout poll re-observes without resending the sideba
         overflow: (e) => Effect.die(e),
       });
       let snapshots = 0;
-      /** The next sidebar this browser is sent that holds `sessions` session references. */
       const sidebarWith = (sessions: number) =>
         Effect.gen(function* () {
           for (;;) {
@@ -1310,7 +1282,6 @@ test("INV-01: a browser's checkout poll re-observes without resending the sideba
         "the connection is given the sidebar once",
       );
 
-      // The page's five-second checkout poll, which keeps Git's branch projection current.
       for (let poll = 0; poll < 3; poll++) {
         yield* yield* receive({ _tag: "registry" });
         yield* view.fresh;
@@ -1327,11 +1298,6 @@ test("INV-01: a browser's checkout poll re-observes without resending the sideba
   );
 });
 
-/**
- * Every change a browser sends, with the toast that confirms it once the server has made it and
- * a request of the same kind that fails. A failed change is answered by its error alone: no
- * toast says it happened. Folders close idempotently, so closing one has no failing request.
- */
 const confirmations: ReadonlyArray<{
   readonly done: ClientRequest;
   readonly toast: string;
@@ -1531,11 +1497,6 @@ test("PIN-152: Data controls returns actual counts, clears an archived selection
   );
 });
 
-/**
- * PIN-132: one browser (A) composes a follow-up to a session another browser (B) archives. A's
- * real client, drafts and transport-level sends meet the real dispatch; only the socket is
- * replaced by direct delivery.
- */
 const archiveRace = (options: { startsClosingHost?: boolean } = {}) =>
   Effect.gen(function* () {
     const session = yield* registered(`pin-132-${++databases}`);
@@ -1563,8 +1524,6 @@ const archiveRace = (options: { startsClosingHost?: boolean } = {}) =>
       send: (m) => Effect.sync(() => handlers!.onMessage(m)),
       overflow: (e) => Effect.die(e),
     }).pipe(
-      // A's start resolves the live host just before B's archive takes the session's lock, so
-      // A's input reaches a host that is closing.
       Effect.provideService(
         SessionHosts,
         options.startsClosingHost
@@ -1586,7 +1545,6 @@ const archiveRace = (options: { startsClosingHost?: boolean } = {}) =>
       Effect.gen(function* () {
         while (!ready()) yield* Effect.sleep("5 millis");
       });
-    /** Composer-style send; returns the act the browser handed its socket. */
     const send = () => {
       const before = requests.length;
       assert.equal(
@@ -1727,8 +1685,6 @@ test("INV-03: a first message its new session refuses before Pi sees it reads no
       browser.start();
       handlers!.onStatus(true);
       const hosts = yield* SessionHosts;
-      // Pi stops between attaching and the first prompt (another client archives the new
-      // session here), so the prompt reaches a host that is closing.
       const dispatch = yield* makeClientDispatch({
         send: (m) => Effect.sync(() => handlers!.onMessage(m)),
         overflow: (e) => Effect.die(e),

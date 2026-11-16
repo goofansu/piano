@@ -1,49 +1,26 @@
-/**
- * Client policy for Pi's extension dialogs: queue selection, answer delivery, receipts and drafts.
- * Only the head of a settled session attachment can be answered; a resync hides the queue until
- * its replacement snapshot arrives. Components render the resulting views without deciding policy.
- *
- * Sent or uncertain answers are never replayed automatically. A fresh attachment may offer an
- * unresolved dialog again; the server still enforces one terminal claim per dialog. Ordinary
- * dialogs have no Pi consumption acknowledgement, while tool-owned answers are confirmed by the
- * stored tool result. Draft replies survive view changes but not a page reload.
- */
 import type { ClientCommand, Dialog, DialogResolution } from "@shared/wire";
-// Relative, not @shared/: module tests load this file directly in Node.
 import { readProposal } from "../../../shared/library.ts";
 import { type AppState, sessionKey } from "../store.ts";
-// Relative, not @/: module tests load this file directly in Node.
 import { sessionReady } from "./sessionContext.ts";
 import type { SendDisposition } from "./ws.ts";
 
-/** Where a dialog is asked: a confirmation in a modal, any other method inline by the composer, and
- * so is a save tool's proposal, which is a confirmation the user reads beside the transcript. */
 export type DialogSurface = "modal" | "inline";
 
 export const dialogSurface = (dialog: Dialog): DialogSurface =>
   dialog.method === "confirm" && !readProposal(dialog) ? "modal" : "inline";
 
-/** A question's title, or the generic one when Pi gave none; the asking and answered views share it. */
 export const dialogTitle = (title: string | undefined): string => title || "Pi needs an answer";
 
-/** A tool call owns the dialog or answer (Piano's own `ask_user`): it ends with that call, never on
- * a timer, and only the call's stored result confirms the answer. */
 const ownedByToolCall = ({ toolCallId }: { toolCallId?: string }) => toolCallId !== undefined;
 
 export interface PendingDialogs {
-  /** The dialog to answer now; undefined when none is pending or a resync is replacing the list. */
   head: Dialog | undefined;
-  /** Which surface asks the head; null when there is none. */
   surface: DialogSurface | null;
-  /** Dialogs queued behind the head. */
   more: number;
-  /** The settled attachment answers go out on (see `sessionReady`); null while there is none. */
   attachment: string | null;
-  /** The selected session's key, which its questions' replies are kept under; null with no session. */
   session: string | null;
 }
 
-/** The selected session's dialog queue as the dialog host shows it. */
 export function pendingDialogs(state: AppState): PendingDialogs {
   const dialogs = state.resync ? [] : (state.session?.dialogs ?? []);
   return {
@@ -55,20 +32,12 @@ export function pendingDialogs(state: AppState): PendingDialogs {
   };
 }
 
-/** A status dot's tone; the subset of `StatusTone` an answer receipt uses. */
 export type AnswerTone = "busy" | "warn" | "err" | "muted";
 
-/** How a dialog resolution is reported, decided once for the answer card and notices. */
 export interface AnswerReceipt {
-  /** The last answer stays above the composer. */
   card: boolean;
-  /** The card's delivery line; null when delivery needs no word. */
   status: { label: string; tone: AnswerTone } | null;
-  /** The card offers the delivery detail behind a Details popover. */
   details: boolean;
-  /** The status line for a resolution without an answer; null when it has one or the user's
-   * cancellation reached Pi. The server retires the receipt, and so the line, when the next run
-   * starts. */
   notice: { tone: "quiet"; title: string } | null;
 }
 
@@ -84,21 +53,13 @@ const deliveryStatus: Record<
   "not-sent": { label: "Not sent", tone: "muted" },
 };
 
-/** A receipt reports delivery, not history: an answer a tool call owns leaves once its stored
- * result confirms it; an ordinary reply leaves once written, without claiming Pi consumed it.
- * Pending/failed/uncertain writes remain visible even without a pending question (INV-04). */
 export function answerReceipt(resolution: DialogResolution): AnswerReceipt {
   const { delivery, answer } = resolution;
   const owned = ownedByToolCall(resolution);
-  // A written answer to one of Piano's own questions still awaits Pi's confirmation.
   const status =
     delivery === "written" && owned
       ? { label: "Sent, waiting for Pi…", tone: "busy" as const }
       : deliveryStatus[delivery];
-  // Ending a dialog by Cancel or by Stop ("aborted") is the user's own act: once Pi has it, it
-  // needs no receipt, as a confirmed answer leaves none. A pending, uncertain or unsent one still
-  // says so, and an ending the user did not choose (expiry, recovery, Pi exiting) always does
-  // (INV-04).
   const cancelled =
     (resolution.reason === "cancelled" || resolution.reason === "aborted") &&
     (delivery === "written" || delivery === "accepted");
@@ -113,7 +74,6 @@ export function answerReceipt(resolution: DialogResolution): AnswerReceipt {
   };
 }
 
-/** The selected session's last answer while its receipt still has something to say. */
 export function answeredQuestion(state: AppState): DialogResolution | undefined {
   if (state.resync) return;
   const resolution = state.session?.state.dialogResolution;
@@ -121,42 +81,26 @@ export function answeredQuestion(state: AppState): DialogResolution | undefined 
   return resolution;
 }
 
-/** One reply to a dialog; which field is set depends on its method. */
 export type DialogReply = { value?: string; confirmed?: boolean; cancelled?: boolean };
 
 export interface DialogAnswerView {
-  /** A reply was sent (or abort requested) on this attachment, or the socket has since closed;
-   * the host's resolution is awaited. */
   submitted: boolean;
-  /** The reply controls are disabled: already submitted, disconnected or past the deadline. */
   disabled: boolean;
-  /** Abort is disabled: already submitted or disconnected. It ignores the deadline. */
   abortDisabled: boolean;
-  /** The title to show, with the generic fallback applied. */
   title: string;
-  /** The estimated answer deadline; null when a tool call owns the dialog and so it has none. */
   deadline: {
-    /** What the estimate is: Pi's own timeout, or Piano cancelling it on recovery. */
     label: string;
-    /** Whole seconds until the deadline, rounded up and never negative. */
     remainingSeconds: number;
-    /** The deadline as epoch milliseconds. */
     at: number;
   } | null;
-  /** The status line once submitted: what the dialog now waits for. */
   waiting: string;
 }
 
-/** Each method takes the current `PendingDialogs.attachment`. */
 export interface DialogAnswer {
-  /** The attachment a reply or abort may have been sent on; `subscribe` fires after an attempt. */
   getState: () => string | null;
   subscribe: (listener: () => void) => () => void;
-  /** Sends unless disabled; true for sent or uncertain, false for blocked or known not sent. */
   answer: (reply: DialogReply, now: number, attachment: string | null) => boolean;
-  /** Closing the dialog: a cancelled reply, under the same rules as `answer`. */
   cancel: (now: number, attachment: string | null) => boolean;
-  /** Requests native abort unless disabled; true for sent or uncertain delivery. */
   abort: (now: number, attachment: string | null) => boolean;
   view: (now: number, attachment: string | null) => DialogAnswerView;
 }
@@ -171,9 +115,7 @@ export function createDialogAnswer({
   let sentOn: string | null = null;
   const listeners = new Set<() => void>();
   const submit = (command: ClientCommand, attachment: string) => {
-    // Claim before entering the transport: it can synchronously notify connection subscribers.
     sentOn = attachment;
-    // Only proven non-delivery permits a retry on this attachment. Sent/uncertain never replay.
     if (send(command) === "not-sent") sentOn = null;
     for (const listener of listeners) listener();
     return sentOn !== null;
@@ -191,14 +133,11 @@ export function createDialogAnswer({
         : "Sending response…";
   const view = (now: number, attachment: string | null): DialogAnswerView => {
     const expired = at !== null && now >= at;
-    // Disconnected, the attempt still awaits its outcome; a new attachment's snapshot decides it.
     const submitted = sentOn !== null && (attachment === null || attachment === sentOn);
     const connected = attachment !== null;
     return {
       submitted,
       disabled: submitted || !connected || expired,
-      // Abort stays available past the deadline: the deadline only bounds when Pi still reads a
-      // reply, while abort is how the user gets out of a dialog Pi may already have given up on.
       abortDisabled: submitted || !connected,
       title,
       deadline:
@@ -234,25 +173,15 @@ export function createDialogAnswer({
   };
 }
 
-/** The client state a `QuestionReplies` follows; the page's `Client` is one. */
 export interface QueueSource {
   getState: () => AppState;
   subscribe: (listener: () => void) => () => void;
 }
 
-/**
- * The reply being written to each open question: an input's or editor's text, or a choice's
- * 1-based option index ("" when none is chosen). It belongs to the question, not to the view that
- * shows it, so switching sessions or a resync keeps it. It is dropped when its session's queue is
- * next seen without it (answered, cancelled, timed out, or a restarted Pi's new generation).
- * Like message drafts it lives in browser memory for this page load only.
- */
 export interface QuestionReplies {
-  /** The reply so far; an untouched question starts from its prefill, a choice unselected. */
   get: (session: string | null, dialog: Dialog) => string;
   subscribe: (listener: () => void) => () => void;
   set: (session: string | null, dialog: Dialog, reply: string) => void;
-  /** Drops replies whose question left the selected session's queue; returns the stop function. */
   follow: (source: QueueSource) => () => void;
 }
 
@@ -283,7 +212,6 @@ export function createQuestionReplies(): QuestionReplies {
     follow: (source) =>
       source.subscribe(() => {
         const state = source.getState();
-        // A resync is replacing the list, so it says nothing about which questions closed.
         if (state.resync || !state.session) return;
         const session = sessionKey(state.session);
         const open = replies.get(session);

@@ -2,27 +2,17 @@ import { type RefObject, useEffect } from "react";
 
 const ownsInput = (el: EventTarget | null) =>
   el instanceof HTMLElement &&
-  // Inline questions own Space on their radio buttons and actions, not just their text fields.
   (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || !!el.closest("form"));
 
-/**
- * A focused control activates on Space: a button, link, summary or ARIA widget keeps that key
- * rather than having it typed into the composer. Other printable keys still go to the composer.
- */
 const activates = (el: EventTarget | null) =>
   el instanceof Element &&
   el.matches(
     'button, a[href], summary, [role="button"], [role="link"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="option"], [role="tab"], [role="checkbox"], [role="radio"], [role="switch"], [role="treeitem"]',
   );
 
-/** Something else is taking keys: a menu, a listbox, a dialog. */
 const overlayOpen = () =>
   !!document.querySelector('[role="dialog"], [role="menu"], [role="listbox"], [cmdk-root]');
 
-/**
- * Typing anywhere on the page goes into the composer, as in ChatGPT. A printable key or a paste
- * that lands outside any field focuses the textarea and inserts the text there.
- */
 export function useTypeToFocus(
   ref: RefObject<HTMLTextAreaElement | null>,
   insert: (text: string) => void,
@@ -40,7 +30,6 @@ export function useTypeToFocus(
         !ref.current ||
         ref.current.disabled ||
         !ref.current.getClientRects().length ||
-        // Hidden in place behind another area (one area at a time), it is not taking input.
         ref.current.closest("[inert]")
       )
         return;

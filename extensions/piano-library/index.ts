@@ -1,4 +1,3 @@
-/** Bundled Pi extension: read Piano-owned skills/prompts and propose saves for user approval. */
 import { type JsonValue, StringEnum } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { bool, obj, opt, type Static, str } from "@earendil-works/pi-schema";
@@ -55,7 +54,6 @@ const GUIDELINES = [
 
 export default function pianoLibrary(pi: ExtensionAPI) {
   const config = dispatchConfiguration();
-  // Not advertised without the Piano that started this Pi: a catalog probe, a terminal Pi.
   if (!config) return;
   const base = new URL(config.url);
   base.protocol = base.protocol === "wss:" ? "https:" : "http:";

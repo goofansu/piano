@@ -1,7 +1,3 @@
-// The session UI's view of its managed app, through PiSessions: what the live generation's state
-// shows, how the browser re-observes and stops it, and what it must never show or stop. The host
-// supervisor is the substituted boundary (fixtures/preview-host.ts); lifecycle ownership itself is
-// PreviewOwner.test.ts's contract.
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -58,7 +54,6 @@ async function fixture(t: TestContext) {
   return { root, host, config, launched, stops, run };
 }
 
-/** The first state, from the snapshot onwards, that satisfies `pred`. */
 const stateWhere = (session: PiSession, pred: (state: SessionState) => boolean) =>
   session.events.pipe(
     Stream.map((frame) =>
@@ -73,7 +68,6 @@ const stateWhere = (session: PiSession, pred: (state: SessionState) => boolean) 
     Effect.map(Option.getOrThrow),
   );
 
-/** The session's tool sends `request`; the reply the agent reads. */
 const askTool = (session: PiSession, request: object) =>
   Effect.gen(function* () {
     const reply = yield* session.events.pipe(
@@ -90,7 +84,6 @@ const askTool = (session: PiSession, request: object) =>
     return yield* Fiber.join(reply);
   });
 
-/** The session's tool starts an app, as the agent would. */
 const startFromTool = (session: PiSession) =>
   Effect.gen(function* () {
     yield* askTool(session, {
@@ -115,7 +108,6 @@ test("the tool's app reaches the session state; the browser re-observes and stop
       assert.equal(app.url, null, "an unready app offers nothing to open");
       assert.deepEqual(app.command, [process.execPath, "-e", "process.exit(1)"]);
 
-      // Unavailable supervision is unknown: not stopped, and not openable.
       f.host.unavailable = true;
       const failed = yield* session.act({ _tag: "preview_status", requestId: "failed-read" });
       assert.equal(failed?._tag === "preview_observed" && failed.requestId, "failed-read");
@@ -140,7 +132,6 @@ test("the tool's app reaches the session state; the browser re-observes and stop
       );
       assert.equal((yield* session.state).preview?.state, "failed");
 
-      // A stale instance is never retargeted to the current one.
       assert.deepEqual(yield* session.act({ _tag: "preview_stop", instanceId: "replaced" }), {
         _tag: "preview_stopped",
         instanceId: "replaced",
@@ -221,7 +212,6 @@ test("a stale stop after a replacement neither stops nor clears the replacement"
       )).preview!;
       const stopped = f.stops.length;
 
-      // The browser still shows the old instance and asks to stop it.
       assert.deepEqual(
         yield* session.act({
           _tag: "preview_stop",
@@ -263,7 +253,7 @@ test("a replacement that fails after stopping the app no longer shows the stoppe
         sessionId: "preview-lost",
       });
       const app = yield* startFromTool(session);
-      f.config.ports = [5173]; // Reserved for Piano: no free port remains.
+      f.config.ports = [5173];
 
       const reply = yield* askTool(session, {
         action: "start",

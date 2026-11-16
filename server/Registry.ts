@@ -1,9 +1,3 @@
-/**
- * What piano knows about: folders, projects, the worktrees created through piano, and
- * the sessions started through piano. SQLite owns persistence. Pi's own session store is only consulted to
- * load a session's history; it is never scanned to populate the sidebar.
- */
-
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
@@ -31,7 +25,6 @@ export class RegistryError extends Data.TaggedError("RegistryError")<{ readonly 
   }
 }
 
-/** A typed lookup miss. `detail` is the text shown to the person. */
 export class RegistryLookupError extends Data.TaggedError("RegistryLookupError")<{
   readonly subject: "workspace" | "session" | "folder" | "project";
   readonly detail: string;
@@ -41,29 +34,23 @@ export class RegistryLookupError extends Data.TaggedError("RegistryLookupError")
   }
 }
 
-/** A title derived from a session's first prompt stays shorter than one a person typed. */
 const PROMPT_TITLE_MAX = 80;
 
 const WorktreeEntry = Schema.Struct({
   folder: Schema.String,
   path: Schema.String,
   branch: Schema.String,
-  /** The base branch Worktrunk reported when Piano created the worktree; absent for a worktree
-   * Piano only discovered. Changes compares the branch with it. */
   baseBranch: Schema.optional(Schema.String),
 });
 export type WorktreeEntry = typeof WorktreeEntry.Type;
 
-/** A session reference's integration links: identities owned by Piano, facts owned by the forge. */
 const sessionLinkFields = {
-  /** Absent: discover from the checkout. Null: explicitly removed. No forge status is persisted. */
   pullRequest: Schema.optional(Schema.NullOr(SessionPullRequestLink)),
 };
 const SessionLinks = Schema.Struct(sessionLinkFields);
 export type SessionLinks = typeof SessionLinks.Type;
 export type SessionLinkKey = keyof SessionLinks;
 
-/** One session reference: the registry's single statement of a session's fields. */
 const SessionEntry = Schema.Struct({
   ...sessionLinkFields,
   projectId: Schema.optional(Schema.String),
@@ -73,20 +60,13 @@ const SessionEntry = Schema.Struct({
   createdAt: Schema.String,
   updatedAt: Schema.String,
   archived: Schema.Boolean,
-  /** Retention generation: prevents stale writes across archive → unarchive. */
   retentionVersion: Schema.optional(Schema.Number),
-  /** Sidebar preference; absent means unpinned. */
   pinned: Schema.optional(Schema.Boolean),
-  /** Changes preference: the comparison the user chose; absent means Uncommitted. */
   changesScope: Schema.optional(ChangesScope),
-  /** Replaceable last-known Pi accounting, not session history. */
   stats: Schema.optional(SessionStats),
 });
 export type SessionEntry = typeof SessionEntry.Type;
 
-/** What a session reference shows: cached statistics and the Changes scope never reach the
- * sidebar. The pull request link does, so a browser reads GitHub facts only for a
- * session that has one. */
 export const shownReference = ({
   stats: _stats,
   changesScope: _changesScope,
@@ -94,17 +74,12 @@ export const shownReference = ({
   ...shown
 }: SessionEntry): Omit<SessionEntry, "stats" | "changesScope" | "retentionVersion"> => shown;
 
-/**
- * `entry` is still the reference `expected` was read as: not recreated (same creation time), not
- * archived since, and, when `link` is named, that link unchanged.
- */
 const sameReference = (entry: SessionEntry, expected: SessionEntry, link?: SessionLinkKey) =>
   entry.createdAt === expected.createdAt &&
   (entry.retentionVersion ?? 0) === (expected.retentionVersion ?? 0) &&
   entry.archived === expected.archived &&
   (link === undefined || entry[link] === expected[link]);
 
-/** Private integration credentials, deliberately outside RegistryData and its listeners. */
 export interface StoredWebhook {
   readonly id: string;
   readonly url: string;
@@ -114,7 +89,6 @@ export interface StoredWebhook {
   readonly createdAt: string;
 }
 
-/** Voice input and the OpenAI key only it uses: private, outside RegistryData like webhooks. */
 export interface StoredVoiceInput {
   readonly enabled: boolean;
   readonly key: string | null;
@@ -132,7 +106,6 @@ export interface RegistryData {
 export const DEFAULT_DB_PATH = resolve(
   join(process.env.XDG_DATA_HOME || join(homedir(), ".local", "share"), "piano", "piano.db"),
 );
-/** `PIANO_DB_PATH` selects a scratch database; tests inject one directly. */
 export const RegistryDatabasePath = Context.Reference<string>("piano/RegistryDatabasePath", {
   defaultValue: () => resolve(process.env.PIANO_DB_PATH ?? DEFAULT_DB_PATH),
 });
@@ -146,7 +119,6 @@ const currentSchema = Schema.Struct({
   sessions: Schema.Array(SessionEntry),
 });
 
-/** Path references keep their spelling: never move or merge Pi's alias-based history. */
 function withWorkspaces(
   data: RegistryData,
   candidates: ReadonlyArray<string> = [
@@ -166,12 +138,6 @@ function withWorkspaces(
   }
   return added.length ? { ...data, workspaces: [...data.workspaces, ...added] } : data;
 }
-/**
- * Every write keeps "each folder, worktree and session cwd has a workspace", which `decode`
- * requires on the next start. Only rows that are new or replaced at their index are checked, and
- * a replaced row that keeps its path adds nothing, so a session metadata update compares
- * references without building the workspace path set.
- */
 function withAddedWorkspaces(before: RegistryData, after: RegistryData): RegistryData {
   const candidates: string[] = [];
   const scan = <A>(was: ReadonlyArray<A>, is: ReadonlyArray<A>, path: (row: A) => string) => {
@@ -187,7 +153,6 @@ function withAddedWorkspaces(before: RegistryData, after: RegistryData): Registr
   return candidates.length ? withWorkspaces(after, candidates) : after;
 }
 
-/** Mutations are immutable. Compare only replaced items, retaining value-equal references too. */
 function shareCollection<A>(before: ReadonlyArray<A>, after: ReadonlyArray<A>): ReadonlyArray<A> {
   if (before === after) return before;
   let unchanged = before.length === after.length;
@@ -251,13 +216,11 @@ const recovery = (path: string, error: unknown) =>
   new RegistryError({
     detail: `Cannot read or persist registry ${path}. It has not been reset. Restore a known-good backup or repair the database before restarting. ${String(error)}`,
   });
-/** A folder must name an existing directory before it is registered. */
 const requireDirectory = (raw: string) =>
   Directories.require(raw).pipe(
     Effect.mapError((error) => new RegistryError({ detail: error.detail })),
   );
 
-/** Told about each write that changed the data, with the data before and after it. */
 export type RegistryListener = (before: RegistryData, after: RegistryData) => Effect.Effect<void>;
 
 export class Registry extends Context.Service<
@@ -267,7 +230,6 @@ export class Registry extends Context.Service<
     readonly creationAttempt: (
       id: string,
     ) => Effect.Effect<CreationAttempt | undefined, RegistryError>;
-    /** Atomic durable claim, before checkout/child/input effects. Existing claims are never reused. */
     readonly claimCreation: (attempt: CreationAttempt) => Effect.Effect<boolean, RegistryError>;
     readonly saveCreation: (attempt: CreationAttempt) => Effect.Effect<void, RegistryError>;
     readonly webhooks: Effect.Effect<readonly StoredWebhook[], RegistryError>;
@@ -275,15 +237,8 @@ export class Registry extends Context.Service<
     readonly removeWebhook: (id: string) => Effect.Effect<void, RegistryError>;
     readonly voiceInput: Effect.Effect<StoredVoiceInput, RegistryError>;
     readonly saveVoiceInput: (voice: StoredVoiceInput) => Effect.Effect<void, RegistryError>;
-    /**
-     * Hear about every write that changes the data, for the listener's scope. The writer
-     * waits for its listeners, so whatever they publish is out before the write returns;
-     * a write that changes nothing is not announced.
-     */
     readonly onChange: (listener: RegistryListener) => Effect.Effect<void, never, Scope.Scope>;
-    /** The registered workspace with this ID. */
     readonly workspace: (id: string) => Effect.Effect<Workspace, RegistryLookupError>;
-    /** A session reference registered at this workspace's exact path. */
     readonly sessionIn: (
       workspaceId: string,
       sessionId: string,
@@ -291,93 +246,49 @@ export class Registry extends Context.Service<
       { readonly workspace: Workspace; readonly session: SessionEntry },
       RegistryLookupError
     >;
-    /** Succeeds only for a folder the person added (exact path spelling). */
     readonly requireFolder: (path: string) => Effect.Effect<void, RegistryLookupError>;
-    /** A known project. */
     readonly requireProject: (id: string) => Effect.Effect<Project, RegistryLookupError>;
-    /**
-     * Create a project, its name and any instructions trimmed. An existing ID is refused and
-     * left as it is: `updateProject` is the one way to change a project. With `assign`, that
-     * session joins it in the same write: one change announcement, and an unregistered session
-     * rejects the whole save.
-     */
     readonly saveProject: (
       project: Pick<Project, "id" | "name" | "instructions">,
       assign?: { readonly cwd: string; readonly sessionId: string },
     ) => Effect.Effect<void, RegistryError>;
-    /**
-     * Change a known project's name or instructions in one write, both trimmed. A blank name is
-     * refused; null or blank instructions clear them. An unknown project is refused, so a change
-     * racing its deletion cannot bring it back.
-     */
     readonly updateProject: (
       id: string,
       change: { readonly name?: string; readonly instructions?: string | null },
     ) => Effect.Effect<void, RegistryError>;
-    /**
-     * Mark a known project done (`doneAt` now) or reopen it (no `doneAt`), touching nothing
-     * else: its sessions keep their state and their Pi. Already so is a no-op; an unknown project
-     * is refused.
-     */
     readonly setProjectDone: (id: string, done: boolean) => Effect.Effect<void, RegistryError>;
-    /** Remove a project in one write; its sessions stay registered and move to No project. */
     readonly deleteProject: (id: string) => Effect.Effect<void, RegistryError>;
     readonly assignProject: (
       cwd: string,
       sessionId: string,
       projectId: string | null,
     ) => Effect.Effect<void, RegistryError>;
-    /** Open an existing directory as a folder under this exact spelling, returned; an open folder stays as it is. Which directory a session belongs to is SessionHosts' decision. */
     readonly addFolder: (path: string) => Effect.Effect<string, RegistryError>;
     readonly removeFolder: (path: string) => Effect.Effect<void, RegistryError>;
-    /** Register a worktree. An already registered path keeps its entry. */
     readonly addWorktree: (entry: WorktreeEntry) => Effect.Effect<void, RegistryError>;
-    /**
-     * Save the branch Git last reported for registered worktrees, as their last-known value
-     * (INV-01): shown once Git no longer lists them. One write and one announcement for the batch;
-     * an unregistered path, a blank branch or an unchanged one is left alone.
-     */
     readonly observeWorktreeBranches: (
       observed: ReadonlyArray<{ readonly path: string; readonly branch: string }>,
     ) => Effect.Effect<void, RegistryError>;
-    /** Register a session and its initial, currently active project in one write. Existing references stay unchanged. */
     readonly addSession: (
       cwd: string,
       sessionId: string,
       title?: string,
       projectId?: string,
     ) => Effect.Effect<void, RegistryError>;
-    /** Bump a session's activity time; sets the title from the first prompt when neither a start name nor Pi's name gave one. */
     readonly touchSession: (
       cwd: string,
       sessionId: string,
       text?: string,
     ) => Effect.Effect<void, RegistryError>;
-    /**
-     * Mirror Pi's facts onto a session reference in one write: Pi's session name, when it has
-     * one, replaces the title; statistics replace the last-known cache. Never changes activity
-     * or order, and never creates a reference.
-     */
     readonly mirrorSession: (
       cwd: string,
       sessionId: string,
       facts: { readonly sessionName?: string; readonly stats?: SessionStats },
     ) => Effect.Effect<void, RegistryError>;
-    /**
-     * The registered entry for `expected` while it is still that reference: not removed,
-     * recreated or archived since it was read, and, when `link` is named, with that link
-     * unchanged. Undefined otherwise.
-     */
     readonly current: (
       expected: SessionEntry,
       link?: SessionLinkKey,
     ) => Effect.Effect<SessionEntry | undefined>;
-    /**
-     * Compare-and-set one integration link, applied only while `expected` is `current` with
-     * that link unchanged, so a delayed forge result cannot undo a removal, overwrite
-     * a newer choice or resurrect a deleted reference. Returns the saved entry, or undefined
-     * when refused.
-     */
     readonly setSessionLink: <K extends SessionLinkKey>(
       expected: SessionEntry,
       link: K,
@@ -388,7 +299,6 @@ export class Registry extends Context.Service<
       sessionId: string,
       pinned: boolean,
     ) => Effect.Effect<void, RegistryError>;
-    /** Save the comparison Changes opens the session on; `undefined` restores the Uncommitted default. */
     readonly setSessionChangesScope: (
       cwd: string,
       sessionId: string,
@@ -399,14 +309,9 @@ export class Registry extends Context.Service<
       cwd: string,
       sessionId: string,
     ) => Effect.Effect<void, RegistryError>;
-    /** One write; rechecks reference generation and pinned state at commit. Caller owns execution locks. */
     readonly archiveSessions: (
       expected: ReadonlyArray<SessionEntry>,
     ) => Effect.Effect<number, RegistryError>;
-    /**
-     * `reopened` names the done mark `addSession` cleared for this session: removing a start that
-     * failed gives it back, unless the project took a later session or is no longer open.
-     */
     readonly removeSession: (
       cwd: string,
       sessionId: string,
@@ -451,8 +356,6 @@ export const RegistryLive = Layer.effect(
         }),
       );
       if (!change) return;
-      // Outside the lock, so a listener may read the registry; it reads at least this write.
-      // The write is saved either way: a failing listener is logged, never reported as a failed write.
       yield* Effect.forEach(
         [...listeners],
         (listener) =>
@@ -465,7 +368,6 @@ export const RegistryLive = Layer.effect(
       );
     }, Effect.uninterruptible);
     const now = () => new Date().toISOString();
-    /** The one place a session's title is decided: trimmed, cut at `max`, empty is none. */
     const titleOf = (text: string | undefined, max = SESSION_TITLE_MAX) => {
       const trimmed = text?.trim();
       if (!trimmed) return undefined;
@@ -660,8 +562,6 @@ export const RegistryLive = Layer.effect(
           );
           return path;
         }),
-      // Closing a folder only hides it; its worktrees and sessions stay registered so
-      // starting a session in that directory again brings everything back.
       removeFolder: (path) =>
         update((d) => ({ ...d, folders: d.folders.filter((p) => p !== path) })),
       addWorktree: (entry) =>
@@ -694,7 +594,6 @@ export const RegistryLive = Layer.effect(
               detail: "Project is unavailable. Choose a current project before starting.",
             });
           const t = now();
-          // A session started in a done project reopens it: new work means the outcome is not done.
           const projects = d.projects.map((p) => {
             if (p.id !== projectId || p.doneAt === undefined) return p;
             const { doneAt: _, ...open } = p;
@@ -734,7 +633,6 @@ export const RegistryLive = Layer.effect(
         update((d) => {
           const entry = d.sessions.find(isSession(cwd, sessionId));
           if (!entry) return d;
-          // Pi owns the name; a session Pi has not named keeps its start name or first prompt.
           const title = titleOf(facts.sessionName) || entry.title;
           const stats = facts.stats ?? entry.stats;
           if (title === entry.title && JSON.stringify(stats) === JSON.stringify(entry.stats))

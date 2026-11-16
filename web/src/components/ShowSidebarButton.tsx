@@ -5,17 +5,8 @@ import { IconButton } from "@/components/IconButton";
 import { StatusDot } from "@/components/StatusDot";
 import { useSidebarLayout, useSidebarLayoutState } from "@/lib/useSidebarLayout";
 
-/** Whether any session's Pi is working: the one signal the hidden sidebar's rows would have shown. */
 export const SidebarActivityContext = createContext(false);
 
-/**
- * A page's way to the sidebar while it is out of sight: below the breakpoint, where the sidebar is
- * a sheet, and on desktop once it is collapsed. It sits where the sidebar's hide control was (both
- * in the pane's frame), so the toggle stands still across the collapse; it leads, so its glyph stays
- * there when the touch target grows. While any session works it carries the busy dot, since the
- * rows that would say so are hidden. Its tooltip names it, as Hide sidebar's does. It offers itself as where focus returns when the sheet closes
- * and nothing better is left to focus.
- */
 export function ShowSidebarButton({
   className,
   label = "Show sidebar",
@@ -43,7 +34,6 @@ export function ShowSidebarButton({
       onClick={layout.show}
     >
       {children}
-      {/* At the glyph's top-right corner, which `leading` keeps put at any target size. */}
       {working && (
         <StatusDot
           tone="busy"

@@ -6,7 +6,6 @@ import { MAX_VOICE_REQUEST_BYTES } from "../shared/voiceInput.ts";
 import { gatewayFixture } from "./fixtures/peer-gateway.ts";
 import { startRouter } from "./fixtures/router.ts";
 
-// Real Node HTTP ingestion, not just schema validation or a preallocated in-memory Request.
 test(
   "main voice ingestion bounds actual chunked bytes before parsing; peers never proxy voice",
   { timeout: 45_000 },

@@ -66,13 +66,9 @@ for (const scenario of cases) {
       { detached: true, stdio: ["ignore", "pipe", "pipe"] },
     );
     t.after(() => {
-      // There is no native supervisor in this test: on Linux its test-owned group is the
-      // cleanup boundary. macOS's runner must already have killed this group itself.
       try {
         process.kill(-runner.pid!, "SIGKILL");
-      } catch {
-        /* Already gone. */
-      }
+      } catch {}
     });
     const exited = once(runner, "exit");
     if (scenario.reason === "stop" || scenario.reason === "owner-disconnect") {
@@ -92,7 +88,6 @@ for (const scenario of cases) {
       exitCode: scenario.exitCode ?? null,
       signal: scenario.signal ?? null,
     });
-    // systemd reads the status; the adapter reads the outcome. Both must call it the same.
     if (process.platform !== "darwin")
       assert.equal(outcomeFailed(written), status !== 0, "status and outcome agree on failure");
   });

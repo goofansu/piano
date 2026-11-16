@@ -47,7 +47,6 @@ import {
 import { usePreviewObservation, usePreviews } from "@/lib/useMachine";
 import type { AppState } from "@/store";
 
-/** The app's state in the status dot's vocabulary; work in progress breathes. */
 export const dotTone: Record<PreviewTone, StatusTone> = {
   ready: "ok",
   pending: "busy",
@@ -55,22 +54,16 @@ export const dotTone: Record<PreviewTone, StatusTone> = {
   idle: "muted",
 };
 
-/**
- * The selected session's app as this page sees it; see `seenPreview`. None where the machine
- * observes no previews: a remote's snapshot carries its peer's app, which stays on the peer.
- */
 export function useSeenPreview(state: AppState) {
   const observed = usePreviewObservation();
   return observed && seenPreview(state, observed);
 }
 
-/** The app the user chose to inspect, while `claim` holds; see `claimedPreview`. */
 export function useClaimedPreview(state: AppState, claim: PreviewClaim | null) {
   const observed = usePreviewObservation();
   return observed && claimedPreview(state, observed, claim);
 }
 
-/** The selected session's preview commands, run through the host like any other surface's. */
 function usePreviewCommands() {
   const { commands, run } = useSessionCommands();
   const find = (id: "preview-details" | "stop-preview") => commands.find((c) => c.id === id);
@@ -83,7 +76,6 @@ function usePreviewCommands() {
   };
 }
 
-/** The dot and the word for the app's state, in Preview and its details. */
 export function PreviewStatus({
   preview,
   className,
@@ -100,7 +92,6 @@ export function PreviewStatus({
   );
 }
 
-/** One owned app in the rail; opening it never changes session navigation. */
 export function PreviewRailRow({ preview }: { preview: SessionPreview }) {
   const commands = usePreviewCommands();
   const previews = usePreviews();
@@ -229,11 +220,6 @@ function PreviewFacts({ preview }: { preview: SessionPreview }) {
   );
 }
 
-/**
- * The selected session's preview on demand: what was observed, the app's recent output, and its
- * actions. `claim` is the app it was opened for; it closes once that app is stopped, replaced, its
- * Pi restarted or its session left, and never reopens for another one.
- */
 export function PreviewDetailsDialog({
   claim,
   close,
@@ -255,10 +241,8 @@ export function PreviewDetailsDialog({
   return (
     <Dialog open={!!preview} onOpenChange={(o) => !o && close()}>
       <DialogContent
-        // Bounded to the viewport so Close and the footer stay reachable on a short screen.
         className="max-h-[85dvh] overflow-y-auto sm:max-w-xl"
         onCloseAutoFocus={onCloseAutoFocus}
-        // Land on the safe action, never Stop: opening the app, else the dialog itself.
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           (openRef.current ?? (event.currentTarget as HTMLElement | null))?.focus();
@@ -294,10 +278,7 @@ export function PreviewDetailsDialog({
                 </Button>
               </div>
               {details?.error && <p className="text-sm text-err">{details.error}</p>}
-              {/* Plain preformatted output has no dedicated UI primitive. The scroll container
-                  wraps the <pre> instead of being it: when a scrollable <pre> is dragged over in
-                  Firefox, the selection jumps to the whole dialog each time the pointer crosses
-                  the gap between two lines. */}
+              {/* A scrollable <pre> breaks drag selection in Firefox; scroll its wrapper instead. */}
               <div className="max-h-[min(16rem,40dvh)] min-h-16 overflow-auto rounded-md border border-line bg-fill">
                 <pre className="p-3 font-mono text-xs whitespace-pre-wrap break-words">
                   {details?.logs.trim() ||

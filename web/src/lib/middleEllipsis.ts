@@ -1,5 +1,3 @@
-/** Fit a name to its rendered width, sharing the retained graphemes between its two ends.
- * Unlike a file path, neither side of a slash gets priority. */
 export function middleEllipsis(
   text: string,
   width: number,

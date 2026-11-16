@@ -6,7 +6,7 @@ import { displayPath, sessionFiles, splitPath, visibleFiles } from "../web/src/l
 const call = (id: string, name: string, args: Record<string, unknown>) => ({
   id,
   name,
-  args: "[REDACTED]", // Display arguments need not even be JSON; only server facts name files.
+  args: "[REDACTED]",
   writtenPath:
     name === "write" || name === "edit" ? String(args.path ?? args.file_path ?? "") : undefined,
 });
@@ -121,7 +121,6 @@ test("Git's answer hides ignored, outside and removed paths; without one, or aft
     ),
     files,
   );
-  // A cached answer may span path-set refreshes, but never workspace identity (INV-07).
   for (const current of [
     undefined,
     { ...workspace, id: "other" },
@@ -148,7 +147,6 @@ test("one file under several spellings is one entry at its latest touch once Git
   const abbrev = (p: string) => p;
   const shown = (list: ReturnType<typeof visibleFiles>) =>
     list.map((file) => [file.path, displayPath(file, "/tmp/repo", abbrev)]);
-  // Before an answer, the text rule: each spelling once, inside the directory relative to it.
   assert.deepEqual(shown(visibleFiles(files, undefined, workspace)), [
     ["src/a.ts", "src/a.ts"],
     ["/tmp/repo/src/a.ts", "src/a.ts"],
@@ -168,12 +166,10 @@ test("one file under several spellings is one entry at its latest touch once Git
       })),
     },
   };
-  // The latest touch's spelling is kept, so opening sends a path the call named.
   assert.deepEqual(shown(visibleFiles(files, ready, workspace)), [
     ["/private/tmp/repo/src/a.ts", "src/a.ts"],
     ["src/b.ts", "src/b.ts"],
   ]);
-  // A spelling the answer does not cover yet keeps the text rule until a fresh answer.
   const stale = {
     ...ready,
     result: { ...ready.result, files: ready.result.files.slice(0, 2) },

@@ -26,7 +26,6 @@ import { inputFingerprint } from "../server/PiRecords.ts";
 import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
 import { largeHistory } from "./fixtures/large-history.ts";
 
-// Fixture history only: Pi reads PI_CODING_AGENT_SESSION_DIR and filters it by each file's cwd.
 const root = realpathSync(mkdtempSync(join(tmpdir(), "piano-history-")));
 const cwd = join(root, "checkout"),
   alias = join(root, "alias"),
@@ -57,13 +56,10 @@ const seed = (path: string, id: string, text: string, dir = sessions) => {
   );
   return file;
 };
-// Discovery deliberately rereads files within one second of ctime: filesystem timestamps can
-// collide within a clock tick. Await that specific boundary when testing stable-file reuse.
 const settleHistoryWrite = async (file: string) => {
   await delay(Math.max(0, statSync(file).ctimeMs + 1001 - Date.now()));
 };
 const run = Effect.runPromise;
-// Saved sessions are read through PiSessions without starting Pi.
 const runtime = ManagedRuntime.make(PiSessionsLive.pipe(Layer.provide(NodeServices.layer)));
 after(() => runtime.dispose());
 const history = await runtime.runPromise(Effect.map(PiSessions, (sessions) => sessions.history));
@@ -168,7 +164,6 @@ test("saved nested-call omissions distinguish arguments from missing calls or un
 test("large saved history with tiny active context leaves the server thread responsive", async (t) => {
   const file = join(sessions, "large-projection.jsonl");
   largeHistory(file, "large-projection", cwd);
-  // Warm runtime/worker imports separately from the measured projection.
   await run(history.peek("warm", seed(cwd, "warm", "warm worker")));
   let ticks = 0;
   const timer = setInterval(() => ticks++, 1);
@@ -193,7 +188,6 @@ test("large saved history with tiny active context leaves the server thread resp
       ["tiny active branch"],
     );
     assert.ok(ticks > 0, "another server timer must run during projection");
-    // Unlike a timer alone, this also rejects async-read followed by on-loop JSON parsing.
     assert.ok(
       main.user + main.system < (total.user + total.system) / 2,
       "full-history CPU must not run on the interactive thread",
@@ -212,8 +206,6 @@ test("large saved history with tiny active context leaves the server thread resp
       }),
     );
     for (const result of snapshots) assert.deepEqual(result, snapshot);
-    // A deliberately loose CPU budget, not a wall-clock gate: 16 simultaneous observations
-    // must not do 16 full projections. This catches serialized duplication as well as fan-out.
     assert.ok(
       concurrent.user + concurrent.system < 8 * (total.user + total.system),
       "concurrent reads must share expensive work",
@@ -225,7 +217,6 @@ test("large saved history with tiny active context leaves the server thread resp
 
 test("a projection worker exit reports unreadable history and a later read recovers", async (t) => {
   const file = seed(cwd, "worker-exit", "worker recovery");
-  // Fault at the real thread boundary, not in the history parser/projector.
   const fault = t.mock.method(Worker.prototype, "postMessage", function (this: Worker) {
     fault.mock.restore();
     void this.terminate();
@@ -248,7 +239,6 @@ test("saved projection refreshes mutations and preserves process-local fingerpri
   const replacement = seed(cwd, "changing-peek", "replacement");
   renameSync(replacement, file);
   assert.equal((await run(history.peek("changing-peek", file))).messages[0].text, "replacement");
-  // The worker is already warm when this secret is introduced.
   process.env.PIANO_HISTORY_TEST_SECRET = "history-test-secret-123456";
   const png =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6VxkAAAAASUVORK5CYII=";
@@ -401,8 +391,6 @@ test("INV-01: history discovery reads headers, not neighboring transcript bodies
     );
   }
   await settleHistoryWrite(join(store, "large-b.jsonl"));
-  // Observe actual filesystem I/O, preserving real reads and parsing. The budget is deliberately
-  // much larger than the headers, but smaller than one transcript: no wall-clock threshold.
   const read = fs.read;
   let bytes = 0;
   t.mock.method(fs, "read", (...args: unknown[]) => {
@@ -482,7 +470,6 @@ test("INV-01: warmed discovery refreshes rewrites, replacements and partial head
   assert.deepEqual(await run(history.sessionIds(folder)), new Set(["before"]));
   const original = readFileSync(file, "utf8");
   const metadata = statSync(file);
-  // Same size and restored mtime must not conceal an in-place header rewrite.
   writeFileSync(file, original.replace('"id":"before"', '"id":"after!"'));
   utimesSync(file, metadata.atime, metadata.mtime);
   assert.deepEqual(await run(history.locate("before", [folder])), { _tag: "missing" });
@@ -500,7 +487,6 @@ test("INV-01: warmed discovery refreshes rewrites, replacements and partial head
   assert.deepEqual(await run(history.sessionIds(folder)), new Set());
   appendFileSync(file, `,"version":3,"id":"completed","cwd":${JSON.stringify(folder)}}\n`);
   assert.deepEqual(await run(history.locate("completed", [folder])), { _tag: "file", path: file });
-  // A failing read must not preserve the last good header, or poison a later successful read.
   rmSync(file);
   symlinkSync(join(root, "missing-target"), file);
   assert.deepEqual(await run(history.sessionIds(folder)), new Set());
@@ -670,7 +656,6 @@ test("INV-01/12: default stores follow Pi's encoding and accept old headers with
   const previous = process.env.PI_CODING_AGENT_SESSION_DIR;
   delete process.env.PI_CODING_AGENT_SESSION_DIR;
   try {
-    // Use Pi to choose the default path, so this guards Piano's adapter against SDK rule changes.
     const store = SessionManager.create(folder).getSessionDir();
     const file = seed(folder, "old-default", "default history", store);
     const contents = readFileSync(file, "utf8").replace(`,"cwd":${JSON.stringify(folder)}`, "");
@@ -679,7 +664,6 @@ test("INV-01/12: default stores follow Pi's encoding and accept old headers with
       _tag: "file",
       path: file,
     });
-    // An explicit setting naming the default store has the same non-filtering semantics in Pi.
     process.env.PI_CODING_AGENT_SESSION_DIR = store;
     assert.deepEqual(await run(history.sessionIds(folder)), new Set(["old-default"]));
     assert.equal(readFileSync(file, "utf8"), contents);
@@ -701,7 +685,6 @@ test("INV-01: a relative sessionDir setting is read from the folder, as the Pi c
     JSON.stringify({ sessionDir: ".pi/sessions" }),
   );
   const file = seed(folder, "relative", "relative history", store);
-  // Only the setting names the store here; Pi would otherwise prefer the environment.
   const previous = process.env.PI_CODING_AGENT_SESSION_DIR;
   delete process.env.PI_CODING_AGENT_SESSION_DIR;
   try {

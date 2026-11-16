@@ -1,10 +1,3 @@
-/**
- * Sessions' status by ID, for orchestrators that did not start them or lost what a start
- * returned: one bounded read, never a wait. Facts come from what Piano already holds: SessionHosts'
- * live host or the saved Pi history it reads (INV-01), the registry's reference, Git's view of the
- * checkout as Changes shows it, and GitHub for a linked pull request. Nothing is stored and Pi is
- * never started.
- */
 import { Clock, Context, Data, Effect, Layer, Option, Stream } from "effect";
 import { STATUS_CHANGES_MS } from "../shared/dispatch.ts";
 import { pullRequestIdentity } from "../shared/pullRequestIdentity.ts";
@@ -15,16 +8,13 @@ import { Registry, type SessionEntry } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { WorkspaceChanges } from "./WorkspaceChanges.ts";
 
-/** A status request that names nothing Piano lists; `detail` is written for people. */
 export class SessionStatusError extends Data.TaggedError("SessionStatusError")<{
   readonly detail: string;
 }> {}
 
 export type StatusTarget = { readonly sessionId: string } | { readonly projectId: string };
 
-/** How long a linked pull request's state may take before the status reports it unknown. */
 const PULL_REQUEST_TIMEOUT = "5 seconds";
-/** The budget one read shares among its sessions' `changes`; tests shorten it. */
 export const StatusChangesMs = Context.Reference<number>("piano/StatusChangesMs", {
   defaultValue: () => STATUS_CHANGES_MS,
 });
@@ -32,7 +22,6 @@ export const StatusChangesMs = Context.Reference<number>("piano/StatusChangesMs"
 export class SessionStatus extends Context.Service<
   SessionStatus,
   {
-    /** One session by ID, or every active session of a project, in registry order. */
     readonly read: (
       target: StatusTarget,
     ) => Effect.Effect<ReadonlyArray<SessionStatusFacts>, SessionStatusError>;
@@ -47,7 +36,6 @@ export const SessionStatusLive = Layer.effect(
     const changes = yield* WorkspaceChanges;
     const github = yield* GitHubPullRequests;
 
-    /** The live snapshot, or the saved one; undefined when neither can be read. */
     const readSnapshot = (entry: SessionEntry) =>
       hosts.read(entry.cwd, entry.sessionId).pipe(
         Effect.flatMap((view) =>
@@ -66,9 +54,6 @@ export const SessionStatusLive = Layer.effect(
         Effect.orElseSucceed(() => undefined),
       );
 
-    // SessionHosts serializes reads under its ownership lock. Coalesce before entering that
-    // lock, otherwise concurrent statuses would queue N full projections one after another.
-    // Keep only pending observations: a later status always reads current Pi/live facts.
     const snapshots = new Map<string, ReturnType<typeof readSnapshot>>();
     const snapshotOf = Effect.fn("SessionStatus.snapshotOf")(function* (entry: SessionEntry) {
       const key = JSON.stringify([entry.cwd, entry.sessionId]);
@@ -88,12 +73,6 @@ export const SessionStatusLive = Layer.effect(
       return yield* pending;
     });
 
-    /**
-     * The Git view, within the read's shared budget: a session whose checkout has no ready
-     * uncommitted read by `deadline` (a clock time; unregistered, unreadable or mid-merge) carries
-     * null, and its other facts still arrive.
-     * The patch Changes would render is never generated for a status.
-     */
     const changesOf = Effect.fn("SessionStatus.changesOf")(function* (
       entry: SessionEntry,
       deadline: number,
@@ -101,7 +80,6 @@ export const SessionStatusLive = Layer.effect(
       const workspace = (yield* registry.get).workspaces.find((w) => w.path === entry.cwd);
       if (!workspace) return null;
       const remaining = Math.max(0, deadline - (yield* Clock.currentTimeMillis));
-      // The documented count is of uncommitted files, whatever comparison Changes opens on.
       const observed = yield* changes
         .summary(workspace, { scope: "uncommitted" })
         .pipe(Effect.timeoutOption(remaining), Effect.map(Option.getOrNull));
@@ -152,11 +130,8 @@ export const SessionStatusLive = Layer.effect(
 
     const read = Effect.fn("SessionStatus.read")(function* (target: StatusTarget) {
       const data = yield* registry.get;
-      // One budget for the whole read, so a project's answer arrives within it however many
-      // sessions it has; the core facts come from what Piano holds and are not bounded by it.
       const deadline = (yield* Clock.currentTimeMillis) + (yield* StatusChangesMs);
       if ("sessionId" in target) {
-        // An ID names one session; an active reference wins over an archived one.
         const matches = data.sessions.filter((s) => s.sessionId === target.sessionId);
         const entry = matches.find((s) => !s.archived) ?? matches[0];
         if (!entry)

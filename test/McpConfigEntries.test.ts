@@ -21,8 +21,6 @@ const COMMAND = "/opt/notes/bin/notes";
 const json = (path: string) => JSON.parse(readFileSync(path, "utf8"));
 const save = (path: string, value: unknown) => writeFileSync(path, JSON.stringify(value, null, 2));
 
-/** Pi's real loader and writer over a temp agent directory. The real DirectoryFacts runs over a
- * counting probe: a re-probe is the observable effect of invalidation. */
 async function fixture(
   run: (
     entries: McpConfigEntries,
@@ -49,7 +47,6 @@ async function fixture(
     await Effect.runPromise(
       Effect.gen(function* () {
         const facts = yield* DirectoryFacts;
-        // Loads the catalog (cached unless invalidated) and reports how many probes have run.
         const probes = () => Effect.map(facts.catalog(cwd), () => count);
         yield* run(yield* McpConfigEntries(directory), join(directory, "mcp.json"), probes);
       }).pipe(Effect.provide(DirectoryFactsLive.pipe(Layer.provide(sessions))), Effect.scoped),
@@ -93,13 +90,11 @@ test("INV-12: conflicting, malformed and deliberately disabled configuration is 
         );
         assert.equal(readFileSync(file, "utf8"), text);
       }
-      // A disabled entry is still the reviewed entry: it carries a removal identity.
       const disabled = entries.observe(DOCS);
       assert(
         disabled.status === "blocked" && disabled.entry?.name === "docs" && disabled.removalKey,
       );
 
-      // Pi's switch for all MCP blocks even a missing entry, and an unreadable settings file could hide it.
       save(file, {});
       for (const settings of [JSON.stringify({ extensions: ["-builtin:mcp"] }), "{malformed"]) {
         writeFileSync(join(directory, "settings.json"), settings);
@@ -142,7 +137,6 @@ test("INV-12: saving BOM-prefixed config merges under the existing name, preserv
       writeFileSync(file, `\uFEFF${readFileSync(file, "utf8")}`);
       assert.equal(yield* probes(), 1);
       const before = readFileSync(file, "utf8");
-      // The caller is satisfied with the existing entry: nothing is written and the catalog stays cached.
       yield* entries.save(DOCS, () => undefined);
       assert.equal(readFileSync(file, "utf8"), before);
       assert.equal(yield* probes(), 1);
@@ -173,7 +167,6 @@ test("INV-01/10: removal targets only the reviewed entry, refuses stale identiti
       save(file, { custom: "keep", mcpServers: { mine: { url: URL, enabled: false }, other } });
       const reviewed = entries.observe(DOCS).removalKey!;
       assert(reviewed);
-      // Another tab or editor changed the entry after the confirmation opened.
       save(file, { custom: "keep", mcpServers: { mine: { url: URL, exposure: "hidden" }, other } });
       yield* probes();
       const stale = yield* Effect.flip(entries.remove(DOCS, reviewed));
@@ -260,7 +253,6 @@ test("INV-01/12: named entries are added all or none under Pi's validation, repl
       );
       assert.equal(yield* probes(), 1);
 
-      // A taken name, a repeated name or an invalid entry refuses the whole batch, naming its field.
       const text = readFileSync(file, "utf8");
       for (const [servers, field, detail] of [
         [[{ name: "other", config: { url: URL } }], "name", /named other/],
@@ -309,7 +301,6 @@ test("INV-01/12: named entries are added all or none under Pi's validation, repl
         headers: { Authorization: "Bearer t" },
       });
 
-      // Replacing takes the reviewed entry only, under its new name when asked, and verifies the result.
       const reviewed = entries.observe(DOCS).removalKey!;
       const stale = yield* Effect.flip(
         entries.update("docs", "stale", undefined, (existing) => existing),
@@ -335,7 +326,6 @@ test("INV-01/12: named entries are added all or none under Pi's validation, repl
         handbook: { url: URL, headers: { Authorization: "Bearer t" }, timeout: 30 },
       });
 
-      // Removal by name, as reviewed; `before` can keep the entry by throwing.
       const key = entries.observe(DOCS).removalKey!;
       const kept = yield* Effect.flip(
         entries.removeNamed("handbook", key, () => {
@@ -348,7 +338,6 @@ test("INV-01/12: named entries are added all or none under Pi's validation, repl
       assert.deepEqual(Object.keys(json(file).mcpServers), ["other", "notes"]);
       assert.equal((yield* Effect.result(entries.removeNamed("handbook", key)))._tag, "Failure");
 
-      // Pi's switch for all MCP, or an unreadable file, is the page's problem rather than an entry's.
       writeFileSync(
         join(file, "..", "settings.json"),
         JSON.stringify({ extensions: ["-builtin:mcp"] }),

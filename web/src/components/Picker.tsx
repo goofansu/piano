@@ -4,11 +4,6 @@ import { type ComponentProps, type RefObject, useRef } from "react";
 import { CommandInput } from "@/components/PianoCommand";
 import { PopoverContent } from "@/components/PianoPopover";
 
-/**
- * The searchable pickers (folder, project, worktree, model) share one popover: one width, scrolling
- * inside the viewport, no padding of its own. Opening focuses the search field with a keyboard, and
- * the panel itself on a touch screen, so no software keyboard appears.
- */
 export function PickerContent({
   className,
   searchRef,
@@ -35,7 +30,6 @@ export function PickerContent({
   );
 }
 
-/** A picker's search row: the input takes the width and any action buttons sit at its end. */
 export function PickerSearch({
   children,
   divider = true,
@@ -54,7 +48,6 @@ export function PickerSearch({
   );
 }
 
-/** The trailing check on a picker option: shown on the chosen one, invisible but space-keeping on the others. */
 export function PickerCheck({ selected }: { selected: boolean }) {
   return (
     <CheckIcon aria-hidden className={cn("ml-auto", selected ? "opacity-100" : "opacity-0")} />

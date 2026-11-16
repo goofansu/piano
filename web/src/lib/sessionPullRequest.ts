@@ -1,14 +1,3 @@
-/**
- * Observes the selected session's pull request and manages its link/details/edit view. The
- * registry owns the association; GitHub reads add live facts but never decide whether it is linked.
- * Linked details poll while visible until closed or merged; an unavailable status keeps polling.
- * Unlinked sessions skip detail reads, though an idle, never-searched session may trigger discovery
- * when work stops or Changes opens (see `observe`).
- *
- * Background reads are silent and preserve edits in progress. Explicit changes report their
- * outcomes and block controls while pending. The caller supplies visibility and dialog intent;
- * this module handles selection changes and reconciles the view without depending on React.
- */
 import type {
   SessionPullRequestLink as RegistryLink,
   SessionPullRequest,
@@ -16,80 +5,54 @@ import type {
 } from "@shared/wire";
 import { createObservation, type ObservationEnvironment } from "./observation.ts";
 
-/** Where the link is shown: nowhere, the form to link one, its details, or the form to change it. */
 export type PullRequestSurface = "closed" | "link-form" | "details" | "editing";
 
 export interface SessionPullRequestState {
-  /** The session this state belongs to, as `JSON.stringify([workspaceId, sessionId])`; `null` while idle. */
   key: string | null;
-  /** The last read or change, keeping the saved link with the reason when GitHub is unreadable. */
   value: SessionPullRequest | undefined;
-  /** The registry links the session; its details may show before the first read lands. */
   linked: boolean;
-  /** The registry's link, as the catalog reports it: the trigger names it before the first read lands. */
   link: RegistryLink | null | undefined;
-  /** A read is in flight; with no `value` yet it is the first, which the trigger shows. */
   loading: boolean;
-  /** An explicit change is in flight. */
   busy: boolean;
-  /** "Find from branch" is in flight. */
   finding: boolean;
   surface: PullRequestSurface;
 }
 
 export type PullRequestOutcome =
   | { _tag: "saved"; value: SessionPullRequest }
-  /** Discovery ran and found no open PR for the branch. */
   | { _tag: "not-found" }
   | { _tag: "failed"; reason: string }
-  /** The session changed, or another change started, before this one settled. */
   | { _tag: "superseded" }
-  /** Nothing was sent: the URL is blank or another change is in flight. */
   | { _tag: "refused" };
 
 export interface SessionPullRequestOptions {
-  /** Reads with no action; changes with one. */
   api: (
     workspaceId: string,
     sessionId: string,
     action: SessionPullRequestAction | undefined,
     options: { signal: AbortSignal },
   ) => Promise<SessionPullRequest>;
-  /** Each action's answer, once: a saved change, an absence, or the error that stopped it. */
   notify: {
     error: (message: string) => void;
     info: (message: string) => void;
     success: (message: string) => void;
   };
-  /** Called when the surface closes itself, so whoever owns "open" can follow. */
   closed?: () => void;
   environment?: ObservationEnvironment;
-  /** Clock for the freshness of the last completed read or change. */
   now?: () => number;
 }
 
 export interface SessionPullRequestLink {
   getState: () => SessionPullRequestState;
   subscribe: (listener: () => void) => () => void;
-  /** Resumes reading; returns the stop function, which aborts all work. */
   start: () => () => void;
-  /**
-   * Follows a session, the registry's link for it as the catalog reports it (a link, null once
-   * removed, undefined when never searched), whether its work is going, and what is on screen.
-   * Only a linked session is read; a different session starts from nothing using its own view,
-   * and its `working` is recorded, not acted on. When the observed session's work starts or
-   * stops, a linked session's facts are read again. A never-searched session is searched once
-   * when its work stops or its Changes first shows.
-   */
   observe: (
     workspaceId: string | undefined,
     sessionId: string | null | undefined,
     link: RegistryLink | null | undefined,
     working: boolean,
-    /** Visibility and dialog intent belong to this same selection, never the previous one. */
     view: { visible: boolean; dialog: boolean },
   ) => void;
-  /** Sends nothing, answering `refused`, unless `canLink` allows it. */
   link: (url: string) => Promise<PullRequestOutcome>;
   discover: () => Promise<PullRequestOutcome>;
   remove: () => Promise<PullRequestOutcome>;
@@ -104,7 +67,6 @@ const LINKED = "Pull request linked";
 const REMOVED = "Pull request link removed";
 const failure = (error: unknown) =>
   error instanceof Error ? error.message : "Could not load the pull request.";
-/** An unreadable pull request keeps the session's saved link, with the reason. */
 const fallback = (
   previous: SessionPullRequest | undefined,
   link: RegistryLink | null | undefined,
@@ -114,10 +76,8 @@ const fallback = (
   pullRequest: null,
   error,
 });
-/** A link change needs a URL and no other change in flight; the form's submit follows this rule. */
 export const canLink = (url: string, busy: boolean) => !busy && url.trim() !== "";
 
-/** The identity a session's pull request state belongs to. */
 export const pullRequestKey = (
   workspaceId: string | undefined,
   sessionId: string | null | undefined,
@@ -138,15 +98,12 @@ export function createSessionPullRequest({
     signal: AbortSignal,
   ) => {
     const value = await api(...target(key), action, { signal });
-    // An aborted response belongs to superseded work and must not make current facts fresh.
     if (!signal.aborted) readAt = now();
     return value;
   };
   const observation = createObservation<SessionPullRequest>({
     load: (signal, key) => request(key, undefined, signal),
     interval: (value) => {
-      // Unavailable facts still need a recovery read. Only terminal facts for the current
-      // association stop polling; a superseded link's state says nothing about this one.
       const status = sameLink(value?.link, link) ? value?.pullRequest?.state : undefined;
       return surface === "details" && link && status !== "closed" && status !== "merged"
         ? POLL_MS
@@ -155,20 +112,15 @@ export function createSessionPullRequest({
     focus: true,
     environment,
   });
-  /** The registry's link for the observed session, as the catalog last reported it. */
   let link: RegistryLink | null | undefined;
   let associationRevision = 0;
-  /** The background search in flight; its answer reaches the registry, never this state. */
   let search: AbortController | undefined;
-  /** The one answer to "is this session linked?": the registry's, never GitHub's read. */
   const linked = () => !!link;
-  /** Whether the observed session's work is going, so the next `observe` can tell an edge. */
   let working = false;
   let visible = false,
     dialog = false;
   let surface: PullRequestSurface = "closed",
     finding = false,
-    /** One of this module's changes is in flight; it decides the surface when it settles. */
     changing = false;
   const listeners = new Set<() => void>();
   const derive = (): SessionPullRequestState => {
@@ -176,9 +128,6 @@ export function createSessionPullRequest({
     const read = error
       ? fallback(sameLink(value?.link, link) ? value : undefined, link, error)
       : value;
-    // The registry says whether the session is linked; a read adds GitHub's facts to that link.
-    // A value read for another link (changed or removed elsewhere) is not shown; a change in
-    // flight keeps what it applies to until it settles.
     const current = mutating || sameLink(read?.link, link);
     return {
       key,
@@ -203,7 +152,6 @@ export function createSessionPullRequest({
     publish();
   };
   const reconcileSurface = () => {
-    // Without a session to address there is nothing to show or send.
     const next =
       observation.getState().key === null
         ? "closed"
@@ -232,7 +180,6 @@ export function createSessionPullRequest({
     publish();
   });
 
-  /** One background search for a never-searched session; its answer reaches the registry. */
   const startSearch = () => {
     const key = observation.getState().key;
     if (key === null) return;
@@ -256,7 +203,6 @@ export function createSessionPullRequest({
       const value = await observation.mutate(async (signal, previous) => {
         try {
           const body = await request(key, action, signal);
-          // A saved association can succeed even when its live GitHub status is unavailable.
           if (body.error) notify.error(body.error);
           return body;
         } catch (error) {
@@ -272,8 +218,6 @@ export function createSessionPullRequest({
       return { _tag: "superseded" };
     } finally {
       changing = false;
-      // A registry acknowledgement must not cancel the mutation. If the registry instead
-      // reported a conflicting association while it ran, reconcile after it settles.
       const current = observation.getState();
       if (
         current.key === key &&
@@ -309,16 +253,10 @@ export function createSessionPullRequest({
       dialog = view.dialog;
       const previousLink = link;
       const associationChanged = !sameLink(previousLink, next);
-      // The dialog closes itself when the registry's link appears or disappears under it (a link
-      // found closes the form; a link removed elsewhere takes its edit with it), or when its
-      // session can no longer be addressed (its checkout removed) rather than offer a Link that
-      // cannot be sent. A change of this module's own closes it when it settles.
       const closing =
         dialog && (key === null || (key === previous && !changing && linked() !== !!next));
       if (closing) dialog = false;
       if (key !== previous || associationChanged) associationRevision++;
-      // Work starting or stopping is an edge only within one session: a selection arriving
-      // mid-turn is not a start, so it is read once, by the observation, not twice.
       const edge = key !== null && key === previous && nextWorking !== working;
       working = nextWorking;
       if (key !== previous) {
@@ -328,8 +266,6 @@ export function createSessionPullRequest({
         endSearch();
       }
       link = next;
-      // A newly linked session, or a new session, reads on its own; a link that changed
-      // elsewhere is read afresh so GitHub's facts match it.
       observation.observe(key, !!next);
       const alreadyReading = key !== previous || !previousLink;
       if (next && !alreadyReading && (associationChanged || edge)) observation.refreshSoon(0);
@@ -337,7 +273,6 @@ export function createSessionPullRequest({
       publish();
       if (closing) closed?.();
       const { loading, mutating } = observation.getState();
-      // Reuse a recent read and never replace one in flight just because the row appeared.
       if (
         surface === "details" &&
         previousSurface !== "details" &&
@@ -347,7 +282,6 @@ export function createSessionPullRequest({
       ) {
         void observation.refresh();
       }
-      // Only a never-searched session at rest is searched; a removed link stays removed.
       if (key === null || link !== undefined || working || search) return;
       if (edge || revealed || (key !== previous && visible)) startSearch();
     },
@@ -366,15 +300,12 @@ export function createSessionPullRequest({
       try {
         const outcome = await change({ action: "discover" });
         if (outcome._tag !== "saved") return outcome;
-        // Failed discovery can retain an existing link; that is not a newly found match.
-        // The change already reported the error, so callers must not announce success too.
         if (outcome.value.error) return { _tag: "failed", reason: outcome.value.error };
         if (outcome.value.link) {
           notify.success(LINKED);
           closeItself();
           return outcome;
         }
-        // Only the explicit search reports absence; polling stays silent.
         notify.info(NOT_FOUND);
         return { _tag: "not-found" };
       } finally {

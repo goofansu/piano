@@ -37,8 +37,6 @@ const body = (images = [png], destination = target) =>
 const run = <A, E>(effect: Effect.Effect<A, E, PreparedImages>) =>
   Effect.runPromise(effect.pipe(Effect.provide(PreparedImagesLive)));
 
-// Contract risk: a prepared capability could be replayed, cross-targeted, or release its budget
-// while the actual Pi input is still in flight. Exercise the real store, not helper choreography.
 test("preparations bind target and runtime, consume once, and hold their capacity until settlement", async () => {
   let prior = { id: "" };
   await run(

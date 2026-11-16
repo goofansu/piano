@@ -139,7 +139,6 @@ test("readback replies of the wrong shape surface as refresh errors and recover,
       assert.equal(recovered.projectionError, undefined);
       assert.equal(recovered.stateRefreshError, undefined);
       assert.equal(recovered.cost, 1.23);
-      // Once preflight succeeds, an invalid full history must still surface and recover.
       yield* observe(session, "/history-malformed");
       assert.equal(
         (yield* settledState((s) => s.projectionError !== undefined)).projectionError,
@@ -223,8 +222,6 @@ test("safe live/reload output retains tools and extension state without inventin
         yield* observe(session, "/clear");
         assert.deepEqual((yield* snapshot(session)).state.extension?.statuses, []);
         assert.deepEqual((yield* snapshot(session)).state.extension?.widgets, []);
-        // Readback no longer blocks protocol consumption: a subsequent Pi notify
-        // is not a barrier for the host's asynchronous authoritative projection.
         yield* observe(
           session,
           "/compact",

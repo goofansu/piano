@@ -12,8 +12,6 @@ import { Effect, Fiber, Layer } from "effect";
 import { HttpRouter } from "effect/http";
 import { staticAssets } from "../server/StaticAssets.ts";
 
-// A built web client as Vite leaves it: hashed assets under assets/, unhashed public files and
-// index.html at the root, and the precompressed copies the build writes beside them.
 const INDEX = `<!doctype html><html><body>${"<p>piano</p>".repeat(200)}</body></html>`;
 const SCRIPT = `export const piano = ${JSON.stringify("a".repeat(4000))};\n`;
 const LOGO = `<svg xmlns="http://www.w3.org/2000/svg">${"<rect />".repeat(200)}</svg>`;
@@ -30,7 +28,6 @@ before(async () => {
   root = join(outside, "dist");
   mkdirSync(join(root, "assets"), { recursive: true });
   writeFileSync(join(outside, "secret.txt"), SECRET);
-  // A Brotli copy outside the build: resolution, not the absence of a copy, must refuse it.
   writeFileSync(join(outside, "secret.txt.br"), brotliCompressSync(SECRET));
   const write = (name: string, content: string, codings: ReadonlyArray<"br" | "gz"> = []) => {
     writeFileSync(join(root, name), content);
@@ -42,9 +39,7 @@ before(async () => {
   };
   write("index.html", INDEX, ["br", "gz"]);
   write(join("assets", "app-A1b2C3d4.js"), SCRIPT, ["br", "gz"]);
-  // Below the build's size floor: no copy was written, so every client reads the file itself.
   write(join("assets", "style-E5f6G7h8.css"), STYLE);
-  // A public file keeps its name across builds, and here only Brotli was worth keeping.
   write("logo.svg", LOGO, ["br"]);
 
   const node = createServer();
@@ -71,8 +66,6 @@ interface Answer {
   readonly body: Buffer;
 }
 
-/** Ask with the request target exactly as written: no client-side URL normalization, and no
- * Accept-Encoding unless the test sends one, so each answer is the server's own choice. */
 const ask = (target: string, headers: Record<string, string> = {}, method = "GET") =>
   new Promise<Answer>((resolve, reject) => {
     const req = httpRequest({ host: "127.0.0.1", port, path: target, headers, method }, (res) => {
@@ -227,7 +220,6 @@ test("a revalidated asset answers 304 without sending the coded body again", asy
   assert.equal(stale.status, 200);
   assert.equal(brotliDecompressSync(stale.body).toString(), INDEX);
 
-  // A cache that kept only the date revalidates the coded copy the same way.
   const dated = await ask("/index.html", {
     "accept-encoding": "br",
     "if-modified-since": first.headers["last-modified"]!,

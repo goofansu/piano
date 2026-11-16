@@ -35,7 +35,6 @@ test("delivery byte budgets fail oversized frames and retained backlogs without 
   }
 });
 
-// A fake socket: `written` holds each frame the delivery wrote, as "<deliveryId>:<value>".
 const socket = (limits: Partial<typeof socketLimits> = {}) =>
   Effect.gen(function* () {
     const writes = yield* Queue.unbounded<string>();
@@ -45,8 +44,6 @@ const socket = (limits: Partial<typeof socketLimits> = {}) =>
       (value: string, id) => `${id}:${value}`,
       { ...socketLimits, ackTimeout: "1 second", ...limits },
     );
-    // Wait for the frames the window should allow by now, then give a writer that should be
-    // blocked a moment to write more: a fixed sleep alone loses the race on a loaded machine.
     const expectWritten = (expected: string, message = "the expected frames are written") =>
       Effect.gen(function* () {
         const count = expected === "" ? 0 : expected.split(",").length;
@@ -71,12 +68,12 @@ test("INV-05: the socket window holds unacknowledged frames and cumulative acks 
       const { delivery, expectWritten } = yield* socket({ window: { frames: 2, bytes: 1024 } });
       for (const value of ["a", "b", "c", "d", "e", "f"]) yield* delivery.offer(value);
       yield* expectWritten("1,2", "a saturated window stops writing");
-      yield* delivery.ack(99); // never written: no credit
+      yield* delivery.ack(99);
       yield* expectWritten("1,2");
-      yield* delivery.ack(2); // out of order and cumulative: acknowledges 1 and 2
+      yield* delivery.ack(2);
       yield* expectWritten("1,2,3,4");
       yield* delivery.ack(1);
-      yield* delivery.ack(2); // stale: no extra credit
+      yield* delivery.ack(2);
       yield* expectWritten("1,2,3,4");
       yield* delivery.ack(3);
       yield* expectWritten("1,2,3,4,5");
@@ -97,7 +94,7 @@ test("INV-05: the socket window also bounds unacknowledged bytes", () =>
   scoped(
     Effect.gen(function* () {
       const { delivery, expectWritten } = yield* socket({ window: { frames: 32, bytes: 12 } });
-      for (const value of ["xxxx", "yyyy", "zzzz"]) yield* delivery.offer(value); // 6 bytes per frame
+      for (const value of ["xxxx", "yyyy", "zzzz"]) yield* delivery.offer(value);
       yield* expectWritten("1,2");
       yield* delivery.ack(1);
       yield* expectWritten("1,2,3");
@@ -132,7 +129,6 @@ test("INV-05: an oversized frame closes as too large and a lagging consumer clos
       const behind = yield* lagging.delivery.closed;
       assert.equal(behind.code, 1013);
       assert.match(behind.reason, /reconnect for a current snapshot/);
-      // The first close reason wins.
       yield* lagging.delivery.close("later", 1000);
       assert.equal((yield* lagging.delivery.closed).code, 1013);
     }),
@@ -159,7 +155,6 @@ test("INV-05: writer failure closes delivery without exposing transport contents
     }),
   ));
 
-// Kept here so the performance fixture stays with the publication contract it exercises.
 const streamingPi = String.raw`
 import { createInterface } from 'node:readline';
 const out = (value) => process.stdout.write(JSON.stringify(value) + '\n');
@@ -257,8 +252,6 @@ test("PIN-47: 128KiB tool arguments through PiSessions stay below 5MiB of partia
         contiguous(frames);
         assert.ok(bytes < 5 * 1024 * 1024, `${bytes} partial bytes exceeds the benchmark budget`);
 
-        // Barriers force intermediate safe projections onto the wire even when chunks arrive
-        // within one cadence. A masked suffix may later become ordinary visible text.
         const secretReady = yield* Deferred.make<void>();
         const secretWatch = yield* session.events.pipe(
           Stream.tap((f) =>
@@ -342,7 +335,6 @@ test("INV-05: cumulative partials publish on a bounded cadence, not once per del
       assert.equal(frames.length, 2, "25 inputs over 50ms publish one partial");
       assert.equal(frames[1]._tag, "message_update");
       if (frames[1]._tag === "message_update") assert.equal(frames[1].message.text, "x".repeat(25));
-      // New objects with the same projected content (e.g. thinking deltas) are no-ops.
       yield* pub.apply([partial("x".repeat(25))]);
       yield* TestClock.adjust(50);
       assert.equal(frames.length, 2);
@@ -364,7 +356,6 @@ test("INV-05: cumulative partials publish on a bounded cadence, not once per del
           Effect.forkChild,
         );
       yield* Deferred.await(reconnectReady);
-      // A different message cannot replace an unpublished previous message.
       yield* pub.apply([partial("first", "one"), partial("second", "two")]);
       yield* pub.apply([{ _tag: "closed", closure: { _tag: "released", detail: "done" } }]);
       yield* TestClock.adjust(100);
@@ -498,8 +489,6 @@ test("INV-05/11: atomic attach identifies partial/tools/dialog/state and all sub
         assert.equal(attached.snapshot.state.extension?.statuses[0].text, "Status ordered");
         assert.ok(attached.cursor.sequence >= frames.at(-1)!.cursor.sequence);
         assert.ok(!JSON.stringify([frames, attached]).includes(canary));
-        // Attach and mutate concurrently. A fact is either in the snapshot or strictly
-        // after its cursor, never an unsequenced partial assembled outside the lock.
         const [observed] = yield* Effect.all(
           [
             session.events.pipe(
@@ -575,7 +564,7 @@ test("INV-05: a held consumer fails bounded delivery while Pi and a fast subscri
         latest.snapshot.state.extension?.statuses.find((s) => s.key === "burst")?.text,
         "burst 600",
       );
-      yield* prompt(session, "/after-overflow"); // stdout/commands remain responsive
+      yield* prompt(session, "/after-overflow");
     }),
   );
 });

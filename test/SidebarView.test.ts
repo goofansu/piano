@@ -96,7 +96,6 @@ test("sidebar view: each of the last seven days is its own section, named by dat
     const byName = dateGroups(input.flat(), "name", new Date("2026-03-31T12:00:00-04:00"));
     assert.deepEqual(titles(byName[2]!.sessions), ["two", "two early"]);
     assert.equal(input[0]![0]!.title, "today", "input order is preserved");
-    // A day heading crosses a month or year boundary like any other calendar day.
     assert.deepEqual(
       dateGroups(
         [datedSession("new year's eve", "2026-12-31T20:00:00-05:00")],

@@ -1,13 +1,9 @@
-// A scripted stand-in for `pi --mode rpc`: speaks the JSONL protocol well enough to
-// exercise PiSessions through its interface. Behaviour is driven by the prompt text.
 import { spawn } from "node:child_process";
 import { closeSync, existsSync, readdirSync, writeFileSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
-// Oversized output fixtures follow Piano's inbound budget, so a policy change edits one constant.
 import { inboundLimits } from "../server/InboundCapacity.ts";
 
 const args = process.argv.slice(2);
-// Simulate a personal extension remembering its project_trust decision during startup.
 if (args.includes("--remember-project-trust")) {
   const { ProjectTrustStore, getAgentDir } = await import("@earendil-works/pi-coding-agent");
   new ProjectTrustStore(getAgentDir()).set(process.cwd(), true);
@@ -25,7 +21,6 @@ if (verifyChildEnvironment) {
       import.meta.url,
     ).href
   );
-  // Valid 1×1 RGBA PNG, including chunk CRCs, for the installed Pi decoder.
   const png = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==",
     "base64",
@@ -77,7 +72,6 @@ const startupNotice = () => {
   out({ type: "message_end", message });
 };
 const capacityHeld = [];
-// capacity-readback: usage readbacks Pi holds alongside the held prompts.
 const heldReads = [];
 let capacityRound = 0;
 const capacityCount = () =>
@@ -103,7 +97,7 @@ const settle = (last) => {
   out({ type: "agent_end", messages: last ? [last] : [], willRetry: false });
   while (steering.length || followUp.length) {
     const text = steering.length ? steering.shift() : followUp.shift();
-    queueUpdate(); // Pi removes a pending message before it starts appearing in history.
+    queueUpdate();
     const user = { role: "user", content: text, timestamp: Date.now() };
     const assistant = {
       role: "assistant",
@@ -124,10 +118,8 @@ const settle = (last) => {
   streaming = false;
   out({ type: "agent_settled" });
 };
-/** Pi rewrites a `/skill:name args` prompt into the skill file before it enters history. */
 const expandSkill = (text) => {
   if (!text.startsWith("/skill:")) return text;
-  // Match Pi's literal-space delimiter, including its failure on a newline separator.
   const space = text.indexOf(" ");
   const name = space === -1 ? text.slice(7) : text.slice(7, space);
   if (!name || /\s/.test(name)) return text;
@@ -137,7 +129,6 @@ const expandSkill = (text) => {
 };
 const dec = new StringDecoder("utf8");
 let buf = "";
-/** While set, Pi reads no more input, as a blocked Pi would, until this file exists. */
 let stdinPausedUntil;
 
 const drain = () => {
@@ -147,8 +138,6 @@ const drain = () => {
     if (line.trim()) handle(JSON.parse(line));
   }
 };
-// slow-reader: Pi takes at least 1 ms per 4 KiB of input (256 ms per MiB) on any machine, as
-// Pi's own reader does for a long line on a slow one.
 const slowReader = sessionId === "slow-reader";
 process.stdin.on("data", (d) => {
   buf += dec.write(d);
@@ -176,15 +165,14 @@ function handle(cmd) {
     case "get_state":
       if (sessionId === "capacity-records") {
         for (let n = 0; n <= inboundLimits.records.messages; n++) out({ type: "future_event", n });
-        return; // No readiness response: nothing consumes records until open completes.
+        return;
       }
       if (sessionId === "capacity-record-bytes") {
-        // Each record fits one RPC line; together they exceed the pending record bytes.
         const text = "x".repeat(Math.ceil(inboundLimits.records.bytes / 3));
         for (let n = 0; n < 3; n++) out({ type: "future_event", text });
         return;
       }
-      if (args.includes("--silence-readiness")) return; // alive, but never ready
+      if (args.includes("--silence-readiness")) return;
       if (holdNextState) {
         holdNextState = false;
         heldState = { cmd, data: state() };
@@ -219,7 +207,6 @@ function handle(cmd) {
               display: true,
               timestamp: 1,
             };
-        // Final history is visible, but message_end awaits an extension's dialog answer.
         messages.push(startupMessage);
         if (assistant) {
           streaming = true;
@@ -252,7 +239,7 @@ function handle(cmd) {
       }
       return;
     case "get_commands":
-      if (sessionId === "silent-commands") return; // a readback Pi never answers
+      if (sessionId === "silent-commands") return;
       if (heldClear) {
         respond(heldClear.cmd, heldClear.restored);
         heldClear = undefined;
@@ -268,7 +255,6 @@ function handle(cmd) {
           },
           { name: "review", description: "Review changes", source: "prompt" },
           { name: args.includes("--no-session") ? "probe-only" : "live-only", source: "extension" },
-          // Like Pi, the project's templates as they were on disk when this child started.
           ...(existsSync(".pi/prompts") ? readdirSync(".pi/prompts") : [])
             .filter((file) => file.endsWith(".md"))
             .map((file) => ({ name: file.slice(0, -3), source: "prompt" })),
@@ -276,7 +262,6 @@ function handle(cmd) {
       });
     case "get_messages":
       messageReads++;
-      // Open's one context read comes first; these fixtures disturb it.
       if (sessionId === "startup-read-failure")
         return respond(cmd, undefined, "startup read failed");
       if (sessionId === "startup-read-exit") return process.exit(3);
@@ -285,7 +270,6 @@ function handle(cmd) {
         (sessionId === "startup-during-read" && messageReads === 1)
       )
         startupNotice();
-      // context-reads: Pi's context reports how many times it has been read.
       if (sessionId === "context-reads")
         return respond(cmd, {
           messages: [
@@ -301,11 +285,9 @@ function handle(cmd) {
         });
       return respond(cmd, { messages });
     case "get_entries": {
-      // rejected-entries: Pi refuses to read its entries, as a failing extension could.
       if (sessionId.startsWith("rejected-entries"))
         return respond(cmd, undefined, "entries unavailable");
       const entries = [
-        // `piano-dispatch` records the dispatching session once, as it does for a new child.
         ...(dispatchedFrom
           ? [
               {
@@ -321,7 +303,6 @@ function handle(cmd) {
       return respond(cmd, { entries, leafId: entries.at(-1)?.id });
     }
     case "get_session_stats":
-      // held-usage: Pi never answers a usage readback, as if it were slow.
       if (sessionId.startsWith("held-usage")) return;
       if (sessionId === "capacity-readback" && capacityHeld.length) {
         heldReads.push(cmd);
@@ -363,7 +344,6 @@ function handle(cmd) {
         return respond(cmd, undefined, "fixture abort failed");
       if (sessionId.startsWith("stop-") && (steering.length || followUp.length))
         return respond(cmd, undefined, "abort before clear");
-      // Pi 1.0.2 abort pauses pending work; it does not consume its queues.
       streaming = false;
       out({ type: "agent_end", messages: [], willRetry: false });
       out({ type: "agent_settled" });
@@ -441,8 +421,6 @@ function handle(cmd) {
         message: `answered ${cmd.id} with ${cmd.value ?? cmd.confirmed ?? "cancel"}`,
         notifyType: "info",
       });
-      // A dialog released after native abort must not fabricate an assistant
-      // reply or drain the queue that real Pi has paused.
       if (cmd.cancelled && !streaming) return;
       const asst = {
         role: "assistant",
@@ -457,10 +435,8 @@ function handle(cmd) {
       return;
     }
     case "prompt": {
-      // A child's edit, made where the child actually runs, before Pi admits the prompt.
       if (cmd.message.startsWith("write marker "))
         writeFileSync(`${process.cwd()}/${cmd.message.slice(13)}`, `${sessionId}\n`);
-      // Stands in for the piano_preview tool: the request rides this generation's owner socket.
       if (cmd.message.startsWith("preview ")) {
         respond(cmd, { disposition: "handled" });
         import("../scripts/PreviewClient.ts")
@@ -474,7 +450,6 @@ function handle(cmd) {
           .then((message) => out({ type: "extension_ui_request", method: "notify", message }));
         return;
       }
-      // Pi accepts the prompt and is busy before its agent_start reaches Piano.
       if (cmd.message === "late start") {
         respond(cmd, { disposition: "started" });
         streaming = true;
@@ -519,7 +494,7 @@ function handle(cmd) {
         if (cmd.message !== "notification pause") {
           streaming = false;
           out({ type: "agent_settled" });
-          out({ type: "agent_settled" }); // duplicate lifecycle records must not duplicate completion
+          out({ type: "agent_settled" });
         }
         out({ type: "extension_ui_request", method: "notify", message: "completion barrier" });
         return;
@@ -534,7 +509,6 @@ function handle(cmd) {
           });
         capacityHeld.push(cmd);
         streaming = true;
-        // The user message's end makes Piano refresh usage in the background.
         if (sessionId === "capacity-readback" && capacityHeld.length === 1)
           out({
             type: "message_end",
@@ -543,8 +517,6 @@ function handle(cmd) {
         return capacityCount();
       }
       if (cmd.message === "capacity invalid-utf8") {
-        // A line of exactly the RPC line limit with one invalid UTF-8 byte, which decodes to
-        // U+FFFD (three bytes): its decoded string is longer than the line Pi wrote.
         const head = Buffer.from('{"type":"future_event","padding":"');
         const tail = Buffer.from('"}\n');
         const line = Buffer.alloc(inboundLimits.rpcLineBytes + 1, "x");
@@ -557,11 +529,9 @@ function handle(cmd) {
       }
       if (cmd.message === "capacity oversized-line") {
         process.stdout.write("x".repeat(inboundLimits.rpcLineBytes + 1));
-        return; // Intentionally no newline and no response.
+        return;
       }
       if (cmd.message === "capacity fragmented" || cmd.message === "capacity fragmented-large") {
-        // Repeated oversized framing storage followed by small records and a partial
-        // UTF-8 tail. The same write can end a large line and begin the next record.
         const prefix = cmd.message.endsWith("-large")
           ? ["Large 1", "Small", "Large 2"]
               .map(
@@ -589,8 +559,6 @@ function handle(cmd) {
           process.stdout.write(bytes.subarray(split));
           respond(cmd, { disposition: "handled" });
         };
-        // Cross the documented one-second large-buffer reuse window with an unfinished
-        // UTF-8 record. An idle-release callback must not discard that partial tail.
         if (prefix) setTimeout(complete, 1200);
         else setImmediate(complete);
         return;
@@ -605,8 +573,6 @@ function handle(cmd) {
         };
         out({ type: "message_end", message });
         if (mode === "descendant") {
-          // A real inherited pipe stays open without an acknowledgement. The
-          // transport must bound the drain and clean up its process group.
           const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
             stdio: ["ignore", process.stdout, "ignore"],
           });
@@ -631,7 +597,6 @@ function handle(cmd) {
         return;
       }
       if (cmd.message === "protocol future") out({ type: "future_event", extra: { version: 2 } });
-      // Extension commands run before busy checks. Never accept these through follow_up.
       if (cmd.message === "/handled") {
         model = { provider: "fake", id: "beta" };
         thinkingLevel = "high";
@@ -651,7 +616,6 @@ function handle(cmd) {
         }
         return;
       }
-      // Read and dropped: never acknowledged and never run, so Pi stays idle.
       if (cmd.message === "ignore input") return;
       if (cmd.message === "withhold acknowledgement") {
         delayedPrompt = cmd;
@@ -748,14 +712,11 @@ function handle(cmd) {
           method: "input",
           title: "Enter a value",
           placeholder: "type",
-          // "ask expire": Pi advertises a 3-second timeout, so the dialog lapses unanswered.
           ...(cmd.message === "ask expire" ? { timeout: 3000 } : {}),
         });
-        return; // stays streaming until answered (see extension_ui_response below is fire-and-forget; finish on answer)
+        return;
       }
       if (cmd.message.startsWith("propose")) {
-        // A `piano-library` save proposal: "propose hidden" changes only a value Piano redacts.
-        // Imported here, not at startup, so every other fake Pi starts as fast as before.
         const hidden = cmd.message === "propose hidden";
         const files = hidden
           ? ["Use api_key: staging-111 for $1", "Use api_key: production-999 for $1"]
@@ -783,7 +744,6 @@ function handle(cmd) {
         process.exit(3);
       }
       if (cmd.message.startsWith("close stdin then crash")) {
-        // Piano's next write fails before the exit it precedes is observed.
         process.stdin.destroy();
         closeSync(0);
         process.stderr.write("boom\n");
@@ -796,7 +756,6 @@ function handle(cmd) {
         setInterval(() => {}, 1000);
         return;
       }
-      // A nested publication succeeds, then its outer script throws without printing the result.
       const nestedArtifact = /^codemode-artifact (\S+) (\d+) (.+)$/.exec(cmd.message);
       if (nestedArtifact) {
         const [, artifactId, revision, title] = nestedArtifact;
@@ -856,9 +815,6 @@ function handle(cmd) {
         settle(result);
         return;
       }
-      // "codemode <n> [fail <k>]": one codemode call whose script makes n nested bash/read/write
-      // calls, k of them failing, as live executions each running for 150ms, then recorded in
-      // its result.
       const codemode = /^codemode (\d+)(?: fail (\d+))?$/.exec(cmd.message);
       if (codemode) {
         const n = Number(codemode[1]);
@@ -876,7 +832,6 @@ function handle(cmd) {
         messages.push(asst);
         out({ type: "message_end", message: asst });
         out({ type: "tool_execution_start", toolCallId: id, toolName: "code", args: { code } });
-        // Failures spread over the run, the first early enough to fold away.
         const failing = new Set(
           Array.from({ length: failures }, (_, i) => 2 + Math.floor((i * n) / failures)),
         );
@@ -908,7 +863,6 @@ function handle(cmd) {
               toolName: c.name,
               args: c.arguments,
             });
-            // Each call runs for its 150ms before it ends and the next starts.
             return setTimeout(() => {
               out({
                 type: "tool_execution_end",
@@ -975,7 +929,6 @@ function handle(cmd) {
         content: [{ type: "text", text }],
         model: model.id,
         provider: model.provider,
-        // Pi ends every finished reply with its stop reason; a reply without one is still being written.
         stopReason: "stop",
         timestamp: Date.now(),
       };
@@ -989,8 +942,6 @@ function handle(cmd) {
             content: "sk-content-abcdefghijklmnopqrstuvwxyz",
           },
         });
-      // "artifact <id> <confirmed|error> <title>": a radius-artifacts publication, as the bundled
-      // extension's create (an ID not yet published) or update call and its result report it.
       const artifact = /^artifact (\S+) (confirmed|error) (.+)$/.exec(cmd.message);
       const artifactTool =
         artifact &&
@@ -1089,16 +1040,15 @@ function handle(cmd) {
           method: "input",
           title: "Running after response",
         });
-        return; // deterministic pause before the next response, not agent_settled
+        return;
       }
       settle(asst);
       return;
     }
     case "set_session_name":
       sessionName = cmd.name;
-      if (cmd.name === "withhold acknowledgement") return; // applied, never acknowledged
+      if (cmd.name === "withhold acknowledgement") return;
       if (cmd.name.startsWith("pause stdin until ")) {
-        // Stop reading stdin, so Piano's input backs up, with a dialog open; never acknowledged.
         stdinPausedUntil = cmd.name.slice("pause stdin until ".length);
         process.stdin.pause();
         out({ type: "extension_ui_request", id: "paused", method: "input", title: "Paused" });

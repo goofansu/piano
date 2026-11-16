@@ -95,8 +95,6 @@ test("a worktree session reads its branch and workspace from one place", () => {
   );
 });
 
-// The server decides a session's branch (SidebarView's branchOf): none for a worktree Git lists as
-// detached or for a non-Git folder. Each fixture pairs the checkout with the reference it sends.
 test("the rail shows the detached commit and the server's branch, and omits Git for non-Git folders", () => {
   const path = "/work/repo.feature";
   const head = "d4449bb7183bb577791acab4f6fc4f52f78d02b0";
@@ -144,11 +142,9 @@ test("the branch link is the shown branch where discovery found it on GitHub, el
     "https://github.com/me/repo/tree/feature/a%23b",
   );
   assert.equal(branchUrl(worktree(path, "local-fix", { facts: facts("local-fix") })), undefined);
-  // Facts for a branch the session no longer shows link nothing rather than another branch.
   assert.equal(branchUrl(worktree(path, "local-fix", { facts: pushed }), "other"), undefined);
 });
 
-// A closed folder lists no checkout, so only the reference knows the branch it was registered on.
 const closed: AppState = {
   ...base,
   sessionReferences: [sessionReference("/closed", "s1", { branch: "saved-branch" })],
@@ -162,7 +158,6 @@ test("a session whose folder was closed keeps its registry workspace for Changes
   assert.equal(ctx.changesWorkspace?.id, "ws:/closed");
   assert.equal(ctx.canOpenChanges, true);
   assert.deepEqual(ctx.pullRequestTarget, { workspaceId: "ws:/closed", sessionId: "s1" });
-  // A session still starting has no ID yet, so its pull request cannot be addressed.
   const starting = sessionContext({
     ...closed,
     session: { ...session("/closed"), sessionId: null },
@@ -191,14 +186,12 @@ test("a removed checkout keeps its workspace identity but cannot open Changes or
   assert.equal(missing.workspace?.id, "ws:/work/repo.feature");
   assert.equal(missing.canOpenChanges, false);
   assert.equal(missing.changesUnavailable, "Checkout removed");
-  // Its pull request lives in Changes, so nothing reads or polls it from GitHub.
   assert.equal(missing.pullRequestTarget, undefined);
   const plain: FolderView = {
     ...folder,
     worktrees: [worktree("/repo", null, { status: "non-git" })],
     discovery: { status: "non-git", observedAt: "" },
   };
-  // The server sends no branch for a non-Git directory.
   const nonGitState: AppState = {
     ...base,
     folders: [plain],
@@ -318,7 +311,6 @@ test("status precedence: startup, delivery, reconnecting, read-only, exited, the
     "Compacting · Retrying",
   );
   assert.equal(status({ ...base, session: session("/repo", { isStreaming: true }) }), "Working");
-  // Working by the sidebar's rule (`workUnderWay`), not only while Pi streams.
   for (const working of [
     { submission: { id: 1, outcome: "submitting" as const } },
     { queuedMessages: [{ kind: "follow-up" as const, text: "next" }] },
@@ -381,7 +373,6 @@ test("the session pane: a first message shows at once, without skeleton, until P
     placeholder: undefined,
     composerDisabled: true,
   });
-  // Pi's session is attached but still starting: the first message stays, the composer waits.
   const attached = sessionPane({ ...base, pendingCreate: input, session: session("/repo") });
   assert.equal(attached.skeleton, false);
   assert.equal(attached.placeholder, undefined, "the first message is not an empty transcript");
@@ -392,7 +383,6 @@ test("the session pane: a first message shows at once, without skeleton, until P
     session: session("/repo"),
   });
   assert.equal(submitted.composerDisabled, false);
-  // A failed first message keeps its text in view instead of a loading skeleton.
   assert.equal(
     sessionPane({ ...base, pendingCreate: { ...input, outcome: "rejected" } }).skeleton,
     false,
@@ -433,7 +423,6 @@ test("the session pane: input Pi has not answered keeps the skeleton and no plac
   });
   assert.equal(submitting.skeleton, true);
   assert.equal(submitting.placeholder, undefined);
-  // Pi's reply has begun: the transcript replaces the skeleton.
   const replying = sessionPane({
     ...base,
     session: session(
@@ -482,7 +471,6 @@ test("the selected session waits for a settled attachment before registry change
   assert.equal(sessionMutable({ ...settled, resync: true }, selected), false);
   assert.equal(sessionMutable({ ...settled, resync: true }, other), true);
   assert.equal(sessionMutable({ ...settled, connected: false }, other), false);
-  // The New page has no selection; sidebar rows stay actionable there.
   assert.equal(sessionMutable({ ...base, selectionId: null, view: { kind: "new" } }, other), true);
   assert.equal(
     sessionCheckoutMissing(
@@ -785,7 +773,6 @@ test("a session is selected, working and previewing by cwd and ID together", () 
       { cwd: "/elsewhere", sessionId: "s1", working: false },
     ],
   };
-  // The selected session reads its own state; a same-cwd session with another ID reads its host.
   assert.equal(sessionWorking(state, { cwd: "/repo", sessionId: "s1" }), false);
   assert.equal(sessionWorking(state, other), true);
   assert.equal(sessionHasPreview(state, other), true);
@@ -794,7 +781,6 @@ test("a session is selected, working and previewing by cwd and ID together", () 
   assert.equal(hostOf(state, { cwd: "/repo", sessionId: "s3" }), undefined);
   assert.equal(isSelectedSession(state, { cwd: "/repo", sessionId: "s1" }), true);
   assert.equal(isSelectedSession(state, other), false);
-  // The selected session's own state wins over a stale host entry for it.
   const busyHost = { ...state, hosts: [{ cwd: "/repo", sessionId: "s1", working: true }] };
   assert.equal(sessionWorking(busyHost, { cwd: "/repo", sessionId: "s1" }), false);
   assert.equal(
@@ -883,8 +869,6 @@ test("where a session runs: repository or folder, then branch or short detached 
   assert.equal(sessionPlace(none), undefined, "no line before the session has a directory");
 });
 
-// The phone header and the rail name the place as the sidebar row does: a worktree session sits in
-// its folder, not in the worktree's `folder.branch` directory.
 test("a session's place names its folder as its sidebar row does", () => {
   const worktreeState = { ...base, session: session("/work/repo.feature") };
   assert.deepEqual(sessionPlace(sessionContext(worktreeState)), {
@@ -894,7 +878,6 @@ test("a session's place names its folder as its sidebar row does", () => {
   });
   assert.equal(catalogEntry(worktreeState, "s1")?.folder, "repo");
 
-  // A directory no registered folder holds is named by its last segment, a trailing slash ignored.
   const loose = {
     ...base,
     session: session("/work/notes/"),

@@ -1,12 +1,6 @@
 import { createConnection } from "node:net";
 import { OBSERVATION_TIMEOUT_MS } from "./PreviewReadiness.ts";
 
-/**
- * Send one JSON request to the owner's local socket; resolve with its trimmed JSON reply, not a
- * parsed object. Owner errors, unparseable replies and transport failures reject. Aborting or
- * losing the reply ends only this observation: an admitted operation and the runner's separate
- * connection to its owner continue.
- */
 export function ownerRequest(
   endpoint: string,
   request: unknown,

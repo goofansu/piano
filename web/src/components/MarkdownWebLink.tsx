@@ -1,8 +1,6 @@
 import type { ReactNode } from "react";
 import { linkBrand } from "@/lib/linkBrand";
 
-/** Web-link presentation policy: explicit HTTP(S) links are clickable; implicit links only
- * for recognized brands. Local files/images are handled by the owning Markdown surface. */
 export function MarkdownWebLink({
   href,
   title,
@@ -17,7 +15,6 @@ export function MarkdownWebLink({
   if (!/^https?:\/\//i.test(href)) return <>{children}</>;
   const brand = linkBrand(href);
   if (implicit && !brand) return <>{children}</>;
-  // Custom inline link: shadcn has no Markdown link primitive with bundled provider branding.
   return (
     <a
       href={href}

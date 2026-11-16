@@ -1,4 +1,3 @@
-// The layer rule runs inside the existing oxlint pass, including type-only edges.
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
@@ -6,8 +5,6 @@ const root = resolve(import.meta.dirname, "..");
 const within = (path, dir) => path === dir || path.startsWith(`${dir}${sep}`);
 const sharedPackages = new Set(["effect", "@earendil-works/pi-schema", "zod"]);
 
-// Read the same paths as tsc, rather than maintaining a second alias table. These two configs
-// are plain JSON. Unsupported config inheritance fails lint instead of silently missing aliases.
 function aliases(config) {
   const json = JSON.parse(readFileSync(config, "utf8"));
   if (json.extends || json.compilerOptions?.baseUrl)
@@ -27,7 +24,6 @@ const serverAliases = aliases(resolve(root, "tsconfig.json"));
 const webAliases = aliases(resolve(root, "web/tsconfig.app.json"));
 
 function canonical(path) {
-  // Extensionless aliases and Vite query suffixes must not hide a symlink across a layer.
   for (const candidate of [path, `${path}.ts`, `${path}.tsx`, `${path}.js`, `${path}/index.ts`])
     if (existsSync(candidate)) return realpathSync(candidate);
   return path;

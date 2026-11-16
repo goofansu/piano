@@ -1,9 +1,3 @@
-/**
- * Where a dispatched child runs, through the registered `piano_start_session` tool against a
- * running `server/main.ts` and the fake Pi. Piano's server runs in one checkout and the parent
- * session in another: a relative `cwd` must be read from the parent's checkout, never the server's,
- * or a child asked to edit its own checkout edits Piano's instead.
- */
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
@@ -31,7 +25,6 @@ test(
       execFileSync("git", ["-C", dir, "init", "--quiet", "-b", "main"]);
       return dir;
     };
-    // A: where Piano's server runs. B: the parent session's checkout. C: another checkout.
     const server = checkout("server");
     const parent = checkout("parent");
     const other = checkout("other");
@@ -67,9 +60,7 @@ test(
       for (;;) {
         try {
           if ((await fetch(`${base}/api/folders`)).ok) break;
-        } catch {
-          /* startup */
-        }
+        } catch {}
         assert.ok(Date.now() < deadline && piano.exitCode === null, logs);
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
@@ -123,7 +114,6 @@ test(
             )
         ).details as SessionStatus;
       };
-      // Standalone starts have no parent; membership is never guessed from a directory.
       const parentStart = await start("parent");
       assert.equal((await status(parentStart)).projectId, null);
       parentId = parentStart.handle!.sessionId;
@@ -230,7 +220,6 @@ test(
         );
         parentId = parentStart.handle!.sessionId;
 
-        // A missing relative destination refuses before any child runs, naming where it looked.
         const missing = await start("missing", "absent");
         assert.deepEqual(
           [missing.creation, missing.submission, missing.handle, missing.detail],

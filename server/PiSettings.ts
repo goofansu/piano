@@ -1,4 +1,3 @@
-/** Machine-wide startup preferences. Pi owns the file, locking, merging and errors. */
 import { SettingsManager } from "@earendil-works/pi-coding-agent";
 import { Context, Data, Effect, Layer, Semaphore } from "effect";
 import type { SessionDefaults } from "../shared/wire.ts";
@@ -12,7 +11,6 @@ export class PiSettingsError extends Data.TaggedError("PiSettingsError")<{
 export class PiSettings extends Context.Service<
   PiSettings,
   {
-    /** Pi's probed catalog, not this answer, names the saved default (INV-01). */
     readonly saveDefaults: (defaults: SessionDefaults) => Effect.Effect<void, PiSettingsError>;
   }
 >()("piano/PiSettings") {}
@@ -60,7 +58,6 @@ export const PiSettingsLive = Layer.effect(
             return yield* Effect.tryPromise({
               try: async () => {
                 const settings = manager();
-                // No model in the request means keep Pi's automatic/existing selection.
                 if (next.model !== undefined) {
                   const slash = next.model.indexOf("/");
                   settings.setDefaultModelAndProvider(
@@ -70,7 +67,6 @@ export const PiSettingsLive = Layer.effect(
                 }
                 settings.setDefaultThinkingLevel(next.thinkingLevel);
                 await settings.flush();
-                // Pi records I/O failures instead of rejecting flush(). Never claim a failed save succeeded.
                 if (settings.drainErrors().length) throw new Error("Could not write Pi settings.");
               },
               catch: () =>

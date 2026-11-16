@@ -44,7 +44,6 @@ const state: AppState = {
       updatedAt: at(5),
       pullRequest: { url: "https://github.com/eduvo/openapply/pull/26674", source: "manual" },
     }),
-    // Its worktree is gone: Git no longer reports a branch for it.
     sessionReference("/work/repo.gone", "gone", { projectId: "p1", updatedAt: at(3) }),
     sessionReference("/repo", "elsewhere", { title: "Other project", projectId: "p2" }),
     sessionReference("/repo", "archived", { projectId: "p1", archived: true, updatedAt: at(9) }),

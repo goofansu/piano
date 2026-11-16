@@ -1,18 +1,6 @@
-/**
- * What happened to the last thing sent in the selected session, decided once. The browser keeps
- * its own record of a first message (`pendingCreate`) from the moment it is sent, including
- * failures Pi never sees: a rejected selection or a lost connection. That record speaks until
- * Pi's own submission supersedes it, after which Pi's submission is the receipt. Status, the
- * reply indicator and the status line all read phase, tone and words from here.
- */
 import type { PromptSubmission } from "@shared/wire";
 import type { AppState } from "../store.ts";
 
-/**
- * `starting`: the first message is on its way with a new session. `submitting`: Pi has it but has
- * not answered. `submitted`: Pi started or queued it. `not_sent`: refused before Pi saw it, so the
- * sender has it back. The rest are Pi's, or the browser's, verdicts.
- */
 export type SubmissionPhase =
   | "starting"
   | "submitting"
@@ -23,17 +11,13 @@ export type SubmissionPhase =
   | "uncertain";
 
 export interface SubmissionReceipt {
-  /** Whose record this is: the browser's first message, or Pi's last submission. */
   source: "browser" | "pi";
   phase: SubmissionPhase;
-  /** A failed or uncertain delivery needs the person; everything else is secondary. */
   tone: "warning" | "quiet";
-  /** The line to show, when the phase needs words the running state does not already say. */
   text: string | undefined;
   detail: string | undefined;
 }
 
-/** The phase each of Pi's submission outcomes reads as, wherever a receipt is shown. */
 const PI_PHASE = {
   submitting: "submitting",
   started: "submitted",
@@ -44,14 +28,12 @@ const PI_PHASE = {
   uncertain: "uncertain",
 } as const satisfies Record<PromptSubmission["outcome"], SubmissionPhase>;
 
-/** What Pi's submission outcome means for the input it answers: the one reading of each outcome,
- * shared by Pi's own receipt and the browser's first-message record. */
 export const submissionPhase = (outcome: PromptSubmission["outcome"]) => PI_PHASE[outcome];
 
 const text = (phase: SubmissionPhase, source: SubmissionReceipt["source"]): string | undefined => {
   switch (phase) {
-    case "starting": // The reply area's Piano keys provide startup feedback.
-    case "submitted": // Running/ready state describes the work; the queue shows queued input.
+    case "starting":
+    case "submitted":
       return undefined;
     case "submitting":
       return "Submitting — waiting for Pi.";
@@ -59,10 +41,9 @@ const text = (phase: SubmissionPhase, source: SubmissionReceipt["source"]): stri
       return "Command handled.";
     case "rejected":
       return "Message rejected.";
-    case "not_sent": // The draft is back in the composer; the detail says why.
+    case "not_sent":
       return "Not sent.";
     case "uncertain":
-      // Before Pi answered, the session itself may not exist; after, the input may sit in its queue.
       return `Delivery uncertain — inspect the ${source === "browser" ? "session list" : "session and queue"} before deciding whether to send again. Piano will not resend automatically.`;
   }
 };
@@ -79,7 +60,6 @@ const receipt = (
   detail,
 });
 
-/** The selected session's receipt for its last input, if it has one. */
 export function submissionReceipt(state: AppState): SubmissionReceipt | undefined {
   const input = state.pendingCreate;
   const submission = state.session?.state.submission;

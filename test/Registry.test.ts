@@ -84,8 +84,6 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
     ],
   };
   seedRegistry(f.dbPath, original);
-  // Reshape it as an older Piano left it: version 1, with a project goal and an archived project.
-  // Opening upgrades it in place, and the archived project comes back as an ordinary one.
   const legacy = new DatabaseSync(f.dbPath);
   try {
     legacy.exec(
@@ -187,7 +185,6 @@ test("INV-01/07: every path a write adds has a workspace when the database reope
   ];
   for (const [path, write] of writes) {
     await f.run(write);
-    // Each `run` and `get` opens Piano's database afresh, so `get` succeeding means it decoded.
     const workspace = (await f.get()).workspaces.find((w) => w.path === path);
     assert.ok(workspace?.id, `${path} has a workspace after reopening`);
   }
@@ -221,7 +218,6 @@ test("INV-01: a worktree's observed branch replaces its last-known one in one wr
         { path: two, branch: "feat-y" },
         { path: join(f.root, "unregistered"), branch: "other" },
       ]);
-      // Nothing new: the same branches again, a blank one, an unregistered path.
       yield* r.observeWorktreeBranches([
         { path: one, branch: "feat-b" },
         { path: two, branch: "" },
@@ -327,7 +323,6 @@ test("version-16 retires session sharing: a saved Radius link is dropped and its
     }),
   );
   const before = (await f.get()).sessions[0]!;
-  // Reshape it as a version-15 Piano left it: a session that was shared.
   const legacy = new DatabaseSync(f.dbPath);
   try {
     legacy.exec(
@@ -352,7 +347,6 @@ test("version-16 retires session sharing: a saved Radius link is dropped and its
   } finally {
     upgraded.close();
   }
-  // The upgraded database keeps working: a later change persists.
   await f.run(Effect.flatMap(Registry, (r) => r.pinSession(cwd, "shared", false)));
   assert.equal((await f.get()).sessions[0]?.pinned, undefined);
 });
@@ -439,7 +433,7 @@ test("PIN-152: reversible archive preserves metadata and refuses stale writes af
       const r = yield* Registry;
       for (const id of ["one", "two", "pinned"]) yield* r.addSession(cwd, id, id);
       const before = yield* r.get;
-      yield* r.pinSession(cwd, "pinned", true); // Pin after planning: the write must recheck it.
+      yield* r.pinSession(cwd, "pinned", true);
       stale = before.sessions[0]!;
       let changes = 0;
       yield* r.onChange(() =>
@@ -503,7 +497,6 @@ for (const version of [4, 5, 6]) {
     try {
       if (version === 5) {
         legacy.exec("CREATE TABLE notification_webhooks (url TEXT PRIMARY KEY NOT NULL) STRICT;");
-        // Retired preferences must not block an upgrade, even when malformed.
         legacy.prepare("INSERT INTO notification_webhooks VALUES (?)").run("invalid old URL");
       }
       if (version === 6) {
@@ -743,7 +736,6 @@ test("INV-01: a failed transaction publishes neither partial rows nor in-memory 
     const r = await runtime.runPromise(Registry);
     await runtime.runPromise(r.saveProject({ id: "launch", name: "Launch" }));
     const before = await runtime.runPromise(r.get);
-    // A real SQLite write failure after workspace creation must roll back the whole operation.
     const db = new DatabaseSync(f.dbPath);
     try {
       db.exec(
@@ -904,8 +896,6 @@ test("PIN-50: new cwd creates one workspace, keeping aliases and worktree parent
   );
 });
 
-// Registry does not expose removal for every collection. Exercise the existing database save
-// boundary too, so position handling is protected for every ordered table, including parents.
 for (const name of ["projects", "workspaces", "folders", "worktrees", "sessions"] as const) {
   test(`PIN-50: deleting the first ${name} row persists shifted positions and restart order`, async (t) => {
     const f = fixture(t);
@@ -945,7 +935,6 @@ for (const name of ["projects", "workspaces", "folders", "worktrees", "sessions"
       stored.close();
     }
     assert.deepEqual(await f.get(), after);
-    // Reinsert at the end: stale positions must not tie with the appended item.
     const reopened = openRegistryDatabase(f.dbPath);
     const appended = { ...reopened.data, [name]: [...reopened.data[name], before[name][0]] };
     try {
@@ -990,7 +979,6 @@ test("a new session's title is limited where it is stored, from a start name or 
       yield* r.addSession(cwd, "named", ` ${"n".repeat(SESSION_TITLE_MAX + 50)} `);
       yield* r.addSession(cwd, "prompted");
       yield* r.touchSession(cwd, "prompted", ` ${"p".repeat(SESSION_TITLE_MAX + 50)}`);
-      // An emoji straddling the cut is dropped whole, never left as half a surrogate pair.
       yield* r.addSession(cwd, "emoji");
       yield* r.touchSession(cwd, "emoji", `${"e".repeat(79)}\u{1F600} more`);
     }),
@@ -1014,7 +1002,6 @@ test("a start name over the title limit is refused like a rename", () => {
 });
 
 test("INV-01: a database holding a project name over today's limit still opens", async (t) => {
-  // The limit guards what the client sends; a name saved under an earlier, longer limit is read as it is.
   const f = fixture(t);
   const name = "n".repeat(PROJECT_NAME_MAX + 1);
   seedRegistry(f.dbPath, {
@@ -1030,7 +1017,6 @@ test("INV-01: a database holding a project name over today's limit still opens",
     data.projects.map((p) => p.name),
     [name],
   );
-  // Renaming it must fit the limit; the stored name stays until then.
   const rename = (next: string) =>
     JSON.stringify({ _tag: "update_project", id: "long", name: next });
   assert.throws(() => decodeClientMessage(rename(name)));

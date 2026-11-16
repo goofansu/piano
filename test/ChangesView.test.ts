@@ -62,7 +62,6 @@ const sheet = (
     disclosure = initialDisclosure,
   }: { error?: string; busy?: boolean; disclosure?: Disclosure } = {},
 ) => changesSheet({ observation, error, busy, disclosure });
-/** Each listed file's path and whether it is open, in order. */
 const opens = (view: ChangesSheetView) =>
   view.body.kind === "files" ? view.body.files.map((f) => [f.metadata.path, f.open]) : [];
 
@@ -94,8 +93,6 @@ test("only a new checkout-changing tool result or a streaming change asks for a 
   assert.notEqual(refreshKey(session([msg("1", "tool_result", "edit")], true)), base);
 });
 
-// The server compares by the link's recorded branches (SessionChanges hints); a read rewrites them
-// without changing the URL, after a retarget or once GitHub answers for a link saved without them.
 test("Changes reads again when the pull request's recorded branches move, not only its URL", () => {
   const url = "https://github.com/o/r/pull/7";
   const saved = { url, source: "manual" as const };

@@ -4,13 +4,11 @@ import mermaid from "mermaid";
 let sequence = 0;
 let queue: Promise<unknown> = Promise.resolve();
 
-/** Serialize configuration + rendering: Mermaid's configuration is global. */
 export function renderDiagram(source: string, dark: boolean): Promise<string> {
   const result = queue.then(async () => {
     mermaid.initialize({
       startOnLoad: false,
       securityLevel: "strict",
-      // Diagram directives/frontmatter must not override host policy (including CSS).
       secure: [...Object.keys(mermaid.mermaidAPI.defaultConfig), "htmlLabels", "dompurifyConfig"],
       theme: dark ? "dark" : "default",
       htmlLabels: false,

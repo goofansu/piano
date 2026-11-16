@@ -1,14 +1,3 @@
-/**
- * SessionDialogs: every path one dialog can end by (INV-04: a dialog has one terminal resolution).
- * An ordinary dialog gets a host deadline from Pi's advertised timeout and the recovery policy. A
- * dialog a tool call owns has none: Pi's native end record for that call closes it, and the
- * result Pi stored confirms or rejects the answer written for it. Answer, cancel, deadline,
- * abort, tool end and exit compete for one claim taken under the session's snapshot lock; the
- * response is written to Pi only after the claim, outside the lock, and no transport
- * acknowledgement reopens it. Internal to PiSessions, which owns the child; resolutions go
- * through the session's SessionPublication. This module owns the deadlines, claims, resolution
- * reasons and their detail texts.
- */
 import { Clock, Deferred, Effect, Fiber, type Scope } from "effect";
 import { answerStored } from "../shared/askUser.ts";
 import type { Dialog, DialogResolution, SessionAction } from "../shared/wire.ts";
@@ -23,25 +12,16 @@ import type { PublicationTransaction, SessionPublication } from "./SessionPublic
 
 export interface SessionDialogsOptions {
   readonly generation: string;
-  /** Bounds a dialog whose Pi timeout is absent or later: Pi does not report an extension
-   * cancelling its own dialog, so an unbounded one could block the session forever. A dialog
-   * owned by a tool call is exempt: that call's end closes it. */
   readonly recoveryMs: number;
-  /** Watchers and answers belong to the session, not to the requesting browser. */
   readonly scope: Scope.Scope;
   readonly write: (command: PiCommand) => Effect.Effect<void, PiSessionError>;
   readonly publication: SessionPublication;
-  /** The in-progress abort's dispatch signal, if an abort is cancelling the current run. */
   readonly abortInProgress: () => Deferred.Deferred<void> | undefined;
 }
 
-/** The reason a dialog ends at its deadline: Pi's own timeout, or Piano's recovery policy. */
 const lapsed = (dialog: Dialog) =>
   dialog.deadlineKind === "pi-timeout" ? ("expired" as const) : ("recovery" as const);
 
-/** What can happen to the live receipt after its dialog closed: the next question of its tool call
- * opened, the call ended with the result Pi stored, an answer arrived after the closure, Pi
- * exited, or a new run started. */
 type ReceiptEvent =
   | { readonly _tag: "question-opened"; readonly toolCallId: string }
   | { readonly _tag: "tool-ended"; readonly toolCallId: string; readonly result: unknown }
@@ -57,17 +37,12 @@ export const makeSessionDialogs = ({
   publication,
   abortInProgress,
 }: SessionDialogsOptions) => {
-  // Claim/removal, deadline wakeup and resolution frames share one atomic snapshot boundary.
   const closed = new Map<string, Deferred.Deferred<void>>();
-  /** True when this generation's dialog or receipt belongs to `toolCallId` (any call when omitted):
-   * ownership travels on the dialog and its resolution, so a receipt outlives the dialog. */
   const ownedReceipt = (resolution: DialogResolution | undefined, toolCallId?: string) =>
     resolution?.generation === generation &&
     resolution.toolCallId !== undefined &&
     (toolCallId === undefined || resolution.toolCallId === toolCallId);
 
-  /** Every closure of a dialog, built from the dialog: it keeps the dialog's tool call, question
-   * and title, which a later receipt transition and an answer kept after closure read. */
   const closure = (
     dialog: Dialog,
     reason: DialogResolution["reason"],
@@ -86,12 +61,6 @@ export const makeSessionDialogs = ({
     ...(answer ? { answer } : {}),
   });
 
-  /**
-   * A receipt with something left to report: pending, uncertain or rejected, an answer Pi never
-   * received, or a response written for a tool call that has not yet given its verdict. It stays
-   * across a new run and is not replaced by another dialog's closure that carries no answer
-   * (INV-04).
-   */
   const unsettled = (current: DialogResolution) =>
     !(
       current.delivery === "accepted" ||
@@ -99,16 +68,6 @@ export const makeSessionDialogs = ({
       (current.delivery === "written" && !ownedReceipt(current))
     );
 
-  /**
-   * The one transition of the live receipt after its dialog closed; undefined leaves it as it is.
-   * A response written for a dialog a tool call owns waits on that call: its next question accepts
-   * an answer (the tool asks only after storing it), its end accepts a cancellation and accepts or
-   * rejects an answer by the result Pi stored, and Pi's exit leaves it uncertain, as it does any
-   * response still being delivered. An answer arriving after an owned question closed unanswered
-   * is kept, rejected, in that question's receipt. A new run retires a receipt whose delivery is
-   * final and that holds no answer to keep: it reported its ending in the run it ended in. An
-   * `unsettled` one stays (INV-04).
-   */
   const nextReceipt = (
     current: DialogResolution | undefined,
     event: ReceiptEvent,
@@ -150,7 +109,6 @@ export const makeSessionDialogs = ({
             }
           : undefined;
       case "exited":
-        // An owned dialog's written reply was still awaiting its tool's end; an ordinary one was final.
         return current.delivery === "pending" ||
           (current.delivery === "written" && ownedReceipt(current))
           ? {
@@ -166,7 +124,6 @@ export const makeSessionDialogs = ({
     }
   };
 
-  /** Apply `nextReceipt` to the live receipt, under the caller's lock. */
   const advance = Effect.fnUntraced(function* (
     transaction: PublicationTransaction,
     event: ReceiptEvent,
@@ -176,11 +133,6 @@ export const makeSessionDialogs = ({
       yield* transaction.mergeState({ dialogResolution: next === "retired" ? undefined : next });
   });
 
-  /**
-   * Settle one dialog's claim under the lock: remove it, wake its watcher, publish. Its ending
-   * becomes the live receipt unless that receipt is `unsettled` and the ending carries no answer:
-   * the queue still drops the dialog, but its status line yields to the receipt still reporting.
-   */
   const settle = Effect.fnUntraced(function* (
     transaction: PublicationTransaction,
     resolution: DialogResolution,
@@ -197,7 +149,6 @@ export const makeSessionDialogs = ({
     });
   });
 
-  /** All terminal paths compete under the snapshot lock, before any transport yield. */
   const resolve = Effect.fn("SessionDialogs.resolve")(function* (
     dialog: Dialog,
     reason: DialogResolution["reason"],
@@ -243,7 +194,6 @@ export const makeSessionDialogs = ({
     ).pipe(Effect.result);
     const owned = dialog.toolCallId !== undefined;
     const response = resolution.reason === "answered" ? "Answer" : "Cancellation";
-    // A refusal before any bytes were queued (Pi exited, input capacity) proves Pi never saw it.
     const final: DialogResolution =
       result._tag === "Success"
         ? {
@@ -267,7 +217,6 @@ export const makeSessionDialogs = ({
     yield* publication.transaction((transaction) =>
       Effect.gen(function* () {
         const state = yield* publication.state;
-        // The owning tool can end before the stdin write completes: never downgrade its verdict.
         if (
           state.dialogResolution?.id === dialog.id &&
           state.dialogResolution.delivery === "pending" &&
@@ -289,12 +238,6 @@ export const makeSessionDialogs = ({
     return final;
   });
 
-  /**
-   * Open a dialog Pi requested, under the publication lock. An ordinary dialog's deadline is the
-   * earlier of Pi's timeout and host recovery. A dialog its tool call owns has none, and its
-   * arrival confirms the answer written for that call's previous question: the tool only asks
-   * the next one after storing the last.
-   */
   const opened = Effect.fnUntraced(function* (
     transaction: PublicationTransaction,
     request: DialogRequest,
@@ -316,12 +259,10 @@ export const makeSessionDialogs = ({
     return dialog;
   });
 
-  /** End an open dialog at its deadline, or once an abort in progress has been dispatched. */
   const watch = Effect.fnUntraced(function* (dialog: Dialog) {
     const signal = closed.get(dialog.id);
     if (!signal) return;
     const abort = abortInProgress();
-    // Never stop stdout consumption while an extension or a pipe is blocked.
     yield* Effect.gen(function* () {
       if (abort) yield* Deferred.await(abort);
       else if (dialog.deadlineAt === null) return;
@@ -333,11 +274,6 @@ export const makeSessionDialogs = ({
     }).pipe(Effect.ignore, Effect.forkIn(scope));
   });
 
-  /**
-   * A tool call ended (Pi's native record, consumed under the same lock as local claims). Its
-   * dialogs still open closed with it: nothing is written, Pi no longer reads a reply. The
-   * response written for it then takes its verdict from `nextReceipt`.
-   */
   const toolEnded = Effect.fnUntraced(function* (
     transaction: PublicationTransaction,
     { toolCallId, result }: { toolCallId: string; result: unknown },
@@ -352,7 +288,6 @@ export const makeSessionDialogs = ({
     yield* advance(transaction, { _tag: "tool-ended", toolCallId, result });
   });
 
-  /** A browser's answer or cancellation, accepted only for a dialog still open in this generation. */
   const answer = Effect.fn("SessionDialogs.answer")(function* (
     action: Extract<SessionAction, { _tag: "answer" }>,
   ) {
@@ -386,22 +321,12 @@ export const makeSessionDialogs = ({
     yield* work.pipe(Effect.forkIn(scope), Effect.flatMap(Fiber.join));
   });
 
-  /**
-   * Keep an answer to one of Piano's own questions that arrived after it closed, in the live
-   * receipt only: it replaces that question's closure, never another tab's claimed answer or a
-   * different dialog's receipt. Ordinary dialogs keep their recovery policy and no echo.
-   */
   const retain = Effect.fnUntraced(function* (action: Extract<SessionAction, { _tag: "answer" }>) {
     if (action.cancelled || action.generation !== generation || action.value === undefined) return;
     const late = { _tag: "late-answer" as const, id: action.id, value: action.value };
     yield* publication.transaction((transaction) => advance(transaction, late));
   });
 
-  /**
-   * Resolve every dialog in `dialogs` (by default, those open now). Abort passes the dialogs open
-   * before it dispatched, so a newer run's dialog is never cancelled by an older abort. On exit,
-   * a response still being delivered becomes uncertain; it must not be resent.
-   */
   const resolveAll = Effect.fn("SessionDialogs.resolveAll")(function* (
     reason: "aborted" | "exited",
     dialogs?: ReadonlyArray<Dialog>,
@@ -412,8 +337,6 @@ export const makeSessionDialogs = ({
     yield* publication.transaction((transaction) => advance(transaction, { _tag: "exited" }));
   });
 
-  /** A run started (Pi's native record, under the same lock): retire a receipt with nothing left
-   * to report, so an ending from an earlier run never sits under a later one. */
   const runStarted = (transaction: PublicationTransaction) =>
     advance(transaction, { _tag: "run-started" });
 

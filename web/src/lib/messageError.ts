@@ -6,7 +6,6 @@ export interface MessageError {
   details?: string;
 }
 
-/** Presentation only: never rewrite Pi history or infer cancellation from a failed tool alone. */
 export function messageError(
   msg: RenderMsg,
   preceding: readonly RenderMsg[],
@@ -20,8 +19,6 @@ export function messageError(
       raw.trim(),
     )
   ) {
-    // Pi can attach the abort to the call message or emit a separate assistant message
-    // after its results. Never look across another assistant reply or a user turn.
     const previous = preceding.findLast((m) => m.role === "assistant" || m.role === "user");
     const calls = msg.toolCalls?.length
       ? msg.toolCalls
@@ -50,9 +47,7 @@ export function messageError(
       } | null;
       const message = payload?.message ?? payload?.error?.message;
       if (typeof message === "string" && message.trim()) summary = message.trim();
-    } catch {
-      // Unknown or partial provider payloads stay readable, with the original on demand.
-    }
+    } catch {}
   }
   if (summary.length > 240) summary = `${cutText(summary, 237)}…`;
   return { summary, ...(summary !== raw ? { details: raw } : {}) };

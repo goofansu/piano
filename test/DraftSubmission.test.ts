@@ -9,7 +9,6 @@ import { emptyChoice, type ModelTarget, modelChoice } from "../web/src/lib/model
 import { openConnection, type SocketEnvironment, type SocketEvents } from "../web/src/lib/ws.ts";
 import { initialState } from "../web/src/store.ts";
 
-/** Real transport and client; only the external socket and reconnect clock are controlled. */
 function harness({ select = true, frameBytes = machineFrameBytes(LOCAL.id) } = {}) {
   const sockets: Array<{
     events: SocketEvents;
@@ -255,7 +254,7 @@ test("PIN-61: CLOSING before onclose retains the full draft for explicit retry a
     return consumed;
   };
 
-  h.last().open = false; // CLOSING, but no onclose callback yet.
+  h.last().open = false;
   assert.equal(h.client.getState().connected, true);
   assert.equal(submit(), false, "known-unsent must not report composer success");
   assert.equal(h.actions().length, 0);
@@ -387,7 +386,7 @@ test("a new session's first message that is known not sent stays on the New page
     return consumed;
   };
 
-  h.last().open = false; // CLOSING, but no onclose callback yet.
+  h.last().open = false;
   assert.equal(submit(), false, "known-unsent must not consume the draft");
   assert.equal(h.creations().length, 0);
   assert.deepEqual(drafts.get(NEW_SESSION_DRAFT), before);

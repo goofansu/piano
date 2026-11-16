@@ -18,11 +18,9 @@ import { settingsLoadView } from "@/lib/settingsLoadView";
 import { useSetupActions } from "@/lib/useSetupActions";
 import { useVoiceInput, voiceInputSettings } from "@/lib/useVoiceInput";
 
-/** Why the key dialog is open: turning voice input on, or replacing the saved key. */
 type KeyEditing = "turn-on" | "replace";
 
 export function PreferencesSettings() {
-  // The same state every composer reads, so a save here shows or hides their mic at once.
   const observed = useVoiceInput();
   const [editing, setEditing] = useState<KeyEditing>();
   const actions = useSetupActions<"remove-key">({
@@ -53,7 +51,6 @@ export function PreferencesSettings() {
             <ApiKeyDialog
               title="OpenAI API key"
               description="Voice input for every machine sends recordings and session context through this Piano to OpenAI."
-              // Saving a key while turning on also turns voice input on; replacing keeps it as is.
               save={(key) =>
                 voiceInputSettings.save({ enabled: editing === "turn-on" || voice.enabled, key })
               }
@@ -95,8 +92,6 @@ export function PreferencesSettings() {
               title="Voice input"
               titleId="voice-input-title"
               actions={
-                // Keep the switch beside the key menu, never beneath its revealed hit target.
-                // Match the menu's height so saving a key does not move the row vertically.
                 <span className="flex min-h-8 items-center pointer-coarse:min-h-11">
                   <Switch
                     size="sm"

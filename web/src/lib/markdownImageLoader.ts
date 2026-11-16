@@ -1,35 +1,23 @@
 import type { FilePreview } from "../../../shared/files.ts";
 import { mayPreviewAsImage, previewImage } from "./previewImage.ts";
 
-/** Distinct local images one prose surface may read, and the image bytes it may retain. */
 export const markdownImageLimit = 8;
 export const markdownImageBytes = 20 * 1024 * 1024;
 
 export interface MarkdownImageIo {
-  /** Reads a path as the document wrote it; the caller resolves it against its document. */
   readonly read: (path: string, signal: AbortSignal) => Promise<FilePreview>;
   readonly createUrl: (blob: Blob) => string;
   readonly revokeUrl: (url: string) => void;
 }
 
 export interface MarkdownImageLoader {
-  /** The image paths the prose references now, in document order. */
   readonly show: (paths: readonly string[]) => void;
   readonly images: () => ReadonlyMap<string, string>;
   readonly subscribe: (listener: (images: ReadonlyMap<string, string>) => void) => () => void;
-  /** Aborts the read in flight and revokes every Blob URL. */
   readonly dispose: () => void;
 }
 
-/**
- * Loads the images of one prose surface for one (workspace, document) owner. Each path is read
- * at most once, one after another, within the image and byte budgets, so prose that grows (a
- * streaming reply) loads only its new images and never refetches or flashes earlier ones.
- * A name that claims a non-image format (`demo.mp4`, `spec.pdf`) is never read or counted;
- * an unreadable or non-image file keeps its fallback link.
- */
 export function markdownImageLoader(io: MarkdownImageIo): MarkdownImageLoader {
-  // A path that leaves the prose keeps its entry until dispose, so it never reloads if it returns.
   const admitted = new Set<string>();
   const queue: string[] = [];
   const urls = new Map<string, string>();
@@ -53,9 +41,7 @@ export function markdownImageLoader(io: MarkdownImageIo): MarkdownImageLoader {
         urls.set(path, io.createUrl(image));
         images = new Map(urls);
         for (const listener of listeners) listener(images);
-      } catch {
-        // Keep the local-file action usable for an explicit retry/error.
-      }
+      } catch {}
     }
     loading = false;
   };

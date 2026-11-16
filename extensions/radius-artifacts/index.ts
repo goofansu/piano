@@ -95,7 +95,6 @@ async function token(ctx: ExtensionContext) {
   }
 }
 
-/** No Piano globals, credential files, configuration writes, or separate identity database. */
 export default function radiusArtifacts(pi: ExtensionAPI) {
   let registered = false;
   pi.on("before_agent_start", (event) => {
@@ -103,7 +102,6 @@ export default function radiusArtifacts(pi: ExtensionAPI) {
       "Artifact requests mean Radius by default. Local files are staging only unless the user explicitly requests local delivery. Use radius_artifact_create/update/view and return the confirmed Radius URL, visibility and expiration. If these tools are unavailable, ask the user to sign in to Radius and start a new session; never silently fall back to local files. Keep artifact identity and operationKey in the conversation. Unknown is not published: reconcile before any retry and ask the user if unresolved.";
   });
   pi.on("session_start", async (_event, ctx) => {
-    // Check BEFORE registerTool, not merely before execute or by hiding inactive tools.
     if (
       registered ||
       !ctx.modelRegistry.getProviderAuthStatus("radius").configured ||
@@ -168,8 +166,6 @@ export default function radiusArtifacts(pi: ExtensionAPI) {
       const retry = Boolean(intent);
       const mutation = params.artifactId ? "artifacts_versions_publish" : "artifacts_create";
       if (!intent) {
-        // An operation Radius does not advertise is never sent: fail before recording an intent
-        // that would leave this key unknown for good.
         client.operation(mutation);
         const before = params.artifactId ? await client.read(params.artifactId) : undefined;
         if (
@@ -187,7 +183,6 @@ export default function radiusArtifacts(pi: ExtensionAPI) {
           visibility: before?.visibility ?? "private",
           ...(before ? { id: before.id, url: before.canonical_url } : {}),
         };
-        // Persist before sending: a crash or abort cannot turn an uncertain write into a retry.
         pi.appendEntry(entryType, intent);
       }
       let mutationFailure: string | undefined;
@@ -208,8 +203,6 @@ export default function radiusArtifacts(pi: ExtensionAPI) {
         }
       } catch (error) {
         mutationFailure = safeError(error);
-        // Never repeat the mutation, even on authentication, timeout, cancellation or malformed
-        // replies. A read below may prove it committed. The original exception is not safe output.
       }
       if (!intent.id)
         return {
@@ -230,8 +223,6 @@ export default function radiusArtifacts(pi: ExtensionAPI) {
           throw new RadiusError(
             "The expected publication was not found; another writer may have published.",
           );
-        // Nested calls have no result entry of their own. Persist confirmation independently
-        // of the outer script's output/success, but never duplicate an operation on reconciliation.
         if (
           !ctx.sessionManager
             .getBranch()

@@ -1,70 +1,39 @@
-/**
- * The session catalog: which sessions exist and how each one appears. The sidebar groups it,
- * the command palette ranks it, and routing and the document title look sessions up in it.
- * Each entry is one registry reference, placed in its open folder and joined with the host
- * broadcast, the only source of running state.
- */
 import type { FolderView, Project, SessionReference, WorktreeView } from "@shared/wire";
 import { type AppState, isSession, sessionKey } from "../store.ts";
 import { findProject } from "./projectCommands.ts";
 
-/** Working: Pi is streaming. Done: finished while not on screen. Idle: running, waiting. Off: no process. */
 export type SessionActivity = "working" | "done" | "idle" | "off";
 
 export interface SessionEntry {
   cwd: string;
   sessionId: string;
-  /** The registry's saved title, raw: what Rename edits. */
   title: string | undefined;
-  /** What the session is called on screen (see `sessionLabel`). */
   label: string;
   createdAt: string;
   updatedAt: string;
-  /** The registered folder holding the session's directory; undefined once that folder is closed. */
   folderPath: string | undefined;
-  /** The folder's name, else the directory's last segment. */
   folder: string;
-  /** Git's branch for the session's checkout; empty when unknown. */
   branch: string;
   projectId: string | undefined;
-  /** The project the session belongs to, when that project exists. */
   project: Project | undefined;
   archived: boolean;
   pinned: boolean;
-  /**
-   * Eligible for regular sidebar groups: its folder is open, or it belongs to an active project.
-   * Pinned sessions appear separately above these groups even when their folder is closed.
-   * A closed folder takes its unfiled sessions out of the sidebar; project members stay, under
-   * every grouping, since membership does not depend on where a session runs.
-   */
   listed: boolean;
   activity: SessionActivity;
-  /** The session on screen, or the one being opened. */
   selected: boolean;
   unavailable: SessionReference["unavailable"];
-  /** Why the session cannot be used normally, for its tooltip and screen readers. */
   hint: string | undefined;
-  /** Its history is gone, so it cannot be opened. */
   disabled: boolean;
 }
 
-/**
- * What a session is called on screen, wherever it is named: its title, else "Untitled". The
- * fallback is display copy only; Rename starts from the raw title, never from this.
- */
 export function sessionLabel(title: string | undefined): string {
   return title || "Untitled";
 }
 
-/**
- * Whether a session can be opened: its Pi history is there. The one rule the sidebar, the palette,
- * links to a session and its `/s/<id>` address follow; a missing checkout still lets history be read.
- */
 export function sessionOpenable(ref: Pick<SessionReference, "unavailable">): boolean {
   return ref.unavailable !== "history";
 }
 
-/** What a session that cannot be opened says, on its row and at its address. */
 export const HISTORY_UNAVAILABLE = {
   title: "History unavailable",
   description: "Restore the Pi session file to open it.",
@@ -75,30 +44,14 @@ const HINTS = {
   checkout: "Folder missing. History can be read; restore the folder to continue.",
 } as const;
 
-/**
- * Where a session runs: its directory placed among the registered folders. Only that; project
- * membership is independent of the directory (see the glossary), so callers read the project,
- * title and saved branch from the session's reference.
- */
 export interface SessionDirectory {
-  /** The registered folder holding the directory; undefined once that folder is closed. */
   folder: FolderView | undefined;
-  /** The folder's checkout at the directory. */
   checkout: WorktreeView | undefined;
-  /** The folder's name, else the directory's last segment (a trailing slash ignored); empty
-   * without a directory. The sidebar row, the phone header and the rail all name a session's
-   * place by this. */
   folderName: string;
 }
 
-/**
- * Places session directories among `state`'s folders: catalog rows and the selected session's
- * header both read where a session runs from this. A directory is known before the session's
- * reference is (a first message on its way), so this takes the directory alone.
- */
 export function sessionDirectories(state: AppState): (cwd: string | undefined) => SessionDirectory {
   const folderOf = new Map<string, FolderView>();
-  // The first folder listing a directory holds it, as `folderFor` answers.
   for (const f of state.folders)
     for (const w of f.worktrees) if (!folderOf.has(w.path)) folderOf.set(w.path, f);
   return (cwd) => {
@@ -110,11 +63,6 @@ export function sessionDirectories(state: AppState): (cwd: string | undefined) =
   };
 }
 
-/**
- * The registered folder whose worktrees include `cwd`, the first one listing it, as
- * `sessionDirectories` places it; undefined once that folder is closed. One lookup scans the
- * folders instead of indexing them all.
- */
 export function folderFor(state: AppState, cwd: string | undefined): FolderView | undefined {
   return cwd === undefined
     ? undefined
@@ -155,49 +103,36 @@ function entries(state: AppState): SessionEntry[] {
   });
 }
 
-/** Every session that is not archived, display-ready. `listed` says which ones the sidebar shows. */
 export function sessionCatalog(state: AppState): SessionEntry[] {
   return entries(state).filter((s) => !s.archived);
 }
 
-/** Archived sessions, with the same title and folder formatting as every other catalog surface. */
 export function archivedSessionCatalog(state: AppState): SessionEntry[] {
   return entries(state)
     .filter((s) => s.archived)
     .sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0));
 }
 
-/** Whether the sidebar's groups hold a session: listed and not pinned, since Pinned holds those. */
 export function inSidebarGroups(s: Pick<SessionEntry, "listed" | "pinned">): boolean {
   return s.listed && !s.pinned;
 }
 
-/** The palette's openable sessions, newest created first, wherever their folders are. */
 export function recentSessions(state: AppState): SessionEntry[] {
   return sessionCatalog(state)
     .filter((s) => !s.disabled)
     .sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0));
 }
 
-/** One session's display-ready entry by its ID, archived or not. */
 export function catalogEntry(state: AppState, sessionId: string): SessionEntry | undefined {
   return entries(state).find((s) => s.sessionId === sessionId);
 }
 
-/** Where a session opens: its catalog directory, and what a link to it says. */
 export interface SessionDestination {
   sessionId: string;
   cwd: string;
   label: string;
 }
 
-/**
- * Whether a session can be opened, and where: the one rule every link to a session follows. A
- * session opens when the catalog offers it (it is not archived, as `sessionCatalog` decides for
- * the sidebar and palette) and its history is there, at the catalog's directory; otherwise it is
- * "unlisted" and nothing offers to open it. A `/s/<id>` address still opens an archived session;
- * one without history shows History unavailable (see `decideRoute`).
- */
 export function sessionDestination(
   state: AppState,
   sessionId: string,

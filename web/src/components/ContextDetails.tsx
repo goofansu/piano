@@ -28,10 +28,6 @@ interface Props {
   messages: ReadonlyArray<RenderMsg>;
 }
 
-/**
- * History usage is per response, not a reconstruction of Pi's current context. Labels are sans;
- * values (counts, costs, the model id) are mono.
- */
 export function ContextDetails({ figures, usage: session, messages }: Props) {
   const [selectedId, setSelectedId] = useState<string>();
   const [metric, setMetric] = useState<HistoryMetric>("tokens");
@@ -110,7 +106,6 @@ export function ContextDetails({ figures, usage: session, messages }: Props) {
               {metric === "tokens" ? "Tokens" : "Cost"} per response · peak{" "}
               <span className="font-mono">{peakText}</span>
             </p>
-            {/* role=region, not a <section>: a <section> region would add a landmark inside a popover. */}
             <div
               ref={chartRef}
               className="min-w-0 overflow-x-auto overscroll-x-contain"

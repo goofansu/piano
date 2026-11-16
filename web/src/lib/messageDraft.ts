@@ -1,14 +1,4 @@
-/**
- * A message the user has not sent yet, on the New page or for one session: its text, its images
- * and its quotes from the transcript, all kept here under one draft key. This module decides the
- * keys, which images a draft accepts, how text is appended as a paragraph, how quotes join the
- * message, when a draft can be sent, that sending empties all three parts at once, and that input
- * the server refuses before Pi sees it comes back to its draft.
- * Drafts live in browser memory for this page load only; image bytes never go to localStorage or
- * the registry (INV-01). Nothing here depends on React.
- */
 import type { Attachment, ServerMessage } from "@shared/wire";
-// Relative, not @shared: module tests load this file directly in Node.
 import {
   attachmentsRefusal,
   base64Bytes,
@@ -22,55 +12,34 @@ import { inputVerdictOf } from "../../../shared/inputVerdict.ts";
 import { sessionKey } from "../../../shared/wire.ts";
 import type { SendDisposition } from "./ws.ts";
 
-/** Identifies one draft; built only here, so a bare string cannot address one. */
 export type DraftKey = string & { readonly __draft: unique symbol };
 
-/** The New page's single draft. */
 export const NEW_SESSION_DRAFT = "new-session" as DraftKey;
-/** A session's draft. Paths are absolute, so no session key can equal the New page's. */
 export const sessionDraftKey = (s: { cwd: string; sessionId: string | null }) =>
   sessionKey(s.cwd, s.sessionId ?? "") as DraftKey;
 
-/**
- * Appends text as a new paragraph. A draft with visible text gets a blank line before the
- * addition; a blank or whitespace-only draft gets none, so added text never starts with an empty
- * paragraph. The existing text is kept as typed.
- */
 export const appendParagraph = (existing: string, text: string) =>
   `${existing}${existing.trim() ? "\n\n" : ""}${text}`;
 
 export interface ImageDraft {
   items: readonly Attachment[];
-  /** Files are being read; the draft takes no other image change, and is not sent, until they are. */
   busy: boolean;
-  /** Why the last addition was refused; the images already accepted stay. */
   error: string;
 }
 
-/** The draft has something to send: visible text or an image. */
 export const hasContent = (draft: { text: string; images: Pick<ImageDraft, "items"> }) =>
   draft.text.trim().length > 0 || draft.images.items.length > 0;
 const heldBytes = (items: readonly Attachment[]) =>
   items.reduce((n, a) => n + base64Bytes(a.data), 0);
-/**
- * Why `items` cannot be sent as one message, or "" when they can. A draft can hold more than the
- * limits allow (refused input returned while images were added): it stays editable until an image
- * is removed.
- */
 const overLimit = (items: readonly Attachment[]) =>
   attachmentsRefusal(items.length, heldBytes(items));
-/** The draft has content, no image is still being read, and its images fit in one message. */
 export const sendable = (draft: { text: string; images: Pick<ImageDraft, "items" | "busy"> }) =>
   !draft.images.busy && hasContent(draft) && !overLimit(draft.images.items);
 
-/** What a file says about itself before it is read in full: its first bytes are enough to recognize it. */
 export interface ImageCandidate {
   name: string;
-  /** Original file size in bytes. */
   size: number;
-  /** The browser's MIME type; empty when it does not know. */
   type: string;
-  /** At least the first 12 bytes. */
   head: Uint8Array;
 }
 export const IMAGE_HEAD_BYTES = 12;
@@ -79,12 +48,6 @@ export type ImageCheck =
   | { ok: true; mimeTypes: Attachment["mimeType"][] }
   | { ok: false; reason: string };
 
-/**
- * Whether `files` may join a draft that already holds `current`, per shared/attachments.ts and
- * docs/image-attachments.md: the batch within the message limits, each file non-empty, within the
- * per-image limit, with an accepted signature its declared type (if any) agrees with. All or none
- * are accepted.
- */
 export function checkImages(
   current: readonly Attachment[],
   files: readonly ImageCandidate[],
@@ -112,10 +75,6 @@ export function checkImages(
   return { ok: true, mimeTypes };
 }
 
-/**
- * Text selected in the transcript as a quote: line breaks kept (list items stay separate lines),
- * runs of blank lines folded to one, trailing spaces and the ends trimmed. Empty when nothing is left.
- */
 export const quoteText = (selected: string) =>
   selected
     .replace(/\r\n?/g, "\n")
@@ -126,7 +85,6 @@ export const quoteText = (selected: string) =>
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-/** The message a draft sends: each quote as its own Markdown blockquote, in order, then the typed text. */
 export const withQuotes = (quotes: readonly string[], text: string) =>
   [
     ...quotes.map((quote) =>
@@ -140,17 +98,14 @@ export const withQuotes = (quotes: readonly string[], text: string) =>
     .filter(Boolean)
     .join("\n\n");
 
-/** One draft's parts. A draft no one has touched is `EMPTY_DRAFT`. */
 export interface Draft {
   text: string;
   images: ImageDraft;
   quotes: readonly string[];
-  /** Input held off the socket while its images are prepared; newer typing is a separate draft. */
   preparing?: DraftMessage;
   prepareError?: string;
 }
 
-/** What a send takes from the draft: its quotes and trimmed text as one message, and its images. */
 export interface DraftMessage {
   text: string;
   attachments: readonly Attachment[];
@@ -159,62 +114,39 @@ export interface DraftMessage {
 const NO_IMAGES: ImageDraft = { items: [], busy: false, error: "" };
 export const EMPTY_DRAFT: Draft = { text: "", images: NO_IMAGES, quotes: [] };
 
-/** The message `draft` would send now. */
 export const draftMessage = (draft: Draft): DraftMessage => ({
   text: withQuotes(draft.quotes, draft.text.trim()),
   attachments: draft.images.items,
 });
 
-/** The client to follow for restored queues and refused input; the page's `Client` is one. */
 export interface DraftSource {
   listen: (listener: (message: ServerMessage) => void) => () => void;
-  /** The selection on screen, read after a frame is applied: a session frame names only that. */
   getState?: () => {
     selectionId: string | null;
     session: { cwd: string; sessionId: string | null } | null;
   };
 }
 
-/** Every draft on the page. A `null` key addresses no draft: reads are empty and changes do nothing. */
 export interface Drafts {
-  /** The draft's parts; the same object until one of them changes, so React can subscribe to it. */
   get: (key: DraftKey | null) => Draft;
   subscribe: (listener: () => void) => () => void;
-  /** The message the draft would send now. */
   message: (key: DraftKey | null) => DraftMessage;
-  /** The draft has text, a quote or an image to send, and no image is still being read. */
   sendable: (key: DraftKey | null) => boolean;
   setText: (key: DraftKey | null, text: string) => void;
-  /** Adds text at the end as typed, e.g. a key pressed outside the editor. */
   append: (key: DraftKey | null, text: string) => void;
-  /** Adds text as a new paragraph (see `appendParagraph`): Ask from Changes, an extension's suggestion. */
   paragraph: (key: DraftKey | null, text: string) => void;
-  /** Checks and reads `files` into the draft; `encode` returns a file's base64 content. */
   addImages: (
     key: DraftKey | null,
     files: readonly File[],
     encode: (file: File) => Promise<string>,
   ) => Promise<void>;
   removeImage: (key: DraftKey | null, index: number) => void;
-  /** Adds `selected` as a quote; empty text and a quote the draft already holds are ignored. */
   addQuote: (key: DraftKey | null, selected: string) => void;
   removeQuote: (key: DraftKey | null, index: number) => void;
-  /**
-   * Hands the draft to `deliver` with a fresh `inputId` to send with it. Known-unsent input stays
-   * intact and returns false, as does an unsendable draft. Otherwise consumes all parts and
-   * returns true, even when delivery is uncertain: socket acceptance is not remote acceptance,
-   * and input must never auto-replay. A session draft's input is held until Pi reports it or the
-   * server refuses it (see `follow`).
-   */
   submit: (
     key: DraftKey | null,
     deliver: (message: DraftMessage, inputId: string) => SendDisposition,
   ) => boolean;
-  /**
-   * Appends each queue Pi hands back to its own session's draft as a paragraph, and returns input
-   * the server refused before Pi saw it to its draft, ahead of anything typed since; returns the
-   * stop function. Nothing is sent again.
-   */
   follow: (source: DraftSource) => () => void;
   prepareSubmit: (
     key: DraftKey | null,
@@ -222,12 +154,6 @@ export interface Drafts {
   ) => Promise<boolean>;
 }
 
-/**
- * `submitted` back in a draft that holds `now`, typed since: the submitted text, then the newer
- * paragraph; its images and quotes before the newer ones. A newer image still being read keeps
- * `now`'s busy state, and its reader appends to whatever the draft holds when it finishes. Images
- * past the limits stay, with the reason the draft cannot be sent.
- */
 const restore = (submitted: Draft, now: Draft): Draft => {
   const items = [...submitted.images.items, ...now.images.items];
   return {
@@ -239,11 +165,6 @@ const restore = (submitted: Draft, now: Draft): Draft => {
   };
 };
 
-/**
- * A prefix no other page's drafts share: every tab attached to a session hears Pi's receipts for
- * all of their input, so an `inputId` must name one tab's submission. `crypto.randomUUID` needs a
- * secure context; `getRandomValues` does not.
- */
 const inputPrefix = () =>
   Array.from(globalThis.crypto.getRandomValues(new Uint8Array(8)), (b) =>
     b.toString(16).padStart(2, "0"),
@@ -251,7 +172,6 @@ const inputPrefix = () =>
 
 export function createDrafts(): Drafts {
   const drafts = new Map<DraftKey, Draft>();
-  /** Session input sent but not yet acknowledged by its session or refused, by the `inputId` it was sent with. */
   const unconfirmed = new Map<string, { key: DraftKey; draft: Draft }>();
   const prefix = inputPrefix();
   let inputs = 0;
@@ -278,11 +198,6 @@ export function createDrafts(): Drafts {
       ...d,
       images: images.items.length || images.busy || images.error ? images : NO_IMAGES,
     }));
-  /**
-   * Input that never reached Pi returns to its draft, once: the first refusal claims it. A new
-   * session's first input goes to the session it created when there is one, so sending it again
-   * cannot start a second session; only a creation that left nothing returns it to the New page.
-   */
   const giveBack = (inputId: string, created: DraftKey | undefined) => {
     const refused = unconfirmed.get(inputId);
     unconfirmed.delete(inputId);
@@ -290,7 +205,6 @@ export function createDrafts(): Drafts {
     const key = refused.key === NEW_SESSION_DRAFT && created ? created : refused.key;
     update(key, (now) => restore(refused.draft, now));
   };
-  /** The session a frame's verdict belongs to, when the frame or the screen names one. */
   const sessionOf = (m: ServerMessage, source: DraftSource): DraftKey | undefined => {
     if (m._tag === "selected" || m._tag === "error")
       return m.cwd !== undefined && m.sessionId
@@ -343,7 +257,6 @@ export function createDrafts(): Drafts {
             mimeType: check.mimeTypes[i],
             data: await encode(file),
           });
-        // Refused input may have come back meanwhile; the check counted the images before it.
         const items = [...get(key).images.items, ...added];
         setImages(key, { items, busy: false, error: overLimit(items) });
       } catch (e) {
@@ -358,7 +271,6 @@ export function createDrafts(): Drafts {
       const { images } = get(key);
       if (!key || images.busy) return;
       const items = images.items.filter((_, i) => i !== index);
-      // A limit's reason goes once the draft fits again; a refused addition's stays.
       const error = overLimit(items) || (overLimit(images.items) ? "" : images.error);
       setImages(key, { ...images, items, error });
     },
@@ -403,9 +315,6 @@ export function createDrafts(): Drafts {
     },
     follow: (source) =>
       source.listen((m) => {
-        // `not_sent` means Pi never saw the input, so the draft comes back (once, whether the
-        // refusal or the receipt arrives first); any other verdict means Pi holds or held it, so
-        // it stays sent.
         const verdict = inputVerdictOf(m);
         if (verdict)
           if (verdict.outcome === "not_sent") giveBack(verdict.inputId, sessionOf(m, source));

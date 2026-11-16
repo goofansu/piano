@@ -12,11 +12,9 @@ interface Props {
   working?: boolean;
 }
 
-/** A table of contents for the transcript: prompts and replies, opened from the usage row. */
 export function JumpTo({ messages, working = false }: Props) {
   const [active, setActive] = useState<string>("bottom");
   const viewport = useTranscriptViewport();
-  // Built from the rows the transcript renders, so every entry lands on a row that is there.
   const entries = useMemo(
     () => jumpEntries(transcriptRows(messages, { working })),
     [messages, working],
@@ -24,7 +22,6 @@ export function JumpTo({ messages, working = false }: Props) {
   const total = entries.filter(
     (entry) => entry.kind === "user" || entry.kind === "assistant",
   ).length;
-  // Opening reads where the reader is and centres that entry in the list.
   const centre = useCallback(() => {
     const id = viewport ? viewport.current(entries) : "bottom";
     setActive(id);

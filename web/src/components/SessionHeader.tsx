@@ -43,7 +43,6 @@ import { useNarrowViewport } from "@/lib/useNarrowViewport";
 import { useNavigation } from "@/lib/useNavigation";
 import type { AppState } from "@/store";
 
-/** The title (with its menu on wide viewports), shrinking to fit before the controls. */
 const titleGroup = "flex min-w-0 items-center gap-0.5";
 
 export function SessionHeader({
@@ -53,18 +52,13 @@ export function SessionHeader({
 }: {
   state: AppState;
   status: string;
-  /** The link dialog stays mounted even when Changes is hidden (the palette can open it). */
   pullRequest: PullRequestControl;
 }) {
   const openPreview = useOpenPreview();
   const narrowViewport = useNarrowViewport();
-  // Menu kind/context follow area capacity, plus the narrow-viewport startup/hidden fallback.
-  // Placement follows viewport alone; the breadcrumb follows CSS md. Keep these separate.
   const { single } = useNavigation();
   const sheet = narrowViewport || single;
   const [sheetOpen, setSheetOpen] = useState(false);
-  // The sheet closes when the areas stop taking turns: it unmounts for the dropdown then, and
-  // must not reappear by itself when they take turns again.
   if (!sheet && sheetOpen) setSheetOpen(false);
   const menuTrigger = useRef<HTMLButtonElement>(null);
   const session = state.session;
@@ -92,9 +86,6 @@ export function SessionHeader({
       {session ? title : "New session"}
     </h1>
   );
-  // With no rail, where the session runs sits under the title in a sidebar row's folder and branch
-  // line; a detached commit stands in for the branch, since nothing else on a phone names it.
-  // It shows its own text, so it does nothing on tap.
   const place = sheet && session ? sessionPlace(context) : undefined;
   const titleBlock = place ? (
     <div className="flex min-w-0 flex-col">
@@ -127,7 +118,6 @@ export function SessionHeader({
           <SessionIdDetails className="px-2" sessionId={sessionId} />
           {menu.details.map((c) => (
             <DropdownMenuItem key={c.id} asChild disabled={!c.enabled} onSelect={() => run(c)}>
-              {/* Beside the session ID, the glyph alone could read as "copy ID": the tooltip names it. */}
               <IconButton variant="ghost" size="row" className="shrink-0" label={c.label}>
                 <CommandIcon icon={c.icon} />
               </IconButton>
@@ -162,18 +152,12 @@ export function SessionHeader({
   );
   return (
     <>
-      {/* Outside the transcript scroller: stays visible without an overlay or scroll listener.
-       * Project crumb and title/menu, then controls at the end. The sheet adds context below.
-       * Where the session runs is in the session rail and, when shown, the sidebar row; one area
-       * at a time, with no rail, it is the title's second line. */}
       <PaneHeader>
         {cwd ? (
-          // Match header buttons by pointer capability, independent of viewport and area capacity.
           <div className="flex h-8 min-w-0 flex-1 items-center pointer-coarse:h-11">
             {openProject && projectMenu?.current ? (
               <Breadcrumb className={cn(titleGroup, narrowViewport && "h-full")}>
                 <BreadcrumbList className="min-w-0 flex-nowrap gap-1.5 sm:gap-1.5">
-                  {/* Keep the crumb at md even one-area-at-a-time; below md use the sheet's project page. */}
                   <BreadcrumbItem className="hidden min-w-0 max-w-32 shrink-0 md:inline-flex">
                     <BreadcrumbLink asChild>
                       <button
@@ -207,11 +191,9 @@ export function SessionHeader({
             <Skeleton className="h-4 w-40" />
           </div>
         )}
-        {/* The sidebar row shows the session's state; here it is only announced. */}
         <span role="status" className="sr-only">
           {status}
         </span>
-        {/* Ghost controls: the group pulls out so the last one's content ends on the gutter. */}
         <div className="-mr-(--glyph-pad) flex shrink-0 items-center gap-0.5">
           {openPreview && (
             <IconButton asChild size="header" label={openPreview.label}>
@@ -231,11 +213,6 @@ export function SessionHeader({
   );
 }
 
-/**
- * The session rail's toggle, at the header's end beside the Agent area, over where the rail shows.
- * Side by side only: one area at a time its command is hidden, the title's second line says where
- * the session runs and the session menu is a sheet. The trigger is a button, never the composer.
- */
 function SessionRailToggle() {
   const { commands, run } = useSessionCommands();
   const navigation = useNavigation();
@@ -255,13 +232,6 @@ function SessionRailToggle() {
   );
 }
 
-/**
- * Changes' toggle, before the session rail toggle when present: the Changes command, which
- * shows Changes in the Surface area, or, while Changes shows beside the Agent area, its tab's
- * Close ("Hide changes"), filled then, as the rail's toggle is. One area at a time it shows the
- * Changes area, and the tabs say which area shows. Left out while Changes cannot open; the
- * palette's Changes row says why.
- */
 function ChangesToggle() {
   const { commands, run } = useSessionCommands();
   const navigation = useNavigation();

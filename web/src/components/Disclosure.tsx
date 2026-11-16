@@ -1,7 +1,6 @@
 import { cn } from "cn";
 import { ChevronRightIcon } from "lucide-react";
 
-/** The chevron on every folding row: it points right while closed and turns down when open. */
 export function DisclosureChevron({ open, className }: { open: boolean; className?: string }) {
   return (
     <ChevronRightIcon

@@ -44,19 +44,13 @@ interface Props {
   state: AppState;
 }
 
-/** Read for a checked row, whose mark is the stock item's own, shown by `data-checked`. */
 function Current() {
   return <span className="sr-only">current</span>;
 }
 
-/**
- * The command palette: session/project navigation, session actions, and view commands. Its groups and
- * rows come from `commandPalette`; this renders them and runs what is chosen.
- */
 export function CommandPalette({ state }: Props) {
   const { palette: open, setPalette: onOpenChange } = useNavigation();
   const [selected, setSelected] = useState("");
-  // Mod+K toggles the palette.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.isComposing) return;
@@ -68,8 +62,6 @@ export function CommandPalette({ state }: Props) {
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
   }, [open, onOpenChange]);
-  // The expensive contents sit inside the dialog's content, which Radix mounts only while the
-  // palette is open, so their catalog and search work stop when it closes.
   return (
     <CommandDialog
       open={open}
@@ -101,7 +93,6 @@ function PaletteContents({
   const [editing, setEditing] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
-  // The View menu's and the session header's commands, by the same names; the host runs them all.
   const { commands: globalCommandList, run: runCommand } = useGlobalCommands();
   const commandRunner = useRef(runCommand);
   commandRunner.current = runCommand;
@@ -130,8 +121,6 @@ function PaletteContents({
   }, []);
   const settled = useRef(search);
   if (allowed.current) settled.current = search;
-  // Whether the shown results answer the live input: a pointer/Enter event must not race the next
-  // React commit. Every row's action (run, page, input edit) checks it.
   const ready = useCallback(() => allowed.current && input.current?.value === settled.current, []);
   const run = useCallback(
     (action: () => void) => {
@@ -148,7 +137,6 @@ function PaletteContents({
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- page is the only member read.
     [results.page, ready],
   );
-  // The input's own edit, so a filter row can write it; the gate keeps PaletteResults' props stable.
   const replaceText = useRef<(text: string) => void>(() => {});
   const editInput = useCallback(
     (text: string) => {
@@ -194,7 +182,6 @@ function PaletteContents({
   );
 }
 
-/** Urgent text stays outside catalog preparation; results can request an input edit, not a run. */
 const PaletteInput = memo(function PaletteInput({
   input,
   active,
@@ -282,7 +269,6 @@ const PaletteResults = memo(function PaletteResults({
 }: {
   pages: PalettePage[];
   run: (action: () => void) => void;
-  /** Write a filter row's text into the input; the palette stays open. */
   edit: (text: string) => void;
   select: ReturnType<typeof useNavigation>["select"];
   runCommand: ReturnType<typeof useGlobalCommands>["run"];

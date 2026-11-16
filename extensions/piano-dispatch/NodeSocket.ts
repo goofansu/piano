@@ -1,4 +1,3 @@
-/** Connects the dispatch tools to their launching Piano; no endpoint comes from tool input. */
 import { SESSION_ORIGIN, SESSION_WS_URL } from "../../shared/dispatch.ts";
 import { isLoopbackHostname } from "../../shared/loopback.ts";
 import { LOCAL, machineFrameBytes } from "../../shared/machine.ts";
@@ -9,7 +8,6 @@ export interface DispatchConfiguration {
   origin: string;
 }
 
-/** Only launch configuration supplies the endpoint; tool arguments cannot redirect it. */
 export function dispatchConfiguration(
   env: NodeJS.ProcessEnv = process.env,
 ): DispatchConfiguration | undefined {
@@ -40,12 +38,10 @@ export function dispatchConfiguration(
 export function nodeSocketEnvironment(config: DispatchConfiguration): SocketEnvironment {
   return {
     url: () => config.url,
-    // Dispatch speaks to this Piano's own socket.
     frameBytes: machineFrameBytes(LOCAL.id),
     nonce: () => crypto.randomUUID(),
     open: (url, events) => {
-      // Node's WebSocket accepts Undici's options, including Origin, but the shared transport's
-      // DOM typings omit that overload. DispatchSocket.test covers the runtime constructor.
+      // Node's WebSocket accepts Undici headers, but its DOM typings omit that overload.
       const NodeWebSocket = WebSocket as unknown as {
         new (url: string, options: { headers: Record<string, string> }): WebSocket;
       };

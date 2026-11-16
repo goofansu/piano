@@ -48,7 +48,6 @@ const selecting = (state: AppState, cwd: string, sessionId: string | null): AppS
   selecting: { cwd, sessionId },
 });
 
-/** Local storage for one page; `writes` counts what the list stored. */
 function memoryStorage(initial: Record<string, string> = {}) {
   const items = new Map(Object.entries(initial));
   const storage: PreferenceStorage = {
@@ -59,7 +58,6 @@ function memoryStorage(initial: Record<string, string> = {}) {
   return { items, storage };
 }
 
-/** A clock the test moves; `fire` runs the wake-up that is due, as the page's timer would. */
 function fakeClock(start: Date) {
   let now = start;
   let timer: { at: number; wake: () => void } | null = null;
@@ -80,12 +78,10 @@ function fakeClock(start: Date) {
   };
   return {
     clock,
-    /** Moves to `to`, running the timer if it falls due on the way. */
     advance: (to: Date) => {
       now = to;
       if (timer && timer.at <= to.getTime()) timer.wake();
     },
-    /** Jumps without the timer, as sleep or a clock change does; only a resume notices. */
     jump: (to: Date) => {
       now = to;
     },
@@ -108,7 +104,6 @@ function sidebar(stored: Record<string, string> = {}, now = new Date(2026, 9, 2)
   return { model, items, time, changes: () => changes };
 }
 
-/** Each section's key and whether it is open, Pinned first. */
 const openness = (list: SidebarList) => [
   ...(list.pinned ? [[list.pinned.key, list.pinned.open]] : []),
   ...(list.body?.kind === "sections"
@@ -371,7 +366,6 @@ test("sidebar navigation follows Pinned, expanded sections and Done in the chose
   const walk = (list: SidebarList, direction: -1 | 1) => {
     const ids: string[] = [];
     let current = adjacentSidebarSession(list, null, direction);
-    // The list stays the same through the walk, as during repeated keys before a render.
     while (current && ids.length < 10) {
       ids.push(current.sessionId);
       current = adjacentSidebarSession(list, current, direction);
@@ -394,7 +388,6 @@ test("sidebar navigation follows Pinned, expanded sections and Done in the chose
   model.toggle(PINNED, false);
   const list = model.list(state, chosen);
   assert.deepEqual(walk(list, 1), ["loose", "done"]);
-  // A collapsed or unlisted selection is not a displayed row. Treat it as no selection.
   assert.equal(
     adjacentSidebarSession(list, { cwd: "/repo", sessionId: "a" }, 1)?.sessionId,
     "loose",
@@ -433,12 +426,10 @@ test("sidebar list: an empty registry says what to do next, per grouping; pinned
       pinned: null,
       body: { kind: "empty", text: expected[groupBy] },
     });
-  // An open folder without sessions is a folder group, not the empty state.
   const withFolder: AppState = { ...loaded, folders: [folder("/repo")] };
   assert.deepEqual(openness(model.list(withFolder, view("folder"))), [["/repo", false]]);
   assert.equal(model.list(withFolder, view("date")).body?.kind, "empty");
 
-  // Its folder was closed, so no regular group lists it.
   const pinnedOnly: AppState = {
     ...loaded,
     sessionReferences: [sessionReference("/closed/app", "p", { title: "Pinned", pinned: true })],
@@ -502,7 +493,6 @@ test("sidebar list: folder and branch adds a line only where a row has something
         list.body?.kind === "sections" ? list.body.sections.map((s) => [s.key, s.details]) : [],
     };
   };
-  // A folder group names its folder; a non-Git folder's rows have no branch, so no line at all.
   assert.deepEqual(details("folder"), {
     pinned: "folder-and-branch",
     sections: [
@@ -552,12 +542,10 @@ test("sidebar list: selecting a session opens the section holding it: its folder
   model.sync(feature, view("project"));
   assert.equal(isOpen(model.list(feature, view("project")), "project:p1"), true);
 
-  // A session never filed belongs to No project.
   const unfiled = selecting(pinned, "/other", "unfiled");
   model.sync(unfiled, view("project"));
   assert.equal(isOpen(model.list(unfiled, view("project")), "project:"), true);
 
-  // A pinned session lives only in Pinned, so Pinned opens, not its folder or project.
   const before = openness(model.list(pinned, view("folder")));
   assert.equal(isOpen(model.list(pinned, view("folder")), PINNED), false);
   const pinnedSelected = selecting(pinned, "/other", "s2");
@@ -571,7 +559,6 @@ test("sidebar list: selecting a session opens the section holding it: its folder
   );
   assert.equal(items.get("piano.pinnedOpen"), "true", "and stays open on the next load");
 
-  // Under date grouping Pinned is still the session's section.
   model.toggle(PINNED, false);
   model.sync(pinnedSelected, view("date"));
   assert.equal(model.list(pinnedSelected, view("date")).pinned?.open, true);
@@ -579,7 +566,6 @@ test("sidebar list: selecting a session opens the section holding it: its folder
 
 test("sidebar list: a session being started opens its project's group once its reference names it, not No project", () => {
   const { model, items } = sidebar();
-  // Started from a project's home: the project reaches the sidebar with the session's reference.
   for (const sessionId of [null, "new"]) {
     const starting = selecting(registry, "/repo", sessionId);
     model.sync(starting, view("project"));
@@ -638,7 +624,6 @@ test("sidebar list: a registry refresh never reopens a section the user collapse
   const collapsed = model.list(selected, view("folder"));
   assert.equal(isOpen(collapsed, "/repo"), false);
 
-  // Streaming output and other registry updates hand the list the same selection again (d8fafa0).
   const seen = changes();
   const refreshed: AppState = {
     ...selected,
@@ -649,7 +634,6 @@ test("sidebar list: a registry refresh never reopens a section the user collapse
   model.sync(refreshed, view("folder"));
   assert.equal(isOpen(model.list(refreshed, view("folder")), "/repo"), false);
   assert.equal(changes(), seen, "a repeat changes nothing, so nothing is stored or rendered again");
-  // Leaving for an unregistered folder and back does not reopen it.
   model.sync(selecting(registry, "/unregistered", "s3"), view("folder"));
   model.sync(refreshed, view("folder"));
   assert.equal(isOpen(model.list(refreshed, view("folder")), "/repo"), false);
@@ -705,7 +689,6 @@ test("sidebar list: keys stay the same across a grouping switch, so sections kee
     ["project:p1", true],
     ["project:", false],
   ]);
-  // The same keys reach the next page load.
   assert.deepEqual(JSON.parse(items.get("piano.machine.local.openGroups") ?? "[]").sort(), [
     "/repo",
     "project:p1",
@@ -824,10 +807,8 @@ test("sidebar list: date sections start open, remember a collapse per browser, a
   ]);
   const reloaded = sidebar(Object.fromEntries(items), new Date(2026, 9, 2, 12)).model;
   assert.equal(isOpen(reloaded.list(state, chosen), YESTERDAY), false, "the next load");
-  // Collapsing a date group leaves folders and projects as they were.
   assert.deepEqual(JSON.parse(items.get("piano.machine.local.openGroups") ?? "[]"), []);
 
-  // Selecting a session in a collapsed date group opens it; the same selection again does not.
   const selected = selecting(state, "/repo", "earlier");
   model.sync(selected, chosen);
   assert.equal(isOpen(model.list(selected, chosen), YESTERDAY), true);
@@ -837,7 +818,6 @@ test("sidebar list: date sections start open, remember a collapse per browser, a
   assert.equal(isOpen(model.list(selected, chosen), YESTERDAY), false, "a refresh");
   assert.equal(changes(), seen);
 
-  // A session not yet in the registry (a new one) belongs to Today.
   model.toggle(TODAY, false);
   const fresh = selecting(state, "/repo", null);
   model.sync(fresh, chosen);
@@ -919,7 +899,6 @@ test("sidebar list: date sections roll over at local midnight and after the page
   assert.equal(changes(), seen + 1, "the rollover re-renders once");
   assert.equal(time.pendingAt(), new Date(2026, 9, 4).getTime(), "and waits for the next one");
 
-  // A sleeping laptop misses its timer; coming back catches up.
   time.jump(new Date(2026, 9, 6, 9));
   assert.deepEqual(headings(), ["Yesterday"]);
   time.resume();

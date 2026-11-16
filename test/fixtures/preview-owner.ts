@@ -1,4 +1,3 @@
-// A separate helper killed after durable intent and during uncertain supervisor submission.
 import { fakeAdapter, type Platform } from "./preview-host.ts";
 
 const [platform, workspace, stateRoot] = process.argv.slice(2) as [Platform, string, string];

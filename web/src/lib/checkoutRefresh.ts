@@ -1,18 +1,8 @@
-/**
- * Keeps Git's branch projection current even with Changes closed (INV-01/06): while a session is
- * on screen and the socket connected, ask the server for the registry now, every 5 seconds and on
- * focus or a visibility change while the page is visible, and 250 ms after the session's checkout
- * may have moved (see `refreshKey`). The same refresh notices the session's checkout go or come
- * back, live or saved. The server coalesces discovery; never infer a branch from tool arguments or the
- * registry. Nothing here depends on React.
- */
 import type { ClientCommand, RenderMsg } from "@shared/wire";
 import { refreshKey } from "./changesView.ts";
 import { browserEnvironment, type ObservationEnvironment } from "./observation.ts";
 
-/** The observation seam plus the page's visibility changes. */
 export interface CheckoutRefreshEnvironment extends ObservationEnvironment {
-  /** Subscribes to visibility changes; returns the unsubscribe function. */
   onVisibilityChange: (listener: () => void) => () => void;
 }
 
@@ -24,7 +14,6 @@ export const browserCheckoutEnvironment: CheckoutRefreshEnvironment = {
   },
 };
 
-/** The part of the page's state this follows; `AppState` is one. */
 export interface CheckoutRefreshState {
   connected: boolean;
   view: { kind: string };
@@ -35,7 +24,6 @@ export interface CheckoutRefreshState {
   } | null;
 }
 
-/** The client to follow; the page's `Client` is one. */
 export interface CheckoutRefreshSource {
   getState: () => CheckoutRefreshState;
   subscribe: (listener: () => void) => () => void;
@@ -43,12 +31,10 @@ export interface CheckoutRefreshSource {
 }
 
 export interface CheckoutRefresh {
-  /** Refreshes while `source` shows a session; returns the stop function. */
   follow: (source: CheckoutRefreshSource) => () => void;
 }
 
 const POLL_MS = 5000;
-/** Coalesces bursts of tool completions; streaming text never changes the trigger. */
 const DEBOUNCE_MS = 250;
 
 export function createCheckoutRefresh({
@@ -64,7 +50,6 @@ export function createCheckoutRefresh({
         if (!env.hidden()) registry();
       };
 
-      /** The checkout being followed; polling, focus and visibility belong to it. */
       let cwd: string | undefined;
       let poll: unknown, unfocus: (() => void) | undefined, unvisible: (() => void) | undefined;
       const tick = () => {
@@ -78,7 +63,6 @@ export function createCheckoutRefresh({
         poll = unfocus = unvisible = undefined;
       };
 
-      /** The `cwd|trigger` the pending debounce belongs to. */
       let debounced: string | undefined;
       let soon: unknown;
       const stopDebounce = () => {
@@ -125,5 +109,4 @@ export function createCheckoutRefresh({
   };
 }
 
-/** The page's one checkout refresh; App follows the client with it. */
 export const checkoutRefresh = createCheckoutRefresh();

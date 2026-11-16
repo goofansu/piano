@@ -14,7 +14,6 @@ import {
 
 const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 
-/** A server whose replies the test gives one request at a time, and a clock the test advances. */
 function harness(provider = "acme") {
   const requests: {
     request: SignInRequest;
@@ -53,7 +52,6 @@ function harness(provider = "acme") {
       clearTimeout: (id) => timers.delete(id as number),
     },
   });
-  /** Fires the pending poll timer; there is at most one. */
   const tick = () => {
     assert.equal(timers.size, 1, "one poll is scheduled");
     const [[id, run]] = [...timers];
@@ -84,7 +82,6 @@ const succeeded = (id: string): ProviderLoginState => ({
   status: "success",
 });
 
-/** Opens on a server with no attempt, so a new one starts and comes back running. */
 async function opened(h: ReturnType<typeof harness>, id = "a1") {
   h.attempt.start();
   await h.last().reply(null);
@@ -130,7 +127,6 @@ test("a poll that answers after an answer was sent never overwrites the answer's
   await put.reply(running("a1", { message: "Waiting for authorization" }));
   assert.equal(h.attempt.getState().attempt?.prompt, undefined);
   assert.equal(h.attempt.getState().attempt?.message, "Waiting for authorization");
-  // And when the superseded poll replies after the answer.
   const late = harness();
   await opened(late);
   late.tick();
@@ -176,14 +172,12 @@ test("signedIn runs once per attempt", async () => {
   h.tick();
   await h.last().reply(succeeded("a1"));
   assert.equal(h.signedIn(), 1);
-  // Remounting shows the same success without announcing it again.
   h.attempt.start()();
   h.attempt.start();
   assert.equal(h.signedIn(), 1);
   h.attempt.retry();
   await h.last().reply(succeeded("a2"));
   assert.equal(h.signedIn(), 2);
-  // Dismissing a finished attempt only closes.
   h.attempt.dismiss();
   assert.equal(h.closed(), 1);
   assert.equal(h.signedIn(), 2);
@@ -234,7 +228,6 @@ test("dismissing while anything is in flight is ignored", async () => {
   h.attempt.dismiss();
   assert.deepEqual(h.methods(), ["GET", "POST", "PUT"]);
   await h.last().reply(running("a1"));
-  // A cancellation already in flight is not sent twice.
   h.attempt.dismiss();
   h.attempt.dismiss();
   assert.deepEqual(h.methods(), ["GET", "POST", "PUT", "DELETE"]);
@@ -266,7 +259,6 @@ test("the dialog links only to http(s) sign-in pages without credentials", () =>
   }
   const page = "https://acme.example/device";
   assert.equal(view(running("a1", { url: page })).url, page);
-  // A finished attempt's page is no longer offered.
   assert.equal(view({ ...succeeded("a1"), url: page }).link, null);
 });
 
@@ -282,7 +274,6 @@ test("the sign-in link shows beside a prompt or in the footer, never both", () =
 });
 
 test("the dialog says each fact once: a choice is the Method field, a typed prompt its label", () => {
-  // A choice with one option needs no line; with several, the line says what the names leave out.
   const choice = view(running("a1", { prompt: select }));
   assert.deepEqual([choice.description, choice.label], [undefined, "Method"]);
   const options = [
@@ -293,7 +284,6 @@ test("the dialog says each fact once: a choice is the Method field, a typed prom
     view(running("a1", { prompt: { ...select, options } })).description,
     "On another machine, choose a device-code or copy-code method.",
   );
-  // Pi's instructions and its question say the same; the question stays, in sign-in words.
   const typed = view(
     running("a1", {
       message: "Complete sign-in in your browser.",

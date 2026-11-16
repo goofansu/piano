@@ -10,7 +10,6 @@ import type { ConnectionHandlers, DisconnectReason, SendDisposition } from "../w
 import { initialState } from "../web/src/store.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
 
-/** A client over a fake transport: the test plays the server and the socket's status changes. */
 function harness() {
   const sent: ClientMessage[] = [];
   const notes: Array<[string, NotifyLevel | undefined]> = [];
@@ -109,7 +108,6 @@ for (const disposition of ["not-sent", "sent", "uncertain"] as const) {
     const rendered = pendingDialogs(h.client.getState());
     assert.equal(rendered.attachment, "sel1");
     const controller = createDialogAnswer({ dialog: rendered.head!, send: h.client.send });
-    // The transport fails at click time, while the rendered attachment is still current.
     h.transport(disposition);
     const reply = { value: "keep this answer" };
     assert.equal(controller.answer(reply, 1_000, rendered.attachment), disposition !== "not-sent");
@@ -119,7 +117,6 @@ for (const disposition of ["not-sent", "sent", "uncertain"] as const) {
       controller.view(1_000, pendingDialogs(h.client.getState()).attachment).disabled,
       true,
     );
-    // The server never claimed it, so the new snapshot still lists the question.
     reconnect([{ ...dialog }]);
     const reconnected = pendingDialogs(h.client.getState());
     assert.deepEqual(reconnected.head, rendered.head, "same pending question and generation");
@@ -134,7 +131,6 @@ for (const disposition of ["not-sent", "sent", "uncertain"] as const) {
       selectionId: "sel2",
       action: { _tag: "answer", id: dialog.id, generation: dialog.generation, ...reply },
     });
-    // Once the server claims an answer, a snapshot no longer lists the question to answer.
     reconnect([]);
     assert.equal(pendingDialogs(h.client.getState()).head, undefined);
   });
@@ -443,9 +439,9 @@ test("manual trust changes keep their confirmation without an automatic-change t
   h.client.dispatch({ type: "new_directory", cwd: "/a" });
   trust(false);
   h.client.send({ _tag: "set_trust", path: "/a", trusted: true });
-  trust(false); // An older probe can finish before the explicit decision.
+  trust(false);
   h.server({ _tag: "catalogs_invalidated" });
-  trust(true); // The refresh can win the race with the explicit response.
+  trust(true);
   h.server({ _tag: "toast", level: "success", message: "Trusted." });
   trust(true, true);
   assert.deepEqual(h.notes, [["Trusted.", "success"]]);
@@ -676,14 +672,12 @@ test("a rejection that names no creation leaves the first message uncertain", ()
     text: "kept on screen",
     attemptId: "attempt-1",
   });
-  // Every rejection of a creation names it; one naming nothing cannot prove nothing was created.
   h.server({
     _tag: "selection_rejected",
     selectionId: h.client.getState().selectionId!,
     message: "Creation was not started",
   });
   assert.equal(h.client.getState().pendingCreate?.outcome, "uncertain");
-  // Nothing returned the input to the draft, so it stays where it is shown.
   assert.equal(h.client.getState().view.kind, "session");
 });
 
@@ -709,7 +703,6 @@ test("a creation that fails after the person moved to another session is announc
   });
   assert.deepEqual(h.notes, [["Could not start session: Pi exited during startup.", "error"]]);
   assert.equal(h.client.getState(), shown, "the session on screen is untouched");
-  // A rejection of the selection on screen is shown in place, not as a toast.
   h.client.select("/scratch", "missing");
   h.server({
     _tag: "selection_rejected",
@@ -719,14 +712,12 @@ test("a creation that fails after the person moved to another session is announc
   assert.equal(h.notes.length, 1);
 });
 
-/** What the client asked Pi about, as `tag cwd` pairs, since the last call. */
 function focusHarness(
   options: {
     remembered?: string | null;
     initial?: typeof initialState;
     startsSessionIn?: (state: typeof initialState, cwd: string) => boolean;
     pending?: boolean;
-    /** Deliver no registry frame on connect, as before the server's first one arrives. */
     unregistered?: boolean;
   } = {},
 ) {
@@ -774,7 +765,6 @@ function focusHarness(
     return out;
   };
   const server = (m: ServerMessage) => handlers!.onMessage(m);
-  /** Like the server, a connection's first frame is the registry, once the socket has opened. */
   const status = (connected: boolean) => {
     handlers!.onStatus(connected);
     if (connected && !options.unregistered) server({ _tag: "registry", folders: [] });
@@ -1048,15 +1038,12 @@ test("on a remote, which starts only in open folders, a remembered directory no 
   still.server(registry);
   assert.deepEqual(still.client.getState().view, { kind: "new", cwd: "/two" });
 
-  // Local may start anywhere, so its remembered directory stands whether or not it is a folder.
   const anywhere = focusHarness({ remembered: "/closed" });
   anywhere.server(registry);
   assert.deepEqual(anywhere.client.getState().view, { kind: "new", cwd: "/closed" });
 });
 
 test("INV-05: a focus is observed only once the registry says which directories exist", () => {
-  // A remote refuses to read a directory it has not registered; the socket opens before the
-  // registry frame, so a remembered directory the remote no longer has must not be asked about.
   const { startsSessionIn } = machineOffers({ id: "eng-1", name: "Eng" });
   const h = focusHarness({
     remembered: "/closed",
@@ -1182,14 +1169,11 @@ test("a New page or project home never lands on a folder whose root checkout is 
     "a remembered directory whose root is gone is not used",
   );
 
-  // On a remote the same one rule decides: its machine half admits /gone, its checkout half refuses.
   const { startsSessionIn } = machineOffers({ id: "eng-1", name: "Eng" });
   const remote = focusHarness({ remembered: "/gone", startsSessionIn });
   remote.server({ _tag: "registry", folders });
   assert.deepEqual(remote.client.getState().view, { kind: "new", cwd: "/two" });
 
-  // A project home skips a member whose folder's root is gone for the next newest member's folder;
-  // with none left, it starts without a directory, as when no member's folder is open.
   const at = (minute: number) => `2026-10-21T08:0${minute}:00Z`;
   const registry = (refs: ReturnType<typeof sessionReference>[]): ServerMessage => ({
     _tag: "registry",

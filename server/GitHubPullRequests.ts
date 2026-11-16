@@ -1,9 +1,3 @@
-/** GitHub adapter for pull requests: remote parsing, the `gh` response shape and its mapping
- * into wire `PullRequest` facts, and API host routing through `gh`: which route a saved link, URL
- * or checkout reads through, and how a link records it. Nothing else in Piano knows how GitHub or
- * `gh` phrase a pull request; which pull request a URL names is `shared/pullRequestIdentity.ts`,
- * and session-link policy lives in SessionPullRequests.
- */
 import { Context, Data, Effect, Layer, Schema } from "effect";
 import { EXE_GITHUB, type GitHubHost, pullRequestIdentity } from "../shared/pullRequestIdentity.ts";
 import type { PullRequest } from "../shared/wire.ts";
@@ -20,14 +14,11 @@ export class PullRequestError extends Data.TaggedError("PullRequestError")<{
 }
 const failure = (detail: string) => new PullRequestError({ detail });
 
-/** A pull request as a session saves it: the canonical github.com URL, plus the API route when
- * it is not github.com. The saved route outlives the checkout that implied it. */
 export interface PullRequestLink {
   readonly url: string;
   readonly apiHost?: typeof EXE_GITHUB;
 }
 
-/** The repository and API route a Git remote URL names, or null for a non-GitHub remote. */
 export function githubRemote(remote: string): { repo: string; apiHost: GitHubHost } | null {
   const proxy = remote.match(
     /^https:\/\/github\.int\.exe\.xyz\/([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/i,
@@ -41,22 +32,16 @@ export function githubRemote(remote: string): { repo: string; apiHost: GitHubHos
   return { repo: match[1]!.toLowerCase(), apiHost: proxy ? EXE_GITHUB : "github.com" };
 }
 
-/** A branch as GitHub knows it: its name on the remote it pushes to, in that remote's repository. */
 export interface BranchHead {
   readonly name: string;
   readonly repo: string;
 }
 
-/** Where a branch's work goes, as GitHub sees it: no remote, a remote not on GitHub, or a GitHub
- * repository read through its API route, with the branch there unless detached. Discovery, the
- * API route of a link and the pull request Changes compares with all read a branch this way. */
 export type BranchRemote =
   | { readonly on: "none" }
   | { readonly on: "other" }
   | { readonly on: "github"; readonly apiHost: GitHubHost; readonly head: BranchHead | null };
 
-/** Where Git says a branch lives (GitCheckout's `BranchHome`) as GitHub sees it, pushed or not:
- * each caller decides what an unpushed branch means to it. */
 export function branchRemote({ upstream, url }: BranchHome): BranchRemote {
   if (!url) return { on: "none" };
   const github = githubRemote(url);
@@ -68,10 +53,6 @@ export function branchRemote({ upstream, url }: BranchHome): BranchRemote {
   };
 }
 
-/** `cwd`'s branch as GitHub sees it, read in `cwd` through GitCheckout's hardened observation
- * (INV-06): inherited GIT_* state cannot redirect it. Null outside Git; fails when Git cannot
- * answer. A branch Git holds no pushed ref for still names where it would be: discovery can find
- * a pull request opened from a push Git has not fetched. */
 export const observeBranchRemote = Effect.fn("GitHubPullRequests.observeBranchRemote")(function* (
   cwd: string,
 ): Effect.fn.Return<BranchRemote | null, PullRequestError> {
@@ -81,15 +62,11 @@ export const observeBranchRemote = Effect.fn("GitHubPullRequests.observeBranchRe
   return branchRemote(observed.home);
 });
 
-/** Whether a pull request was opened from `branch`: its head names the same branch in the same
- * repository. Discovery and Changes both ask this; a same-named branch of a fork is another. */
 export const isFromBranch = (
   pr: { readonly head?: string | undefined; readonly headRepo?: string | undefined },
   branch: BranchHead,
 ): boolean => pr.head === branch.name && pr.headRepo === branch.repo;
 
-/** One pull request as `gh pr view/list --json` returns it. `statusCheckRollup` is absent when
- * the token could not read checks and the pull request was read without them. */
 export const GitHubPullRequest = Schema.Struct({
   url: Schema.String,
   number: Schema.Number,
@@ -125,7 +102,6 @@ const fieldsWithoutChecks =
   "url,number,title,state,isDraft,reviewDecision,author,headRefName,baseRefName,headRepository,headRepositoryOwner,additions,deletions,changedFiles,updatedAt,closedAt";
 const fields = `${fieldsWithoutChecks},statusCheckRollup`;
 
-/** GitHub's GraphQL errors as gh prints them: `GraphQL: <message> (<path>), …`. */
 function graphqlErrors(stderr: string): { message: string; path: string }[] {
   const body = stderr.match(/GraphQL: (.*)/)?.[1] ?? "";
   return [...body.matchAll(/\s*([^,(]+?)\s*\(([\w.]+)\)/g)].map((m) => ({
@@ -135,8 +111,6 @@ function graphqlErrors(stderr: string): { message: string; path: string }[] {
 }
 const refused = (message: string) => /^Resource not accessible by /i.test(message);
 
-/** Whether gh failed only because the token may not read check results: the pull request itself
- * is readable without them. */
 export function onlyChecksRefused(stderr: string): boolean {
   const errors = graphqlErrors(stderr);
   return (
@@ -145,8 +119,6 @@ export function onlyChecksRefused(stderr: string): boolean {
   );
 }
 
-/** What went wrong, from gh's failure, in words a user can act on. Only fixed phrases and GraphQL
- * field names reach the message: never stderr itself, which can name paths or tokens. */
 export function ghFailureDetail(
   error: Pick<SubprocessError, "reason" | "stderr">,
   host: GitHubHost,
@@ -186,8 +158,6 @@ export function ghFailureDetail(
     : "Could not read GitHub. Check gh authentication and repository access, then retry.";
 }
 
-/** Map GitHub's response into wire facts. Throws when the URL is not a pull request URL or
- * disagrees with the number. */
 export function facts(raw: GitHubPullRequest): PullRequest {
   const checks = raw.statusCheckRollup ?? [];
   const unread = raw.statusCheckRollup === undefined;
@@ -247,7 +217,6 @@ export function facts(raw: GitHubPullRequest): PullRequest {
     ...(raw.additions !== undefined && raw.deletions !== undefined && raw.changedFiles !== undefined
       ? { additions: raw.additions, deletions: raw.deletions, changedFiles: raw.changedFiles }
       : {}),
-    // Merged and closed PRs date their disposition; open work dates its last activity.
     ...(raw.state !== "OPEN" && raw.closedAt
       ? { at: raw.closedAt }
       : raw.updatedAt
@@ -266,7 +235,6 @@ const parse = (url: string) => {
     : Effect.fail(failure("Enter a GitHub pull request URL."));
 };
 
-/** The API route `cwd`'s GitHub remote implies; github.com when it names none or is unreadable. */
 const checkoutHost = (cwd: string): Effect.Effect<GitHubHost> =>
   observeBranchRemote(cwd).pipe(
     Effect.map((remote) => (remote?.on === "github" ? remote.apiHost : "github.com")),
@@ -276,18 +244,11 @@ const checkoutHost = (cwd: string): Effect.Effect<GitHubHost> =>
 export class GitHubPullRequests extends Context.Service<
   GitHubPullRequests,
   {
-    /** The link to save for a pull request URL. Its route is the URL's own when the URL names
-     * the exe.dev integration, else the one `cwd`'s remote implies, else github.com. */
     readonly link: (url: string, cwd: string) => Effect.Effect<PullRequestLink, PullRequestError>;
-    /** Live facts for a saved link, read through its saved route, else the one `cwd`'s remote
-     * implies, else github.com. The checkout need not still exist. */
     readonly view: (
       link: PullRequestLink,
       cwd: string,
     ) => Effect.Effect<PullRequest, PullRequestError>;
-    /** Open pull requests whose head is `branch` in head repository `repo` ("owner/name"),
-     * each with the link that reads it back through `host`. `cwd` is the checkout: on
-     * github.com, gh resolves the base repository (including a fork parent) from it. */
     readonly openForHead: (
       cwd: string,
       branch: string,
@@ -304,7 +265,6 @@ export const GitHubPullRequestsLive = Layer.effect(
   GitHubPullRequests,
   Effect.gen(function* () {
     const ghCli = yield* GhCommand;
-    // Scope routing to this subprocess; never change global gh config or credentials.
     const gh = (cwd: string, args: string[], host: GitHubHost) =>
       runProcess({
         command: ghCli,
@@ -314,8 +274,6 @@ export const GitHubPullRequestsLive = Layer.effect(
         timeout: 15000,
         limit: 4 * 1024 * 1024,
       }).pipe(Effect.map((result) => result.stdout.toString().trim()));
-    /** Reads with `--json <fields>` (the last argument). A token that may read the pull request
-     * but not its checks gets it again without them: the checks are then unknown. */
     const ghJson = (cwd: string, args: string[], host: GitHubHost) =>
       gh(cwd, [...args, fields], host).pipe(
         Effect.catchIf(
@@ -335,8 +293,6 @@ export const GitHubPullRequestsLive = Layer.effect(
       view: Effect.fn("GitHubPullRequests.view")(function* (link, cwd) {
         const identity = yield* parse(link.url);
         const host = link.apiHost ?? (yield* checkoutHost(cwd));
-        // A public URL overrides GH_HOST in gh. Use number + explicit API repository instead.
-        // Neither this lookup nor a saved integration route needs the checkout to still exist.
         const output = yield* ghJson(
           process.cwd(),
           ["pr", "view", String(identity.number), "--repo", `${host}/${identity.repo}`, "--json"],
@@ -349,9 +305,6 @@ export const GitHubPullRequestsLive = Layer.effect(
         });
       }),
       openForHead: Effect.fn("GitHubPullRequests.openForHead")(function* (cwd, branch, repo, host) {
-        // Normal remotes let gh select the base repository (including fork parents).
-        // Integration remotes name the authorized repository explicitly. Match the head
-        // repository too: unrelated forks often have identically named branches.
         const output = yield* ghJson(
           cwd,
           [

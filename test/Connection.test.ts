@@ -9,7 +9,6 @@ import {
   type SocketEvents,
 } from "../web/src/lib/ws.ts";
 
-/** A socket the test plays the server for: it accepts, sends frames and closes. */
 interface FakeSocket {
   url: string;
   sent: ClientMessage[];
@@ -19,7 +18,6 @@ interface FakeSocket {
   serverClose: (code: number) => void;
 }
 
-/** A connection over fake sockets, a clock the test advances and network events it fires. */
 function harness(onDisconnect?: () => void, overrides: Partial<SocketEnvironment> = {}) {
   let now = 0;
   let ids = 0;
@@ -108,7 +106,6 @@ function harness(onDisconnect?: () => void, overrides: Partial<SocketEnvironment
     socket.sent.flatMap((m) => (m._tag === "ack" ? [m.deliveryId] : []));
   const pings = (socket: FakeSocket) =>
     socket.sent.flatMap((m) => (m._tag === "ping" ? [m.nonce] : []));
-  /** The delivered frames, named by the session each `hosts` frame carries. */
   const delivered = () =>
     messages.map((m) => (m._tag === "hosts" ? m.hosts[0]!.sessionId : m._tag));
   return {
@@ -351,7 +348,6 @@ test("a message larger than its machine admits is not sent and keeps the socket"
       selectionId: "s",
       action: { _tag: "prompt", text, attachments: [], inputId: "a-1" },
     }) as ClientMessage;
-  // A pasted log the remote's gateway would refuse: the draft must stay with the person.
   assert.equal(h.connection.send(prompt("é".repeat(PEER_FRAME_BYTES / 2))), "not-sent");
   assert.ok(!h.last().sent.some((m) => m._tag === "act"));
   assert.ok(!h.last().closed, "the socket stays up");

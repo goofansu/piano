@@ -18,7 +18,6 @@ test("hints carry the names of where a message is dictated", () => {
     session: "Voice",
   });
   assert.ok(Schema.is(VoiceHints)(hints));
-  // A blank name is left out rather than sent empty.
   assert.deepEqual(voiceHints({ folder: "piano", branch: "  " }), { folder: "piano" });
 });
 
@@ -26,7 +25,6 @@ test("long names stay inside what the server accepts", () => {
   const long = "f".repeat(MAX_HINT_LENGTH + 1);
   const hints = voiceHints({ folder: long, session: "t".repeat(MAX_HINT_LENGTH * 4) });
   assert.ok(Schema.is(VoiceHints)(hints), "hints decode on the server");
-  // A name longer than the limit is clipped to it, not dropped.
   assert.equal(hints.folder, long.slice(0, MAX_HINT_LENGTH));
   assert.equal(hints.session?.length, MAX_HINT_LENGTH);
 });
@@ -44,12 +42,10 @@ test("a transcript lands at the cursor, a space apart from the words beside it",
     text: "Fix the test later",
     caret: 12,
   });
-  // A selection is replaced.
   assert.deepEqual(insertDictation("Use OLD here", { start: 4, end: 7 }, "useDraftEditor"), {
     text: "Use useDraftEditor here",
     caret: 18,
   });
-  // Punctuation joins the word before it; an empty transcript changes nothing.
   assert.equal(insertDictation("Done", { start: 4, end: 4 }, ", thanks").text, "Done, thanks");
   assert.deepEqual(insertDictation("Keep", { start: 2, end: 2 }, "   "), {
     text: "Keep",

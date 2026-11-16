@@ -23,8 +23,6 @@ const run = <A, E>(effect: Effect.Effect<A, E, PiSessions>) =>
     ),
   );
 
-// Each action whose policy is priority, sent while ordinary prompts hold every ordinary slot from
-// session admission down to Pi's command lane.
 for (const control of ["answer", "abort", "stop", "restore_queue"] as const) {
   test(`INV-03/04: ${control} stays live at ordinary Pi capacity; excess input is never sent`, async () => {
     await run(
@@ -67,23 +65,19 @@ for (const control of ["answer", "abort", "stop", "restore_queue"] as const) {
           value: "release",
         } as const;
         if (control === "restore_queue") {
-          // Pi answers clear_queue past the held prompts; the dialog answer then releases them.
           const restored = yield* session.act({ _tag: "restore_queue" });
           assert.equal(restored?._tag, "queue_restored");
           yield* session.act(answer);
         } else yield* session.act(control === "answer" ? answer : { _tag: control });
         for (const fiber of pending) yield* Fiber.join(fiber);
         assert.equal((yield* session.state).closure, undefined);
-        yield* session.commands; // capacity is released after work completes
+        yield* session.commands;
         yield* Fiber.interrupt(heard);
       }).pipe(Effect.scoped, Effect.timeout("15 seconds")),
     );
   });
 }
 
-// Above, session admission rejects ordinary input before it reaches Pi's command lane. Here a
-// background usage readback that Pi holds takes one of those slots instead, so session admission
-// has room and a readback must be refused by Pi's command lane itself.
 test("INV-03/04: a readback stays ordinary work at Pi's command capacity; a refused prompt reads not sent", async () => {
   await run(
     Effect.gen(function* () {
@@ -124,8 +118,6 @@ test("INV-03/04: a readback stays ordinary work at Pi's command capacity; a refu
       assert.equal(read.failure.reason, "rejected");
       assert.match(read.failure.detail, /Pi command capacity is full.*Nothing was sent/);
       assert.equal(read.failure.notSent, true);
-      // Session admission has room for one more prompt; Pi's command lane refuses it unsent, and
-      // its receipt says so, so the composer can give the draft back.
       const prompt = yield* session
         .act({ _tag: "prompt", text: "must not execute", inputId: "refused" })
         .pipe(Effect.flip);
@@ -141,14 +133,12 @@ test("INV-03/04: a readback stays ordinary work at Pi's command capacity; a refu
         value: "release",
       });
       for (const fiber of pending) yield* Fiber.join(fiber);
-      yield* session.commands; // capacity is released after work completes
+      yield* session.commands;
       yield* Fiber.interrupt(heard);
     }).pipe(Effect.scoped, Effect.timeout("15 seconds")),
   );
 });
 
-// Pi's input lane fills only while Pi stops reading stdin: each ordinary write then keeps its slot
-// after its command times out, until Pi reads it.
 test("INV-04: an answer stays live while ordinary input fills Pi's stdin", async () => {
   const dir = mkdtempSync(join(tmpdir(), "piano-stdin-"));
   const resume = join(dir, "resume");
@@ -176,7 +166,6 @@ test("INV-04: an answer stays live while ordinary input fills Pi's stdin", async
           .pipe(Effect.flip);
         assert.equal(paused.reason, "timeout");
         const dialog = yield* Deferred.await(opened);
-        // Each record outgrows the pipe, so none is accepted before Pi reads again.
         const name = "x".repeat(256 * 1024);
         yield* Effect.forEach(
           Array.from({ length: inboundLimits.writes.messages }),
@@ -187,7 +176,6 @@ test("INV-04: an answer stays live while ordinary input fills Pi's stdin", async
         assert.equal(excess.reason, "rejected");
         assert.match(excess.detail, /input capacity is full.*Nothing was sent/);
         assert.equal(excess.notSent, true, "a sender may take refused input back");
-        // Admitted, so it waits behind the input Pi has not read and times out undelivered.
         const answer = yield* session
           .act({ _tag: "answer", id: dialog.id, generation: dialog.generation, value: "release" })
           .pipe(Effect.flip);
@@ -198,7 +186,6 @@ test("INV-04: an answer stays live while ordinary input fills Pi's stdin", async
         assert.equal((yield* session.state).closure, undefined);
         yield* Fiber.interrupt(heard);
       }).pipe(
-        // Bounds each held write; open's readbacks also answer within it.
         Effect.provideService(PiRequestTimeoutMs, 1000),
         Effect.scoped,
         Effect.timeout("15 seconds"),
@@ -224,7 +211,6 @@ for (const sessionId of ["capacity-records", "capacity-record-bytes"]) {
 }
 
 test("INV-03: a burst of more records than the pending limit streams the whole reply", async () => {
-  // The fake Pi echoes a prompt as one message_update per character, written in one burst.
   const text = "x".repeat(8 * inboundLimits.records.messages);
   await run(
     Effect.gen(function* () {
@@ -345,8 +331,6 @@ test("large stdout records preserve subsequent small records and fragmented UTF-
         (yield* Fiber.join(notices)).map((e) => e.message),
         ["Large 1", "Small", "Large 2", "Fragmented € record"],
       );
-      // The newline-terminated stdin encoding must preserve escapes and multi-byte text,
-      // and leave the next command on a separate line.
       const name = '雪 😀 " \\t \\\\';
       yield* session.act({ _tag: "set_name", name });
       yield* session.commands;
@@ -356,11 +340,7 @@ test("large stdout records preserve subsequent small records and fragmented UTF-
   );
 });
 
-// Pi's JSONL reader takes time that grows with a line's size, so a large prompt can need longer
-// than the base deadline to reach Pi. This fake Pi reads at most 4 MiB a second, so the 4 MiB image
-// (about 5.3 MiB of base64) cannot arrive within the 1 s base on any machine.
 test("INV-03: a large prompt Pi reads slower than the base deadline is delivered, not uncertain", async () => {
-  // PNG signature plus zeros: Piano admits it by its type; fake Pi only echoes it.
   const png = Buffer.alloc(4 * 1024 * 1024);
   png.set([137, 80, 78, 71, 13, 10, 26, 10]);
   const attachment = {
@@ -378,7 +358,6 @@ test("INV-03: a large prompt Pi reads slower than the base deadline is delivered
       const started = Date.now();
       yield* session.act({ _tag: "prompt", text: "large", attachments: [attachment] });
       const elapsed = Date.now() - started;
-      // Otherwise the fixture no longer exercises the size-aware part of the deadline.
       assert.ok(elapsed > 1000, `fake Pi read the prompt in ${elapsed}ms`);
       assert.equal((yield* session.state).closure, undefined);
     }).pipe(

@@ -38,7 +38,6 @@ const request = (input: Partial<AttemptRequest> = {}): AttemptRequest => ({
   text: "one input",
   ...input,
 });
-/** The session SessionHosts would create: it places the attempt and registers the reference. */
 const registers = (registry: Registry["Service"]) => (attempt: StartingAttempt) =>
   Effect.gen(function* () {
     yield* attempt.place("/repo");
@@ -96,7 +95,6 @@ test("the read-back waits for the original and says whether its session exists",
           Deferred.await(gate).pipe(Effect.andThen(registers(registry)(attempt))),
         ),
       );
-      // As recorded now, a start still under way cannot be confirmed.
       assert.equal((yield* attempts.outcome("created", { wait: false }))._tag, "uncertain");
       yield* Deferred.succeed(gate, undefined);
       const outcome = yield* attempts.outcome("created");
@@ -138,7 +136,6 @@ test("INV-02: claims and their outcomes survive restart; a duplicate never creat
         ),
       );
       yield* Effect.flip(failed.creation);
-      // The server stops before this creation does anything.
       yield* attempts.begin(request({ id: "abandoned" }), () => Effect.never);
     }),
     path,

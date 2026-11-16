@@ -34,12 +34,9 @@ import { useSessionFiles } from "@/lib/useSessionFiles";
 import { useTranscriptViewport } from "@/lib/useTranscriptViewport";
 import { type AppState, sessionKey } from "@/store";
 
-/** The rail's sections, each folding on its own. */
 type RailSectionName = "workspace" | "app" | "outputs";
 const SECTIONS: readonly RailSectionName[] = ["workspace", "app", "outputs"];
 
-/** The sections the user folded, remembered across sessions and reloads; every section starts
- * open. The key predates the rail's name. */
 const collapsedPreference = createPreference<readonly RailSectionName[]>({
   key: "piano.detailsCollapsed",
   decode: (raw) => {
@@ -48,21 +45,6 @@ const collapsedPreference = createPreference<readonly RailSectionName[]>({
   },
 });
 
-/**
- * The session rail: Environment (its repository or folder, branch and linked pull request), App
- * while a preview is known, and Outputs (the files Pi wrote or edited) once there is one, each a
- * section that folds. It reads nothing itself: the facts are the registry's and Pi's, the lists
- * the transcript's, so it is never stale. The artifacts Pi published are the header's.
- *
- * It stands at the Agent area's right, as tall as the transcript and composer together, as Claude
- * Code's session rail does: the transcript's scroller keeps the area's full width, so its
- * scrollbar stays at the pane's edge, and the transcript, notices and composer keep clear of it
- * through `--rail-inset`. While it fits, the wheel over it scrolls the conversation as anywhere in
- * the area; taller, the wheel over it scrolls the rail alone and never runs on into the
- * conversation. One area at a time there is no rail: the session header's second line says where
- * the session runs, and the session menu holds Preview and the pull request.
- * It follows the selected session. Hand-written: no shadcn component is a pinned side column.
- */
 interface RailProps {
   state: AppState;
 }
@@ -86,9 +68,6 @@ function SessionRailContent({ state }: RailProps) {
       data-slot="session-rail"
       aria-label="Session rail"
       onWheel={onWheel}
-      // Clear of the scrollbar at the area's edge; its first section level with the transcript's
-      // first row. Overflow fades at either edge; the last row clears the fade at the scroll end.
-      // It scrolls without a scrollbar, as the tab strips do.
       className={cn(
         "flex scrollbar-none flex-col overscroll-y-contain pb-[max(0.75rem,env(safe-area-inset-bottom))]",
         "absolute inset-y-0 right-3 z-10 w-[calc(var(--rail-inset)-0.75rem)] overflow-y-auto pt-3 md:pt-5",
@@ -99,7 +78,6 @@ function SessionRailContent({ state }: RailProps) {
   );
 }
 
-/** Fade only content beyond the viewport, including after a resize or a section folds. */
 function fadeOverflow(rail: HTMLElement | null) {
   if (!rail) return;
   const update = () => {
@@ -118,18 +96,12 @@ function fadeOverflow(rail: HTMLElement | null) {
   };
 }
 
-/**
- * A rail that fits has nothing to scroll, and the transcript beside it is no ancestor the wheel
- * would reach, so the wheel is handed to the transcript's viewport, which moves the conversation
- * as a wheel anywhere else in the area does. The rail decides only whether to hand it over.
- */
 function passWheel(event: React.WheelEvent<HTMLElement>, viewport: TranscriptViewport | null) {
   const rail = event.currentTarget;
   if (rail.scrollHeight > rail.clientHeight || event.ctrlKey) return;
   viewport?.wheel(event.deltaY, event.deltaMode);
 }
 
-/** The rail's folding sections for the selected session. */
 function RailSections({ state }: { state: AppState }) {
   const preview = useSeenPreview(state);
   const files = useSessionFiles();
@@ -159,10 +131,6 @@ function RailSections({ state }: { state: AppState }) {
   );
 }
 
-/**
- * Where the session runs: its repository or folder, its branch or detached commit, and its linked
- * pull request, each a row with its menu. The rail's first section.
- */
 export function SessionEnvironment({ state }: { state: AppState }) {
   const context = sessionContext(state);
   const { cwd, branchUrl, pullRequest } = context;
@@ -217,10 +185,6 @@ export function SessionEnvironment({ state }: { state: AppState }) {
   );
 }
 
-/**
- * One fact about where the session runs: its icon, then its value; the name is read, not shown, as
- * in the header. Its menu holds the session's copy commands for that fact, then its GitHub page.
- */
 function EnvironmentRow({
   name,
   icon,
@@ -234,7 +198,6 @@ function EnvironmentRow({
   icon: ReactNode;
   href?: string;
   menu: EnvironmentRowKind;
-  /** The directory the row stands for, as its tooltip. */
   cwd?: string;
   description?: string;
   children: string;
@@ -259,8 +222,6 @@ function EnvironmentRow({
     </>
   );
   return (
-    // Keep rail clicks on their controls: modal pointer blocking lets repeated clicks select
-    // the transcript beneath the rail through the document root.
     <DropdownMenu modal={false} open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         <Item
@@ -269,8 +230,6 @@ function EnvironmentRow({
             railRow,
             "cursor-pointer text-left hover:bg-fill-hover data-[state=open]:bg-fill-hover",
           )}
-          // The row's one tooltip: what its text stands for, or the full name a shortened text hides;
-          // none while its menu is open.
           title={open ? undefined : (description ?? cwd ?? (isName ? children : name))}
           asChild
         >
@@ -301,7 +260,6 @@ function EnvironmentRow({
   );
 }
 
-/** A section of the rail: its name as a folding heading, then its list. */
 function RailSection({
   title,
   open,
@@ -318,7 +276,6 @@ function RailSection({
       <div className="flex min-h-8 items-center gap-2 pointer-coarse:min-h-11">
         <h2 className="flex min-w-0">
           <CollapsibleTrigger asChild>
-            {/* The heading is the fold: its name, then the chevron turned by its state. */}
             <PianoButton
               variant="ghost"
               size="sm"

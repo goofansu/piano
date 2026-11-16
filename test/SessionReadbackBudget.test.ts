@@ -98,8 +98,6 @@ test("PIN-53: compaction and active tool boundaries defer full context reads unt
           "known-active boundaries must not download full context",
         );
         assert.equal(metrics.activeBytes, 0);
-        // The final message and settlement can overlap one in-flight refresh; pending
-        // requests coalesce into at most one more, independent of the active boundary count.
         assert.ok(metrics.settledReads >= 1 && metrics.settledReads <= 2);
         assert.ok(metrics.settledBytes < 2.02 * 1024 * 1024);
         assert.ok(

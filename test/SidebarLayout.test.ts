@@ -6,13 +6,11 @@ import {
   type SidebarEnvironment,
 } from "../web/src/lib/sidebarLayout.ts";
 
-/** A focusable control on a fake page: it can be removed or hidden, and records focus. */
 interface Control {
   name: string;
   available: boolean;
 }
 
-/** A page at a breakpoint, with storage and focus the test controls. */
 function page({ desktop = true, stored = {} as Record<string, string> } = {}) {
   const storage = new Map(Object.entries(stored));
   const breakpoint = new Set<() => void>();
@@ -80,8 +78,6 @@ test("show, hide and toggle open and close the sheet below the breakpoint, leavi
 });
 
 test("the desktop preference changes only on a desktop viewport", () => {
-  // Direct calls must not change the hidden column's preference while narrow,
-  // independently of the shortcut's viewport-aware routing.
   const narrow = page({ desktop: false, stored: { "piano.sidebar": "shown" } });
   narrow.layout.setCollapsed(true);
   assert.equal(narrow.state().collapsed, false);
@@ -186,18 +182,17 @@ test("closing the sheet returns focus to where it was, else to a visible show-si
 
   p.focus(composer);
   p.layout.show();
-  p.focus(null); // the sheet takes focus
+  p.focus(null);
   p.layout.closeMobile();
   p.layout.restoreFocus();
   assert.equal(p.focused(), composer);
 
   p.layout.show();
-  composer.available = false; // the control that had focus went away while the sheet was open
+  composer.available = false;
   p.layout.closeMobile();
   p.layout.restoreFocus();
   assert.equal(p.focused(), settings);
 
-  // A swipe remembers focus as it starts revealing the sheet.
   composer.available = true;
   p.focus(composer);
   p.layout.previewMobile();

@@ -9,7 +9,6 @@ import {
 } from "../extensions/piano-dispatch/NodeSocket.ts";
 import { sessionEndpoint, sessionEnvironment } from "../server/SessionEndpoint.ts";
 
-// INV-11: a non-browser observer must still send the explicit allowed Origin.
 test("dispatch uses Node's native WebSocket with the configured Origin", async () => {
   const server = createServer();
   const sockets = new Set<Socket>();
@@ -79,8 +78,6 @@ test("dispatch is unavailable without trusted local launch configuration", () =>
   );
 });
 
-// The two halves are tested apart above; if Piano's launch drifted from what the extension
-// accepts, the dispatch tools would silently stop registering.
 test("every endpoint Piano launches a child with is one the extension accepts", () => {
   for (const [host, origins] of [
     ["127.0.0.1", ["http://127.0.0.1:7070"]],

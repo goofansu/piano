@@ -1,7 +1,3 @@
-/** Binary image preparation, separate from the conversation socket (ADR 0004).
- * Four big-endian bytes give the UTF-8 manifest length, then the manifest, then exactly
- * each image's bytes in order. No multipart filenames, headers, nesting or arbitrary files.
- */
 import { Schema } from "effect";
 import {
   IMAGE_TYPES,
@@ -15,10 +11,7 @@ import { URL_ID } from "./urlId.ts";
 export const remoteImageLimits = {
   manifestBytes: 16 * 1024,
   bodyBytes: MAX_ATTACHMENT_BYTES + 16 * 1024 + 4,
-  /** Peer staging slots across reading, unclaimed and consumed batches (the memory budget). */
   batches: 2,
-  /** Concurrent HTTP transfers per image lane, with no waiting queue: on main per peer for each
-   * of uploads, reads and cancellations; on the peer for streaming preview reads. */
   laneTransfers: 2,
   ttlMs: 10 * 60_000,
   idleMs: 30_000,
@@ -29,7 +22,6 @@ export const remoteImageLimits = {
 export const IMAGE_UPLOAD_PATH = "/api/peer/images";
 export const IMAGE_CANCEL_PATH = "/api/peer/images/cancel";
 export const IMAGE_PREVIEW_PATH = "/api/peer/image-preview";
-/** Every image route a remote answers and main relays: the one list each side serves from. */
 export const IMAGE_ROUTES = {
   upload: IMAGE_UPLOAD_PATH,
   cancel: IMAGE_CANCEL_PATH,
@@ -38,7 +30,6 @@ export const IMAGE_ROUTES = {
 export const IMAGE_PATHS = Object.values(IMAGE_ROUTES);
 export const IMAGE_UPLOAD_TYPE = "application/vnd.piano.images";
 const ID = Schema.String.check(Schema.isPattern(URL_ID));
-/** The capability itself: an unguessable ID the remote issued for one upload. */
 export const PreparedImages = Schema.Struct({ id: ID });
 export type PreparedImages = typeof PreparedImages.Type;
 export const ImageTarget = Schema.Union([
@@ -46,7 +37,6 @@ export const ImageTarget = Schema.Union([
     cwd: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(4096)),
     sessionId: ID,
   }),
-  /** A new session's first message, in this folder or worktree. */
   Schema.Struct({
     cwd: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(4096)),
   }),

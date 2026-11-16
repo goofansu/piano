@@ -1,4 +1,3 @@
-/** In-process HTTP adapter for the real MCP SDK. Never forwards a request to the network. */
 import assert from "node:assert/strict";
 
 export const radiusCanary = "fake-radius-credential-DO-NOT-DISCLOSE";

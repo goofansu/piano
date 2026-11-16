@@ -4,7 +4,6 @@ import { radiusSetup } from "./api.ts";
 import { createRadiusSetup, type RadiusSetup, type RadiusSetupSnapshot } from "./radiusSetup.ts";
 import { providerAccounts } from "./useProviderAccounts.ts";
 
-/** The Radius section's setup while mounted, over the page's provider accounts. */
 export function useRadiusSetup(): RadiusSetup & RadiusSetupSnapshot {
   const [setup] = useState(() =>
     createRadiusSetup({

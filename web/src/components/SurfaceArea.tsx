@@ -13,7 +13,6 @@ import { trackPointerDrag } from "@/lib/pointerDrag";
 import { ScrollRootContext } from "@/lib/scrollRoot";
 import { useNavigation } from "@/lib/useNavigation";
 
-/** The viewers own native button and media keys, not the composer's type-to-focus hook. */
 const ownKeys = (event: ReactKeyboardEvent<HTMLElement>) => {
   if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey)
     event.stopPropagation();
@@ -21,21 +20,12 @@ const ownKeys = (event: ReactKeyboardEvent<HTMLElement>) => {
 
 const fileName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
 
-/** A tab's name, the name of its Close, and its view's region. */
 export function surfaceTabNames(tab: SurfaceTab) {
   return tab === "changes"
     ? { name: "Changes", close: "Hide changes", region: "Changes" }
     : { name: fileName(tab.path), close: `Close ${fileName(tab.path)}`, region: "File viewer" };
 }
 
-/**
- * One view in the Surface area: a session's Changes, or an open file. The area
- * (`SessionPanel`) draws the tabs, each with its name and Close, in a row of their own; a view
- * owns the toolbar beneath them, what it shows on the left and its actions on the right, so naming
- * and closing never mix with acting, and its scrolling body. A view with nothing to show there
- * has no toolbar. One area at a time the session's tabs name the view, so a file's
- * Close joins the end of its toolbar; Agent is the way back from Changes.
- */
 export function SurfaceFrame({
   tab,
   status,
@@ -43,13 +33,9 @@ export function SurfaceFrame({
   below,
   children,
 }: {
-  /** The view's tab, which names the region and its Close, and which Close closes. */
   tab: SurfaceTab;
-  /** What the view shows, before its actions: a change's size, a file's path. */
   status?: ReactNode;
-  /** The view's controls. */
   actions?: ReactNode;
-  /** Rows above the body, such as a stale observation's note. */
   below?: ReactNode;
   children: ReactNode;
 }) {
@@ -71,10 +57,7 @@ export function SurfaceFrame({
       }}
     >
       {toolbar && (
-        // Plain status and view controls have no dedicated shadcn layout.
         <div className="flex min-h-10 min-w-0 shrink-0 items-center justify-between gap-2 border-b border-line pr-2 pl-4 text-xs text-ink-2">
-          {/* Several status items (a comparison, then a count) take a second line on a narrow
-           * toolbar rather than clipping; each item truncates on its own. */}
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 py-1">{status}</div>
           <div className="flex shrink-0 items-center">
             {actions}
@@ -94,13 +77,6 @@ export function SurfaceFrame({
   );
 }
 
-/**
- * The Surface area's place in the session. Beside the Agent area it is a column split off by a
- * hairline, as Linear's side panel is, resizable from that edge and remembered; one area at a time
- * it takes the session's full width. Hidden, it keeps its layout box (invisible and inert, not
- * `display: none`), so a view's scroll and disclosure wait for its return. Hand-written: no shadcn
- * component is a nonmodal, resizable split.
- */
 export function SurfaceColumn({
   id,
   labelledBy,
@@ -110,7 +86,6 @@ export function SurfaceColumn({
   children,
 }: {
   id: string;
-  /** One area at a time, the area is the tab panel its tab names. */
   labelledBy: string | undefined;
   label: string;
   single: boolean;
@@ -163,16 +138,11 @@ export function SurfaceColumn({
         "relative flex min-h-0 min-w-0 flex-col bg-conversation",
         single
           ? "flex-1"
-          : // The remembered width is a preference, not a claim on the Agent area's room: the
-            // column gives way (down to its minimum) before the Agent area does.
-            "max-w-[calc(100%-var(--agent-min))] min-w-(--surface-min) shrink border-l border-line",
-        // Hidden at the width it shows at, so nothing rewraps and its scroll stays put.
+          : "max-w-[calc(100%-var(--agent-min))] min-w-(--surface-min) shrink border-l border-line",
         !shown && (single ? "invisible absolute inset-0" : "invisible absolute inset-y-0 right-0"),
       )}
     >
       {!single && shown && (
-        // No standard shadcn resize handle supports a remembered pixel width; mirrors the sidebar's.
-        // role=separator: an interactive window splitter, not a thematic break.
         <div
           role="separator"
           tabIndex={0}

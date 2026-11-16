@@ -19,10 +19,6 @@ import { REFRESH_SPIN_MS } from "@/lib/radiusSetup";
 import { type RadiusToolView, radiusUninstallCopy } from "@/lib/radiusSetupView";
 import { useRadiusSetup } from "@/lib/useRadiusSetup";
 
-/**
- * Radius on the Providers page: the account, and what Pi may use from it. Radius is here rather
- * than in the provider list because signing in is only the first of its steps.
- */
 export function RadiusSection() {
   const setup = useRadiusSetup();
   const { view, confirmation, providers } = setup;
@@ -140,7 +136,6 @@ export function RadiusSection() {
   );
 }
 
-/** One tool's row: its wording, its install and uninstall actions, or the change Pi is running. */
 function RadiusToolRow({
   tool,
   setup,
@@ -160,8 +155,6 @@ function RadiusToolRow({
       </DropdownMenuItem>
     </RowMenu>
   );
-  // The menu reveals over the row's end, unless Install already stands there: then it sits beside
-  // it. While Pi runs a change, the change stands alone.
   return (
     <ListRow
       title={tool.title}

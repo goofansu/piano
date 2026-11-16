@@ -40,7 +40,6 @@ import { browserSocketEnvironment, type ConnectionHandlers, openConnection } fro
 import { type AppState, initialState } from "@/store";
 
 export default function App() {
-  // Layout belongs to the browser, outside the keyed machine-local state and connections.
   const layout = useSidebarLayoutController();
   return (
     <SidebarLayoutContext.Provider value={layout}>
@@ -58,7 +57,6 @@ function MachineApp() {
   const previews = usePreviews();
   const { state, client } = useClient(
     (): AppState => {
-      // Stored catalogs let the model picker open before Pi answers.
       const catalogs = { ...modelCatalogs.seed() };
       return {
         ...initialState,
@@ -68,14 +66,12 @@ function MachineApp() {
     },
     notify,
     {
-      // Each machine's socket has its own address and its own largest frame.
       connect: (handlers: ConnectionHandlers) =>
         openConnection(handlers, {
           ...browserSocketEnvironment,
           url: () => machineSocketUrl(machine.id),
           frameBytes: machineFrameBytes(machine.id),
         }),
-      // Each machine remembers its own last directory and decides where a session may start.
       lastDirectory: storedLastDirectory(machine.id),
       startsSessionIn: offers.startsSessionIn,
     },
@@ -95,13 +91,11 @@ function MachineApp() {
   useEffect(() => previews?.follow(client, notify), [client, previews]);
   const layout = useSidebarLayout();
   useSidebarShortcut();
-  // Details' Outputs reads this one answer, filtered by Git once per change.
   const sessionFiles = useSessionFilesController(state);
 
   const navigation = useNavigationController(client, layout.closeMobile);
   const { settings } = useSyncExternalStore(navigation.subscribe, navigation.getState);
   const { openNew, openSettings, closeSettings } = navigation;
-  // One cached list for both sidebar mounts and keyboard navigation, even when the column is hidden.
   const { view: sidebarView } = useSidebarView();
   const sidebar = useSidebarList(state, sidebarView);
   useSidebarSessionNavigation(sidebar.list, client, navigation);
@@ -132,7 +126,6 @@ function MachineApp() {
               }
               content={
                 <>
-                  {/* Opening settings keeps the current view mounted for session continuity (INV-02). */}
                   <LayoutView key={state.view.kind} active={!offers.settings || !settings}>
                     {state.view.kind === "new" ? (
                       <NewSession
@@ -176,8 +169,6 @@ function MachineApp() {
                 </>
               }
             >
-              {/* Top-right, just below the pane's header row, so a toast never covers a title or its controls.
-          Above dialogs and sheets (z-50) but below menus, popovers and tooltips (z-[60]), so an open menu is never covered. */}
               <Toaster
                 position="top-right"
                 className="toaster group !absolute !z-[55]"

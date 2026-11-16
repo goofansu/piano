@@ -17,7 +17,6 @@ import { URL_ID } from "../../../shared/urlId.ts";
 import type { Attachment, ClientCommand } from "../../../shared/wire.ts";
 import { peerApiPath } from "./machine.ts";
 
-/** Blob framing keeps base64 off the socket; the browser supplies its exact Content-Length. */
 export function imageUploadBody(target: ImageTarget, images: readonly Attachment[]) {
   const manifest: ImageManifest = {
     target,
@@ -95,7 +94,6 @@ export async function prepareImages(
   });
 }
 
-/** The post-preparation wire command, shared by both composers: no inline image bytes. */
 export function preparedImageCommand(
   original: ClientCommand,
   reference: PreparedImages,
@@ -112,7 +110,6 @@ export function preparedImageCommand(
       : original;
 }
 
-/** Best effort disposal, never a retry of upload or input. A lost result expires on the peer. */
 export function discardImages(machineId: string, reference: PreparedImages) {
   void fetch(peerApiPath(machineId, IMAGE_CANCEL_PATH), {
     method: "POST",
@@ -125,7 +122,6 @@ export function discardImages(machineId: string, reference: PreparedImages) {
     .catch(() => {});
 }
 
-/** Only source-owned projected image addresses. Never resolve an absolute/unknown URL or fall back. */
 export function remoteImageUrl(
   machineId: string,
   url: string,

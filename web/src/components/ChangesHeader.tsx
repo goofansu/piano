@@ -17,10 +17,6 @@ import {
 import { WrapButton } from "@/components/WrapButton";
 import type { ChangesSheetView, ScopeView } from "@/lib/changesView";
 
-/**
- * The comparison, at the toolbar's start: Uncommitted or the actual target ref, with the same
- * names in its menu. A choice is saved for the session; the list answers by changing.
- */
 export function ChangesScopeMenu({
   scope,
   disabled,
@@ -66,10 +62,6 @@ export function ChangesScopeMenu({
   );
 }
 
-/**
- * Changes' toolbar actions: the view controls, then Refresh. The comparison sits at the toolbar's
- * start and the tab names the view (`SurfaceFrame`).
- */
 export function ChangesActions({
   sheet,
   canRefresh,
@@ -99,14 +91,12 @@ export function ChangesActions({
         disabled={!canRefresh}
         onClick={refresh}
       >
-        {/* The icon turns while Git is read, the one in-progress sign every refresh shares. */}
         <RefreshCwIcon className={sheet.refreshing ? "animate-spin" : undefined} />
       </IconButton>
     </>
   );
 }
 
-/** The note under the toolbar while the last observation is stale, with the failure's reason. */
 export function ChangesStaleNote({ sheet }: { sheet: ChangesSheetView }) {
   return (
     sheet.staleNote && (

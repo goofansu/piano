@@ -1,4 +1,3 @@
-/** Browser failure fixture: only the scratch checkout containing this resource blocks startup. */
 import { appendFileSync } from "node:fs";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 

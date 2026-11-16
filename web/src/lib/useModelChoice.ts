@@ -9,28 +9,16 @@ import {
   modelChoice,
 } from "@/lib/modelChoice";
 
-/**
- * Everything the composer's model picker reads and does for one target. The page hands it to
- * DraftEditor whole, and ModelSelect renders from it, so a new picker action changes `modelChoice`,
- * this hook and the picker, not the pages between them.
- */
 export interface ModelControl {
-  /** The directory's catalog with its refresh and saved defaults (`useModelCatalog`). */
   models: ModelCatalogView;
   model: string | undefined;
   effort: ThinkingLevel;
-  /** The New page has no directory yet, so there is no catalog to wait for. */
   noDirectory: boolean;
   chooseModel: (model: string) => void;
   chooseEffort: (level: ThinkingLevel) => void;
-  /** Returns the model and effort to Pi's defaults for new sessions. */
   chooseDefaults: () => void;
 }
 
-/**
- * The composer picker's state for one target: React state around `modelChoice`, which decides
- * which target a pick belongs to and what a change means.
- */
 export function useModelChoice(
   models: ModelCatalogView,
   target: ModelTarget,
@@ -38,7 +26,6 @@ export function useModelChoice(
   ready = true,
   initialPick: ModelPick = {},
 ): ModelControl & {
-  /** Sends with the start options; a send that consumed its input clears the pick it carried. */
   submit: (send: (start: StartOptions) => boolean) => void;
   start: StartOptions;
   consume: () => void;

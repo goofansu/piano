@@ -54,14 +54,11 @@ interface Props {
   captureSend: Client["captureSend"];
 }
 
-/** The session's areas share one tab list one at a time; these name its parts for each other. */
 const AREA_ID = { agent: "session-agent-area", surface: "session-surface-area" } as const;
 const tabId = (value: string) => `session-area-tab-${encodeURIComponent(value)}`;
 
 export function SessionView({ state, send, captureSend }: Props) {
   const drafts = useDrafts();
-  // The selected session's PR dialog; navigation closes it when Settings covers the view. Its
-  // Changes and open file live in the Surface area (SessionPanel).
   const navigation = useNavigation();
   const {
     pullRequest: pullRequestOpen,
@@ -75,8 +72,6 @@ export function SessionView({ state, send, captureSend }: Props) {
   } = navigation;
   const onPullRequestOpenChange = (open: boolean) =>
     open ? openPullRequest() : closePullRequest();
-  // Measure the areas container after sidebar/insets; panelLayout owns capacity and navigation
-  // projects visible areas/rail/tabs. A hidden session (under Settings) keeps its prior mode.
   const areas = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const element = areas.current;
@@ -91,12 +86,10 @@ export function SessionView({ state, send, captureSend }: Props) {
     return () => observer.disconnect();
   }, [setSingle]);
   const agentHidden = !navigation.layout.agent;
-  // The rail is pinned beside the transcript side by side; one area at a time it is not shown.
   const railInside = navigation.layout.rail;
   const agent = useRef<HTMLDivElement>(null);
   const [messagesOnly] = useMessagesOnly();
   const t = state.session;
-  // The transcript looks executions up by tool call ID.
   const tools = useMemo(
     () => Object.fromEntries((t?.tools ?? []).map((tool) => [tool.id, tool])),
     [t?.tools],
@@ -105,7 +98,6 @@ export function SessionView({ state, send, captureSend }: Props) {
   const input = state.pendingCreate;
   const context = sessionContext(state);
   const { workspace, pullRequestTarget, draftKey, pullRequest: link } = context;
-  // Where a dictated message is spoken: the names voice input spells by.
   const place = {
     project: sessionProject(state, t?.sessionId ? { cwd: t.cwd, sessionId: t.sessionId } : null)
       ?.name,
@@ -114,9 +106,7 @@ export function SessionView({ state, send, captureSend }: Props) {
     session: context.title,
   };
   const { commands } = useSessionCommands();
-  // The area tabs show where the Agent command is offered; only then is each area their panel.
   const areaTabs = !!commands.find((c) => c.id === "agent")?.enabled;
-  // Ask adds to the draft and never sends; one area at a time, it returns to the draft.
   const onAsk = draftKey
     ? (text: string) => {
         drafts.paragraph(draftKey, text);
@@ -129,10 +119,6 @@ export function SessionView({ state, send, captureSend }: Props) {
         );
       }
     : undefined;
-  // The pull request lives in Changes: it is followed only at its target, and its
-  // details are on screen while Changes is. Its reference says whether the session is linked,
-  // so an unlinked one asks GitHub nothing. Its refreshes follow the session's one working
-  // rule, the sidebar's.
   const changesVisible = navigation.shownTab === "changes";
   const pullRequest = useSessionPullRequest(
     pullRequestTarget,
@@ -146,14 +132,12 @@ export function SessionView({ state, send, captureSend }: Props) {
   const { status, replyActivity } = sessionActivity(state, messagesOnly);
   const parentId = t?.state.dispatchedFrom;
   const dispatchedFrom = parentId ? sessionDestination(state, parentId) : undefined;
-  // Dispatch rows offer to open a session only where the catalog can open it.
   const destination = (sessionId: string) => sessionDestination(state, sessionId);
   const pane = sessionPane(state);
   const notices = sessionNotices(state, messagesOnly);
   const answerReceipt = answeredQuestion(state);
   const readOnly = notices.find((n) => n.placement === "composer");
   const [usedEditorRequest, setUsedEditorRequest] = useState<string>();
-  // The transcript reports where the reader is; the composer's jump list reads and moves it.
   const viewport = useNewTranscriptViewport();
 
   return (
@@ -174,17 +158,14 @@ export function SessionView({ state, send, captureSend }: Props) {
           ref={agent}
           id={AREA_ID.agent}
           data-slot="agent-area"
-          // While the area tabs show it is the panel the Agent tab names; otherwise a plain region.
           {...(areaTabs && { role: "tabpanel", "aria-labelledby": tabId("agent") })}
           inert={agentHidden}
           aria-hidden={agentHidden || undefined}
           className={cn(
             "flex min-h-0 min-w-0 flex-1 flex-col",
             !single && "min-w-(--agent-min)",
-            // Hidden in place, not display:none, so the transcript keeps its reading position.
             agentHidden && "invisible absolute inset-0",
           )}
-          // Beside the Agent area the rail floats in it, and what reads and writes keeps clear.
           style={
             railInside ? ({ "--rail-inset": `${RAIL_WIDTH}px` } as React.CSSProperties) : undefined
           }
@@ -217,7 +198,6 @@ export function SessionView({ state, send, captureSend }: Props) {
                   : undefined}
               </Banner>
             ))}
-          {/* The transcript and the composer, with the session rail at their right, as tall as both. */}
           <div className="relative flex min-h-0 flex-1 flex-col">
             <AddToChat draftKey={draftKey} className="relative flex min-h-0 flex-1 flex-col">
               {pane.list && (
@@ -281,7 +261,6 @@ export function SessionView({ state, send, captureSend }: Props) {
                     <StatusLine key={n.id} notice={n} />
                   ),
                 )}
-              {/* Local file links in a question open the preview, as they do in the transcript. */}
               <LocalFileContext value={(path) => openFile(path, "agent")}>
                 {answerReceipt && <AnsweredQuestion resolution={answerReceipt} />}
                 <InlineQuestion pending={pendingDialogs(state)} send={send} />
@@ -314,13 +293,6 @@ export function SessionView({ state, send, captureSend }: Props) {
   );
 }
 
-/**
- * One area at a time, the tabs between them while something is open beside the Agent area:
- * Agent, then the open tabs in opening order ("Agent | README.md"). Without one the bar is left
- * out, saving its row; Changes opens from the header or palette and becomes a tab. There is no
- * session rail in this layout. Choosing Agent never focuses the composer or raises the software
- * keyboard; choosing a view shows it as it was left. A tab closes from its view's toolbar.
- */
 function AreaTabs() {
   const navigation = useNavigation();
   const { surface, showAgent, selectTab } = navigation;
@@ -344,7 +316,6 @@ function AreaTabs() {
               Agent
             </PianoStripTabTrigger>
           </PianoStripTab>
-          {/* The Surface area's strip tabs, so the session's tabs look alike at every width. */}
           {tabs.map((tab) => {
             const key = tabKey(tab);
             return (
@@ -359,7 +330,6 @@ function AreaTabs() {
   );
 }
 
-/** A status line under the transcript: the last dialog's or input's outcome. Hand-written: no shadcn component is a plain live line. */
 function StatusLine({ notice }: { notice: SessionNotice }) {
   return (
     <section
@@ -382,7 +352,6 @@ function StatusLine({ notice }: { notice: SessionNotice }) {
   );
 }
 
-/** What Pi's extensions report: title, statuses, widgets and a suggested message to append. */
 function ExtensionBlock({
   extension,
   used,
@@ -390,7 +359,6 @@ function ExtensionBlock({
 }: {
   extension: ExtensionState;
   used: string | undefined;
-  /** Omitted while the draft takes no additions, which hides Append. */
   onAppend: ((request: { id: string; text: string }) => void) | undefined;
 }) {
   return (
@@ -434,15 +402,9 @@ function ExtensionBlock({
   );
 }
 
-/**
- * A skeleton in the transcript's own geometry: a prompt card, a reply with three lines and a
- * tool row. `sessionPane` decides when it shows; it leaves at once when the transcript or its
- * empty state can show, since loading placeholders have no motion.
- */
 function TranscriptSkeleton() {
   return (
     <div aria-hidden className="absolute inset-0 overflow-hidden bg-conversation px-(--gutter)">
-      {/* The lines wait like the sidebar's, so a quick load shows the transcript without them. */}
       <div className="late-enter mx-auto flex w-full max-w-3xl flex-col gap-6 py-6 md:py-8">
         <div className="rounded-2xl border border-line bg-fill px-4 py-3.5">
           <div className="flex gap-3">

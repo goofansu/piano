@@ -1,16 +1,3 @@
-/**
- * Starting and observing Piano sessions from a Pi extension, over the browser's own transport
- * (`openConnection`) and wire vocabulary. A tool invocation owns its connections: a start opens
- * one, a wait opens one per handle, and each closes with its timers when its call returns. There
- * is no worker, registry or shared map; everything a later call needs travels in the handle the
- * model keeps in its tool history.
- *
- * Attribution is conservative. An answer is returned only while the facts that tie it to this
- * handle's input still hold: the same child incarnation, the same submission, the same transcript
- * prefix, and no later input of anyone else's. Anything else is reported as unattributable rather
- * than guessed, because Pi has no durable receipt for a prompt. An answer already observed is
- * kept: later interference cannot retract what this call saw.
- */
 import { createHash } from "node:crypto";
 import { creationVerdictOf } from "../../shared/creationVerdict.ts";
 import {
@@ -51,17 +38,11 @@ import {
   type SocketEnvironment,
 } from "../../web/src/lib/ws.ts";
 
-// ── Public vocabulary ───────────────────────────────────────────────────────
-
 export interface StartRequest {
   readonly prompt: string;
-  /** The session's directory; with `worktree`, the checkout whose repository it branches from. */
   readonly cwd: string;
-  /** Start in a new worktree Piano creates; a failure creates no session. */
   readonly worktree?: WorktreeRequest;
-  /** The dispatching session, recorded in the new one's history for its backlink. */
   readonly dispatchedFrom?: string;
-  /** Inherit current membership from dispatchedFrom; defaults to true. */
   readonly inheritProject?: boolean;
 }
 
@@ -76,26 +57,14 @@ export type {
   WaitEnding,
 } from "../../shared/dispatch.ts";
 
-/** Bounds for an explicitly requested observation window; omission waits for completion. */
 export const WAIT_MIN_MS = 1_000;
 export const WAIT_MAX_MS = 60_000;
-/** A start waits this long for creation and the input's acknowledgement, plus Piano's worktree
- * creation budget when it asks for one. */
 const START_DEADLINE_MS = 30_000;
-/** Re-selects allowed to confirm quiescence after the session looks finished. */
 const QUIESCENCE_RECHECKS = 3;
-/** Milliseconds between those re-selects. */
 const RECHECK_DELAY_MS = 250;
-/** Attaches in a row, without a current selection between them, before a wait reports that it
- * could not observe the session. */
 const SELECT_ATTEMPTS = 3;
-/** Milliseconds before retrying a refused or failed attach. */
 const RETRY_DELAY_MS = 500;
-/** Bound missing snapshots and reconnects, not healthy execution. Reopening a socket alone
- * cannot reset this budget, nor SELECT_ATTEMPTS: only a current selection proves observation
- * recovered, and it renews both. */
 const READ_DEADLINE_MS = 30_000;
-/** How much of a session a wait is willing to hold in memory before it gives up on observing it. */
 const MAX_VIEW_MESSAGES = 5_000;
 const MAX_VIEW_CHARS = 4_000_000;
 
@@ -108,23 +77,12 @@ const fingerprint = (text: string): string => createHash("sha256").update(text).
 const baselineFingerprintOf = (messages: ReadonlyArray<RenderMsg>): string =>
   fingerprint(JSON.stringify(messages.map((m) => [m.id, m.role, m.text, m.toolCalls ?? null])));
 
-/** Includes tool arguments, pending output and attachments, not only finalized message text. */
 const oversized = (snapshot: Snapshot): boolean =>
   snapshot.messages.length > MAX_VIEW_MESSAGES || JSON.stringify(snapshot).length > MAX_VIEW_CHARS;
 
-// ── One connection, its deadline and its cleanup ────────────────────────────
-
-/** What an observation may do while it runs. Timers and the socket belong to `observe`. */
 interface Link {
-  /** A frame that changes nothing in Pi, such as a selection; it may be sent again after a loss. */
   readonly send: (message: ClientMessage) => void;
-  /**
-   * Sends this observation's one mutation, at most once. `false` only when the socket was checked
-   * non-open: the frame never left this process. A send that throws on an open socket may already
-   * have enqueued it, so it counts as possibly sent.
-   */
   readonly commit: (message: ClientMessage) => boolean;
-  /** Whether the mutation may have left this process: Pi may hold it, so it is never resent. */
   readonly committed: () => boolean;
   readonly nonce: () => string;
   readonly after: (ms: number, run: () => void) => unknown;
@@ -132,22 +90,13 @@ interface Link {
 }
 
 interface Observer<T> {
-  /** The socket is up, for the first time or after a loss: issue what this observation needs. */
   readonly connected: () => void;
-  /** The socket is down; `fatal` means this connection will not come back. */
   readonly disconnected: (fatal: boolean) => void;
   readonly message: (message: ServerMessage) => void;
-  /** The observation deadline passed. */
   readonly deadline: () => T;
-  /** The caller abandoned the observation. Pi is never told. */
   readonly aborted: () => T;
 }
 
-/**
- * Runs one observation over one connection and resolves exactly once: with the observer's own
- * conclusion, with its deadline value or with its aborted value. Closes the socket and clears
- * every timer it started, whichever of those happens.
- */
 function observe<T>(
   environment: SocketEnvironment,
   options: { readonly deadlineMs: number | undefined; readonly signal?: AbortSignal },
@@ -157,8 +106,6 @@ function observe<T>(
     let connection: Connection | null = null;
     let done = false;
     const timers = new Set<unknown>();
-    // A send that throws reports the loss from inside the send, before the observer learns
-    // whether the frame may have left. Hold that report until the send returns its disposition.
     let sending = false;
     let heldLoss: (() => void) | null = null;
     const send = (message: ClientMessage): SendDisposition => {
@@ -170,7 +117,6 @@ function observe<T>(
         sending = false;
         const loss = heldLoss;
         heldLoss = null;
-        // After the caller has seen the disposition; deferred so it reads that state.
         if (loss) queueMicrotask(loss);
       }
     };
@@ -235,32 +181,18 @@ function observe<T>(
       },
       environment,
     );
-    // A conclusion reached while the socket was being opened still closes it.
     if (done) connection.close();
   });
 }
 
-/** The selection a reply belongs to, when the message carries one. */
 const selectionOf = (message: ServerMessage): string | undefined =>
   "selectionId" in message ? message.selectionId : undefined;
 
-/** Pi's handling of one input, once it is known. */
 interface InputDisposition {
   readonly submission: SessionSubmission;
   readonly detail: string | undefined;
 }
 
-/**
- * When an input's handling is known, for a start and a follow-up alike: its own verdict once
- * there is one (`inputVerdictOf`), or a dialog that opened after the input was sent while its submission is not
- * final yet. Pi holds a command's acknowledgement while the dialog it opened is waiting, so
- * `submitting` would otherwise last until a person answers; the caller hears `needs_input` now.
- * `opened` names the dialogs that were already waiting when the input was sent (none for a new
- * session): they did not come from this input, which Pi acknowledges in their presence. A dialog
- * the current run opens in the moment between the send and Pi's acknowledgement cannot be told
- * apart from the input's own; either way the session waits on a person. `undefined` while the
- * input is still undecided.
- */
 const dispositionOf = (
   verdict: InputVerdict | undefined,
   dialogs: ReadonlyArray<Dialog>,
@@ -271,18 +203,6 @@ const dispositionOf = (
   return dialog && { submission: "needs_input", detail: dialogAsks(dialog) };
 };
 
-// ── Starting a session ──────────────────────────────────────────────────────
-
-/**
- * Creates a session in `cwd` and sends `prompt` as its first input, then returns as soon as Pi's
- * handling of that input is known — including when Pi answers with a dialog, which it cannot
- * resolve on its own. `create_session` is sent at most once: a connection lost before the session
- * is named reads the original attempt back by its `attemptId` rather than creating a second
- * session, and a loss after it only re-attaches by identity. Until the frame is handed to an open
- * socket nothing can exist, so a socket that never opens, a deadline or an abort before then
- * reports `refused` / `not_sent`. A send that throws on an open socket may already have enqueued
- * the frame: that is `uncertain`.
- */
 export function startSession(
   request: StartRequest,
   environment: SocketEnvironment,
@@ -309,7 +229,6 @@ export function startSession(
         creation,
         submission,
         handle,
-        // A session exists only once its worktree was created, at the path Piano placed it in.
         worktree:
           handle && worktree
             ? ({ path: handle.cwd, branch: worktree.branch.trim() } satisfies CreatedWorktree)
@@ -317,21 +236,17 @@ export function startSession(
         detail,
       });
       const unnamed = (detail: string) => result("uncertain", "uncertain", detail);
-      /** Before the creation request left this process: no session, nothing to inspect. */
       const unsent = (detail: string) =>
         result("refused", "not_sent", `${detail} The creation request was not sent.`);
       const mine = (message: ServerMessage) =>
         selectionId !== null && selectionOf(message) === selectionId;
-      /** Settles once this input's handling is known (`dispositionOf`). */
       const applyInput = () => {
         if (!snapshot || !handle) return;
         const submission = snapshot.state.submission;
-        // Before Pi acknowledges this input, its submission is the previous one, or none.
         if (!submission || submission.id < expectedSubmission) {
           settleOn(undefined);
           return;
         }
-        // The id is this child's counter: observing it is what lets a later wait attribute output.
         if (submission.id !== expectedSubmission) {
           settle(
             result("created", "uncertain", "Another input superseded the initial submission."),
@@ -356,7 +271,6 @@ export function startSession(
           };
         settleOn(submission);
       };
-      /** Everything in a new session arrived after its creation, which carries the input. */
       const settleOn = (submission: PromptSubmission | undefined) => {
         const known =
           snapshot && dispositionOf(submissionVerdict(submission), snapshot.dialogs, new Set());
@@ -380,8 +294,6 @@ export function startSession(
             if (!sent) settle(unsent("The connection closed before it could send."));
             return;
           }
-          // Only an identity may be re-sent. Creating again would start a second session for
-          // one request, and no acknowledgement is worth that.
           if (!handle) {
             reconciling = true;
             selectionId = link.nonce();
@@ -398,7 +310,6 @@ export function startSession(
         },
         disconnected: (fatal) => {
           if (!link.committed()) settle(unsent("Piano could not be reached."));
-          // An ordinary loss before the session is named reconnects and reads the attempt back.
           else if (!handle && fatal)
             settle(
               unnamed(
@@ -427,15 +338,13 @@ export function startSession(
                 }
                 const messages = message.snapshot.messages;
                 handle = {
-                  // Piano's spelling of the directory, not the caller's.
                   cwd: message.cwd,
                   sessionId: message.sessionId,
                   generation: message.cursor?.generation ?? "",
                   submissionId: null,
-                  // Taken before the prompt is sent, so startup output is never read as an answer.
                   baselineMessages: messages.length,
                   baselineFingerprint: oversized(snapshot) ? "" : baselineFingerprintOf(messages),
-                  inputFingerprint: "", // Filled only by this submission's server-owned proof.
+                  inputFingerprint: "",
                   anchorMessageId: null,
                 };
                 if (reconciling) {
@@ -462,7 +371,6 @@ export function startSession(
                 applyInput();
                 return;
               }
-              // A re-attach after a loss. Only this incarnation can report on this input.
               if ((message.cursor?.generation ?? "") !== handle.generation) {
                 settle(
                   result(
@@ -522,8 +430,6 @@ export function startSession(
                 );
                 return;
               }
-              // The user message Pi records for this prompt anchors later attribution. Pi
-              // acknowledges input before it records it, so it may never arrive in time.
               if (
                 message.event._tag === "message_end" &&
                 message.event.message.role === "user" &&
@@ -534,8 +440,6 @@ export function startSession(
               applyInput();
               return;
             }
-            // `selection_failed` answers an attach; creation fails with `error`. Either way an
-            // admitted request may already have created the session and sent its input.
             case "selection_rejected":
             case "selection_failed":
             case "error": {
@@ -583,12 +487,6 @@ export function startSession(
   );
 }
 
-// ── Observing sessions ──────────────────────────────────────────────────────
-
-/**
- * What a stopped child proves. An ordinary exit is not evidence that this input's work finished:
- * Pi can exit zero with the run abandoned, so that needs separate completion evidence.
- */
 const closureReading = (closure: SessionClosure, completed: boolean): Reading => {
   const detail = closure.detail;
   switch (closure._tag) {
@@ -614,19 +512,12 @@ const closureReading = (closure: SessionClosure, completed: boolean): Reading =>
 interface Attributed {
   readonly answer: string | null;
   readonly attribution: Attribution;
-  /** The last reply of this input's turn, even when it has no text: it carries how the turn ended. */
   readonly message?: RenderMsg;
   readonly detail?: string;
-  /** The session is no longer this handle's to read: stop observing and say so. */
   readonly mismatch?: boolean;
-  /** Pi has not recorded this input yet: what the session shows is older than the prompt. */
   readonly pending?: boolean;
 }
 
-/**
- * The answer this handle's input produced, if the facts still tie it to that input. Partial
- * replies are never read: only a message that is an answer (`isAnswer`) counts.
- */
 function attribute(
   handle: SessionHandle,
   snapshot: Snapshot,
@@ -641,15 +532,12 @@ function attribute(
   });
   if (snapshot.state.projectionError || snapshot.state.stateRefreshError)
     return mismatch(snapshot.state.projectionError ?? snapshot.state.stateRefreshError!);
-  // A remembered closure in saved history cannot speak for this handle's live input.
   if (!hosted) return mismatch("The session is not running; only its history is readable.");
   if (generation !== handle.generation)
     return mismatch("Pi restarted; this incarnation cannot answer for that input.");
   if (handle.submissionId === null)
     return mismatch("Pi never acknowledged that input, so no output can be attributed.");
   const submission = snapshot.state.submission;
-  // An idle session whose last submission predates this one has not acted on it yet: that is
-  // something to keep waiting for, not a finished run to report.
   if (!submission || submission.id < handle.submissionId)
     return {
       answer: null,
@@ -672,7 +560,6 @@ function attribute(
       "Conversation context changed; the initial input's output can no longer be attributed.",
     );
   const prompts = after.filter((message) => message.role === "user");
-  // A second user message is someone else's input, whatever the submission counter says.
   if (prompts.length > 1) return mismatch("Later input was sent to this session.");
   if (handle.anchorMessageId !== null && prompts[0]?.id !== handle.anchorMessageId)
     return mismatch("This input's message is no longer where it was recorded.");
@@ -686,7 +573,6 @@ function attribute(
     return mismatch(
       "The initial input was transformed or replaced; its answer cannot be attributed.",
     );
-  // A handled command may have no user message at all. Never adopt unrelated startup output.
   if (!input) return { answer: null, attribution: "no-output" };
   const last = after
     .slice(after.indexOf(input) + 1)
@@ -698,31 +584,18 @@ function attribute(
     : { answer: null, attribution: "no-output", message: last };
 }
 
-/** A wait's current report and whether observation should stop. */
 interface Reading {
   readonly status: WaitStatus;
   readonly detail?: string;
-  /** Finish this observation, subject to `needsQuiescence`; a mismatch can end it while the
-   * session keeps running. */
   readonly terminal: boolean;
-  /**
-   * Terminal only once the host confirms it has no pending work. Until then the session is
-   * running, as its status reads, whatever ends the wait first.
-   */
   readonly needsQuiescence?: boolean;
 }
 
 const AWAITING_QUIESCENCE =
   "The run looks finished, but Piano still reports pending work for this session.";
 
-/**
- * The session's own facts, in the order that decides them. A closure, a mismatch or a projection
- * failure ends observation at once — even mid-run — because waiting longer cannot improve them.
- */
 function read(snapshot: Snapshot, attributed: Attributed, completed: boolean): Reading {
   const state = snapshot.state;
-  // Attribution owns view validity, including history-only and projection failures. No lifecycle
-  // fact may bypass that gate; output already captured is retained separately by observation.
   if (attributed.mismatch) return { status: "unknown", terminal: true, detail: attributed.detail };
   if (state.closure) return closureReading(state.closure, completed);
   const submission = state.submission;
@@ -732,8 +605,6 @@ function read(snapshot: Snapshot, attributed: Attributed, completed: boolean): R
       terminal: true,
       detail: submission.detail ?? "Pi refused the input.",
     };
-  // Uncertain delivery is read as status reads it: work under way or a dialog decides first, and
-  // an idle session whose delivery is uncertain is unknown.
   const activity = liveActivityOf(snapshot);
   switch (activity._tag) {
     case "needs_input": {
@@ -746,7 +617,6 @@ function read(snapshot: Snapshot, attributed: Attributed, completed: boolean): R
     }
     case "running":
       return { status: "running", terminal: false };
-    // Pi may act on it or never do anything, and never becomes quiescent: as status reads it.
     case "uncertain":
       return { status: "unknown", terminal: true, detail: activity.detail };
     case "idle":
@@ -761,7 +631,6 @@ function read(snapshot: Snapshot, attributed: Attributed, completed: boolean): R
   }
 }
 
-/** The verdict for an idle, quiescent session, from the facts it kept about this input. */
 function verdict(
   snapshot: Snapshot,
   attributed: Attributed,
@@ -773,7 +642,6 @@ function verdict(
   const message = attributed.message;
   const stop = message?.stopReason;
   const ending = turnEnding(stop);
-  // An interrupted turn often also carries an error: the interruption is the better answer.
   if (ending === "cancelled")
     return { status: "cancelled", terminal: true, detail: `Pi stopped: ${stop}` };
   if (message?.isError || message?.errorMessage)
@@ -794,12 +662,6 @@ function verdict(
   };
 }
 
-/**
- * Observes one session for one handle on its own connection. Quiescence is read from a snapshot
- * a `select` just produced: after a run drains, live events no longer report the host's pending
- * work, so a terminal-looking session is re-selected (a bounded number of times) before it is
- * called settled. Nothing here mutates the session: only `select` is ever sent.
- */
 function observeHandle(
   handle: SessionHandle,
   deadlineMs: number | undefined,
@@ -812,15 +674,12 @@ function observeHandle(
     let hosted = false;
     let generation = "";
     let sequence = 0;
-    /** The snapshot came from a `select` and no live event has been folded into it since. */
     let fresh = false;
     let sawResponseCompleted = false;
     let attempts = 0;
     let rechecks = 0;
     let recheck: unknown;
-    /** Latest attributable finalized output, including an empty reply; survives interference. */
     let captured: Attributed | null = null;
-    /** Positive evidence that this input's turn finished, rather than merely stopped arriving. */
     const completed = (attributed: Attributed) =>
       sawResponseCompleted || turnEnding(attributed.message?.stopReason) === "completed";
     const observation = (
@@ -831,7 +690,6 @@ function observeHandle(
       const current = snapshot
         ? attribute(handle, snapshot, hosted, generation)
         : { answer: null, attribution: "unattributable" as const, detail: "Nothing was observed." };
-      // A captured answer outlives later interference; a fresh one supersedes nothing it had.
       const attributed = current.attribution === "unattributable" && captured ? captured : current;
       return {
         handle,
@@ -855,7 +713,6 @@ function observeHandle(
         );
       });
     };
-    /** A current selection: observation recovered, so a later loss starts a fresh budget. */
     const recovered = () => {
       link.cancel(readDeadline);
       readDeadline = undefined;
@@ -872,7 +729,6 @@ function observeHandle(
         sessionId: handle.sessionId,
       });
     };
-    /** Attaches again, up to the attempt bound, rather than trusting an incomplete view. */
     const reattach = (detail: string) => {
       boundRead();
       if (attempts >= SELECT_ATTEMPTS) {
@@ -898,8 +754,6 @@ function observeHandle(
         return;
       }
       const attributed = attribute(handle, snapshot, hosted, generation);
-      // Output attribution does not depend on execution ending: message_end can arrive while
-      // still streaming. Retain empty newer replies too, never falling back to older text.
       if (attributed.attribution !== "unattributable") captured = attributed;
       const reading = read(snapshot, attributed, completed(attributed));
       if (!reading.terminal) {
@@ -908,12 +762,10 @@ function observeHandle(
         return;
       }
       if (!reading.needsQuiescence) {
-        // Retain already observed output, but interference before quiescence cannot certify settlement.
         settle(observation(reading.status, "observed", reading.detail));
         return;
       }
       const final = verdict(snapshot, attributed, sawResponseCompleted);
-      // Only a snapshot this attach just produced reports the host's pending work.
       if (fresh && snapshot.state.isQuiescent === true) {
         settle(observation(final.status, "observed", final.detail));
         return;
@@ -968,8 +820,6 @@ function observeHandle(
             return;
           case "session": {
             if (!snapshot) return;
-            // A frame of another incarnation, or a gap in this one, cannot be folded into
-            // this view: the cursor is the only ordering this attachment has.
             const step = cursorStep({ generation, sequence }, message.cursor);
             if (step === "other-generation") {
               generation = message.cursor.generation;
@@ -1006,12 +856,6 @@ function observeHandle(
   });
 }
 
-/**
- * Observes until all handles complete or any needs attention, with no default execution deadline.
- * An explicit timeout requests a bounded observation instead (1–60 seconds). Every handle is
- * reported, including unavailable or abandoned observations. Cancellation closes observers,
- * never workers; nothing here wakes a parent after its turn ends.
- */
 export function waitSessions(
   handles: ReadonlyArray<SessionHandle>,
   timeoutMs: number | undefined,
@@ -1040,8 +884,6 @@ export function waitSessions(
           detail:
             "Observation ended early because another session needs attention; this worker was not stopped.",
         };
-      // A deadline or caller cancellation ends observation, not the child's work. Only an
-      // observed outcome can require attention and shorten the other handles' observations.
       if (
         result.ending === "observed" &&
         (result.status === "needs_input" ||
@@ -1055,28 +897,16 @@ export function waitSessions(
   );
 }
 
-// ── Sending a follow-up ─────────────────────────────────────────────────────
-
 export interface FollowUpRequest {
-  /** Piano's spelling of the session's directory, as a status read reports it. */
   readonly cwd: string;
   readonly sessionId: string;
   readonly text: string;
   readonly delivery: FollowUpDelivery;
 }
 
-/** A follow-up waits this long for Pi's handling of the message. */
 const FOLLOW_UP_DEADLINE_MS = 30_000;
-/** After Piano reports a failed send, how long its own submission frame may still arrive. */
 const FAILURE_GRACE_MS = 1_000;
 
-/**
- * Sends `text` to an existing session the way the composer does: select it, then one `act`
- * (starting a stopped Pi, with the session's own model and effort). The `act` is sent at most
- * once. A loss before it re-selects; an `act` that finds the socket closed reports `not_sent`; a
- * loss after it reports `uncertain` and never resends, since Pi may already hold the message
- * (INV-02).
- */
 export function sendFollowUp(
   request: FollowUpRequest,
   environment: SocketEnvironment,
@@ -1090,8 +920,6 @@ export function sendFollowUp(
       let selectionId: string | null = null;
       let inputId: string | null = null;
       let failed = false;
-      /** This message's verdict once a frame gives one, and the dialogs already waiting when it
-       * was sent. */
       let verdict: InputVerdict | undefined;
       let opened: ReadonlySet<string> = new Set();
       const result = (
@@ -1106,11 +934,8 @@ export function sendFollowUp(
       const unsent = (detail: string) => result("not_sent", detail);
       const unconfirmed = (detail: string) =>
         result("uncertain", `${detail} Read the session's status before sending again.`);
-      /** Before the act, nothing reached Piano; after it, Pi may hold the message. */
       const ended = (before: string, after: string) =>
         link.committed() ? unconfirmed(after) : unsent(before);
-      /** Settles once this message's handling is known (`dispositionOf`), from the frame's verdict
-       * on it and the dialogs it shows; says whether it settled. */
       const apply = (message: ServerMessage, dialogs: ReadonlyArray<Dialog> = []) => {
         if (inputId === null) return false;
         const next = inputVerdictOf(message);
@@ -1125,7 +950,6 @@ export function sendFollowUp(
             settle(unconfirmed("The connection was lost after the message was sent."));
             return;
           }
-          // Nothing was sent yet: attaching again is safe.
           selectionId = link.nonce();
           link.send({ _tag: "select", selectionId, cwd, sessionId });
         },
@@ -1142,7 +966,6 @@ export function sendFollowUp(
                   settle(unsent("Piano did not open this session."));
                   return;
                 }
-                // The selection is a claim on this connection; the act must reuse it.
                 inputId = selectionId;
                 opened = new Set(message.snapshot.dialogs.map((d) => d.id));
                 const sent = link.commit({
@@ -1158,7 +981,6 @@ export function sendFollowUp(
                 if (!sent) settle(unsent("The connection closed before it could send."));
                 return;
               }
-              // A stopped session started by the act is shown again under this selection.
               apply(message, message.snapshot.dialogs);
               return;
             case "session": {
@@ -1175,9 +997,6 @@ export function sendFollowUp(
                 settle(unsent(message.message));
                 return;
               }
-              // An error naming this message is the verdict: Piano refused it before Pi saw it.
-              // Any other failure Piano reports apart from the session's frames; Pi's own verdict
-              // on the message, when there is one, may still be on its way.
               if (apply(message) || failed) return;
               failed = true;
               link.after(FAILURE_GRACE_MS, () => settle(unconfirmed(message.message)));
@@ -1201,11 +1020,8 @@ export function sendFollowUp(
   );
 }
 
-// ── Reading status ──────────────────────────────────────────────────────────
-
 export type StatusTarget = { readonly sessionId: string } | { readonly projectId: string };
 
-/** A status with the links its reader opens: the session, and the dialog it needs answered there. */
 export const withLinks = (
   facts: SessionStatusFacts,
   link: (sessionId: string) => string,
@@ -1217,15 +1033,9 @@ export const withLinks = (
 
 export type StatusReply =
   | { readonly status: "ready"; readonly sessions: ReadonlyArray<SessionStatusFacts> }
-  /** Piano answered that it lists no such session or project. */
   | { readonly status: "unlisted"; readonly detail: string }
-  /** No answer, or Piano refused the read: whether the target is listed is unknown. */
   | { readonly status: "error"; readonly detail: string };
 
-/**
- * One read of sessions' status: a session by ID, or a project's active sessions. It mutates
- * nothing, so a connection lost before the answer simply asks again.
- */
 export function readStatus(
   target: StatusTarget,
   environment: SocketEnvironment,

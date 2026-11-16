@@ -7,7 +7,6 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { Effect, Layer } from "effect";
-// The credential store McpSetup uses, so synthetic tokens are saved under Pi's own keys.
 import { FileAuthStorageBackend } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/auth-storage.js";
 import { McpOAuthCredentialStore } from "../node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/runtime.js";
 import { DirectoryFactsLive } from "../server/DirectoryFacts.ts";
@@ -19,10 +18,6 @@ import type { ProviderLoginState } from "../shared/wire.ts";
 const json = (path: string) => JSON.parse(readFileSync(path, "utf8"));
 const save = (path: string, value: unknown) => writeFileSync(path, JSON.stringify(value, null, 2));
 
-/** The network is the fake boundary: a loopback MCP server behind OAuth discovery, dynamic
- * registration and a token endpoint. Pi's own client runs the whole sign-in against it. The same
- * endpoint also accepts a fixed Authorization header, as a server with an API key does, and a
- * `/login` provider's key. */
 async function oauthMcpServer() {
   const server = createServer(async (request, response) => {
     let body = "";
@@ -57,7 +52,6 @@ async function oauthMcpServer() {
             refresh_token: "private-refresh-token",
           })
         : reply(400, { error: "invalid_grant" });
-    // `/keyed` is the same server at an endpoint that is no catalog server's.
     if (path !== "/mcp" && path !== "/keyed") return reply(404);
     const authorized = [
       "Bearer private-access-token",
@@ -137,7 +131,6 @@ const until = (setup: McpSetup["Service"], done: (state: ProviderLoginState) => 
       yield* Effect.sleep(5);
     }
   }).pipe(Effect.timeout("10 seconds"));
-/** Starts a sign-in once the lane is free: a cancelled attempt holds it until its run ends. */
 const startWhenFree = (setup: McpSetup["Service"], subject: string) =>
   Effect.gen(function* () {
     for (;;) {
@@ -147,14 +140,12 @@ const startWhenFree = (setup: McpSetup["Service"], subject: string) =>
       yield* Effect.sleep(5);
     }
   }).pipe(Effect.timeout("10 seconds"));
-/** The entry named `name`, or undefined when Pi's file has none. */
 const server = (setup: McpSetup["Service"], name: string) =>
   Effect.map(setup.state, (state) => state.servers.find((server) => server.name === name));
 const linear = (setup: McpSetup["Service"]) => server(setup, "linear");
 const available = (state: McpSetupState) => state.available.map((server) => server.id);
 const names = (state: McpSetupState) => state.servers.map((server) => server.name);
 
-/** Approves the running sign-in by pasting the redirect with `code`, and waits for its outcome. */
 const approve = (setup: McpSetup["Service"], code = "granted") =>
   Effect.gen(function* () {
     const waiting = yield* until(setup, (state) => !!state.prompt && !!state.url);
@@ -181,7 +172,6 @@ test("INV-01/11/12: connecting a catalog server saves it only once its sign-in s
       assert.deepEqual(available(initial), ["linear"]);
       assert.match((yield* Effect.flip(setup.signIn.start("linear"))).detail, /Add MCP linear/);
 
-      // The server asks for a sign-in: nothing is saved yet, and the answer says whom to sign in to.
       const before = readFileSync(file, "utf8");
       const connecting = yield* setup.change({ action: "connect", server: "linear" });
       assert.ok(connecting.signIn);
@@ -191,7 +181,6 @@ test("INV-01/11/12: connecting a catalog server saves it only once its sign-in s
       yield* setup.signIn.start(connecting.signIn);
       const waiting = yield* until(setup, (state) => !!state.prompt && !!state.url);
       assert.equal(new URL(waiting.url!).origin, new URL(url).origin);
-      // A mistyped paste asks again instead of ending the sign-in.
       const wrong = new URL(new URL(waiting.url!).searchParams.get("redirect_uri")!);
       wrong.searchParams.set("code", "granted");
       wrong.searchParams.set("state", "other");
@@ -216,7 +205,6 @@ test("INV-01/11/12: connecting a catalog server saves it only once its sign-in s
       );
       assert.deepEqual(available(yield* setup.state), []);
 
-      // A saved server signs in again with its stored token, asking nothing.
       yield* setup.signIn.start("linear");
       assert.equal(
         (yield* until(setup, (state) => state.status !== "running")).message,
@@ -250,7 +238,6 @@ test("INV-01/12: a sign-in that is refused or cancelled saves nothing and leaves
       assert.deepEqual(json(file), { mcpServers: {} });
       assert.equal(store.tokens("linear", url), undefined);
 
-      // Trying again signs in to the same waiting server; cancelling it saves nothing either.
       yield* setup.signIn.start(signIn);
       const waiting = yield* until(setup, (state) => !!state.prompt);
       yield* setup.signIn.cancel(waiting.id);
@@ -258,7 +245,6 @@ test("INV-01/12: a sign-in that is refused or cancelled saves nothing and leaves
       assert.deepEqual(json(file), { mcpServers: {} });
       assert.equal(yield* linear(setup), undefined);
 
-      // A later sign-in still saves it.
       yield* setup.signIn.start(signIn);
       assert.equal((yield* approve(setup)).status, "success");
       assert.equal((yield* linear(setup))?.signedIn, true);
@@ -280,7 +266,6 @@ test("INV-01/12: removing clears the endpoint's sign-in after a switch to a head
       const notes = "http://127.0.0.1:9/notes";
       signIn("notes", notes, "synthetic-notes");
       signIn("linear", url, "synthetic-linear");
-      // The user switched Linear's endpoint to a header in Pi; the old sign-in is still stored.
       save(file, {
         mcpServers: {
           notes: { url: notes },
@@ -297,7 +282,6 @@ test("INV-01/12: removing clears the endpoint's sign-in after a switch to a head
         "the Authorization value never reaches the browser",
       );
 
-      // An unreadable credential store fails the removal and leaves the entry to retry.
       const stored = readFileSync(auth, "utf8");
       writeFileSync(auth, "{ not json");
       const failed = yield* Effect.flip(
@@ -312,7 +296,6 @@ test("INV-01/12: removing clears the endpoint's sign-in after a switch to a head
       assert.equal(store.tokens("linear", url), undefined);
       assert.equal(store.tokens("notes", notes)?.access_token, "synthetic-notes");
 
-      // Connecting again asks for a new sign-in: nothing of the old one is reused.
       assert.ok((yield* setup.change({ action: "connect", server: "linear" })).signIn);
     }),
   );
@@ -348,7 +331,6 @@ test("INV-01/12: a URL server that cannot be reached, or rejects its Authorizati
       assert.ok(!rejected.detail.includes("wrong"), "the header value is not echoed");
       assert.deepEqual(json(file), { mcpServers: {} });
 
-      // The right header connects without a sign-in, so the server is saved at once.
       const keyed = yield* setup.change({
         action: "add",
         name: "keyed",
@@ -362,8 +344,6 @@ test("INV-01/12: a URL server that cannot be reached, or rejects its Authorizati
       });
       assert.ok(!JSON.stringify(keyed).includes("header-token"), "no header value on the wire");
 
-      // The form adds as it edits: the header comes from its Authorization field alone, never a
-      // Headers row of that name, and empty fields are left out.
       const formed = yield* setup.change({
         action: "add",
         name: "formed",
@@ -389,7 +369,6 @@ test("INV-01/12: a URL server authenticated by a /login provider connects with t
       const keyedUrl = url.replace(/\/mcp$/, "/keyed");
       save(file, { mcpServers: { gateway: { url: keyedUrl, auth: { provider: "radius" } } } });
       const gateway = (yield* server(setup, "gateway"))!;
-      // Pi sends the provider's token: the page names it, and never offers a sign-in of its own.
       assert.deepEqual(
         [gateway.auth, gateway.signedIn],
         [{ kind: "provider", provider: "radius" }, false],
@@ -401,7 +380,6 @@ test("INV-01/12: a URL server authenticated by a /login provider connects with t
         config: { url: keyedUrl, headers: { "x-team": "platform" } },
       } as const;
 
-      // No key in Pi's auth.json: the server answers 401, and a provider entry has no sign-in here.
       const refused = yield* Effect.flip(setup.change(edit));
       assert.deepEqual(
         [refused.field, refused.detail],
@@ -425,7 +403,6 @@ test("INV-01/12: a URL server authenticated by a /login provider connects with t
   );
 });
 
-/** A local stdio MCP server that logs each spawn and request; `--broken` refuses `initialize`. */
 const sentinel = fileURLToPath(new URL("fixtures/phase0-mcp.mjs", import.meta.url));
 const spawned = (log: string): { event: string; pid: number }[] =>
   existsSync(log)
@@ -532,7 +509,6 @@ test("INV-01/12: edits keep Pi's other keys and the Authorization value on the m
         hasAuthorization: true,
       });
 
-      // A rename and new headers, the saved Authorization kept while the edit leaves it out.
       const edited = yield* setup.change({
         action: "update",
         name: "docs",
@@ -549,7 +525,6 @@ test("INV-01/12: edits keep Pi's other keys and the Authorization value on the m
       assert.equal(json(file).mcpServers.docs, undefined);
       const handbook = (yield* server(setup, "handbook"))!;
 
-      // A stale identity refuses the edit; one that cannot connect is refused and changes nothing.
       const stale = yield* Effect.flip(
         setup.change({
           action: "update",
@@ -571,7 +546,6 @@ test("INV-01/12: edits keep Pi's other keys and the Authorization value on the m
       assert.equal(unreachable.field, "config");
       assert.equal(readFileSync(file, "utf8"), saved);
 
-      // Dropping the header makes the server ask for a sign-in, which saves the edit.
       const cleared = yield* setup.change({
         action: "update",
         name: "handbook",
@@ -581,9 +555,6 @@ test("INV-01/12: edits keep Pi's other keys and the Authorization value on the m
       assert.ok(cleared.signIn);
       assert.equal(readFileSync(file, "utf8"), saved);
 
-      // Left waiting, the change is saved only by its own sign-in: while that runs the entry
-      // cannot be removed, and once it is cancelled the saved entry's own sign-in (Reconnect)
-      // never saves it.
       yield* setup.signIn.start(cleared.signIn);
       const asking = yield* until(setup, (state) => !!state.prompt);
       const removing = yield* Effect.flip(
@@ -605,7 +576,6 @@ test("INV-01/12: edits keep Pi's other keys and the Authorization value on the m
       assert.deepEqual(json(file).mcpServers.handbook, { url, timeout: 30 });
       assert.equal((yield* server(setup, "handbook"))?.signedIn, true);
 
-      // Renaming an OAuth entry drops the tokens stored under its old name.
       const signedIn = (yield* server(setup, "handbook"))!;
       const renamed = yield* setup.change({
         action: "update",
@@ -625,8 +595,6 @@ test("INV-01/12: edits keep Pi's other keys and the Authorization value on the m
       );
       assert.ok(store.tokens("manual", url));
 
-      // A command server's edit that Pi refuses is never started; a change of transport drops the
-      // other transport's keys.
       const tools = (yield* server(setup, "tools"))!;
       const rejected = yield* Effect.flip(
         setup.change({
@@ -665,7 +633,6 @@ test("INV-01/12: an edit keeps a saved sign-in across a switch of authentication
       save(file, { mcpServers: { docs: { url } } });
       signIn("docs", url);
 
-      // Switched to a header in Piano, under the same name and endpoint: the sign-in stays.
       const signedIn = (yield* server(setup, "docs"))!;
       assert.equal(signedIn.signedIn, true);
       yield* setup.change({
@@ -680,7 +647,6 @@ test("INV-01/12: an edit keeps a saved sign-in across a switch of authentication
       });
       assert.ok(store.tokens("docs", url), "a switch of authentication keeps the sign-in");
 
-      // Renamed while on the header: nothing could find the old sign-in again.
       const header = (yield* server(setup, "docs"))!;
       yield* setup.change({
         action: "update",
@@ -692,7 +658,6 @@ test("INV-01/12: an edit keeps a saved sign-in across a switch of authentication
       assert.ok(json(file).mcpServers.handbook);
       assert.equal(store.tokens("docs", url), undefined, "a rename drops the old sign-in");
 
-      // Pointed at another endpoint: the old endpoint's sign-in goes too.
       signIn("handbook", url);
       const handbook = (yield* server(setup, "handbook"))!;
       const keyed = url.replace(/\/mcp$/, "/keyed");

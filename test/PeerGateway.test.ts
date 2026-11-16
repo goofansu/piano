@@ -97,7 +97,6 @@ test(
       assert.equal((await upload()).status, 502, mode);
       assert.equal(one.state.requests.length, count + 1, "never retry uploads");
     }
-    // The peer's refusal reaches the browser as its status and its own sentence.
     one.state.mode = "image-refused";
     const refused = await upload();
     assert.equal(refused.status, 404);
@@ -117,7 +116,6 @@ test(
       const response = await fetch(preview);
       if (response.ok) await assert.rejects(response.arrayBuffer(), mode);
     }
-    // Held HTTP responses cannot occupy WS input/control lanes or another peer's HTTP slots.
     one.state.mode = "http-held";
     const a = upload(),
       b = upload();
@@ -146,7 +144,6 @@ test(
     }
     socket.ws.close();
     await socket.closed;
-    // Backpressure on the second hop of a maximum accepted batch must not hold controls.
     one.state.mode = "image-body-held";
     const pixels = Buffer.alloc(10 * 1024 * 1024);
     pixels.set(Buffer.from(image.data, "base64"));
@@ -185,7 +182,6 @@ test(
     live.ws.close();
     await live.closed;
     one.state.mode = "ready";
-    // No Content-Length: count the actual streamed bytes, not an absent or lying header.
     let chunks = 0;
     const overflowing = new ReadableStream<Uint8Array>({
       pull(controller) {
@@ -242,7 +238,6 @@ test("both image hops refuse a malformed image request with the same status and 
       413,
     ],
   ];
-  // node:http, since fetch cannot send Upgrade or a Content-Length its body does not match.
   const send = (path: string, method: string, headers: Record<string, string>) =>
     new Promise<{ status: number; body: unknown }>((resolve, reject) => {
       const req = request(`${f.base}${path}`, {
@@ -267,7 +262,6 @@ test("both image hops refuse a malformed image request with the same status and 
   assert.equal(f.state.requests.length, 0, "the relay refuses before dialing the peer");
 });
 
-// These new policy/transport boundaries have no protection in local ClientDispatch tests.
 test("peer startup configuration is explicit, bounded and fail-closed", (t) => {
   const root = mkdtempSync(join(tmpdir(), "piano-peer-config-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -322,10 +316,6 @@ test("peer startup configuration is explicit, bounded and fail-closed", (t) => {
   assert.throws(() => loadPeerConfigs(file), /PIANO_PEER_CONFIG/);
 });
 
-// The remote answers work that outlasts its own bound with its own error (a 200 with
-// `{ status: "error" }` for Git observations, a refusal otherwise). The gateway's own deadline
-// starts earlier (before dialing), so it must be longer, or the browser gets "machine
-// unavailable" in place of the remote's error.
 test("the gateway waits out every bound the remote enforces on a relayed answer", () => {
   const bounds = new Map<Endpoint, number>([
     [Endpoints.sessionChanges, CHECKOUT_TIMEOUT_MS],
@@ -344,14 +334,11 @@ test("the gateway waits out every bound the remote enforces on a relayed answer"
       (relayed.requestMs ?? 0) > bound,
       `${endpoint.path}: ${relayed.requestMs} ms must outlast ${bound} ms`,
     );
-    // A refused answer is the remote's own error, not "machine unavailable".
     if (relayed.upstream.refused !== undefined)
       assert.ok(relayed.passRefusal, `${endpoint.path} passes the remote's refusal`);
   }
 });
 
-// The remote refuses a file past its preview limit; the gateway must relay any file it allows,
-// in a multipart answer with its metadata.
 test("the gateway relays any file the remote's preview limit allows", () => {
   for (const endpoint of [Endpoints.workspaceFile, Endpoints.workspaceFileDownload]) {
     const relayed = RemoteRequests.find((request) => request.browser === endpoint);
@@ -360,8 +347,6 @@ test("the gateway relays any file the remote's preview limit allows", () => {
   }
 });
 
-// The remote refuses a Changes answer past CHANGES_ANSWER_BYTES with `{ status: "error" }`; the
-// gateway must relay every answer it allows, or the browser gets "machine unavailable" instead.
 test("the gateway relays any Changes answer the remote's budget allows", () => {
   for (const endpoint of [
     Endpoints.sessionChanges,
@@ -456,7 +441,6 @@ test(
           "/peer/local/ws",
           "/peer/missing/ws",
           "/peer/eng-1/api/folders",
-          // Browsing the remote's directories stays on its own Piano.
           "/peer/eng-1/api/ls",
           "/peer/eng-1/ws/extra",
         ]) {
@@ -470,7 +454,6 @@ test(
           405,
         );
         assert.equal((await fetch(`${f.base}${commandPath}&cwd=/arbitrary`)).status, 400);
-        // Another site's <img>/<script> or CORS read must not spend the peer credential.
         for (const crossSite of [
           { "Sec-Fetch-Site": "cross-site" },
           { "Sec-Fetch-Site": "same-site" },
@@ -818,18 +801,15 @@ test(
           "the file's path travels only in the body",
         );
 
-        // What only the remote knows comes back in its words.
         const missing = await read("missing.md");
         assert.equal(missing.status, 400);
         assert.deepEqual(await missing.json(), { error: "File not found." });
 
-        // A larger or compressed answer is the remote unavailable, never a partial file.
         for (const mode of ["file-large", "file-compressed"]) {
           f.state.mode = mode;
           assert.equal((await read("docs/notes.md")).status, 502, mode);
         }
 
-        // Two files at once for one remote; a third is refused rather than queued.
         f.state.mode = "http-held";
         const held = [read("a.md"), read("b.md")];
         await f.until(() => f.state.pendingHttp.length === 2);

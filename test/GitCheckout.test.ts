@@ -28,7 +28,6 @@ test("INV-06: the Git observation tells non-Git paths from broken metadata and n
   git(repo, "init", "--quiet", "-b", "main");
   git(repo, "commit", "--quiet", "--allow-empty", "-m", "baseline");
 
-  // Discovery's observation reads no branch.
   assert.deepEqual(await observe(join(repo, "subdirectory")), {
     status: "checkout",
     toplevel: repo,
@@ -38,7 +37,6 @@ test("INV-06: the Git observation tells non-Git paths from broken metadata and n
     toplevel: repo,
     branch: "main",
   });
-  // A detached HEAD has no branch.
   git(repo, "checkout", "--quiet", "--detach");
   assert.deepEqual(await observe(repo, { branch: true }), {
     status: "checkout",
@@ -50,8 +48,6 @@ test("INV-06: the Git observation tells non-Git paths from broken metadata and n
   const notes = join(root, "notes");
   mkdirSync(notes);
   assert.deepEqual(await observe(notes), { status: "non-git" });
-  // Older Git says "not a git repository"; Git 2.56 names the invalid gitfile. Either way,
-  // the `.git` entry makes this broken, not non-Git, and its diagnostic must survive.
   writeFileSync(join(notes, ".git"), "gitdir: /not/a/repository\n");
   const brokenFile = await observe(notes);
   assert.equal(brokenFile.status, "broken");
@@ -63,7 +59,6 @@ test("INV-06: the Git observation tells non-Git paths from broken metadata and n
   const bare = join(root, "bare.git");
   mkdirSync(bare);
   git(bare, "init", "--quiet", "--bare");
-  // Outside a work tree Git refuses the toplevel half of the single rev-parse: still broken.
   for (const path of [bare, join(repo, ".git")]) {
     const result = await observe(path);
     assert.ok(result.status === "broken" && /bare repositories/.test(result.detail), path);
@@ -102,7 +97,6 @@ test("INV-06: an observation that writes an index runs no configured filter driv
   assert.equal((await add("index")).result, "added");
   assert.equal(existsSync(join(root, "FILTER_RAN")), false);
   assert.equal(existsSync(join(root, "HOOK_RAN")), false);
-  // The same read without the option runs both, so the traps are live.
   assert.equal((await add()).result, "added");
   assert.equal(existsSync(join(root, "FILTER_RAN")), true);
   assert.equal(existsSync(join(root, "HOOK_RAN")), true);
@@ -131,13 +125,10 @@ test("INV-01: a branch's home is where Git would push it, by push URL, read in i
     url: "git@github.com:example/repo.git",
     pushed: false,
   });
-  // Pushed once Git holds the ref a push updates.
   git(repo, "update-ref", "refs/remotes/origin/main", "HEAD");
   assert.equal((await home())?.pushed, true);
-  // The branch is where its remote pushes, not where it fetches.
   git(repo, "remote", "set-url", "--push", "origin", "git@github.com:me/fork.git");
   assert.equal((await home())?.url, "git@github.com:me/fork.git");
-  // A detached HEAD has no branch; its home is origin's, unnamed and never pushed.
   git(repo, "checkout", "--quiet", "--detach");
   assert.deepEqual(await home(), {
     remote: undefined,
@@ -146,8 +137,6 @@ test("INV-01: a branch's home is where Git would push it, by push URL, read in i
     pushed: false,
   });
 
-  // A worktree's own config pushes its branch to the fork; from the main checkout Git would push
-  // it to origin. Each checkout is read where it is.
   const fork = forkWorktree(t);
   assert.deepEqual(await home(fork.worktree), {
     remote: "fork",
@@ -167,7 +156,6 @@ test("INV-01: a branch's home is where Git would push it, by push URL, read in i
     ["fork", "https://github.com/me/fork.git", true],
   );
   assert.equal(homes.get(fork.repo)?.upstream?.remote, "origin");
-  // The fork's `feat` is gone: Git no longer holds the pushed ref.
   fork.git(fork.repo, "update-ref", "-d", "refs/remotes/fork/feat");
   assert.equal((await home(fork.worktree))?.pushed, false);
 });

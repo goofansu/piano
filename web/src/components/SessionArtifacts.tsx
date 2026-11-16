@@ -13,11 +13,6 @@ import { artifactsMenu } from "@/lib/artifactsMenu";
 import { sessionArtifacts } from "@/lib/sessionArtifacts";
 import type { AppState } from "@/store";
 
-/**
- * The session header's Artifacts control: its icon and how many Radius artifacts the session
- * published, left out until there is one. It opens a menu of their titles, newest first; each opens
- * its artifact in a new tab. The palette's Artifacts command opens the same menu.
- */
 export function ArtifactsMenu({ state }: { state: AppState }) {
   const artifacts = sessionArtifacts(state.session?.messages ?? [], state.session?.state.artifacts);
   const [open, setOpen] = useState(false);

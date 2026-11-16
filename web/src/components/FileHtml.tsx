@@ -8,7 +8,6 @@ import { useNavigation } from "@/lib/useNavigation";
 
 type Props = { content: string; path: string; workspaceId: string; active: boolean };
 
-/** A changed owner removes the old frame/listener at commit, before passive read cleanup. */
 export default function FileHtml(props: Props) {
   return (
     <HtmlDocument key={JSON.stringify([props.workspaceId, props.path, props.content])} {...props} />
@@ -48,8 +47,6 @@ function HtmlDocument({ content, path, workspaceId, active }: Props) {
   }, [active, document, openFile]);
   if (error) return <FileNotice>{error}</FileNotice>;
   if (document === undefined) return <FileNotice>Opening HTML…</FileNotice>;
-  // shadcn has no document renderer. Only the fixed CSP-hashed click bridge may run.
-  // NEVER add same-origin, forms, popups, downloads or navigation allowances.
   return (
     <iframe
       key={document.token}
@@ -59,7 +56,6 @@ function HtmlDocument({ content, path, workspaceId, active }: Props) {
       referrerPolicy="no-referrer"
       srcDoc={document.srcDoc}
       className="absolute inset-0 size-full border-0"
-      // Like SVG image mode, document colors are independent of Piano's theme.
       style={{ backgroundColor: "white", colorScheme: "light" }}
     />
   );

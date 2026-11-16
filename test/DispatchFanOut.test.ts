@@ -1,9 +1,3 @@
-/**
- * Fan-out and status through the interface a shell orchestrator uses: `scripts/dispatch-session.ts`
- * against a running `server/main.ts`, with the fake Pi and the installed Worktrunk on a throwaway
- * repository. A start with `--worktree` must place its session in a new worktree or create
- * nothing; `status` and `list` must answer from what Piano holds, before and after a restart.
- */
 import assert from "node:assert/strict";
 import { execFile, execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
@@ -50,7 +44,6 @@ test(
     const plain = join(root, "plain");
     mkdirSync(plain);
 
-    // The installed Worktrunk, isolated from the user's configuration and approvals.
     const config = join(root, "config");
     mkdirSync(join(config, "worktrunk"), { recursive: true });
     writeFileSync(join(config, "worktrunk", "config.toml"), "");
@@ -103,9 +96,7 @@ test(
       for (;;) {
         try {
           if ((await fetch(`${base}/api/folders`)).ok) return child;
-        } catch {
-          /* startup */
-        }
+        } catch {}
         assert.ok(Date.now() < deadline && child.exitCode === null, logs);
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
@@ -143,7 +134,6 @@ test(
       assert.equal(result.code, 0, `${result.stderr}\n${logs}`);
       return JSON.parse(result.stdout) as SessionStatus;
     };
-    /** One read answers at once; an orchestrator that wants a later answer reads again. */
     const statusUntil = async (sessionId: string, disposition: SessionStatus["disposition"]) => {
       const deadline = Date.now() + 15_000;
       for (;;) {
@@ -156,7 +146,6 @@ test(
 
     let piano = await startPiano();
     try {
-      // Three children, each on its own new branch, all from the main checkout's repository.
       const echo = await start("a", "fix the parser", repo, "--worktree", "task-a");
       assert.equal(echo.creation, "created", JSON.stringify(echo));
       assert.ok(echo.handle && echo.worktree);
@@ -165,8 +154,6 @@ test(
       assert.notEqual(echo.cwd, repo, "never the parent's checkout");
       assert.equal(git(echo.cwd, "branch", "--show-current"), "task-a");
       assert.equal(echo.link, `${base}/s/${echo.handle.sessionId}`);
-      // From a subdirectory of a linked worktree, the next worktree still belongs to the main
-      // checkout's folder.
       const inside = join(echo.cwd, "server");
       mkdirSync(inside);
       const asks = await start("b", "ask for a value", inside, "--worktree", "task-b");
@@ -187,7 +174,6 @@ test(
       for (const child of [echo, asks, crash])
         assert.equal(listed.get(child.cwd), child.worktree?.branch);
 
-      // Failures create no session, and nothing falls back to the checkout it was asked from.
       const before = worktrees();
       for (const [cwd, branch, detail] of [
         [repo, "task-a", /^Branch task-a already exists\. Enter a new branch name\.$/],
@@ -201,7 +187,6 @@ test(
         assert.match(refused.detail ?? "", detail);
       }
       assert.deepEqual(worktrees(), before);
-      // A repository hook nobody approved refuses a start that asks to run hooks.
       mkdirSync(join(repo, ".config"));
       writeFileSync(join(repo, ".config", "wt.toml"), 'pre-start = "touch hook-ran"\n');
       git(repo, "add", ".config");
@@ -229,7 +214,6 @@ test(
       assert.equal(git(repo, "branch", "--list", "task-h"), "", "no branch was created");
       assert.deepEqual(worktrees(), before);
 
-      // Status by ID, from a process that did not start the session.
       const settled = await statusUntil(echo.handle.sessionId, "settled");
       assert.equal(settled.lastAnswer, "echo: fix the parser");
       assert.deepEqual(settled.changes, { branch: "task-a", files: 0, pullRequest: null });
@@ -245,7 +229,6 @@ test(
 
       await statusUntil(crash.handle!.sessionId, "exited");
 
-      // A file the child wrote counts as one of its own changes, and only its own.
       writeFileSync(join(echo.cwd, "parser.ts"), "export {};\n");
       assert.equal((await status(echo.handle.sessionId)).changes?.files, 1);
       assert.equal((await status(asks.handle!.sessionId)).changes?.files, 0);
@@ -254,7 +237,6 @@ test(
       assert.equal(unknown.code, 2);
       assert.match(unknown.stderr, /lists no session no-such-session/);
 
-      // A project's sessions, one JSON object per line.
       const socket = new WebSocket(env.PIANO_SESSION_WS_URL, {
         headers: { Origin: base },
       } as unknown as string[]);
@@ -273,7 +255,6 @@ test(
             .map((l) => JSON.parse(l));
         }
       };
-      // save_project only creates, so the second session joins the project once it exists.
       socket.send(
         JSON.stringify({
           _tag: "save_project",
@@ -301,8 +282,6 @@ test(
       );
       assert.equal((await dispatch("list", "--project", "missing")).code, 2);
 
-      // The same from inside a Piano session: the extension's registered tools, launched as Piano
-      // launches Pi, called the way Pi calls them.
       const tools = new Map<
         string,
         { execute: (...args: unknown[]) => Promise<{ details: unknown }> }
@@ -341,7 +320,6 @@ test(
       assert.equal(fanned.worktree?.branch, "task-e");
       assert.equal((await status(fanned.handle!.sessionId)).projectId, "fan-out");
       assert.equal(git(fanned.cwd, "branch", "--show-current"), "task-e");
-      // A missing directory refuses a start without a worktree just as one with a worktree.
       const missing = join(root, "missing");
       const typo = (
         await tools
@@ -374,13 +352,11 @@ test(
         /lists no session nobody/,
       );
 
-      // After a restart the live facts are gone: the same shape, never a guess.
       await stopPiano(piano);
       piano = await startPiano();
       for (const child of [echo, asks, crash]) {
         const after = await status(child.handle!.sessionId);
         assert.deepEqual(Object.keys(after).sort(), Object.keys(settled).sort());
-        // The fake Pi keeps no history file, so nothing proves an ending.
         assert.equal(after.disposition, "unknown", JSON.stringify(after));
         assert.equal(after.changes?.branch, child.worktree?.branch);
       }

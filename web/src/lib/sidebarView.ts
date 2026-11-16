@@ -1,13 +1,11 @@
 import type { FolderView, Project } from "@shared/wire";
 import { isProjectDone } from "./projectCommands.ts";
 
-/** How the sidebar lists sessions: by folder, project or date. */
 export type GroupBy = "folder" | "project" | "date";
 export type SortBy = "name" | "recent";
 export interface SidebarView {
   groupBy: GroupBy;
   sortBy: SortBy;
-  /** Each session row adds a line with its branch, and its folder unless its group names it. */
   folderAndBranch: boolean;
 }
 export const DEFAULT_SIDEBAR_VIEW: SidebarView = {
@@ -20,16 +18,13 @@ export const GROUP_BY: ReadonlyArray<{ value: GroupBy; label: string }> = [
   { value: "folder", label: "Folder" },
   { value: "project", label: "Project" },
 ];
-/** Choices are alphabetical by label. */
 export const SORT_BY: ReadonlyArray<{ value: SortBy; label: string }> = [
   { value: "recent", label: "Activity" },
   { value: "name", label: "Name" },
 ];
 
-/** The one name order: case-insensitive, with numbers by value ("Q2" before "Q10"). */
 const nameCollator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
 export const byName = (a: string, b: string) => nameCollator.compare(a, b);
-/** ISO timestamps order as text; nothing known sorts last. */
 const byActivity = (a: string, b: string) => (a < b ? 1 : a > b ? -1 : 0);
 
 function order<T>(
@@ -52,7 +47,6 @@ function order<T>(
 }
 
 type SessionLike = { title?: string; updatedAt?: string };
-/** Untitled sessions follow titled ones by name; ties keep the given order. */
 export function sortSessions<T extends SessionLike>(sessions: readonly T[], sort: SortBy): T[] {
   return order(
     sessions,
@@ -62,7 +56,6 @@ export function sortSessions<T extends SessionLike>(sessions: readonly T[], sort
   );
 }
 
-/** Folders always A–Z; the selected sort applies only to sessions inside each folder. */
 export function folderGroups<
   F extends Pick<FolderView, "path" | "name">,
   S extends SessionLike & { folderPath?: string },
@@ -85,12 +78,6 @@ export interface SessionGroup<P, S> {
   project: P | null;
   sessions: S[];
 }
-/**
- * Open projects A–Z, then No project; done projects A–Z apart, for the bottom. The selected sort
- * applies only to sessions inside each group. A member whose folder was closed is still listed
- * (see the session catalog), so it still appears, and a done project's members are listed as any
- * other's: done is the project's state, not theirs.
- */
 export function projectGroups<
   P extends Pick<Project, "id" | "name" | "doneAt">,
   S extends SessionLike & { projectId?: string },
@@ -127,25 +114,14 @@ export function projectGroups<
   };
 }
 
-/**
- * The sidebar names each of the last seven local calendar days: Today, Yesterday, then the date
- * ("Oct 29"); anything last touched before that week is Older. Local midnights, not elapsed
- * 24-hour periods: DST days can be shorter or longer.
- */
 const NAMED_DAYS = 7;
-/** Day headings are English like Today and Yesterday, so one fixed format, not the browser locale. */
 const dayFormat = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
 
 export interface DateGroup {
-  /** Stable per calendar day ("2026-10-29") so a collapse remembers that day, not its distance from today. */
   key: string;
   label: string;
 }
 
-/**
- * The start of the local day `days` after the one holding `date` (negative for earlier days).
- * Date groups and the sidebar's rollover both draw their day boundary here.
- */
 export const localMidnight = (date: Date, days = 0) =>
   new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 const isoDay = (day: Date) =>
@@ -156,17 +132,14 @@ const isoDay = (day: Date) =>
 const OLDER: DateGroup = { key: "Older", label: "Older" };
 const UNKNOWN: DateGroup = { key: "Unknown date", label: "Unknown date" };
 
-/** Group `bucket`: one per named day back from today, then Older, then Unknown date. */
 function groupAt(now: Date, bucket: number): DateGroup {
   if (bucket === NAMED_DAYS) return OLDER;
   if (bucket > NAMED_DAYS) return UNKNOWN;
   const day = localMidnight(now, -bucket);
-  // Today and Yesterday too: a collapse belongs to the day, not to the name it has today.
   const label = bucket === 0 ? "Today" : bucket === 1 ? "Yesterday" : dayFormat.format(day);
   return { key: isoDay(day), label };
 }
 
-/** The bucket of a session last touched at `updatedAt`: days before `now`, or the Older or Unknown date bucket. */
 function bucketOf(updatedAt: string | undefined, now: Date): number {
   const time = updatedAt ? Date.parse(updatedAt) : Number.NaN;
   if (Number.isNaN(time)) return NAMED_DAYS + 1;
@@ -175,12 +148,10 @@ function bucketOf(updatedAt: string | undefined, now: Date): number {
   return NAMED_DAYS;
 }
 
-/** The date group of a session last touched at `updatedAt`, as of `now`. */
 export function dateGroup(updatedAt: string | undefined, now = new Date()): DateGroup {
   return groupAt(now, bucketOf(updatedAt, now));
 }
 
-/** Listed sessions by local calendar day, newest day first; empty days are omitted and unknown times stay visible last. */
 export function dateGroups<S extends SessionLike>(
   sessions: readonly S[],
   sort: SortBy,

@@ -1,6 +1,3 @@
-// Supervisor main process, not an independent lifetime owner. Launch only after the live
-// generation admits this connection; losing it triggers cleanup even if Piano exits without
-// running finalizers.
 import { execFileSync, spawn } from "node:child_process";
 import { renameSync, writeFileSync } from "node:fs";
 import { createConnection } from "node:net";
@@ -22,8 +19,6 @@ const end = (
 ) => {
   if (ending) return;
   ending = true;
-  // Persist before macOS kills this leader with its group. A unique instance path and the
-  // generation in the payload fence late outcomes; atomic rename prevents partial observations.
   let status = outcomeStatus({ reason, exitCode, signal });
   try {
     const outcome: PreviewOutcome = { instanceId, generation, reason, exitCode, signal };
@@ -31,17 +26,14 @@ const end = (
     renameSync(`${outcomeFile}.tmp`, outcomeFile);
   } catch (error) {
     console.error("Could not record preview terminal outcome:", error);
-    status = 1; // Missing evidence must not prevent cleanup or manufacture success.
+    status = 1;
   }
-  // Linux: main exit makes systemd clean the entire cgroup (TERM, KILL after 5s).
-  // macOS: this still-live leader can signal its own group without PID reuse or stale lookup.
-  // Kill the group including ourselves; no detached background cleanup helper is needed.
   if (process.platform === "darwin") process.kill(-process.pid, "SIGKILL");
   process.exit(status);
 };
 const disconnected = () => end("owner-disconnect");
 const owner = createConnection(endpoint);
-owner.setTimeout(5000, disconnected); // admission only, never an app lifetime timeout
+owner.setTimeout(5000, disconnected);
 owner.on("error", disconnected);
 owner.on("close", disconnected);
 owner.on("end", disconnected);

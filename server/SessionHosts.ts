@@ -1,10 +1,3 @@
-/** Canonical execution ownership and the session lifecycle around it: create (folder, project
- * and reference before Pi starts), open, rename, release, archive and delete. A SessionHost owns
- * each running session; this module keys hosts, locks keys, and orders retirement. Browser
- * lifetimes never own acquisition or shutdown.
- * SessionReferences finds a session's history and judges whether it can be opened; this module
- * keys ownership by the physical checkout it returns and calls it under that key's lock.
- */
 import { randomUUID } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import { Context, Data, Effect, Fiber, Layer, PubSub, Scope, Semaphore, Stream } from "effect";
@@ -49,58 +42,40 @@ export interface OpenSpec {
   readonly name?: string;
   readonly dispatchedFrom?: string;
 }
-/** An opened session, and whether this call launched Pi with its spec's start options. */
 export interface Opened {
   readonly session: PiSession;
   readonly launched: boolean;
 }
-/** A validated live attachment target or a saved view, chosen under the ownership lock. */
 export type SessionReadback =
   | { readonly _tag: "live"; readonly session: PiSession }
   | { readonly _tag: "saved"; readonly cwd: string; readonly snapshot: Snapshot };
-/** A new session in a directory; an unregistered one is placed by `place` first. */
 export interface CreateSpec {
-  /** The durable claim CreationAttempts made for this creation; without one, nothing is claimed. */
   readonly attempt?: StartingAttempt;
   readonly cwd: string;
-  /** Initial project; it must be active, checked before anything is registered. */
   readonly projectId?: string;
-  /** Without explicit projectId, inherit options.dispatchedFrom’s current project by default. */
   readonly inheritProject?: boolean;
   readonly options: StartOptions;
-  /** Create this new branch's worktree from `cwd`'s repository and start the session there. */
   readonly worktree?: WorktreeRequest;
 }
-/** Only `create`'s fresh server-generated ID may create a registry reference. */
 interface Creation {
-  /** Initial registry membership; never passed to Pi or applied on reopen. */
   readonly projectId?: string;
 }
-/** A session resolved under its ownership lock. `host` is live: a dead one has been stopped. */
 interface Resolved {
   readonly key: string;
   readonly ref: SessionLocation;
   readonly host: SessionHost | undefined;
 }
-/**
- * A creation refused before startup, or a failed startup whose child is confirmed stopped and
- * whose fresh reference was removed after conclusive absence of history. No first input was sent. `detail` is written for people; `checkoutUnconfirmed` when Worktrunk ran and
- * may have left a checkout behind.
- */
 export class SessionNotCreated extends Data.TaggedError("SessionNotCreated")<{
   readonly detail: string;
   readonly checkoutUnconfirmed: boolean;
 }> {}
-/** Slash commands a session could not answer with; `detail` is written for people. */
 export class SessionCommandsError extends Data.TaggedError("SessionCommandsError")<{
   readonly detail: string;
 }> {}
 
 const rejected = (detail: string) => new PiSessionError({ reason: "rejected", detail });
-/** Safe creation refusal: before registration, or after confirmed stopped/empty cleanup. */
 const notCreated = (e: PiSessionError) =>
   new SessionNotCreated({ detail: e.detail, checkoutUnconfirmed: false });
-/** An open's failures stay its own: its reference was written before this call. */
 const reopenFailed = (e: PiSessionError) => e;
 
 export class SessionHosts extends Context.Service<
@@ -111,62 +86,36 @@ export class SessionHosts extends Context.Service<
       sessionId: string,
     ) => Effect.Effect<PiSession | undefined, PiSessionError>;
     readonly open: (spec: OpenSpec) => Effect.Effect<PiSession, PiSessionError>;
-    /** Like `open`, and says whether Pi launched with `spec`'s start options; a session that
-     * was already running ignores them. */
     readonly start: (spec: OpenSpec) => Effect.Effect<Opened, PiSessionError>;
-    /** A running session's slash commands, from its own child. A stopped session is refused,
-     * never started to answer (INV-02), as is an answer past SLASH_COMMANDS_TIMEOUT_MS. */
     readonly commands: (
       cwd: string,
       sessionId: string,
     ) => Effect.Effect<ReadonlyArray<SlashCommand>, SessionCommandsError>;
-    /**
-     * Start a new session under a fresh server-generated ID. The project is checked before the
-     * folder is registered; the folder, reference and project are written before Pi starts.
-     * `SessionNotCreated` means no reference remains and no first input was sent. Startup removes
-     * only a fresh reference with confirmed child exit and conclusively absent history; all other
-     * failures keep their evidence and remain PiSessionError.
-     */
     readonly create: (
       spec: CreateSpec,
     ) => Effect.Effect<PiSession, PiSessionError | SessionNotCreated>;
-    /** Pi owns the name, so a stopped session is started for it; returns the mirrored title. */
     readonly rename: (
       cwd: string,
       sessionId: string,
       title: string,
     ) => Effect.Effect<string, PiSessionError | RegistryError>;
-    /** Release keeps history and registration; it is not abort-current or archive. */
     readonly release: (cwd: string, sessionId: string) => Effect.Effect<void, PiSessionError>;
-    /** Resolve once under the ownership lock, returning the live session or reading its saved
-     * view before releasing ownership. Never starts Pi. */
     readonly read: (
       cwd: string,
       sessionId: string,
     ) => Effect.Effect<SessionReadback, PiSessionError>;
-    /** Whether the checkout at `cwd` is gone now: one filesystem check, no lock and no Pi. */
     readonly checkoutMissing: (cwd: string) => Effect.Effect<boolean, PiSessionError>;
-    /** Stop, then change retention under the same ownership lock. Stale opens fail. */
     readonly archive: (cwd: string, sessionId: string) => Effect.Effect<void, PiSessionError>;
     readonly delete: (cwd: string, sessionId: string) => Effect.Effect<void, PiSessionError>;
-    /** Reference-only restoration; returns whether its folder remains closed. */
     readonly unarchive: (cwd: string, sessionId: string) => Effect.Effect<boolean, PiSessionError>;
-    /** Server-owned eligibility, including closed/missing directories; never closes hosts. */
     readonly archiveAll: Effect.Effect<number, RegistryError>;
     readonly archiveCount: Effect.Effect<number, RegistryError>;
     readonly list: Effect.Effect<ReadonlyArray<HostInfo>>;
-    /** The running sessions, then every later change to them. Subscribes now, so nothing published
-     * after this returns is missed. */
     readonly subscribe: Effect.Effect<Stream.Stream<ReadonlyArray<HostInfo>>, never, Scope.Scope>;
-    /** Acquisition or completed retirement may have changed Pi history. Coalesced invalidations,
-     * not a lifecycle log: re-read current facts. Ordinary session state changes do not emit.
-     * Subscribes now, so nothing acquired or retired after this returns is missed. */
     readonly lifecycleChanges: Effect.Effect<Stream.Stream<void>, never, Scope.Scope>;
   }
 >()("piano/SessionHosts") {}
 
-/** Also provides the SessionReferences it keys ownership by, so every caller shares its alias
- * memory, and the FolderWorktrees it creates worktrees through. */
 export const SessionHostsLive = (options: { idleMs: number }) =>
   Layer.effect(
     SessionHosts,
@@ -181,13 +130,9 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
       const hosts = new Map<string, SessionHost>();
       const starting = new Map<string, HostInfo>();
       const locks = new Map<string, Semaphore.Semaphore>();
-      // Runtime diagnostics, not a competing history. Retained across child reopen,
-      // not across server restart; no execution records are written into registry.
       const exits = new Map<string, SessionClosure>();
       const changed = yield* PubSub.sliding<ReadonlyArray<HostInfo>>(1);
       const lifecycle = yield* PubSub.sliding<void>(1);
-      // Never await observers under ownership's lock. Even a whole create/retire lifetime can
-      // coalesce to one invalidation; unlike diffing host lists, that cannot lose the change.
       const invalidateHistory = PubSub.publish(lifecycle, undefined).pipe(Effect.asVoid);
       let stopping = false;
       const lockFor = (key: string) =>
@@ -216,13 +161,10 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         );
 
       const list = Effect.gen(function* () {
-        // By its fresh session ID: a host is keyed by its physical checkout, a creation knows only
-        // the registered spelling, so their keys differ whenever the directory has an alias.
         const live = new Set([...hosts.values()].map((h) => h.session.spec.sessionId));
         const out: HostInfo[] = [...starting.values()].filter((info) => !live.has(info.sessionId));
         for (const h of hosts.values()) {
           const state = yield* h.session.state;
-          // A disappearing/closing child is not an idle (successfully settled) host.
           if (h.closing || state.closure) continue;
           out.push({
             cwd: h.session.spec.cwd,
@@ -237,7 +179,6 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         Effect.asVoid,
       );
 
-      // Caller holds this key's lock through actual process exit, not just close intent.
       const close = Effect.fn("SessionHosts.close")(function* (
         key: string,
         host: SessionHost,
@@ -250,13 +191,6 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         yield* announce;
       }, Effect.uninterruptible);
 
-      /**
-       * Resolve a session under its ownership lock, once: its reference and Pi file, whether its
-       * checkout is missing, and its live host. A caller can beat the event watcher to this lock
-       * after Pi exits or the checkout disappears, so a dead host is stopped first and the
-       * reference re-read: stopping may persist the Pi file and final statistics. `how` is the
-       * caller's reason for that stop, so an archive or delete stays a stop the person asked for.
-       */
       const resolved = <A, E>(
         cwd: string,
         id: string,
@@ -265,8 +199,6 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
       ) =>
         keyed(cwd, id, (key) =>
           Effect.gen(function* () {
-            // Coalesced create calls can share an existing host; registration checks still
-            // run for ordinary reopen so archive/delete cannot be undone by a stale tab.
             const fresh = create && !hosts.has(key);
             let ref = yield* references.resolve(cwd, id, { create: fresh });
             let host = hosts.get(key);
@@ -279,8 +211,6 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
           }),
         );
 
-      /** `refuse` answers every failure before the reference is known to exist, resolution
-       * included: for a creation, nothing was registered and Pi never started. */
       const start = <E>(
         spec: OpenSpec,
         refuse: (e: PiSessionError) => E,
@@ -295,7 +225,6 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
               if (stopping) return yield* rejected("Piano is shutting down.");
               if (ref.checkoutMissing) return yield* checkoutMissing;
               if (existing) return { session: existing.session, launched: false };
-              // Registering reopens a done project; a start that leaves nothing gives the mark back.
               const doneAt =
                 creation?.projectId === undefined
                   ? undefined
@@ -306,7 +235,6 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
                   .pipe(Effect.mapError((e) => rejected(e.detail)));
               registered = true;
               const lock = yield* lockFor(key);
-              // The project's instructions as of this launch; an edit reaches the next one.
               const data = yield* registry.get;
               const projectId = data.sessions.find((s) =>
                 sameSession(s, { cwd: ref.cwd, sessionId: spec.sessionId }),
@@ -324,8 +252,6 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
                 },
                 lock,
                 onChange: announce,
-                // Retire only this incarnation. A late event must never close a replacement.
-                // The observer reaches this only after taking the lock this open holds.
                 onExit: (closure) =>
                   owned(
                     Semaphore.withPermits(
@@ -338,14 +264,10 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
               }).pipe(
                 Scope.provide(layerScope),
                 Effect.provideContext(hostServices),
-                // Pi may have saved history before readiness failed. makeSessionHost has
-                // closed the failed child's scope before the failure reaches here.
                 Effect.onError(() => invalidateHistory),
                 Effect.catchTag("PiSessionError", (error) =>
                   Effect.gen(function* () {
                     if (creation && error.startupStopped) {
-                      // Only this fresh reference, under its ownership lock. A display projection,
-                      // unreadable header or failed inspection is never proof that history is absent.
                       const inspected = yield* references
                         .resolve(ref.cwd, spec.sessionId, { confirmAbsent: true })
                         .pipe(Effect.orElseSucceed(() => undefined));
@@ -383,32 +305,14 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
       const open = (spec: OpenSpec) =>
         start(spec, reopenFailed).pipe(Effect.map(({ session }) => session));
 
-      /**
-       * Where a new session's directory belongs: one rule for every spelling of a checkout. Git
-       * says what the directory is; Piano decides the placement (INV-01):
-       * - a registered worktree starts there, and its folder is reopened if it was closed;
-       * - a registered folder, under any spelling of the same directory, starts in that folder
-       *   under its registered spelling, so the sidebar lists the session there; a closed folder
-       *   is matched the same way and reopened under its registered spelling;
-       * - the root of a linked worktree is listed under its main checkout's folder, added when
-       *   missing, and recorded under Git's spelling of its path, which discovery matches;
-       * - any other directory becomes a folder of its own.
-       * A missing directory gets Piano's own answer before Git is asked anything, and a checkout
-       * Git cannot read refuses creation instead of registering it blindly (INV-06).
-       */
       const physicalPath = (path: string) =>
         Effect.promise(() => realpath(path).catch(() => undefined));
 
-      /** The registered spelling among `paths` of the directory whose physical path is `physical`. */
       const registeredAs = (paths: ReadonlyArray<string>, physical: string) =>
         Effect.forEach(paths, physicalPath).pipe(
           Effect.map((real) => paths.find((path, i) => path === physical || real[i] === physical)),
         );
 
-      /** The registered folder, open or closed, of the directory whose physical path is
-       * `physical`, reopened under its registered spelling when it was closed. A closed folder
-       * keeps its root workspace (folder === path), so its spelling outlives `folders`; the
-       * registry cannot tell it from a session reference's spelling, which is adopted alike. */
       const registeredFolder = Effect.fn("SessionHosts.registeredFolder")(function* (
         physical: string,
       ) {
@@ -422,8 +326,6 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
           : folder;
       });
 
-      /** The registered folder for a main checkout, reusing one registered under an alias of it,
-       * otherwise the checkout added under Git's spelling. */
       const folderOf = Effect.fn("SessionHosts.folderOf")(function* (main: string) {
         return (yield* registeredFolder(main)) ?? (yield* registry.addFolder(main));
       });
@@ -458,12 +360,6 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         return owner.root;
       });
 
-      /**
-       * A new worktree for a new session, created through Worktrunk (INV-06) from the folder of
-       * `raw`'s repository: from anywhere in a linked worktree its main checkout, otherwise the
-       * checkout's root. The folder and the worktree are registered as `place` would; a failure
-       * starts nothing and never falls back to `raw` itself.
-       */
       const placeWorktree = Effect.fn("SessionHosts.placeWorktree")(function* (
         raw: string,
         worktree: WorktreeRequest,
@@ -484,10 +380,8 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         return created.path;
       });
 
-      /** Where a new session goes, registering only its folder or worktree: no session yet. */
       const destination = Effect.fn("SessionHosts.destination")(
         function* (spec: CreateSpec) {
-          // Registry writes run before the ownership lock; an unavailable project registers nothing.
           if (spec.projectId !== undefined) yield* registry.requireProject(spec.projectId);
           return spec.worktree
             ? yield* placeWorktree(spec.cwd, spec.worktree)
@@ -505,8 +399,6 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
       const create = Effect.fn("SessionHosts.create")(function* (spec: CreateSpec) {
         const { model, thinkingLevel, name, dispatchedFrom } = spec.options;
         let projectId = spec.projectId;
-        // Snapshot Piano-owned membership before any checkout effects, never from cwd or Pi’s
-        // launch environment. A saved/archived parent is enough; its history need not be readable.
         if (
           projectId === undefined &&
           spec.inheritProject !== false &&
@@ -531,10 +423,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
                 detail: `${error.detail} The worktree at ${cwd} was created and kept. Retry in that worktree, not by creating the branch again.`,
               })
             : error;
-        // Only a fresh server-generated ID may create a reference. Registration and initial
-        // membership survive a disconnected requester, as acquisition is server-owned.
         const sessionId = spec.attempt?.sessionId ?? randomUUID();
-        // No reference or Pi exists yet: a destination that cannot be recorded starts nothing.
         if (spec.attempt)
           yield* spec.attempt
             .place(cwd)
@@ -579,8 +468,6 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         );
       });
 
-      // Pi is read outside the ownership lock, as input runs. `get` has already stopped a host
-      // whose checkout is gone, and a query writes nothing, so the checkout is not re-checked.
       const commands = Effect.fn("SessionHosts.commands")(
         function* (cwd: string, sessionId: string) {
           const session = yield* get(cwd, sessionId);
@@ -588,7 +475,6 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
             return yield* new SessionCommandsError({
               detail: "Session is no longer running. Reopen the suggestions.",
             });
-          // Pi's own read deadline is shorter; this keeps the answer within the named bound.
           return yield* session.commands.pipe(
             Effect.timeoutOrElse({
               duration: SLASH_COMMANDS_TIMEOUT_MS,
@@ -601,7 +487,6 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
             }),
           );
         },
-        // Pi's own error text is not for people here; they can only retry.
         Effect.catchTag("PiSessionError", () =>
           Effect.fail(
             new SessionCommandsError({
@@ -616,7 +501,6 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         sessionId: string,
         title: string,
       ) {
-        // The idle deadline releases a session started only for this.
         const session = (yield* get(cwd, sessionId)) ?? (yield* open({ cwd, sessionId }));
         yield* session.act({ _tag: "set_name", name: title });
         const mirrored = (yield* session.state).sessionName ?? title;
@@ -631,14 +515,12 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
           const host = hosts.get(key);
           return host ? close(key, host) : Effect.void;
         });
-      // The person asked for this stop, whether Pi is still running or its checkout already went.
       const retire = (cwd: string, id: string, remove: boolean) =>
         resolved(
           cwd,
           id,
           ({ key, ref, host }) =>
             Effect.gen(function* () {
-              // Discover the final file AFTER shutdown; a last response may have persisted it.
               const final = host
                 ? yield* close(key, host, { requested: true }).pipe(
                     Effect.andThen(references.resolve(ref.cwd, id)),
@@ -649,10 +531,6 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
           { how: { requested: true } },
         );
 
-      /** Try ownership without waiting: a held key is open, even before its host exists.
-       * Hold every acquired key through the single registry write; queued starts then re-resolve
-       * the archived reference. Canonical grouping prevents aliases acquiring different locks.
-       * No close/release/read path runs here, including for a missing checkout or exiting host. */
       const archiveCandidates = Effect.fn("SessionHosts.archiveCandidates")(function* (
         write: boolean,
       ) {
@@ -693,7 +571,6 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         yield* Effect.gen(function* () {
           for (const [key, host] of hosts) {
             const lock = yield* lockFor(key);
-            // One host's failed check or release stays with it; the rest of the sweep still runs.
             yield* Semaphore.withPermits(
               lock,
               1,
@@ -739,7 +616,6 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         archiveAll: owned(archiveCandidates(true)),
         archiveCount: archiveCandidates(false),
         list,
-        // Subscribed before the list is read: a change in between arrives after it, not never.
         subscribe: Effect.gen(function* () {
           const subscription = yield* PubSub.subscribe(changed);
           return Stream.concat(Stream.make(yield* list), Stream.fromSubscription(subscription));

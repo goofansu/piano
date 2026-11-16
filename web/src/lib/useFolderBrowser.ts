@@ -8,14 +8,12 @@ import {
 } from "./folderBrowser.ts";
 import { createPreference } from "./preference.ts";
 
-/** The last folder picked, where the picker opens next; empty for none. */
 const lastPicked = createPreference<string>({
   key: "piano.pickerPath",
   decode: (raw) => raw ?? "",
   encode: (path) => path,
 });
 
-/** The folder picker's browser while mounted, open while `open` is, starting at `initialPath`. */
 export function useFolderBrowser(
   open: boolean,
   initialPath: string | undefined,

@@ -1,13 +1,3 @@
-/**
- * Pi-only translation: every Pi record, readback and history message becomes the browser's wire
- * vocabulary here, with content-indexed reconstruction of streaming output, and every Snapshot,
- * live or saved, comes from one projection of Pi's facts (`PiSessionFacts`). Originals stay in Pi.
- * Outbound, browser actions become Pi's CLI arguments and RPC commands here, and each exchange
- * (a readback or an action's command) decodes its own reply, so a reply of the wrong shape is a
- * protocol failure.
- * PiSessions owns the child, locking, publication and readback scheduling; it never inspects or
- * builds a record's fields itself.
- */
 import { createHmac, randomBytes } from "node:crypto";
 import { getEnvironmentData, isMainThread, setEnvironmentData } from "node:worker_threads";
 import { Option, Schema } from "effect";
@@ -93,15 +83,10 @@ export interface RawMessage {
   details?: unknown;
 }
 type RawNestedCall = NonNullable<RawMessage["nestedCalls"]>["calls"][number];
-/** Pi kept the call but dropped its input to stay within a history size budget. */
 const inputOmitted = (c: RawNestedCall) =>
   c.arguments === undefined && typeof c.argumentsBytes === "number" && c.argumentsBytes > 0;
-/** Pi 1.5's recorder caps nested calls at 256: a record at the cap may have dropped calls. */
 const NESTED_CALL_LIMIT = 256;
 
-/** A tool result's nested calls and what Pi's bounded record of them lost. Only "arguments" when
- * every call is present with a terminal status and each lost input is a known size omission;
- * unknown or unfinished statuses, or a record at the call limit, may hide more: "details". */
 function nestedCallsOf(
   record: RawMessage["nestedCalls"],
   toolCallId: string | undefined,
@@ -139,7 +124,6 @@ function textOf(content: string | RawContent[] | undefined, separator = ""): str
     .filter((text) => text.length > 0)
     .join(separator);
 }
-/** Text blocks are distinct passages, not streaming chunks of one passage. */
 const assistantText = (content: Parameters<typeof textOf>[0]) => textOf(content, "\n\n");
 const usageOf = (usage?: RawUsage): Usage | undefined =>
   usage
@@ -153,10 +137,6 @@ const usageOf = (usage?: RawUsage): Usage | undefined =>
       }
     : undefined;
 
-/**
- * Pi expands `/skill:name args` into `<skill name location>\nReferences are relative to dir.\n\nbody\n</skill>\n\nargs`
- * before the prompt reaches history. The browser shows the skill as the command it was, not as the markup.
- */
 const SKILL_BLOCK =
   /^<skill name="([^"\n]+)" location="([^"\n]+)">\n(?:References are relative to [^\n]*\n\n)?([\s\S]*?)\n<\/skill>(?:\n\n([\s\S]*))?$/;
 function splitSkill(text: string): Pick<RenderMsg, "text" | "skill"> {
@@ -169,16 +149,9 @@ const recordOf = (value: unknown): Record<string, unknown> | undefined =>
     ? (value as Record<string, unknown>)
     : undefined;
 
-// Pi's skill parser splits on a literal space, not other whitespace. Accept a command
-// on its own line without changing the skill body or interpreting unknown skills here.
 function skillCommandForPi(text: string): string {
   return text.replace(/^(\/skill:[^\s]+)\s+/, "$1 ");
 }
-/** Equality evidence, not display text or a durable receipt. The key never leaves this process.
- * Pi owns skill expansion; normalize only its command name/arguments, before redaction. Plain
- * input stays byte-for-byte: a transformed prompt must not become equal through trimming. */
-// Saved-history projection workers must produce the same equality evidence as live Pi.
-// Environment data is inherited by workers, not OS children; the key stays in this process.
 const inputKeyName = "piano.inputFingerprintKey";
 const inheritedInputKey = getEnvironmentData(inputKeyName);
 const inputKey =
@@ -197,7 +170,6 @@ export function inputFingerprint(text: string): string {
   return createHmac("sha256", inputKey).update(JSON.stringify(normalized)).digest("hex");
 }
 
-/** Only supported writing tools supply file identity; arbitrary arguments remain display text. */
 function writtenPath(name: string | undefined, args: unknown): string | undefined {
   if (name !== "write" && name !== "edit") return undefined;
   const fields = recordOf(args);
@@ -278,11 +250,9 @@ export function serializeMessage(
     };
   else if (msg.role === "bashExecution")
     result = { id, role: "context", label: `Shell: ${msg.command ?? ""}`, text: msg.output ?? "" };
-  else return null; // System declarations and thinking are outside this display scope.
+  else return null;
   return redaction.wire(result);
 }
-/** A message's id is its position in Pi's message list, so a live message and the readback that
- * later contains it name it alike, and the browser keeps its row. */
 const messageId = (index: number) => `m${index}`;
 function serializeMessages(msgs: ReadonlyArray<RawMessage>): RenderMsg[] {
   const redaction = compileRedaction();
@@ -320,22 +290,14 @@ type Block =
   | { type: "text"; text: string }
   | { type: "tool"; id: string; name: string; args: string; writtenPath?: string };
 
-// ── Readbacks ────────────────────────────────────────────────────────────────
-
-/**
- * A Pi command and the decoding of its reply. `decode` returns undefined when the reply breaks the
- * protocol, which the caller reports as `invalid` rather than trusting the shape.
- */
 export interface PiExchange<A> {
   readonly command: PiCommand;
   readonly decode: (data: unknown) => A | undefined;
   readonly invalid: string;
 }
 
-/** An exchange that only queries Pi, so it changes nothing. */
 export type PiReadback<A> = PiExchange<A>;
 
-/** The `get_state` facts Piano reads; Pi's other state fields stay in Pi. */
 const RawState = Schema.Struct({
   model: Schema.optional(Schema.Struct({ provider: Schema.String, id: Schema.String })),
   thinkingLevel: Schema.optional(Schema.String),
@@ -347,14 +309,12 @@ const RawState = Schema.Struct({
 });
 export type RawState = typeof RawState.Type;
 
-/** The `get_session_stats` figures Piano shows; Pi's message counts stay in Pi. */
 const RawStats = Schema.Struct({
   cost: Schema.optional(Schema.Number),
   tokens: SessionStats.fields.tokens,
   contextUsage: Schema.optional(ContextUsage),
 });
 
-/** What serializeMessage dereferences on a message it displays; other fields it reads defensively. */
 const DisplayedMessage = Schema.Struct({
   content: Schema.optional(
     Schema.Union([Schema.String, Schema.Array(Schema.Struct({ type: Schema.String }))]),
@@ -369,7 +329,6 @@ const DisplayedMessage = Schema.Struct({
   ),
 });
 const DISPLAYED_ROLES = new Set(["user", "assistant", "toolResult", "custom"]);
-/** Extensions may add message roles of their own shape; only a role is asked of those. */
 const isRawMessage = (value: unknown): value is RawMessage => {
   const message = recordOf(value);
   return (
@@ -380,7 +339,6 @@ const isRawMessage = (value: unknown): value is RawMessage => {
 };
 const fieldOf = (data: unknown, field: string) => recordOf(data)?.[field];
 
-/** The facts any Pi state source establishes: a live readback, or a session file read without Pi. */
 export const stateFactsOf = (raw: RawState) => ({
   sessionId: raw.sessionId,
   sessionFile: raw.sessionFile,
@@ -390,8 +348,6 @@ export const stateFactsOf = (raw: RawState) => ({
   isStreaming: raw.isStreaming,
 });
 
-/** The session that dispatched this one: the first `piano.dispatch` entry `piano-dispatch`
- * recorded, on any branch, since it describes the whole session. */
 export const dispatchedFromOf = (entries: ReadonlyArray<unknown>): string | undefined => {
   for (const entry of entries) {
     if (!entry || typeof entry !== "object") continue;
@@ -406,22 +362,14 @@ export const dispatchedFromOf = (entries: ReadonlyArray<unknown>): string | unde
   return undefined;
 };
 
-/**
- * What Pi establishes about one session, and from where: a running child's `get_state` and
- * `get_messages` with the dispatching session from its entries, or its saved file read without
- * Pi. Either becomes a Snapshot only through {@link snapshotOf} or {@link PiProjector.snapshot}.
- */
 export interface PiSessionFacts {
   readonly source: "live" | "saved";
   readonly state: RawState;
   readonly messages: ReadonlyArray<RawMessage>;
-  /** The session that dispatched this one, from every entry on any branch ({@link dispatchedFromOf}). */
   readonly dispatchedFrom: string | undefined;
   readonly artifacts?: SessionState["artifacts"];
 }
 
-/** The one projection of a Pi session into a Snapshot, with the session that dispatched it. A live session adds its run's own state (compacting only if Pi says so, nothing
- * queued). */
 export const snapshotOf = (facts: PiSessionFacts): Snapshot => {
   const state = {
     ...stateFactsOf(facts.state),
@@ -443,7 +391,6 @@ export const snapshotOf = (facts: PiSessionFacts): Snapshot => {
   };
 };
 
-/** Pi's steering and follow-up queue, from `queue_update` or `clear_queue`. Undefined when malformed. */
 const queuedMessagesOf = (value: unknown): ReadonlyArray<QueuedMessage> | undefined => {
   if (!value || typeof value !== "object") return;
   const { steering, followUp } = value as { steering?: unknown; followUp?: unknown };
@@ -459,12 +406,10 @@ const queuedMessagesOf = (value: unknown): ReadonlyArray<QueuedMessage> | undefi
   ];
 };
 
-/** Keep Pi's execution precedence, exposing only browser-useful catalog fields. Undefined when malformed. */
 const commandsOf = (data: unknown): ReadonlyArray<SlashCommand> | undefined => {
   const commands = (data as { commands?: unknown } | undefined)?.commands;
   if (!Schema.is(Schema.Array(SlashCommand))(commands)) return;
   const unique = new Map<string, SlashCommand>();
-  // Extensions execute before skills and templates; skills expand before templates.
   for (const source of ["extension", "skill", "prompt"] as const)
     for (const command of commands) {
       if (command.source === source && !unique.has(command.name))
@@ -477,14 +422,12 @@ const commandsOf = (data: unknown): ReadonlyArray<SlashCommand> | undefined => {
   return [...unique.values()];
 };
 
-/** One entry of Pi's `get_available_models` reply; other fields stay in Pi. */
 const RawModel = Schema.Struct({
   provider: Schema.String,
   id: Schema.String,
   name: Schema.optional(Schema.String),
   reasoning: Schema.optional(Schema.Boolean),
   contextWindow: Schema.Number,
-  /** Pi's per-model effort table: null disables a level, a value enables xhigh or max. */
   thinkingLevelMap: Schema.optional(Schema.Record(Schema.String, Schema.NullOr(Schema.String))),
 });
 type RawModel = typeof RawModel.Type;
@@ -499,7 +442,6 @@ const LEVELS: ReadonlyArray<ThinkingLevel> = [
   "max",
 ];
 
-/** The rule Pi applies (pi-ai getSupportedThinkingLevels): a non-reasoning model only has off; a level mapped to null is out; xhigh and max need an explicit mapping. */
 const thinkingLevelsOf = (m: RawModel): ThinkingLevel[] =>
   !m.reasoning
     ? ["off"]
@@ -510,10 +452,6 @@ const thinkingLevelsOf = (m: RawModel): ThinkingLevel[] =>
         return true;
       });
 
-/**
- * Pi's `get_available_models` reply as the browser's model choices, in Pi's order, with the efforts
- * each model accepts. Undefined when malformed.
- */
 export const modelChoicesOf = (data: unknown): ReadonlyArray<ModelChoice> | undefined => {
   const models = Schema.decodeUnknownOption(Schema.Struct({ models: Schema.Array(RawModel) }))(
     data,
@@ -533,15 +471,12 @@ export const modelChoicesOf = (data: unknown): ReadonlyArray<ModelChoice> | unde
   });
 };
 
-/** Every Pi readback Piano sends: the query, and how its reply decodes. */
 export const piReadbacks = {
-  /** Live state; also a session's ready check. */
   state: {
     command: { type: "get_state" },
     decode: (data) => Option.getOrUndefined(Schema.decodeUnknownOption(RawState)(data)),
     invalid: "Pi returned an invalid session state.",
   } satisfies PiReadback<RawState>,
-  /** Authoritative current context, replacing any projected history. */
   messages: {
     command: { type: "get_messages" },
     decode: (data) => {
@@ -550,7 +485,6 @@ export const piReadbacks = {
     },
     invalid: "Pi returned an invalid message history.",
   } satisfies PiReadback<ReadonlyArray<RawMessage>>,
-  /** Context use, billed cost and token totals. */
   stats: {
     command: { type: "get_session_stats" },
     decode: (data) =>
@@ -563,7 +497,6 @@ export const piReadbacks = {
       ),
     invalid: "Pi returned invalid session statistics.",
   } satisfies PiReadback<Pick<SessionState, "context" | "cost" | "tokens">>,
-  /** Every session entry; readers check each entry defensively. */
   entries: (): PiReadback<ReadonlyArray<unknown>> => ({
     command: { type: "get_entries" },
     decode: (data) => {
@@ -572,13 +505,11 @@ export const piReadbacks = {
     },
     invalid: "Pi returned invalid session entries.",
   }),
-  /** Slash commands in invocation precedence. */
   commands: {
     command: { type: "get_commands" },
     decode: commandsOf,
     invalid: "Pi returned an invalid command catalog.",
   } satisfies PiReadback<ReadonlyArray<SlashCommand>>,
-  /** Model choices, in Pi's order. */
   models: {
     command: { type: "get_available_models" },
     decode: modelChoicesOf,
@@ -586,9 +517,6 @@ export const piReadbacks = {
   } satisfies PiReadback<ReadonlyArray<ModelChoice>>,
 };
 
-// ── Outbound commands ────────────────────────────────────────────────────────
-
-/** Pi's CLI arguments for opening a session after `--mode rpc`. */
 export const sessionArgs = (spec: {
   sessionId: string;
   sessionFile?: string;
@@ -600,18 +528,14 @@ export const sessionArgs = (spec: {
   ...(spec.sessionFile ? ["--session", spec.sessionFile] : ["--session-id", spec.sessionId]),
   ...(spec.model ? ["--model", spec.model] : []),
   ...(spec.thinkingLevel ? ["--thinking", spec.thinkingLevel] : []),
-  // --name names a new session; existing history keeps the name Pi saved in it.
   ...(spec.name && !spec.sessionFile ? ["--name", spec.name] : []),
-  // `piano-dispatch` records it once in a new session; saved history already holds it.
   ...(spec.dispatchedFrom && !spec.sessionFile
     ? [`--${DISPATCHED_FROM_FLAG}`, spec.dispatchedFrom]
     : []),
 ];
 
-/** One RPC record for Pi's stdin; the transport adds the request id. */
 export type PiCommand = { readonly type: string; readonly [key: string]: unknown };
 
-/** Why a browser action cannot be sent to Pi. */
 export type PiRejection = { readonly rejected: string };
 
 const imagesValid = (attachments: unknown) =>
@@ -621,17 +545,14 @@ const imagesValid = (attachments: unknown) =>
     return bytes.toString("base64") !== a.data || imageType(bytes) !== a.mimeType;
   });
 
-/** Cancels an open dialog; Pi sends no acknowledgement. */
 export const dialogCancellation = (id: string): PiCommand => ({
   type: "extension_ui_response",
   id,
   cancelled: true,
 });
 
-/** How Pi took a prompt (INV-03), from its acknowledgement. */
 export type PiDisposition = "started" | "queued" | "handled";
 
-/** The decoded reply to each exchanged action's command. Null: Pi's acknowledgement is all. */
 interface PiReplies {
   readonly prompt: PiDisposition;
   readonly steer: PiDisposition;
@@ -642,7 +563,6 @@ interface PiReplies {
   readonly set_name: null;
 }
 
-/** A browser action Piano sends as one Pi command with a reply. */
 export type PiExchangedAction = Extract<SessionAction, { _tag: keyof PiReplies }>;
 
 const acknowledged = (command: PiCommand): PiExchange<null> => ({
@@ -651,10 +571,6 @@ const acknowledged = (command: PiCommand): PiExchange<null> => ({
   invalid: "",
 });
 
-/**
- * A browser action as Pi's command and how its reply decodes, or why it cannot be sent. Stop has
- * no single Pi command, listing commands is a readback, and an answer gets no reply.
- */
 export function piExchangeFor<A extends PiExchangedAction>(
   action: A,
 ): PiExchange<PiReplies[A["_tag"]]> | PiRejection;
@@ -715,7 +631,6 @@ export function piExchangeFor(
   }
 }
 
-/** A dialog answer as the record Pi takes for the open dialog it targets; Pi sends no reply. */
 export const dialogAnswerFor = (
   action: Extract<SessionAction, { _tag: "answer" }>,
   dialog: Dialog,
@@ -728,8 +643,6 @@ export const dialogAnswerFor = (
     };
   let value = action.value ?? "";
   if (dialog.method === "select") {
-    // Keep protocol values private. Redacted labels must not change
-    // what Pi receives, nor silently choose between colliding labels.
     const redaction = compileRedaction();
     const options = dialog.options?.filter((option) => redaction.text(option) === value) ?? [];
     if (options.length !== 1)
@@ -749,31 +662,17 @@ export const dialogAnswerFor = (
   };
 };
 
-// ── Live records ─────────────────────────────────────────────────────────────
-
-/** A Pi readback a record makes due. */
 export type RefreshKind = "stats" | "context" | "state";
 
-/** What one Pi record means for the session, to publish atomically in this order. */
 export interface RecordProjection {
-  /** State fields the record establishes, merged into current state before `events`. */
   readonly state?: Partial<SessionState>;
   readonly events: ReadonlyArray<SessionEvent>;
-  /** Readbacks to schedule after publishing; never awaited by the record consumer. */
   readonly refresh: ReadonlyArray<RefreshKind>;
-  /** A dialog Pi just requested, not among `events`: the caller sets its deadline, publishes it
-   * and owns its resolution. */
   readonly dialog?: DialogRequest;
-  /** A tool call ended, with the result Pi stores: the caller closes the dialogs it owned and
-   * confirms or rejects the answer written for them. */
   readonly toolEnded?: { readonly toolCallId: string; readonly result: unknown };
-  /** A run started: the caller retires a dialog receipt that has nothing left to report. */
   readonly runStarted?: true;
 }
 
-/** Pi's facts about a requested dialog: a wire `Dialog` before Piano sets its deadline.
- * `timeoutMs` is Pi's advertised timeout, if it gave a usable one. `toolCallId` is the running
- * call that raised it, when Piano can tell. */
 export type DialogRequest = Omit<Dialog, "deadlineAt" | "deadlineKind">;
 
 const DIALOG_METHODS = new Set(["select", "confirm", "input", "editor"]);
@@ -789,25 +688,14 @@ const notice = (level: "info" | "warning" | "error", message: string): SessionEv
   message,
 });
 
-/**
- * One Pi child's records in the browser's vocabulary. Owns everything a record sequence
- * implies: the streaming partial, tool executions, retry flags,
- * extension status/widgets and dialog requests. Pure and synchronous; callers serialize
- * `record`, `history` and `closed` under their snapshot lock.
- */
 export class PiProjector {
-  /** The assistant message being streamed. Its id is the one its final message will carry, so
-   * the browser keeps one row from first delta to end. */
   private partial: RenderMsg | undefined;
   private blocks = new Map<number, Block>();
   private tools = new Map<string, ToolExecution>();
-  /** A running `ask_user` call's questions in presentation order, and how many it has asked: the
-   * tool asks them one dialog at a time, so its next dialog asks question `asked`. */
   private asking = new Map<
     string,
     { readonly questions: readonly AskUserQuestion[]; asked: number }
   >();
-  /** Pi's message count as last read back plus the messages ended since: the next one's position. */
   private messages = 0;
   private artifacts: NonNullable<SessionState["artifacts"]> = [];
   private turnRetry = false;
@@ -818,27 +706,21 @@ export class PiProjector {
   private responseSucceeded = false;
   private cancelled = false;
 
-  /** An admitted abort cannot be announced as a successful response. */
   abort(): void {
     this.cancelled = true;
   }
 
-  /** `generation` names this child in dialog and editor request IDs. */
   private readonly options: { readonly generation: string };
   constructor(options: { readonly generation: string }) {
     this.options = options;
   }
 
-  /** The opening Snapshot from Pi's facts, before any record arrives. Retains its message count
-   * for subsequent live records. */
   snapshot(facts: PiSessionFacts): Snapshot {
     this.messages = facts.messages.length;
     this.artifacts = facts.artifacts ?? [];
     return snapshotOf(facts);
   }
 
-  /** Seed or replace authoritative history (`get_messages`) and retain its message count
-   * for subsequent live records. The messages themselves remain owned by Pi. */
   history(msgs: ReadonlyArray<RawMessage>): RenderMsg[] {
     this.messages = msgs.length;
     return serializeMessages(msgs);
@@ -885,7 +767,6 @@ export class PiProjector {
           isCompacting: true,
         });
       case "compaction_end":
-        // Pi reports null tokens/percent until fresh post-compaction usage exists.
         return project([], { isCompacting: false }, ["context", "stats"]);
       case "session_info_changed":
         return project([], { sessionName: raw.name as string | undefined });
@@ -928,7 +809,6 @@ export class PiProjector {
     }
   }
 
-  /** The child is gone: no tool still running in it can finish. */
   closed(): SessionEvent[] {
     return this.settle();
   }
@@ -1001,12 +881,6 @@ export class PiProjector {
     return { events: [], refresh: [], dialog };
   }
 
-  /** The `ask_user` call and question a dialog request asks, claiming that question: records on
-   * Pi's one stdout stream put a tool's dialog requests between its start and end, `ask_user` runs
-   * sequentially and asks its questions in order. A request belongs to the call only while the
-   * call alone is running and the request is the call's next prompt (`askUserPrompt`: method,
-   * title and choices). Any other dialog (several tools, another extension's command or hook, a
-   * codemode nest) gets no owner and keeps the estimated deadline. */
   private askingTool(raw: PiRecord): { toolCallId: string; questionId: string } | undefined {
     if (this.tools.size !== 1) return;
     const [tool] = this.tools.values();
@@ -1026,7 +900,6 @@ export class PiProjector {
     return { toolCallId: tool.id, questionId: asking.questions[asking.asked++].id };
   }
 
-  /** Streaming output: the partial reply, final messages and tool executions. */
   private stream(raw: PiRecord): SessionEvent[] {
     const event = raw as MessageEventRecord;
     switch (event.type) {
@@ -1094,7 +967,6 @@ export class PiProjector {
         return this.update();
       }
       case "message_end": {
-        // An assistant message ends its partial and takes the id the partial was shown under.
         const reserved = event.message?.role === "assistant" ? this.partial?.id : undefined;
         if (event.message?.role === "assistant") {
           this.responseSucceeded = turnEnding(event.message.stopReason) === "completed";
@@ -1125,14 +997,10 @@ export class PiProjector {
             event.args === undefined
               ? (old?.args ?? "")
               : redaction.text(argsOf(event.args), !ended),
-          // RPC does not define arbitrary tool updates as append-only. Show the
-          // latest update explicitly; only execution_end claims complete output.
           text: result ? redaction.text(textOf(result.content), !ended) : (old?.text ?? ""),
           status: ended ? (event.isError ? "error" : "success") : "running",
           outputKind: ended ? "final" : "latest-update",
         });
-        // Only unfinished executions need correlation for later updates/settlement. Publication
-        // owns completed previews; retaining them here keeps obsolete output after compaction.
         if (ended) this.tools.delete(id);
         else this.tools.set(id, tool);
         if (ended) this.asking.delete(id);
@@ -1149,7 +1017,6 @@ export class PiProjector {
     return messageId(this.messages++);
   }
 
-  /** Pi will not continue this run: drop the partial and mark unfinished tools incomplete. */
   private settle(): SessionEvent[] {
     this.partial = undefined;
     this.blocks.clear();

@@ -1,9 +1,3 @@
-/**
- * Shared client policy for project commands, membership choices and draft validation. Returns
- * descriptors rather than executing commands, so menus, pickers and the palette use the same
- * availability rules and hand effects to the command host.
- */
-// Relative, not @shared: module tests load this file directly in Node.
 import {
   type ClientCommand,
   PROJECT_INSTRUCTIONS_MAX,
@@ -14,17 +8,10 @@ import type { AppState } from "../store.ts";
 import { sessionProject } from "./sessionContext.ts";
 import { byName } from "./sidebarView.ts";
 
-/** The one project lookup by ID. An unknown or missing ID has no project. */
 export function findProject(state: AppState, id: string | null | undefined): Project | undefined {
   return id ? state.projects.find((p) => p.id === id) : undefined;
 }
 
-/**
- * What a project picker offers, by name as the sidebar lists projects. A done project is set aside,
- * so pickers leave it out. The sidebar's menu moves a session away from `current`, so it leaves
- * `current` out; the New page names its choice, so it keeps `current`, even a done one, and can move
- * away from it.
- */
 export function projectDestinations(
   state: AppState,
   current: Project | undefined,
@@ -38,11 +25,6 @@ export function projectDestinations(
 
 type SessionRef = { cwd: string; sessionId: string };
 
-/**
- * The New project dialog. With `assign`, the created project also takes that session. With
- * `newPage`, the New page's project picker opened it, and the created project becomes that page's
- * project; otherwise the created project's home opens.
- */
 export type ProjectDialog = { assign?: SessionRef; newPage?: true };
 
 export type ProjectCommandId =
@@ -54,12 +36,6 @@ export type ProjectCommandId =
   | "new-project"
   | "assign";
 
-/**
- * `new` starts a session (the pen, as the sidebar's New session); `create` adds any other thing (the
- * plus: New project, New webhook, New skill, New prompt, Add MCP server). `project` stands for a
- * project (the target, as the sidebar and the Projects index show one), so the folder icon means
- * only a folder.
- */
 export type ProjectCommandIcon =
   | "new"
   | "create"
@@ -71,40 +47,24 @@ export type ProjectCommandIcon =
   | "remove";
 
 export type ProjectCommandIntent =
-  /** Open the project's home; it sends nothing. */
   | { kind: "open-project"; projectId: string }
-  /** Open the project's settings dialog; it sends nothing. */
   | { kind: "project-settings"; projectId: string }
-  /** Open the New project dialog, which creates a project (taking `dialog.assign`). */
   | { kind: "project-dialog"; dialog: ProjectDialog }
-  /** Ask before deleting the project. */
   | { kind: "delete-project"; project: Project }
-  /** Send this registry change. */
   | { kind: "send"; command: ClientCommand };
 
 export interface ProjectCommand {
   id: ProjectCommandId;
   label: string;
-  /** The button's accessible name where the row shows only an icon. */
   ariaLabel?: string;
   icon: ProjectCommandIcon;
   enabled: boolean;
-  /** Shown in the destructive style: Delete project. */
   destructive?: true;
   intent: ProjectCommandIntent;
 }
 
-/** Whether the project is marked done: listed under Done on the index, its group last in the sidebar. */
 export const isProjectDone = (project: Pick<Project, "doneAt">) => project.doneAt !== undefined;
 
-/**
- * What a project row offers, in order: New session in the project, Project settings (its name and
- * instructions), Mark project done (Reopen project for a done one), then Delete. Enablement, one
- * rule per command:
- * - new session, settings: always; each only opens a page or dialog, whose changes wait for a
- *   connection.
- * - done, delete: connected, since each changes the registry.
- */
 export function projectCommands(state: AppState, project: Project): ProjectCommand[] {
   const done = isProjectDone(project);
   return [
@@ -114,7 +74,6 @@ export function projectCommands(state: AppState, project: Project): ProjectComma
       ariaLabel: `New session in ${project.name}`,
       icon: "new",
       enabled: true,
-      // The project's home starts a session in the project, beside the ones it already has.
       intent: { kind: "open-project", projectId: project.id },
     },
     {
@@ -145,11 +104,6 @@ export function projectCommands(state: AppState, project: Project): ProjectComma
   ];
 }
 
-/**
- * A project's menu, which the sidebar's project group and the project's home lay out alike: its
- * rows, then the destructive row set apart. New session in project is not a row: the group offers
- * it as its own button and the home is where sessions start.
- */
 export interface ProjectMenuSections {
   manage: ProjectMenuCommand[];
   destructive: ProjectMenuCommand[];
@@ -160,7 +114,6 @@ const MENU_SECTIONS = {
   destructive: ["delete"],
 } as const satisfies Record<keyof ProjectMenuSections, readonly ProjectCommandId[]>;
 
-/** The commands a project's menu lists, across its sections. */
 export type ProjectMenuCommandId = (typeof MENU_SECTIONS)[keyof typeof MENU_SECTIONS][number];
 export type ProjectMenuCommand = ProjectCommand & { id: ProjectMenuCommandId };
 
@@ -169,7 +122,6 @@ const pick = (commands: readonly ProjectCommand[], ids: readonly ProjectMenuComm
     (ids as readonly ProjectCommandId[]).includes(c.id),
   );
 
-/** A project's menu, from `projectCommands`' descriptors. */
 export function projectMenu(commands: readonly ProjectCommand[]): ProjectMenuSections {
   return {
     manage: pick(commands, MENU_SECTIONS.manage),
@@ -177,29 +129,22 @@ export function projectMenu(commands: readonly ProjectCommand[]): ProjectMenuSec
   };
 }
 
-/** A project's Name and Instructions as the New project and Project settings dialogs edit them. */
 export interface ProjectDraft {
   name: string;
   instructions: string;
 }
 
-/** The draft New project opens with. */
 export const EMPTY_PROJECT_DRAFT: ProjectDraft = { name: "", instructions: "" };
 
-/** A draft field's trimmed length and whether writing it would exceed its limit. */
 export interface ProjectFieldCheck {
-  /** The field's length once trimmed, in UTF-16 code units as the browser counts them. */
   length: number;
   max: number;
-  /** An intended write exceeds the limit; an unchanged stored value is not a write. */
   over: boolean;
 }
 
-/** What `checkProjectDraft` decides about a draft: each field against its limit, and what saving it saves. */
 export interface ProjectDraftCheck {
   name: ProjectFieldCheck;
   instructions: ProjectFieldCheck;
-  /** The trimmed draft, when it may be saved; otherwise undefined. */
   saved: ProjectDraft | undefined;
 }
 
@@ -209,12 +154,6 @@ const fieldCheck = (saved: string, max: number, writing: boolean): ProjectFieldC
   over: writing && saved.length > max,
 });
 
-/**
- * The one rule for saving a project draft, whether it creates a project or changes one, and what the
- * dialogs show of it. Creation writes every field; settings writes only fields differing from
- * `opened`. Stored values may predate today's limits, so unchanged fields do not block an edit.
- * Blank instructions clear them; a name write cannot be blank. Lengths count trimmed text.
- */
 export function checkProjectDraft(draft: ProjectDraft, opened?: ProjectDraft): ProjectDraftCheck {
   const name = draft.name.trim();
   const instructions = draft.instructions.trim();
@@ -230,15 +169,6 @@ export function checkProjectDraft(draft: ProjectDraft, opened?: ProjectDraft): P
   return { ...checks, saved: savable ? { name, instructions } : undefined };
 }
 
-/**
- * Build a settings update containing only fields changed from `opened` (the current saved project
- * when omitted). Untouched fields are not sent, preserving concurrent edits to those fields;
- * this is not conflict detection for fields the user also edited.
- *
- * Validate only intended writes against today's limits and return their field feedback. Blank
- * instructions clear them. No changed fields, a missing project, invalid input or a disconnected
- * client returns `allowed: false`. This function sends nothing; the server validates the update.
- */
 export function projectSettingsSave(
   state: AppState,
   projectId: string,
@@ -270,10 +200,6 @@ export function projectSettingsSave(
   };
 }
 
-/**
- * Open `project`'s home, its branches and other member sessions: the way back from one of its
- * sessions. It only navigates, so it does not wait for a connection.
- */
 export function openProjectCommand(project: Project): ProjectCommand {
   return {
     id: "open-project",
@@ -284,11 +210,6 @@ export function openProjectCommand(project: Project): ProjectCommand {
   };
 }
 
-/**
- * New project: the project dialog, which creates a project and, with `assign`, files that session in
- * it; with `newPage`, offered by the New page's project picker. Saving changes the registry, so it
- * waits for a connection.
- */
 export function newProjectCommand(
   state: AppState,
   { assign, newPage }: ProjectDialog = {},
@@ -309,7 +230,6 @@ export function newProjectCommand(
   };
 }
 
-/** Move `session` into `projectId`, or out of every project with null. A registry change, so it waits for a connection. */
 export function assignProjectCommand(
   state: AppState,
   session: SessionRef,
@@ -332,28 +252,16 @@ export function assignProjectCommand(
   };
 }
 
-/** A project a session can move to, with the command that moves it there. */
 export interface ProjectDestination {
   project: Project;
   command: ProjectCommand;
 }
 
-/**
- * A session's project membership as its menus offer it: the current project named, an entry that
- * opens the picker ("Move to project" for a member, "Add to project" otherwise), New project and
- * the destinations inside it, and Remove from project for a member. Every row changes the
- * registry, so one rule enables them all: connected. The entry follows it, so a disconnected menu
- * offers a disabled entry rather than a pane of disabled rows. `open` only navigates
- * (`openProjectCommand`).
- */
 export interface SessionProjectMenu {
   current: Project | undefined;
-  /** Open the current project's home, as the header's project link does. */
   open: ProjectCommand | undefined;
   entry: { label: "Move to project" | "Add to project"; enabled: boolean };
-  /** New project, which files the session in the project it creates. */
   create: ProjectCommand;
-  /** Projects other than the current one, by name. */
   destinations: ProjectDestination[];
   remove: ProjectCommand | undefined;
 }

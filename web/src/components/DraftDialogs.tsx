@@ -1,7 +1,3 @@
-/**
- * The dialogs Settings › Skills and Settings › Prompts share: New skill and New prompt edit one
- * draft (`checkDraft`, the rule the server applies), and View shows the file exactly as saved.
- */
 import { checkDraft, DRAFT_FIELDS, type Draft, type DraftField, NAME_RULE } from "@shared/drafts";
 import { LIBRARY_KINDS, type LibraryKind } from "@shared/library";
 import { cn } from "cn";
@@ -24,7 +20,6 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { useSetupActions } from "@/lib/useSetupActions";
 
-/** New skill or New prompt: Create stays off until the draft passes the server’s rule. */
 export function NewDraftDialog({
   kind,
   create,
@@ -32,21 +27,16 @@ export function NewDraftDialog({
   close,
   refresh,
 }: {
-  /** What is created, lowercase: "skill" names the title, Create button, ids and messages. */
   kind: LibraryKind;
-  /** Saves the trimmed draft; a refusal naming a field shows on that field. */
   create: (draft: Draft) => Promise<unknown>;
-  /** Controls after the draft's fields, such as a skill's Disable model invocation. */
   extra?: ReactNode;
   close: () => void;
-  /** Re-reads the list once a create settles. */
   refresh: () => void;
 }) {
   const { Noun: Kind } = LIBRARY_KINDS[kind];
   const [draft, setDraft] = useState<Draft>({ name: "", description: "", instructions: "" });
   const edit = (field: DraftField) => (value: string) =>
     setDraft((current) => ({ ...current, [field]: value }));
-  // A refused create stays in the open dialog, on its field; a created one closes it with a toast.
   const actions = useSetupActions({
     refresh,
     success: (text) => toast.success(text),
@@ -54,9 +44,6 @@ export function NewDraftDialog({
   });
   const busy = actions.running !== undefined;
   const check = checkDraft(draft);
-  // A character the rule never allows answers as it is typed; a misplaced hyphen waits until the
-  // field is left, so typing "release-" on the way to "release-notes" is not an error. Whether the
-  // name is free, only the server can say.
   const [nameLeft, setNameLeft] = useState(false);
   const nameError = check.malformedName && (nameLeft || /[^a-z0-9-]/.test(draft.name.trim()));
   const refusal = useFieldRefusal(DRAFT_FIELDS, actions.error);
@@ -83,8 +70,6 @@ export function NewDraftDialog({
       <Field data-invalid={!!error}>
         <FieldLabel htmlFor={`${kind}-${id}`}>{label}</FieldLabel>
         {control(!!error || check[id].over)}
-        {/* The count, as New project's instructions: it counts the trimmed text, and over the limit
-         * (a paste into a field that takes no maxLength) it turns red and Create stays off. */}
         {counted && (
           <FieldDescription
             id={`${kind}-${id}-count`}
@@ -173,7 +158,6 @@ export function NewDraftDialog({
   );
 }
 
-/** One skill or prompt, read-only: its file exactly as saved, to read and copy. */
 export function DraftFileView({
   kind,
   name,
@@ -200,8 +184,6 @@ export function DraftFileView({
   );
 }
 
-/** A skill's or prompt's file as plain text, never rendered: read-only, copyable. View shows it,
- * and so does the proposal card for a new one. */
 export function DraftFileText({
   kind,
   name,
@@ -235,5 +217,4 @@ export function DraftFileText({
   );
 }
 
-/** Characters as the browser counts them (UTF-16 code units), grouped for reading: "20,000". */
 const count = new Intl.NumberFormat();

@@ -4,7 +4,6 @@ import { createImageSender, type ImageSend, type ImageSender } from "./imageSend
 import { discardImages, prepareImages } from "./remoteImages.ts";
 import { useMachineId } from "./useMachine.ts";
 
-/** One async send owns its original machine, draft and navigation. Switching cancels, never retargets. */
 export function useImageSend(
   editor: ImageSend["editor"],
   captureSend: Client["captureSend"],

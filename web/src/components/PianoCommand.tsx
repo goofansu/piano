@@ -37,7 +37,6 @@ export function CommandInput({ className, ...props }: ComponentProps<typeof Base
   return <BaseInput {...props} className={cn("h-full py-0", className)} />;
 }
 
-/** A row; `destructive` reads red, as the same command does in a menu. */
 export function CommandItem({
   className,
   variant = "default",
@@ -56,7 +55,6 @@ export function CommandItem({
   );
 }
 
-/** Compose the dialog so it uses Piano's surfaces and equal input/item heights, not an upstream private Command. */
 export function CommandDialog({
   title = "Command Palette",
   description = "Search for a command to run...",
@@ -76,7 +74,6 @@ export function CommandDialog({
 }) {
   return (
     <Dialog {...props}>
-      {/* Mod+K opens it many times a day: it appears at once. */}
       <DialogContent
         still
         className={cn("overflow-hidden p-0", className)}
@@ -86,8 +83,6 @@ export function CommandDialog({
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
-        {/* The stock item ends with its own check, invisible until `data-checked` yet holding
-         * its room; a row not checked drops it, so its content takes the full width. */}
         <Command
           {...commandProps}
           filter={filter}

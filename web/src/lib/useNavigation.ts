@@ -12,7 +12,6 @@ import {
 import { createPreference } from "./preference.ts";
 import { useMachineId } from "./useMachine.ts";
 
-/** Whether the session rail is on, for every session in this browser. The key predates the name. */
 const railPreference = createPreference<boolean>({
   key: "piano.details",
   decode: (raw) => raw === "true",
@@ -20,7 +19,6 @@ const railPreference = createPreference<boolean>({
 
 export const NavigationContext = createContext<Navigation | null>(null);
 
-/** One navigation for the page over the real address bar, following it while mounted. */
 export function useNavigationController(
   client: NavigationOptions["client"],
   moved: () => void,
@@ -30,7 +28,6 @@ export function useNavigationController(
     createNavigation({
       client,
       address: machineAddress(machineId, browserAddressBar),
-      // Each machine's files and remembered tabs are its own: IDs may collide across machines.
       readFile: (workspaceId, path, options) =>
         workspaceFile(workspaceId, path, { ...options, machineId }),
       memory: browserSurfaceMemory(machineId),
@@ -42,7 +39,6 @@ export function useNavigationController(
   return navigation;
 }
 
-/** What is on screen and the moves that change it; any component under the provider calls them directly. */
 export function useNavigation(): Navigation & NavigationState {
   const navigation = useContext(NavigationContext);
   if (!navigation) throw new Error("useNavigation needs a NavigationContext provider");

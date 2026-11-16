@@ -47,7 +47,6 @@ test("Pi's figures label the button as percentage used over Pi's window", () => 
   assert.equal(figures.heading, "Context: 42,000 tokens");
   assert.deepEqual(figures.used, { value: 21, text: "21.0% used" });
   assert.equal(figures.left, "79% left");
-  // Tokens without a percentage show the count; a percentage without tokens is not trusted.
   assert.equal(
     contextFigures({ tokens: 2_400, contextWindow: 0, percent: null }, null, undefined).label,
     "2k",

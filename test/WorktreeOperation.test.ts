@@ -30,7 +30,6 @@ const discovered = (observedAt: string): WorktreeDiscovery => ({
   worktrees: [{ path: "/repo", branch: "main", detached: false, prunable: false }],
 });
 
-/** A connected page client over a fake connection, the test playing the server, and one picker operation on it. */
 function picker() {
   const sent: ClientMessage[] = [];
   let handlers: ConnectionHandlers | undefined;
@@ -233,7 +232,6 @@ test("reopen keeps refreshing until the new discovery answers", () => {
   p.answer("/repo", discovered("first"));
   p.operation.create("feature", false);
   p.elapse();
-  // Closed and opened again on the same folder: its earlier answer is still known.
   p.operation.open("/repo");
   assert.deepEqual(p.state().request, { status: "idle" }, "reopening forgets the failure");
   assert.equal(p.state().refreshing, true);

@@ -35,16 +35,10 @@ import { useDrafts } from "@/lib/useMachine";
 import type { ModelControl } from "@/lib/useModelChoice";
 import type { SendDisposition } from "@/lib/ws";
 
-/**
- * One draft, addressed by its key (`null` while none is), bound to React: its parts from `drafts`,
- * the textarea it is edited in, and send-then-clear. A page calls this first so its own send rules
- * (see composerControl) can read the draft, then renders `DraftEditor` with the result.
- */
 export function useDraftEditor(key: DraftKey | null) {
   const drafts = useDrafts();
   const draft = useSyncExternalStore(drafts.subscribe, () => drafts.get(key));
   const ref = useRef<HTMLTextAreaElement>(null);
-  // Stable per key, so type-to-focus does not resubscribe on every keystroke.
   const append = useCallback((value: string) => drafts.append(key, value), [drafts, key]);
   return {
     key,
@@ -54,7 +48,6 @@ export function useDraftEditor(key: DraftKey | null) {
     prepareSubmit: (
       deliver: (message: DraftMessage, inputId: string) => Promise<SendDisposition>,
     ) => drafts.prepareSubmit(key, deliver),
-    /** The text a send delivers; send rules read this, not `text`, so quotes alone can be sent. */
     message: draftMessage(draft).text,
     attachments: attachmentDraft(key, draft.images, drafts),
     quotes: {
@@ -64,7 +57,6 @@ export function useDraftEditor(key: DraftKey | null) {
     ref,
     setText: (value: string) => drafts.setText(key, value),
     append,
-    /** Consumes the draft unless delivery is known-unsent; see `Drafts.submit`. */
     submit: (deliver: (message: DraftMessage, inputId: string) => SendDisposition) =>
       drafts.submit(key, deliver),
   };
@@ -74,39 +66,25 @@ export type DraftEditorState = ReturnType<typeof useDraftEditor>;
 interface Props {
   editor: DraftEditorState;
   completion?: CompletionContext;
-  /** The draft cannot be edited: the textarea, model picker and typing from the page are off. */
   disabled?: boolean;
-  /** Attaching images is off; defaults to `disabled`. */
   attachmentsDisabled?: boolean;
   label: string;
   inputClassName?: string;
   className?: string;
-  /** The tallest the textarea grows, in pixels. */
   maxHeight: number;
   autoFocus?: boolean;
-  /** The page's model picker (`useModelChoice`). */
   model: ModelControl;
-  /** The send key was pressed; `alt` with Alt held. The page decides whether and how it sends. */
   onSend: (alt: boolean) => void;
-  /** Keys the editor does not handle itself (Mod+/ opens the model picker, Enter sends). */
   onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
-  /** Between the attached images and the textarea. */
   above?: ReactNode;
-  /** Delivery options sit after Model, before the Mic/Send group. */
   delivery?: ReactNode;
-  /** The toolbar's end, immediately after Mic: the page's send control. */
   actions: ReactNode;
   cancelUpload?: () => void;
-  /**
-   * Where the message is spoken, read when a recording stops: the names voice input spells by.
-   * The mic shows immediately before Send in every composer while voice input is on.
-   */
   voice?: () => VoiceHints;
 }
 
 const noVoiceContext = (): VoiceHints => ({});
 
-/** The composer card both the New page and a session use: images, the slash-completing textarea, attach and model controls. */
 export function DraftEditor({
   editor,
   completion,
@@ -130,13 +108,11 @@ export function DraftEditor({
   const [modelOpen, setModelOpen] = useState(false);
   useAutoGrow(ref, text, maxHeight);
   useTypeToFocus(ref, editor.append, !disabled);
-  // A quote added from the transcript leaves the reader ready to type about it.
   const quoteCount = useRef(quotes.items.length);
   useEffect(() => {
     if (quotes.items.length > quoteCount.current && !disabled) ref.current?.focus();
     quoteCount.current = quotes.items.length;
   }, [quotes.items.length, disabled, ref]);
-  // Mod+/ opens the picker exactly when its trigger could.
   const pickerAvailable = modelPickerEnabled({
     disabled,
     catalog: model.models.catalog,
@@ -202,7 +178,6 @@ export function DraftEditor({
             e.preventDefault();
             onSend(e.altKey);
           } else if (e.key === "Backspace" && !text && quotes.items.length) {
-            // An empty draft's Backspace takes back the last quote, as in a token field.
             e.preventDefault();
             quotes.remove(quotes.items.length - 1);
           } else onKeyDown?.(e);
@@ -219,7 +194,6 @@ export function DraftEditor({
         />
         {delivery}
         <div className="ml-auto flex shrink-0 items-center gap-1">
-          {/* Main-origin on every machine: the main machine's preference decides whether it shows. */}
           <VoiceInputButton editor={editor} session={voice ?? noVoiceContext} disabled={disabled} />
           {actions}
         </div>
@@ -230,11 +204,6 @@ export function DraftEditor({
 
 const SEND_HINT: ControlHint = { lead: "Send", key: "Enter" };
 
-/**
- * The composer's primary action, the toolbar's end in both composers: the button, with the key it
- * shares in a tooltip. The New page shows Send; a session passes its `composerControl` label and
- * hint, and its Send and Stop faces as `children` to cross-fade.
- */
 export function ComposerSend({
   label = "Send",
   hint = SEND_HINT,

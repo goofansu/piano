@@ -1,18 +1,3 @@
-/**
- * Session dispatch end to end, isolated: a scratch Piano backend that spawns the installed Pi CLI
- * against a scripted loopback model. Nothing here touches the user's Piano, Pi configuration or
- * credentials — HOME, Pi's agent and session directories, the registry database and the repository
- * all live under one temporary root, and the only endpoint any child may reach is on 127.0.0.1.
- *
- * The "model" is a script, not an LLM. It answers only the markers this fixture put into the
- * conversation and fails closed on anything else, and it drives the parent's tool calls from
- * MODEL-VISIBLE content alone: it reads the dispatch handle back out of the start tool's result
- * text and hands that object to the wait tool unchanged. A handle carried only in tool metadata
- * therefore cannot make the journey pass.
- *
- * Shared by test/RealPiDispatch.test.ts and the scratch browser journey; `holdChild` keeps the
- * child session running so it can be opened in the UI while it is live.
- */
 import assert from "node:assert/strict";
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -42,39 +27,27 @@ import { seedRegistry } from "./registry.ts";
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const installedCli = join(ROOT, "node_modules/@earendil-works/pi-coding-agent/dist/cli.js");
 
-/** One model request, as evidence. Never the system prompt, headers or anything a provider sent. */
 export interface ModelRequest {
-  /** Which Pi asked: the dispatching parent, or the child started from its brief. */
   readonly role: "parent" | "child";
-  /** Tool names declared to the model, so a test can see what a Piano-launched Pi offers. */
   readonly tools: ReadonlyArray<string>;
   readonly userText: string;
-  /** Visible text of every tool result in the conversation so far. */
   readonly toolResults: ReadonlyArray<string>;
-  /** True if the parent's private conversation reached this request at all. */
   readonly sawParentSecret: boolean;
-  /** What the fixture answered: a tool call, the final report, the child's answer, or a refusal. */
   readonly answered: string;
 }
 
-/** One Pi process, recorded by the CLI shim before the real CLI loads. */
 export interface PiSpawn {
   readonly pid: number;
-  /** The process that spawned it. Dispatch must never add a second owner of Pi children. */
   readonly ppid: number;
   readonly cwd: string;
   readonly args: ReadonlyArray<string>;
-  /** `--session-id`; null for a probe, which Piano starts with `--no-session`. */
   readonly sessionId: string | null;
-  /** `--extension` paths this Pi loaded. */
   readonly extensions: ReadonlyArray<string>;
   readonly endpoint: { readonly wsUrl: string | null; readonly origin: string | null };
 }
 
-/** A WebSocket client of the scratch backend, speaking the browser's wire vocabulary. */
 export interface WireClient {
   readonly send: (message: ClientMessage) => void;
-  /** The first message matching `match`, including ones already received. `label` names the wait. */
   readonly next: (
     match: (message: ServerMessage) => boolean,
     label: string,
@@ -86,7 +59,6 @@ export interface WireClient {
 
 export interface RealPiDispatchFixture {
   readonly root: string;
-  /** The registered git checkout the parent session runs in. */
   readonly parentRepo: string;
   readonly database: string;
   readonly agentDir: string;
@@ -97,36 +69,28 @@ export interface RealPiDispatchFixture {
     readonly url: string;
     readonly origin: string;
   };
-  /** The parent's `provider/model`, deliberately different from the new-session default. */
   readonly model: string;
-  /** Only in the parent's own conversation; a self-contained brief must not carry it to the child. */
   readonly parentSecret: string;
   readonly parentPrompt: string;
-  /** What the parent is scripted to dispatch, and what the child is scripted to answer. */
   readonly brief: string;
   readonly answer: string;
   readonly report: string;
   readonly connect: () => Promise<WireClient>;
   readonly requests: () => ReadonlyArray<ModelRequest>;
   readonly spawns: () => ReadonlyArray<PiSpawn>;
-  /** The handle the model read out of the start tool's visible result text, if it found one. */
   readonly handle: () => Record<string, unknown> | null;
-  /** Release a child held by `holdChild`, and observe when the child actually reached the model. */
   readonly gate: {
     readonly releaseChild: () => void;
     readonly childRunning: Promise<void>;
   };
   readonly logs: () => string;
-  /** Write observations, the backend log and the environment summary for a PR. */
   readonly retain: (directory: string) => void;
   readonly close: () => Promise<void>;
 }
 
 export interface RealPiDispatchOptions {
   readonly prefix?: string;
-  /** Hold the child's answer until `gate.releaseChild()`, keeping the child session running. */
   readonly holdChild?: boolean;
-  /** A scratch Vite origin, when a browser drives the fixture instead of only the wire client. */
   readonly browserOrigin?: string;
 }
 
@@ -174,7 +138,6 @@ export async function startRealPiDispatch(
 
   const nonce = randomUUID().slice(0, 8);
   const parentSecret = `PARENT-SECRET-${nonce}`;
-  // Carries a token-shaped value, which Piano shows redacted: the answer is still the brief's.
   const brief = `BRIEF-${nonce}: reply with exactly ECHO-${nonce} and nothing else. token: unshown`;
   const answer = `ECHO-${nonce}`;
   const report = `PARENT_REPORT: ${answer}`;
@@ -202,7 +165,6 @@ export async function startRealPiDispatch(
   git("commit", "-qm", "initial");
   seedRegistry(database, { folders: [parentRepo] });
 
-  // ── The scripted model ────────────────────────────────────────────────────
   const requests: ModelRequest[] = [];
   let handle: Record<string, unknown> | null = null;
   let releaseChild = () => {};
@@ -241,7 +203,6 @@ export async function startRealPiDispatch(
     const toolResults = body.messages
       .filter((m) => m.role === "tool")
       .map((m) => textOf(m.content));
-    // Only the user's own turns classify the conversation: a parent's tool call repeats the brief.
     const role = userTexts.some((text) => text.includes(brief)) ? "child" : "parent";
     const sawParentSecret = input.includes(parentSecret);
     const record = (answered: string) =>
@@ -291,8 +252,6 @@ export async function startRealPiDispatch(
       const schema = declared.find((tool) => tool.function?.name === startTool)?.function
         ?.parameters;
       if (!schema) return record(refuse(response, `${startTool} was not declared to the model`));
-      // A stale call carries options the tool removed, including a nonexistent model: Pi rejects it
-      // before anything starts, so neither those options nor the parent's model reach the child.
       callStart(
         { prompt: brief, model: "missing/nonexistent", thinkingLevel: "high" },
         "call_start_stale",
@@ -301,7 +260,6 @@ export async function startRealPiDispatch(
     }
 
     if (toolResults.length === 1) {
-      // The model has to be told which options do not exist, so it can retry without them.
       if (
         !["- model: unknown field", "- thinkingLevel: unknown field"].every((line) =>
           toolResults[0].includes(line),
@@ -313,7 +271,6 @@ export async function startRealPiDispatch(
     }
 
     if (toolResults.length === 2) {
-      // The handle has to be readable here, in the text the model is shown.
       const started: unknown = JSON.parse(toolResults[1]);
       handle = isRecord(started) && isRecord(started.handle) ? started.handle : null;
       if (!handle)
@@ -345,7 +302,6 @@ export async function startRealPiDispatch(
       return record(`${waitTool} call`);
     }
 
-    // The child's answer has to have arrived as text the parent's model can read.
     const seen = toolResults.at(-1)?.includes(answer) ?? false;
     respond(
       response,
@@ -365,7 +321,6 @@ export async function startRealPiDispatch(
   await new Promise<void>((resolve) => modelServer.listen(0, "127.0.0.1", resolve));
   const modelPort = (modelServer.address() as { port: number }).port;
 
-  // ── Pi's isolated configuration ───────────────────────────────────────────
   const json = (path: string, data: unknown) =>
     writeFileSync(path, `${JSON.stringify(data, null, 2)}\n`);
   json(join(agentDir, "models.json"), {
@@ -386,7 +341,6 @@ export async function startRealPiDispatch(
       },
     },
   });
-  // A child started without an explicit model still has to land on the fixture's endpoint.
   json(join(agentDir, "settings.json"), {
     defaultProvider: "piano-dispatch",
     defaultModel: "local",
@@ -423,7 +377,6 @@ await import(${JSON.stringify(pathToFileURL(installedCli).href)});
 `,
   );
 
-  // ── The scratch backend ───────────────────────────────────────────────────
   const port = await freePort();
   const url = `http://127.0.0.1:${port}`;
   const origin = options.browserOrigin ?? url;
@@ -431,7 +384,6 @@ await import(${JSON.stringify(pathToFileURL(installedCli).href)});
   const backend: ChildProcess = spawn(process.execPath, [join(ROOT, "server/main.ts")], {
     cwd: ROOT,
     stdio: ["ignore", "pipe", "pipe"],
-    // An explicit environment, not the runner's: no PI_*, PIANO_* or provider variable leaks in.
     env: {
       PATH: process.env.PATH ?? "",
       TMPDIR: process.env.TMPDIR ?? "",
@@ -441,7 +393,6 @@ await import(${JSON.stringify(pathToFileURL(installedCli).href)});
       PIANO_ALLOWED_ORIGINS: origin,
       PIANO_DB_PATH: database,
       PIANO_PI_CLI: shim,
-      // --no-builtin-tools keeps the dispatch tools: --no-tools would disable them too.
       PIANO_PI_ARGS:
         "--offline --no-builtin-tools --no-skills --no-prompt-templates --no-context-files",
       PI_CODING_AGENT_DIR: agentDir,
@@ -498,7 +449,6 @@ await import(${JSON.stringify(pathToFileURL(installedCli).href)});
     releaseChild();
     modelServer.closeAllConnections();
     await new Promise<void>((resolve) => modelServer.close(() => resolve()));
-    // Never kill a recorded pid after ownership ended: report a leak instead of hiding it.
     const alive = records()
       .map((spawned) => spawned.pid)
       .filter((pid) => {
@@ -518,9 +468,7 @@ await import(${JSON.stringify(pathToFileURL(installedCli).href)});
     if (backend.exitCode !== null) await fail(`scratch Piano exited:\n${log}`);
     try {
       if ((await fetch(`${url}/api/folders`)).ok) break;
-    } catch {
-      /* not listening yet */
-    }
+    } catch {}
     if (attempt >= 300) await fail(`scratch Piano did not start:\n${log}`);
     await delay(100);
   }
@@ -548,7 +496,6 @@ await import(${JSON.stringify(pathToFileURL(installedCli).href)});
           waiter.resolve(message);
           continue;
         }
-        // A refusal ends the journey a waiter is waiting for: report it now, not at the deadline.
         if (message._tag === "error" || message._tag === "selection_rejected") {
           waiters.delete(waiter);
           clearTimeout(waiter.timer);

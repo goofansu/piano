@@ -1,10 +1,6 @@
 import { Schema } from "effect";
 
 const MiB = 1024 * 1024;
-/**
- * The largest file the server previews or downloads, by kind (text covers every text kind);
- * docs/file-previews.md lists them. Past it, the server refuses the file.
- */
 export const PREVIEW_LIMIT_BYTES = {
   text: MiB,
   image: 10 * MiB,
@@ -12,7 +8,6 @@ export const PREVIEW_LIMIT_BYTES = {
   video: 32 * MiB,
   pdf: 20 * MiB,
 } as const;
-/** The largest of PREVIEW_LIMIT_BYTES. */
 export const LARGEST_PREVIEW_BYTES = Math.max(...Object.values(PREVIEW_LIMIT_BYTES));
 
 const identity = { workspaceId: Schema.String, path: Schema.String };
@@ -33,12 +28,6 @@ export const FilePreview = Schema.Union([
 export type FilePreview = typeof FilePreview.Type;
 export type PreviewKind = FilePreview["kind"];
 
-/**
- * The one list of names that claim a preview format; docs/file-previews.md describes it. The
- * server refuses a name claiming a binary kind whose bytes are not a supported binary format, and
- * the browser picks a file's icon from it before the file is read. Other names are text unless
- * their bytes are a supported binary format.
- */
 export const previewKindsByExtension: Readonly<Record<string, PreviewKind>> = {
   md: "markdown",
   markdown: "markdown",
@@ -62,7 +51,6 @@ export const previewKindsByExtension: Readonly<Record<string, PreviewKind>> = {
   pdf: "pdf",
 };
 
-/** The kind `path`'s extension claims, lowercased; a leading dot (`.bashrc`) is not one. */
 export function previewKindByName(path: string): PreviewKind | undefined {
   const name = path.slice(path.lastIndexOf("/") + 1);
   const dot = name.lastIndexOf(".");
@@ -72,7 +60,6 @@ export function previewKindByName(path: string): PreviewKind | undefined {
     : undefined;
 }
 
-/** A workspace file as it is on disk, for saving: the browser's name for it, its type, every byte. */
 export const FileDownload = Schema.Struct({
   name: Schema.String,
   mime: Schema.String,

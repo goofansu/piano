@@ -1,12 +1,3 @@
-/**
- * One browser socket: bounded delivery of ServerMessages and the read loop that decodes
- * ClientMessages. Acknowledgements go to delivery; every other message goes to the client's
- * ClientDispatch, which owns what the message means.
- *
- * Every message is projected for display (INV-11) as it enters this socket's delivery, and the
- * frame that projection produces is what decides whether the socket has anything to say: a
- * sidebar identical to the one this connection last sent is dropped there.
- */
 import { Cause, Effect } from "effect";
 import { Socket } from "effect/socket";
 import {
@@ -21,13 +12,6 @@ import { makeClientDispatch } from "./ClientDispatch.ts";
 import { projectServerMessage } from "./DisplayProjection.ts";
 import { inboundLimits } from "./InboundCapacity.ts";
 
-/**
- * What one connection sends, decided on the displayed frame: the message projected for display,
- * or undefined when the connection has nothing to say. The sidebar is state, so a frame identical
- * to the last one this connection sent tells a browser nothing it is not already showing; every
- * other kind is an event, whose repetition is its meaning, and always goes out. Comparing after
- * the projection compares exactly what the browser would apply.
- */
 const makeDisplayFrames = () => {
   let sidebar: string | undefined;
   return (message: ServerMessage): ServerMessage | undefined => {
@@ -42,15 +26,11 @@ const makeDisplayFrames = () => {
 
 export const handleSocket = Effect.fn("WsClient.handleSocket")(function* (
   socket: Socket.Socket,
-  /** Another machine's Piano through its gateway (`/ws/peer`); see PeerScope. */
   options: { readonly peer?: boolean } = {},
 ) {
-  // The reader performs the upgrade handshake; the writer waits on it.
   const reader = yield* socket.reader;
   const writer = yield* socket.writer;
 
-  // Bound both host queues and the transport; the window and close codes live in BoundedDelivery.
-  // Frames reach delivery already projected, through `send` below and nowhere else.
   const delivery = yield* makeSocketDelivery(
     (text: string) => writer.write(text),
     (m: ServerMessage, id) => encodeServerMessage(m, id),
@@ -96,14 +76,10 @@ export const handleSocket = Effect.fn("WsClient.handleSocket")(function* (
         yield* delivery.ack(msg.deliveryId);
         continue;
       }
-      // Receiving claims a selection in receive order. The work runs in its own fiber: a prompt
-      // that opens an extension dialog only gets its response after the dialog is answered.
       yield* Effect.forkScoped(yield* client.receive(msg));
     }
   }).pipe(
     Effect.forever,
-    // Peer close already ends this client scope; a failed reader must explicitly
-    // close an otherwise live socket. Never replay work or stop its Pi session.
     Effect.catchTag("SocketError", (error) =>
       error.reason._tag === "SocketCloseError" ? Effect.void : Effect.fail(error),
     ),

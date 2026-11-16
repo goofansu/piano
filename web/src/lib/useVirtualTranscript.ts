@@ -7,8 +7,6 @@ import {
   type TranscriptViewport,
 } from "./transcriptViewport";
 
-/** Geometry is a projection, never history. The viewport owns reader intent; the virtualizer
- * owns measured offsets and refines index jumps as the destination's neighbours mount. */
 export function useVirtualTranscript(
   { history, pending }: TranscriptProjection,
   container: RefObject<HTMLDivElement | null>,
@@ -20,8 +18,6 @@ export function useVirtualTranscript(
   const highlight = useRef<Animation | null>(null);
   const pendingKey = pending?.key;
   const pendingId = pending?.msg.id;
-  // Text deltas change neither keys nor destinations. Keep the virtualizer's measurement
-  // dependencies and the jump index stable until history or the live tail's identity changes.
   const getItemKey = useCallback(
     (index: number) => history[index]?.key ?? pendingKey!,
     [history, pendingKey],
@@ -40,7 +36,6 @@ export function useVirtualTranscript(
     getItemKey,
     estimateSize: () => 240,
     overscan: 3,
-    // A bounded first paint (also in static rendering); the real container replaces this guess.
     initialRect: { width: 768, height: 900 },
     scrollMargin: margin,
     scrollPaddingStart: TRANSCRIPT_JUMP_MARGIN,
@@ -49,7 +44,6 @@ export function useVirtualTranscript(
     },
   });
 
-  // A visible row growing should grow below the reader, not move the text they are reading.
   virtual.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) =>
     item.end <= (instance.scrollOffset ?? 0);
 
@@ -59,7 +53,6 @@ export function useVirtualTranscript(
     const dom = domViewportElement(el);
     viewport.attach({
       ...dom,
-      // Spreading accessors snapshots them; keep all geometry live.
       get scrollHeight() {
         return el.scrollHeight;
       },
@@ -100,7 +93,6 @@ export function useVirtualTranscript(
     };
   }, [container, viewport, virtual]);
 
-  // Measure after every render; setMargin bails out when the offset is unchanged.
   // oxlint-disable-next-line react-hooks/exhaustive-deps
   useLayoutEffect(() => {
     const el = container.current;
@@ -109,19 +101,13 @@ export function useVirtualTranscript(
     setMargin(inner.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop);
     viewport.rendered();
     if (target && !virtual.isScrolling) {
-      // Only a mounted row can land: the windowed anchorTop would otherwise answer from estimates.
       const anchor = el.ownerDocument.getElementById(messageAnchorId(target.id));
       if (anchor && viewport.landed(target.id)) {
         const content = anchor.querySelector<HTMLElement>('[data-slot="row-content"]');
-        // A reply's Markdown excludes its trailing Copy response control. Other row kinds
-        // retain their full content (including prompt attachments and tool details).
         const body = content?.querySelector<HTMLElement>(":scope > .prose-chat") ?? content;
         if (body) {
           const tint = "color-mix(in oklab, var(--brand) 12%, transparent)";
           const fade = target.animate && !matchMedia("(prefers-reduced-motion: reduce)").matches;
-          // A zero-blur spread gives the tint breathing room without padding or layout shifts.
-          // Paint only: no movement or fading of the message text.
-          // The longer duration is an orientation cue, not a wait for navigation to finish.
           highlight.current = body.animate(
             [
               {
