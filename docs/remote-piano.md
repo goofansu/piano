@@ -5,6 +5,8 @@ same user. It shows that machine's sessions and projects; it is not machine mana
 appear even when another browser or an agent started them. Terminal Pi history that the remote
 Piano has not registered is not discovered.
 
+For implementation work, start at [Developer navigation](#developer-navigation).
+
 ## Setup
 
 The main Piano can run on your laptop or on an exe.dev VM. All backends stay bound to loopback;
@@ -290,3 +292,99 @@ No peer voice settings or transcription endpoints are proxied, and no peer crede
   Pi runtime or authenticated external-browser access.
 
 See [ADR 0004](adr/0004-same-owner-piano-peer.md) for ownership and trust decisions.
+
+## Developer navigation
+
+This is the starting place for peers / Remote Pianos. The feature spans the modules below, not a
+single feature module. Preserve `web → shared ← server`: the browser captures a machine owner,
+main relays to that configured peer, and the peer owns its sessions and decides which operations
+it admits. Unavailability never substitutes Local. [ADR 0004](adr/0004-same-owner-piano-peer.md)
+owns the trust and scope decisions; [browser storage](browser-storage.md) and
+[runtime input limits](runtime-input-limits.md) own persistence policy and resource budgets.
+
+### Web ownership and interfaces
+
+- [`MachineHost`](../web/src/components/MachineHost.tsx), mounted by
+  [`App`](../web/src/App.tsx), loads the machine list and keys the provider by machine, remounting
+  its children on a switch while retaining page-lifetime stores.
+  [`useMachine.ts`](../web/src/lib/useMachine.ts) exposes `MachineScope`, `useMachineScope`,
+  `useMachineId` and `useOffers`; a missing provider is an error, not a Local default.
+- [`machine.ts`](../web/src/lib/machine.ts) owns `machineLocation`, `machinePath`,
+  `machineAddress`, `machineSocketUrl` and `peerApiPath`: navigation and requests retain their
+  captured owner; unsupported remote HTTP paths throw.
+  [`createMachineStores`](../web/src/lib/machineStores.ts) partitions drafts, question replies
+  and model catalogs by machine; only Local has preview observation.
+- [`machineMemory.ts`](../web/src/lib/machineMemory.ts) exposes `machineMemory`,
+  `machineLocationMemory` and `forgetUnconfiguredMachines` for per-machine persistence and
+  removal of unconfigured identities. [`machineOffers`](../web/src/lib/machineOffers.ts) decides
+  what the browser offers, not what the server authorizes.
+- [`remoteImages.ts`](../web/src/lib/remoteImages.ts) exposes `prepareImages`, `discardImages`
+  and `remoteImageUrl` for peer image preparation, cancellation and preview addressing.
+  [Voice input](#voice-input) instead uses main-origin utilities and writes the captured machine's
+  draft; it is not a peer-proxied service.
+
+### Shared contracts
+
+- [`machine.ts`](../shared/machine.ts) supplies `MachineId`, `Machine`, `Machines`, `LOCAL`,
+  `machineList` and `machineFrameBytes`: common identity/list schemas and socket limits. The
+  public machine list contains IDs and names, not credentials.
+- [`http.ts`](../shared/http.ts) enumerates the JSON/file relay contracts in `RemoteRequests`
+  (`RemoteRequest`); [`remoteImages.ts`](../shared/remoteImages.ts) defines the fixed image
+  routes, preparation protocol and limits. [`wire.ts`](../shared/wire.ts) remains the session
+  wire vocabulary; peers do not introduce a second conversation protocol.
+
+### Server ownership and interfaces
+
+- [`PeerConfig.ts`](../server/PeerConfig.ts) exposes `loadPeerConfigs`, `PeerConfig` and
+  `ConfiguredPeers`: bounded, validated startup destinations with redacted server-only
+  credentials. [`main.ts`](../server/main.ts) loads and provides them.
+- [`PeerGateway.ts`](../server/PeerGateway.ts)'s `addPeerRoutes(router)` installs the bounded
+  `/peer/*` relay to configured destinations, connecting upstream to `/ws/peer`. It does not
+  own remote sessions or inject/renumber their frames. [`Router.ts`](../server/Router.ts)
+  wires the relay, `/ws/peer` and the public `/api/machines` list.
+- [`PeerScope.ts`](../server/PeerScope.ts)'s `peerVerdict(data, request, selection)`, `registered`
+  and `inputTarget` decide the owning peer's admitted operations and input targets.
+  [`WsClient.ts`](../server/WsClient.ts) identifies peer connections;
+  [`ClientDispatch.ts`](../server/ClientDispatch.ts) applies the verdict and sends ordinary
+  refusals in the peer's delivery sequence. This is distinct from browser offers.
+- [`PeerImageGateway.ts`](../server/PeerImageGateway.ts)'s `makePeerImageRelay` owns the bounded
+  image relay; [`PeerImages.ts`](../server/PeerImages.ts)'s `addPeerImageRoutes` installs the
+  owning peer's HTTP boundary. [`PreparedImages`](../server/PreparedImages.ts) exposes
+  `prepare`, `claim` and `cancel` for ephemeral, target-bound input, checked through `inputTarget`.
+
+### Tests and verification paths
+
+Module checks are grouped by the contract they protect:
+
+- Configuration and transport: [`PeerGateway.test.ts`](../test/PeerGateway.test.ts) covers
+  fail-closed configuration, configured order, HTTP/WS relay and budgets;
+  [`PeerToken.test.ts`](../test/PeerToken.test.ts) covers private token configuration and
+  authenticated relay failures; [`Peers.test.ts`](../test/Peers.test.ts) covers concurrent peers
+  with colliding identities, isolated credentials and failures.
+- Admission: [`PeerScope.test.ts`](../test/PeerScope.test.ts) exercises `/ws/peer` admissions,
+  sequenced refusals and prepared images; [`RemoteSlice.test.ts`](../test/RemoteSlice.test.ts)
+  checks browser-built remote requests against the peer's policy.
+- Browser ownership: [`Machine.test.ts`](../test/Machine.test.ts) covers owner-captured
+  navigation/HTTP/socket mapping, shared ID rules, same-ID/path store isolation and Local-only
+  previews; [`MachineMemory.test.ts`](../test/MachineMemory.test.ts) and
+  [`MachineOffers.test.ts`](../test/MachineOffers.test.ts) cover persistence and browser offers.
+- Image input: [`PreparedImages.test.ts`](../test/PreparedImages.test.ts) covers target binding,
+  single consumption, expiry and bounded capacity; [`ImageSender.test.ts`](../test/ImageSender.test.ts)
+  covers navigation cancellation and known-unsent versus uncertain delivery.
+
+Use the existing `verify-piano` entries for [Start a session](../.agents/skills/verify-piano/features/start-session.md),
+[Open and continue](../.agents/skills/verify-piano/features/open-session.md),
+[Projects index](../.agents/skills/verify-piano/features/projects-index.md),
+[Project home](../.agents/skills/verify-piano/features/project-home.md) and
+[Changes and files](../.agents/skills/verify-piano/features/changes-and-files.md).
+Their configured-peer prerequisites are not coverage from a default scratch launch, which has no
+peers; see the map's [coverage boundaries](../.agents/skills/verify-piano/features/README.md#coverage-boundaries).
+
+The committed journey is [`remote-session.mjs`](../test/browser/remote-session.mjs), run with
+`npm run test:browser:remote -- <evidence-directory>`. It owns main plus two isolated peers with
+colliding paths/session IDs, exercising machine navigation, sessions, projects, trust, memory,
+Changes/files/rail and images, with main-origin voice checks through its imported helper.
+Follow [browser-test scope](testing.md#browser-tests) and the
+[three-instance run-limit exception](../.agents/skills/verify-piano/SKILL.md#run-limits).
+Fake Pi and fake voice devices/providers establish Piano's boundaries, not authenticated exe.dev
+access, real Pi/provider behavior or real-device recording; those require separate evidence.

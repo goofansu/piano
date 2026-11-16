@@ -63,6 +63,7 @@ the [feature-locality rule](../../../../AGENTS.md#feature-locality).
   message and reply, reload without resending,
   navigation-retained drafts, confirmed failed-start recovery, image attachment/refusal/preview,
   and a kept draft when not sent.
+  Docs: [Remote Pianos](../../../../docs/remote-piano.md).
 - [Open and continue a session](./open-session.md): open from the sidebar, palette or project
   home or Alt+Up/Down; read history and cost; follow up; edit queued messages without stopping;
   stop a running reply; archive and delete from the row's
@@ -72,17 +73,20 @@ the [feature-locality rule](../../../../AGENTS.md#feature-locality).
   the configured-peer prerequisite for session actions, trust and machine memory, including
   peer image/voice coverage limits.
   Docs: [Session navigation](../../../../docs/sidebar-session-navigation.md),
-  [Transcript performance](../../../../docs/session-performance.md).
+  [Transcript performance](../../../../docs/session-performance.md),
+  [Remote Pianos](../../../../docs/remote-piano.md).
 - [Projects index](./projects-index.md): `/projects` from the sidebar row and the palette; one row
   per project with folders, count, last activity and the project menu; New project in the header;
   Done / Reopen and the folded Done group; active-project palette navigation, `!` filter
   discovery, `!p` project-only search and paging; empty, phone and peer-index prerequisite.
-  Docs: [Projects UX](../../../../docs/project-centered-ux.md).
+  Docs: [Projects UX](../../../../docs/project-centered-ux.md),
+  [Remote Pianos](../../../../docs/remote-piano.md).
 - [Project home](./project-home.md): `/projects/<id>` from the sidebar, palette and session
   header; member rows and their Archive / Delete, order, PR number, new session in the project,
   settings, Done badge / Reopen and sidebar grouping; empty, deleted and missing projects;
   peer-home prerequisite.
-  Docs: [Project grouping](../../../../docs/outcome-projects.md).
+  Docs: [Project grouping](../../../../docs/outcome-projects.md),
+  [Remote Pianos](../../../../docs/remote-piano.md).
 - [Session dispatch](./session-dispatch.md): `scripts/dispatch-session.ts` start, `--worktree`,
   `follow-up`, `status` and `list --project`, project inheritance/opt-out, its refusals,
   and a dialog that needs input.
@@ -91,7 +95,8 @@ the [feature-locality rule](../../../../AGENTS.md#feature-locality).
   pull request, and the desktop session rail's Environment and Outputs (no Links section or
   narrow rail); peer-owned surfaces and their prerequisite.
   Docs: [File previews](../../../../docs/file-previews.md),
-  [Managed live previews](../../../../docs/live-previews.md).
+  [Managed live previews](../../../../docs/live-previews.md),
+  [Remote Pianos](../../../../docs/remote-piano.md).
 - [Settings › Skills and Prompts](./settings-skills-prompts.md): `/settings/skills` and
   `/settings/prompts` from the sidebar and palette; New skill / New prompt; View and Delete;
   empty states; the separate agent-authored approval path's real-Pi prerequisite.
