@@ -11,6 +11,7 @@ test("settings URLs preserve each section and accept the Providers alias", () =>
     "prompts",
     "webhooks",
     "preferences",
+    "data-controls",
   ] as const) {
     const route = { kind: "settings", section } as const;
     assert.equal(routePath(route), `/settings/${section}`);

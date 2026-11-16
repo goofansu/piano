@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { FolderView, SessionState, WorktreeView } from "../shared/wire.ts";
 import { addressFor } from "../web/src/lib/navigation.ts";
 import {
+  archivedSessionCatalog,
   catalogEntry,
   folderFor,
   recentSessions,
@@ -154,6 +155,57 @@ test("activity follows the live host broadcast, and the selection marks one entr
   assert.deepEqual(
     all.filter((s) => s.selected).map((s) => s.sessionId),
     ["open-member"],
+  );
+});
+
+test("archived rows share catalog formatting, include closed folders and sort newest updated first", () => {
+  const archived: AppState = {
+    ...state,
+    sessionReferences: [
+      ref("/repo", "visible", "Not archived", { updatedAt: "2026-12-01T00:00:00Z" }),
+      ref("/repo", "old", "Older", { archived: true, updatedAt: "2026-10-01T00:00:00Z" }),
+      sessionReference("/closed/app/", "new", {
+        archived: true,
+        updatedAt: "2026-10-03T00:00:00Z",
+      }),
+      ref("/work/repo.feature", "middle", "Feature", {
+        archived: true,
+        updatedAt: "2026-10-02T00:00:00Z",
+      }),
+    ],
+  };
+  const rows = archivedSessionCatalog(archived);
+  assert.deepEqual(
+    rows.map(({ sessionId, label, folder, folderPath, cwd }) => ({
+      sessionId,
+      label,
+      folder,
+      folderPath,
+      cwd,
+    })),
+    [
+      {
+        sessionId: "new",
+        label: "Untitled",
+        folder: "app",
+        folderPath: undefined,
+        cwd: "/closed/app/",
+      },
+      {
+        sessionId: "middle",
+        label: "Feature",
+        folder: "repo",
+        folderPath: "/repo",
+        cwd: "/work/repo.feature",
+      },
+      { sessionId: "old", label: "Older", folder: "repo", folderPath: "/repo", cwd: "/repo" },
+    ],
+  );
+  for (const row of rows) assert.deepEqual(row, catalogEntry(archived, row.sessionId));
+  assert.deepEqual(archivedSessionCatalog(initialState), []);
+  assert.deepEqual(
+    sessionCatalog(archived).map((s) => s.sessionId),
+    ["visible"],
   );
 });
 

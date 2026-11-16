@@ -160,6 +160,13 @@ export function sessionCatalog(state: AppState): SessionEntry[] {
   return entries(state).filter((s) => !s.archived);
 }
 
+/** Archived sessions, with the same title and folder formatting as every other catalog surface. */
+export function archivedSessionCatalog(state: AppState): SessionEntry[] {
+  return entries(state)
+    .filter((s) => s.archived)
+    .sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0));
+}
+
 /** Whether the sidebar's groups hold a session: listed and not pinned, since Pinned holds those. */
 export function inSidebarGroups(s: Pick<SessionEntry, "listed" | "pinned">): boolean {
   return s.listed && !s.pinned;
