@@ -14,6 +14,7 @@ import {
 } from "../web/src/lib/projectCommands.ts";
 import { sessionCommands } from "../web/src/lib/sessionCommands.ts";
 import { type AppState, initialState } from "../web/src/store.ts";
+import { sessionReference } from "./fixtures/sessionReference.ts";
 
 const launch: Project = { id: "p1", name: "Launch" };
 const folder = { path: "/repo", name: "repo" };
@@ -23,6 +24,7 @@ const online: AppState = {
   projects: [launch],
   view: { kind: "new", cwd: "/repo" },
   trusts: { "/repo": { required: true, trusted: false } },
+  sessionReferences: [sessionReference("/repo", "s1"), sessionReference("/repo", "s2")],
 };
 const other = { cwd: "/repo", sessionId: "s2", title: "Other" };
 const selected: AppState = {

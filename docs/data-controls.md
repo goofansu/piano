@@ -21,7 +21,9 @@ ownership lock is held (including shutdown). A count read is only an observation
 rechecks eligibility and the success toast reports the actual count written.
 
 The initiating client's selected stopped session is cleared if archived. Other clients keep the
-existing Archived view, which refuses further input. Unarchive is one session at a time.
+existing Archived view, which refuses further input: its menus keep read and copy actions but
+disable Rename, Pin, Archive, Delete and project assignment. An archived session cannot be deleted
+until it is unarchived. Unarchive is one session at a time.
 
 ## Ownership and interfaces
 
@@ -41,10 +43,13 @@ existing Archived view, which refuses further input. Unarchive is one session at
   ordinary reads, without reading or rewriting history. Ordinary `resolve` still refuses archived
   references. Missing directories retain their known canonical identity.
 - `server/Registry.ts`: `unarchiveSession` and `archiveSessions` mutate saved references only.
+  Pin, Changes scope and project assignment pass one gate that refuses an archived reference.
   The batch rechecks generation and pinned state inside the write, returns the actual count and
   emits one revision/change, or none for an empty batch. Retention generations protect delayed
   integration writes across archive → unarchive (ABA); database migration 17 persists the generation.
   It is internal metadata, excluded from the sidebar projection.
+- `web/src/lib/sessionContext.ts`: `sessionReferenceChangeable` is the client's matching rule;
+  `sessionMutable` adds selection readiness for Rename, Archive and Delete.
 - `server/PeerScope.ts` keeps all three requests outside the peer allowlist.
 
 These preserve INV-01 (Pi history versus Piano references), INV-02 (canonical process ownership),
@@ -53,13 +58,15 @@ INV-05 (correlated completion without replay), and INV-11 (unchanged peer bounda
 ## Verification
 
 `test/Registry.test.ts` covers preserved metadata, one revision, pinned references, unknown/already
-restored refusal and stale writes across archive → unarchive and database reopen.
+restored refusal, stale writes across archive → unarchive and database reopen, and the gate's
+single refusal for every reference write.
 `test/SessionHosts.test.ts` covers live/working/idle and starting hosts, canonical alias locks,
 closed/missing checkouts, app ownership/cleanup, and read/reopen after unarchive without an implicit
 start. `test/ClientDispatch.test.ts` covers count, confirmation, selection clearing and admission
 refusal. `test/PeerScope.test.ts` exercises refusal through `/ws/peer`.
 
-Web tests cover archived row formatting/order, operation correlation and Settings navigation.
+Web tests cover archived row formatting/order, operation correlation, Settings navigation, and
+(`test/SessionCommands.test.ts`) an archived session's menus offering no change.
 Use [the Data controls verification entry](../.agents/skills/verify-piano/features/data-controls.md)
 for the scratch browser journey and Quiet UI comparison with Webhooks. These are observation
 instructions, not a claim that a particular revision passed. The recipe runs on fake Pi and Local

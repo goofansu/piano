@@ -116,6 +116,12 @@ async function browserSends(machine: Machine): Promise<ClientMessage[]> {
   });
   client.start();
   handlers!.onStatus(true);
+  handlers!.onMessage({
+    _tag: "registry",
+    folders: [],
+    workspaces: registry.workspaces,
+    sessionReferences: registry.sessions.map((s) => ({ ...s, workspaceId: "ws1", branch: null })),
+  });
   const send = client.send;
   let preparations = 0;
   const sender = createImageSender({

@@ -13,6 +13,7 @@ import {
   sessionMutable,
   sessionReady,
   sessionReference,
+  sessionReferenceChangeable,
   sessionWorking,
 } from "./sessionContext.ts";
 import {
@@ -354,7 +355,7 @@ export function sessionCommands(
               id: "pin" as const,
               label: reference?.pinned ? "Unpin" : "Pin",
               icon: reference?.pinned ? ("unpin" as const) : ("pin" as const),
-              enabled: state.connected && !!reference && !reference.archived,
+              enabled: sessionReferenceChangeable(state, subject),
               intent: {
                 kind: "send" as const,
                 command: {
