@@ -30,4 +30,6 @@ configure [remote Pianos](docs/remote-piano.md).
 
 ## Develop
 
-See [development setup and checks](docs/development.md).
+Install development dependencies with `npm ci`, then run `npm run verify` for the required
+typecheck, lint and module-test baseline. See [development setup and checks](docs/development.md)
+for tool prerequisites, focused checks and scratch browser journeys.

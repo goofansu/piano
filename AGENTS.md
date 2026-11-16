@@ -17,8 +17,9 @@ the claim, the relevant invariant and the smallest useful check. Add a regressio
 meaningful failure not already protected, testing observable contracts rather than private helpers
 or mock choreography. Documentation-only changes need document/link review, not tests or an app run.
 
-- **Code or dependency changes:** run `npm run typecheck`, `npm run lint` and `npm test`
-  (module tests against `test/fake-pi.mjs`, no credentials). All three must pass.
+- **Code or dependency changes:** run `npm run verify`, the thin wrapper over `npm run typecheck`,
+  `npm run lint` and `npm test` (module tests against `test/fake-pi.mjs`, no credentials). All three
+  must pass; focused checks and browser journeys remain explicit ([commands](docs/development.md#tests)).
 - **Application behavior:** observe the affected journey on a [scratch instance](#scratch-instance)
   and keep the output as PR evidence.
 - **UI changes:** apply the [quiet UI](docs/quiet-ui.md#checks) checks to changed strings,
