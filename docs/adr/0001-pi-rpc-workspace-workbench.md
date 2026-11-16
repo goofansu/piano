@@ -1,7 +1,7 @@
 # ADR 0001: Pi RPC and the workspace workbench
 
 - Date: 2026-10-04
-- Status: Proposed; accepted when this PR is merged
+- Status: Accepted
 - Runtime reference: Pi Coding Agent 1.0.2
 - Related: [invariants](../development-invariants.md), [roadmap](../roadmap.md),
   [original research](../research/2026-10-02-harness-direction.md)

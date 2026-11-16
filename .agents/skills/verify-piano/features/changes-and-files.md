@@ -81,7 +81,7 @@ the palette (Mod+K) does not search individual outputs.
   linked, a "Pull request" row showing `#222` on the seed. The Folder
   row's menu has "Copy directory path" (a Repository row's also "Copy repository name"), the
   Branch row's "Copy branch" (a detached commit's "Copy commit SHA"). Repository and branch
-  rows also offer "Open repository" / "Open branch" when their URLs are known. The rail shows no row for the working directory itself.
+  rows also offer "Open repository" / "Open branch" when their URLs are known, as the Pull request row offers "Open pull request". The rail shows no row for the working directory itself.
 - `files-list`: The rail's "Outputs" lists files written in the session by name only, and
   appears only once it has a row. There is no Links section.
 - `peer-surfaces`: a configured peer's session offers Changes, comparison/PR controls, files

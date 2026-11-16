@@ -16,7 +16,7 @@ its device-code method works remotely. See [Radius setup](radius-setup.md) for t
 ## Resume or cancel a sign-in
 
 Closing or reloading the dialog keeps an active sign-in. To resume it, go back to
-**Settings → Providers** and click **Sign in**. To stop it, click **Cancel sign-in**. An attempt
+**Settings → Providers** and click **Sign in**. To stop it, click **Cancel**. An attempt
 expires after 15 minutes or when Piano stops.
 
 ## API keys
@@ -41,3 +41,13 @@ Start a new session after you sign in. A running session keeps the model list it
 This flow uses the providers built into the bundled Pi SDK and your `models.json`. For OAuth
 providers that only an extension adds, and API keys outside the catalog above, use the Pi TUI. A custom
 `PIANO_PI_CLI` must use the same credential format.
+
+## Developer navigation
+
+- **Owners:** `server/ProviderLogin.ts` and `server/SignInAttempts.ts`, `shared/providerApiKeys.ts`,
+  `web/src/lib/signInAttempt.ts` and `web/src/components/ProviderLoginDialog.tsx`.
+- **Smallest check:** `node --test --import ./test/setup.ts test/ProviderLogin.test.ts` (or
+  `test/SignInAttempts.test.ts`); then the
+  [Settings recipe](../.agents/skills/verify-piano/features/settings-other.md) on scratch Piano.
+- **Not proved:** scratch Piano is signed out, so neither check shows a real provider accepting an
+  OAuth sign-in or an API key.

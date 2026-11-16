@@ -102,7 +102,7 @@ Set `PIANO_PREVIEW_CONFIG` for Piano to an absolute private JSON file, for examp
 {
   "origin": "https://<vm>.exe.xyz",
   "reservedPorts": [],
-  "path": "/home/exedev/node/bin:/usr/local/bin:/usr/bin:/bin"
+  "path": "/home/exedev/.local/bin:/home/exedev/node/bin:/usr/local/bin:/usr/bin:/bin"
 }
 ```
 

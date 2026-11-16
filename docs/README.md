@@ -13,13 +13,13 @@ Read these documents in order:
 3. [Implementation roadmap](roadmap.md) orders the work and defines milestone exit criteria.
    The [verification-gated vertical-slice plan](vertical-slice-plan.md) breaks those milestones into observable
    journeys with focused implementation gates, based on the October 4 source/documentation audit.
-4. [Developing on exe.dev](development-on-exe-dev.md) describes the private development workflow,
-   scratch verification, and the Pi 1.0.2 upgrade handoff.
+4. [Hosted development](hosted-development.md) describes the exe.dev deployment;
+   [developing on exe.dev](development-on-exe-dev.md) covers private access and PR evidence there.
 
 The [outcome-project plan](outcome-projects.md), with its boundary decision in
 [ADR 0002](adr/0002-outcome-projects.md), adds organization around bounded goals across repositories.
 Session grouping is implemented; shared context and instructions remain deferred. The UI distinguishes
-Projects from Repositories while existing directory-based `project` fields retain their meaning.
+Projects from Folders while existing directory-based `project` fields retain their meaning.
 
 Use the [domain glossary](glossary.md) to distinguish sessions, tasks, evidence and verification.
 [Local file previews](file-previews.md) describes supported formats, limits and disposable workspace-scoped ownership.
@@ -30,7 +30,7 @@ legacy apps must be explicitly stopped before upgrade.
 [Browser storage](browser-storage.md) has the rules for what the web UI keeps in the browser.
 [Configuration and storage](configuration.md), [provider sign-in](provider-sign-in.md) and
 [development checks and policy](development.md) hold the detail the root README links to.
-Contributor skill preferences are optional; see the development handoff.
+Contributor skill preferences are [optional](development-on-exe-dev.md#optional-contributor-skills).
 When developing Piano, follow [evidence-based development and testing](testing.md): choose checks
 from the risk and acceptance claim, and add regression tests only where they provide durable value.
 For new or substantially changed features, group what genuinely changes together within its

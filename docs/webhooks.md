@@ -125,3 +125,13 @@ from general database projections and all HTTP responses. Settings endpoints are
 
 Mutations require an allowed Origin, like other Settings endpoints. Piano remains a
 [private trusted-developer tool](configuration.md), not a public webhook relay.
+
+## Developer navigation
+
+- **Owners:** `server/Webhooks.ts` (what is sent and when), `server/WebhookReceiver.ts` (URL and
+  DNS checks, transport), `shared/webhooks.ts` and `web/src/components/WebhookSettings.tsx`.
+- **Smallest check:** `node --test --import ./test/setup.ts test/Webhooks.test.ts` (or
+  `test/WebhookReceiver.test.ts`); then the
+  [Settings recipe](../.agents/skills/verify-piano/features/settings-other.md) on scratch Piano.
+- **Not proved:** the recipe covers inactive webhook editing and URL refusal only; neither check
+  delivers to a public receiver.

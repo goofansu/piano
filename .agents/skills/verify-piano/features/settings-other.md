@@ -81,8 +81,8 @@ Preconditions: seeded launch, `. "$RUN/run.env"`, doctor passed;
 - `test/browser/voice-input.mjs` is an exported helper, not a standalone journey. It runs inside
   `remote-session.mjs` with main and two peers: real scratch settings, controlled browser device
   APIs and a CDP transcription response, no paid call. It checks all-machine visibility, draft
-  insertion, cancellation and source isolation, but exceeds the one-instance Run limit. Report
-  that coverage as unreachable under the limit; the key-dialog recipe above remains runnable.
+  insertion, cancellation and source isolation. Run that journey alone, under the narrow run-limit
+  exception; the key-dialog recipe above remains runnable on the default launch.
 - Voice transcription requires an approved OpenAI key, browser microphone permission and a
   recording-capable browser. The Preferences → Voice input → key-dialog route proves the
   missing-key prerequisite, not recording, context transmission or transcription into the draft.

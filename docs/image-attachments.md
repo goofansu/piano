@@ -28,8 +28,7 @@ Piano uses the unmodified Pi runtime and takes its queue from Pi's events. Pi 1.
 delivered queue entry by matching its text, so after it delivers an image-only queued message it
 still reports an empty entry in `queue_update` and `get_state`'s `pendingMessageCount`. Piano shows
 what Pi reports: an empty queue row, and a session that counts as working. Until the row is gone,
-Piano does not retire the idle Pi process, refuses to share the session ("Wait for this session to
-finish before sharing.") and, if it closes, reports that Pi was released during work. Edit (Pi's
+Piano does not retire the idle Pi process and, if it closes, reports that Pi was released during work. Edit (Pi's
 `clear_queue`) or Stop clears the row; including text with an image avoids it.
 
 Decision: Pi's events are the source of truth for its queue. Piano does not filter, hide or
@@ -98,7 +97,7 @@ processing remain at the PiSessions seam (INV-12).
 **Development environment only.** `npm run dev` runs the backend under `node --watch`, which sets
 `WATCH_REPORT_DEPENDENCIES=1` in the process environment. Pi 1.0.2's image-resize worker treats
 Node's dependency-watch message as its result, so every attached image was reported as
-"could not be resized below the inline image size limit" regardless of size. PiSessions strips
+"could not be resized below the inline image size limit" regardless of size. `PiTransport` strips
 that variable when spawning Pi; `npm start` and the hosted service never set it, so built and
 deployed instances were unaffected. A regression test spawns a child with the variable set in the
 parent and checks the installed Pi accepts an image.
@@ -110,7 +109,7 @@ parent and checks the installed Pi accepts an image.
   It now checks ten and eleven images and a 50 MiB total; the 2026-10-06 evidence below is for
   the former four-image / 20 MiB policy.
 - `npm test`: **57 passed**. `npm run typecheck`: passed.
-- `test/browser-attachments.mjs` through `npx agent-browser` on scratch ports 7271/7272: passed.
+- The former `test/browser-attachments.mjs` through `npx agent-browser` on scratch ports 7271/7272: passed.
   Two distinct, valid PNGs of exactly 10 MiB each traversed browser → WebSocket → fake Pi → preview
   route; each read back as exactly 10,485,760 bytes, and reconnect/reload retained the transcript.
   The same journey verifies per-file/count/aggregate rejection and preserves valid draft attachments
@@ -131,3 +130,11 @@ aggregate/context budget remain unimplemented; this does not change the image po
 
 Activation requires a UI build, `piano.service` restart for server validation, and browser reload.
 No build, deployment or restart was performed as part of this change; no proxy restart is needed.
+
+## Developer navigation
+
+- **Owners:** `shared/attachments.ts` (limits), `server/ImageTransfer.ts`, `server/PreparedImages.ts`
+  and `server/ImagePreviews.ts`, `web/src/lib/imageSender.ts` and `web/src/lib/useImageSend.ts`.
+- **Smallest check:** `node --test --import ./test/setup.ts test/PreparedImages.test.ts` (or
+  `test/ImagePreviews.test.ts`, `test/ImageSender.test.ts`); then the `images` steps of the
+  [Start a session recipe](../.agents/skills/verify-piano/features/start-session.md).

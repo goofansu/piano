@@ -132,7 +132,7 @@ Where to begin: where a session may start, `startsSessionIn` in
 #### Web ownership and interfaces
 
 - [`NewSession.tsx`](../web/src/components/NewSession.tsx) is the UI caller: its submit hands the
-  draft to `useImageSend` ([`imageSender.ts`](../web/src/lib/imageSender.ts)) with a callback
+  draft to `useImageSend` ([`useImageSend.ts`](../web/src/lib/useImageSend.ts)) with a callback
   that builds `newSessionCommand` ([`composerControl.ts`](../web/src/lib/composerControl.ts))
   and adds the draft's fresh `inputId` as the `attemptId` (the command builder itself sets none);
   the sender delivers it through `Client.captureSend`, so a send that completes after navigation

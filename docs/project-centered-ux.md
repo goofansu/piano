@@ -179,3 +179,13 @@ Verification per [testing](testing.md): screenshots of the index with projects, 
 session and empty, the home before and after, and `style-shots` pairs for the home's list change.
 The index is not a critical path, so no new journey in `test/browser/`; the existing project
 home journey in the verify-piano feature map covers the home.
+
+## Developer navigation
+
+- **Owners:** `server/Registry.ts` (projects and membership), `web/src/lib/projectsIndex.ts`,
+  `web/src/lib/projectHome.ts` and `web/src/lib/projectCommands.ts`; `extensions/piano-project/`
+  applies a project's instructions.
+- **Smallest check:** `node --test --import ./test/setup.ts test/Projects.test.ts` (server) or
+  `test/ProjectsIndex.test.ts`, `test/ProjectHome.test.ts`, `test/ProjectCommands.test.ts` (web);
+  then the two recipes linked above.
+- **Not proved:** a remote Piano's projects need configured peers: `test/browser/remote-session.mjs`.

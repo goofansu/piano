@@ -2,20 +2,14 @@
 
 The maintained source for verifying Piano's user-facing behavior. Read this index, then drive the
 matching feature file. How to launch, check, drive, capture and clean up is in
-[`../SKILL.md`](../SKILL.md); `S=.agents/skills/verify-piano/scripts` throughout.
+[`../SKILL.md`](../SKILL.md).
 
 ## Baseline preconditions
 
 - An instance from `.agents/skills/verify-piano/scripts/launch.sh` (seeded unless a file says `--empty` or `--fake-pi dialogs`),
   with `. "$RUN/run.env"` loaded in the driving shell.
 - `.agents/skills/verify-piano/scripts/doctor.sh "$RUN"` exits 0.
-- Seed: folder `repo` (`$REPO`); projects `verify` "Verify Project" and `empty` "Empty Project";
-  sessions `verify-plan` "Plan the verification" (project
-  `verify`, PR link `#222`, last active 1 hour ago) and `verify-loose` "Loose session" (no project,
-  20 minutes ago), each with history `What is 2 + 2? (<title>)` / `Answer 4.`.
-- Fake Pi `test/browser/fake-pi.mjs` replies `echo: <prompt>`; a prompt of exactly `hold` keeps
-  running until Stop. Its audit is `$AUDIT`.
-- Never drive an instance this run did not launch, and never the user's Piano on 7070, 8000 or 8001.
+- The seed data and fake Pi behavior described under [Launch](../SKILL.md#launch).
 
 ## Driving conventions
 
@@ -23,8 +17,7 @@ matching feature file. How to launch, check, drive, capture and clean up is in
   created scratch entries for destructive checks so later recipes keep their prerequisites.
   A recipe needing a fresh baseline or another fake requires confirmed Cleanup before relaunch;
   follow the skill's Run limits, rather than undoing database mutations by hand.
-- Prefer role plus accessible name (`.agents/skills/verify-piano/scripts/ab.sh "$RUN" find role button click --name "..." --exact`),
-  then `aria-label` and `data-slot` selectors, then routes. Never coordinates or tab order.
+- Use the stable handles listed under [Drive](../SKILL.md#drive). Never coordinates or tab order.
 - Treat quoted names and commands as literal.
 - Wait for the state you assert (`wait --text`, `wait --fn`), not a fixed sleep.
 - The repo harness (`test/browser/*.mjs`) covers a feature's critical path where it exists; run it
@@ -32,16 +25,11 @@ matching feature file. How to launch, check, drive, capture and clean up is in
 
 ## Proof and skip reporting
 
-- Capture the action and the resulting state: `.agents/skills/verify-piano/scripts/capture.sh "$RUN" <feature-id> <step>` before
-  and after, plus the text that proves the step.
-- UI proof is a screenshot, an accessibility snapshot and `state.json` (all from `capture.sh`).
+The [proof standards](../SKILL.md#evidence) apply to every recipe. In addition:
+
 - CLI proof is the command, stdout, stderr and exit code, saved under `$EVIDENCE/<feature-id>/`.
-- Side-effect proof is a second, read-only view: the fake-Pi audit, `GET /api/folders`,
-  `git -C "$REPO" worktree list`, files in `$REPO`.
 - Record the feature ID and the entry point used with every artifact.
-- Report an unreachable path with the attempted command and the unmet precondition. Do not report a
-  skipped entry point as verified through another one.
-- Say when a step relied on a hand-written Pi history or only on a unit test.
+- Report an unreachable path with the attempted command and the unmet precondition.
 
 ## Feature entry contract
 
@@ -64,7 +52,9 @@ the [feature verification mapping policy](../../../../docs/testing.md#feature-ve
   navigation-retained drafts, confirmed failed-start recovery, image attachment/refusal/preview,
   and a kept draft when not sent.
   Docs: [Session creation and recovery](../../../../docs/runtime-ownership.md#developer-navigation-session-creation-and-recovery),
-  [Remote Pianos](../../../../docs/remote-piano.md).
+  [Image attachments](../../../../docs/image-attachments.md),
+  [Input limits](../../../../docs/runtime-input-limits.md),
+  [Remote Pianos](../../../../docs/remote-piano.md#developer-navigation).
 - [Open and continue a session](./open-session.md): open from the sidebar, palette or project
   home or Alt+Up/Down; read history and cost; follow up; edit queued messages without stopping;
   stop a running reply; archive and delete from the row's
@@ -75,19 +65,20 @@ the [feature verification mapping policy](../../../../docs/testing.md#feature-ve
   peer image/voice coverage limits.
   Docs: [Session navigation](../../../../docs/sidebar-session-navigation.md#developer-navigation),
   [Transcript performance](../../../../docs/session-performance.md),
-  [Remote Pianos](../../../../docs/remote-piano.md).
+  [Radius artifacts](../../../../docs/radius-artifacts.md),
+  [Remote Pianos](../../../../docs/remote-piano.md#developer-navigation).
 - [Projects index](./projects-index.md): `/projects` from the sidebar row and the palette; one row
   per project with folders, count, last activity and the project menu; New project in the header;
   Done / Reopen and the folded Done group; active-project palette navigation, `!` filter
   discovery, `!p` project-only search and paging; empty, phone and peer-index prerequisite.
   Docs: [Projects UX](../../../../docs/project-centered-ux.md),
-  [Remote Pianos](../../../../docs/remote-piano.md).
+  [Remote Pianos](../../../../docs/remote-piano.md#developer-navigation).
 - [Project home](./project-home.md): `/projects/<id>` from the sidebar, palette and session
   header; member rows and their Archive / Delete, order, PR number, new session in the project,
   settings, Done badge / Reopen and sidebar grouping; empty, deleted and missing projects;
   peer-home prerequisite.
   Docs: [Project grouping](../../../../docs/outcome-projects.md),
-  [Remote Pianos](../../../../docs/remote-piano.md).
+  [Remote Pianos](../../../../docs/remote-piano.md#developer-navigation).
 - [Session dispatch](./session-dispatch.md): `scripts/dispatch-session.ts` start, `--worktree`,
   `follow-up`, `status` and `list --project`, project inheritance/opt-out, its refusals,
   and a dialog that needs input.
@@ -98,7 +89,7 @@ the [feature verification mapping policy](../../../../docs/testing.md#feature-ve
   narrow rail); peer-owned surfaces and their prerequisite.
   Docs: [File previews](../../../../docs/file-previews.md),
   [Managed live previews](../../../../docs/live-previews.md),
-  [Remote Pianos](../../../../docs/remote-piano.md).
+  [Remote Pianos](../../../../docs/remote-piano.md#developer-navigation).
 - [Settings › Skills and Prompts](./settings-skills-prompts.md): `/settings/skills` and
   `/settings/prompts` from the sidebar and palette; New skill / New prompt; View and Delete;
   empty states; the separate agent-authored approval path's real-Pi prerequisite.
@@ -108,7 +99,7 @@ the [feature verification mapping policy](../../../../docs/testing.md#feature-ve
   preference, key prerequisite and cancellation, inactive webhook CRUD and URL refusal;
   authenticated setup, transcription and webhook delivery remain separate checks.
   Docs: [Provider sign-in](../../../../docs/provider-sign-in.md),
-  [Radius setup](../../../../docs/radius-setup.md).
+  [Radius setup](../../../../docs/radius-setup.md), [Webhooks](../../../../docs/webhooks.md).
 - [Settings › Data controls](./data-controls.md): archived rows, Unarchive, closed-folder feedback,
   neutral Archive all confirmation/count, preserved running/pinned sessions and local-only scope.
   Docs: [Data controls](../../../../docs/data-controls.md).

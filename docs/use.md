@@ -47,9 +47,7 @@ agent launches an app in the session's workspace and returns a preview link (on 
 but ends with its owning Pi process (including that session's Archive/Delete or Piano shutdown).
 Data controls' **Archive all** keeps app-owning sessions running.
 Ask the agent to stop the exact instance when finished. See [setup and limits](live-previews.md).
-If a link, sign-in or pop-up does nothing in Preview, choose **More preview actions → Not working
-here?** and open the app in a new tab; see
-[something does nothing when clicked](live-previews.md#something-does-nothing-when-clicked).
+The app opens in its own browser tab; see [external app access](live-previews.md#external-app-access).
 
 ## Dispatch work to another session
 
@@ -67,6 +65,6 @@ argument hint, and the prompt. Type `/<name>` in the composer of a new session t
 
 ## Send session events to a webhook
 
-Open **Settings → Webhooks**, click **Add webhook**, enter your receiver URL and optional Bearer
-token, and choose the events to send. Use **Send test** to check delivery. See
+Open **Settings → Webhooks**, click **New webhook**, enter your receiver URL and optional Bearer
+token, and choose the events to send. Use **Test** in the webhook's menu to check delivery. See
 [payloads, delivery limits and privacy](webhooks.md).

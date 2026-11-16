@@ -62,4 +62,5 @@ refusal. `test/PeerScope.test.ts` exercises refusal through `/ws/peer`.
 Web tests cover archived row formatting/order, operation correlation and Settings navigation.
 Use [the Data controls verification entry](../.agents/skills/verify-piano/features/data-controls.md)
 for the scratch browser journey and Quiet UI comparison with Webhooks. These are observation
-instructions, not a claim that a particular revision passed.
+instructions, not a claim that a particular revision passed. The recipe runs on fake Pi and Local
+only: it does not show an app-owning or real-Pi session surviving Archive all.

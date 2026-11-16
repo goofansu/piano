@@ -53,7 +53,7 @@ Covers INV-01–13 at their existing ownership, execution, evidence and trust bo
 
 **Exit:** short browser roundtrip on 1.0.2 plus fake-Pi scenarios for handled prompt, immediate
 completion, two-tab dialog races, timeout, abort, refresh, interrupted commands and child exit.
-No automatic resubmission on reconnect. Run `npm test` and `npm run typecheck`.
+No automatic resubmission on reconnect. Run the baseline, `npm run verify`.
 Covers INV-01–06 and INV-11–12.
 
 ## 2. Observable workspace workbench

@@ -44,11 +44,11 @@ cancellation leaves remaining gates `not-run`. Run `npm run verify -- --help` fo
 entry points. On a fresh worktree run `npm ci` first; missing dependencies or tools are **blocked**,
 not success. The wrapper is for Linux/macOS, like the scratch scripts; it owns no app/database.
 
-Documentation-only changes still need document and link review, not this baseline or an app run.
 A baseline pass does not verify a feature or select its browser evidence: follow
 [the testing policy](testing.md). CI retains its existing independent jobs and shards.
 
-The code lives in `server/` (backend), `web/` (React UI), `shared/` (wire schemas) and `test/`.
+The code lives in `server/` (backend), `web/` (React UI), `shared/` (wire schemas), `extensions/`
+(Pi extensions Piano loads into its sessions), `scripts/` (CLIs and preview tooling) and `test/`.
 Read these next:
 
 - [Development direction](README.md): architecture, invariants and roadmap.
@@ -169,11 +169,6 @@ Keep the preload and glob aligned with `npm test`. Options must precede the glob
 
 No branch protection enforces these jobs: the owner canceled it (PIN-17). Before you merge, check
 that **Quality gates** and both **Critical paths** jobs passed on the latest commit.
-
-The Piano host must be private: reachable only by its trusted developer, on loopback or through a
-private authenticated proxy such as exe.dev's (INV-11). Development has no privacy requirement;
-the repository can be public. See [browser origins](configuration.md#browser-origins) for the
-access model.
 
 ## Dependency security
 

@@ -49,7 +49,7 @@ One row in the 48px band, so Settings, the project home and the sidebar header s
   the full path stays in the menu's details. Each segment claims about 6rem; when the row is
   tight they drop whole from the end, branch first, then folder.
 - **Details on demand:** the menu's details gain a "Git branch" row between the working directory
-  and the session ID, so a dropped branch is one click away, beside "Copy git branch".
+  and the session ID, so a dropped branch is one click away, beside "Copy branch".
 - **Controls at the end:** preview and pull request, each a state and a one-click action; Views
   joins them in slice 2. Controls never shrink.
 - **Phones:** the same row with 44px controls. With no rail, where the session runs is a second
@@ -91,7 +91,7 @@ With one view open the strip still shows, so closing is one place.
 | Project crumb "Project: X" | control's name (link up) | the sidebar shows it only when grouped by project | the palette's "Open project: X"; the home's "Projects / X" line |
 | Title with `…` | value and the menu's name | the sidebar row lists the title | Amp's title group; the menu keeps its name |
 | folder, branch | values with `sr-only` field names | the Changes header shows the branch only while open | `BranchLabel`, as the picker and Changes use it |
-| Git branch (details) | field name | only in the menu | as "Copy git branch" names it |
+| Git branch (details) | field name | only in the menu | as "Copy branch" names it |
 | Views | control's name | one per header | Amp's name; the view names are the palette's rows |
 | Changes, Files, Preview, `<file name>` tabs | controls' names | one tab per view | the palette's rows; a file tab is named as the transcript names the path |
 | Close `<view>` | control's name | one per tab | the sidebar's Close |

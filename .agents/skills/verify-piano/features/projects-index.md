@@ -109,8 +109,8 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
   - Action: `ab open "$WEB_URL/m/not-configured/projects";
     ab wait --text 'Machine unavailable'`; capture `11-peer-prerequisite`.
   - Result: Local recovery, no fallback index. Report `verified-unreachable` with this route
-    and the configured, reachable peer prerequisite. The committed remote journey starts three
-    Pianos and exceeds the Run limit; see [Open a session](./open-session.md#gotchas).
+    and the configured, reachable peer prerequisite. The committed remote journey covers it, run
+    alone under the narrow run-limit exception; see [Open a session](./open-session.md#gotchas).
     If permitted peers are available, repeat New project on the peer, capture its prefixed home,
     then switch to Local and confirm that project is absent there.
 - `new-project`

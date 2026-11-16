@@ -6,7 +6,7 @@ instance; no credentials or model calls are needed. Keep one instance/browser at
 
 ## Journey
 
-1. Open a seeded saved session. From its session menu choose Archive, confirm, then open
+1. Open a seeded saved session. From its session menu choose Archive (an idle session archives at once), then open
    Settings → Data controls. Capture its title, small folder line (full path in `title`) and
    outline Unarchive button. Archived sessions is the last group; Sessions is first.
 2. Unarchive it. Observe Session unarchived, disappearance from Archived sessions and return to

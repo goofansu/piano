@@ -1,6 +1,6 @@
 # Settings › Skills and Prompts
 
-Settings (`/settings/<section>`) holds Providers, MCP, Skills, Prompts, Webhooks and Preferences. Skills and
+Settings (`/settings/<section>`) holds Providers, MCP, Skills, Prompts, Webhooks, Data controls and Preferences. Skills and
 Prompts are Piano-owned templates saved under the scratch database's skills and prompts folders:
 the user creates one from the page header or the Mod+K palette, views it by clicking its name,
 deletes it from the row menu, and sessions started afterwards load what is saved (already-running sessions do not). The
@@ -9,7 +9,7 @@ sidebar's Settings opens Providers; the palette lists each section by name.
 ## Sub-features
 
 - `open-settings`: the sidebar's Settings opens `/settings/providers`; Mod+K offers Providers,
-  MCP, Skills, Prompts, Webhooks and Preferences (Radius is inside Providers, not a separate
+  MCP, Skills, Prompts, Webhooks, Data controls and Preferences (Radius is inside Providers, not a separate
   palette destination); address bar `/settings/skills`,
   `/settings/prompts`.
 - `skills-empty`: `/settings/skills` headed Skills with New skill; with none, "No skills yet".

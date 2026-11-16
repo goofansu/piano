@@ -44,7 +44,8 @@ Read the matching entry before working on that surface; follow its linked detail
 | When | Read |
 | --- | --- |
 | Choosing tests or evidence | [Testing policy](docs/testing.md), [commands and prerequisites](docs/development.md#tests) |
-| Verifying application behavior | [verify-piano](.agents/skills/verify-piano/SKILL.md) and its [feature map](.agents/skills/verify-piano/features/README.md#features) |
+| Finding a feature's owning modules, or verifying its behavior | The [feature map](.agents/skills/verify-piano/features/README.md#features) links each feature's recipe and owning doc; [verify-piano](.agents/skills/verify-piano/SKILL.md) launches and drives scratch Piano |
+| Measuring performance | [Benchmarks](docs/performance/README.md) |
 | Naming code, UI or docs | [Glossary](docs/glossary.md); use the user's UI names, such as "Piano's database", not "the registry" |
 | Changing UI, including strings and controls | [Quiet UI](docs/quiet-ui.md), [UI evidence scope](docs/testing.md#ui-evidence-scope), [Linear design language](docs/design-moonstone.md#linear) |
 | Writing Effect code or upgrading Effect | [Effect](docs/effect.md) |
