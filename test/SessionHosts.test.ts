@@ -1021,6 +1021,32 @@ test("INV-01/02: alias history opens under its registry owner; a conflict refuse
   );
 });
 
+test("INV-01/02: Archive all skips a session whose saved references conflict through an alias", async () => {
+  await run(
+    Effect.gen(function* () {
+      const hosts = yield* SessionHosts,
+        registry = yield* Registry;
+      yield* registry.addSession(alias, "bulk-conflict");
+      yield* registry.addSession(cwd, "bulk-conflict");
+      yield* registry.addSession(cwd, "bulk-plain");
+      assert.equal(yield* hosts.archiveCount, 1);
+      assert.equal(yield* hosts.archiveAll, 1);
+      const sessions = (yield* registry.get).sessions;
+      assert.deepEqual(
+        sessions.filter((s) => s.sessionId === "bulk-conflict").map((s) => [s.cwd, s.archived]),
+        [
+          [alias, false],
+          [cwd, false],
+        ],
+        "neither conflicting reference is archived",
+      );
+      assert.equal(sessions.find((s) => s.sessionId === "bulk-plain")?.archived, true);
+      assert.equal(yield* hosts.archiveCount, 0);
+    }),
+    { registry: "bulk-conflict" },
+  );
+});
+
 test(
   "INV-02/03/04: idle deadline respects queue, retry, compaction, dialogs and older uncertain commands",
   {
