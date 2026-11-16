@@ -420,6 +420,31 @@ test("a link records the pull request's head and base as GitHub last reported th
   );
 });
 
+test("INV-01: an archived session's pull request link is read but never written", async (t) => {
+  const f = await fixture(t);
+  f.control({ prs: [{ ...candidate(42), baseRefName: "main" }] });
+  await f.get();
+  await f.runtime.runPromise(f.registry.archiveSession(f.repo, "one"));
+  const stored = async () =>
+    (await f.runtime.runPromise(f.registry.get)).sessions.find((s) => s.sessionId === "one")
+      ?.pullRequest;
+  const before = await stored();
+  f.control({ prs: [{ ...candidate(42), baseRefName: "release" }] });
+  const read = await f.get();
+  assert.equal(read.pullRequest?.number, 42, "the linked pull request is still read");
+  assert.deepEqual(read.link, before, "a read keeps the saved link");
+  assert.deepEqual(await stored(), before, "a read records no branches");
+  for (const action of [
+    { action: "link", url: candidate(7).url },
+    { action: "discover" },
+    { action: "remove" },
+  ] as const) {
+    f.control({ prs: [candidate(7)] });
+    await assert.rejects(f.change(action), /changed during lookup/, action.action);
+    assert.deepEqual(await stored(), before, `${action.action} writes nothing`);
+  }
+});
+
 test("INV-01: discovery asks GitHub for the branch where the session's own worktree pushes it", async (t) => {
   const { worktree } = forkWorktree(t);
   const f = await fixture(t, worktree);

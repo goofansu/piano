@@ -321,7 +321,7 @@ export function sessionCommands(
         id: "pull-request",
         label: "Pull request",
         icon: "pull-request",
-        enabled: !!ctx.pullRequestTarget,
+        enabled: !!ctx.pullRequestTarget && !!ref && sessionReferenceChangeable(state, ref),
         detail: ctx.changesUnavailable,
         keywords: ["pr"],
         intent: { kind: "pull-request", linked },

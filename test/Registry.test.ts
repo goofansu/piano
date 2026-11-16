@@ -384,16 +384,17 @@ test("INV-01/07: a session link is set only on the same reference, not archived 
       assert.equal(yield* r.setSessionLink(latest, "pullRequest", null), undefined);
       assert.equal(yield* r.current(latest), undefined, "archived since it was read");
       const archived = (yield* r.get).sessions[0]!;
-      assert.ok(
+      assert.equal(
         yield* r.setSessionLink(archived, "pullRequest", null),
-        "a reference read as archived still keeps its links",
+        undefined,
+        "a reference read as archived refuses a link write",
       );
     }),
   );
   const persisted = (await f.get()).sessions[0];
   assert.deepEqual(
     persisted && [persisted.archived, persisted.pullRequest],
-    [true, null],
+    [true, linked],
     "links persist across restart",
   );
 });
@@ -507,6 +508,12 @@ test("INV-01: every user write to a session reference refuses an archived refere
           "Session reference is unavailable. Refresh and try again.",
           name,
         );
+      const archived = before.sessions.find((s) => s.sessionId === "one")!;
+      assert.equal(
+        yield* r.setSessionLink(archived, "pullRequest", null),
+        undefined,
+        "setSessionLink",
+      );
       assert.deepEqual(yield* r.get, before, "no refused write changes Piano's database");
     }),
   );
