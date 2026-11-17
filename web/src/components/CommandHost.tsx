@@ -43,11 +43,7 @@ import { Input } from "@/components/ui/input";
 import { artifactsMenu } from "@/lib/artifactsMenu";
 import { confirmation, FORM_NOT_SENT } from "@/lib/commandForms";
 import { type Command, type CommandEffects, runCommand } from "@/lib/commands";
-import {
-  type GlobalCommand,
-  type GlobalCommandContext,
-  globalCommands,
-} from "@/lib/globalCommands";
+import { type GlobalCommandContext, globalCommands } from "@/lib/globalCommands";
 import type { SessionLayout } from "@/lib/navigation";
 import { openLink } from "@/lib/openLink";
 import { openPageEditor, pageAvailability } from "@/lib/pageEditor";
@@ -157,22 +153,8 @@ export function useSessionProjectMenu() {
 
 export function useGlobalCommands() {
   const { state, run, global } = useCommands();
-  const scope = useMachineScope();
   const offers = useOffers();
-  const commands = globalCommands(state, global, offers);
-  if (scope.machines.length > 1)
-    commands.push(
-      ...scope.machines.map((machine): GlobalCommand => ({
-        id: `machine-${machine.id}`,
-        label: `Switch to ${machine.name}`,
-        icon: "machine",
-        group: "navigate",
-        enabled: machine.id !== scope.machine.id,
-        checked: machine.id === scope.machine.id,
-        intent: { kind: "machine", id: machine.id },
-      })),
-    );
-  return { commands, run };
+  return { commands: globalCommands(state, global, offers), run };
 }
 
 export function SessionCommandMenuItem({
@@ -313,7 +295,14 @@ export function CommandHost({
         layout,
         codeWrap,
         state,
-        global: { settings, view, theme: theme ?? "system", sidebarHidden },
+        global: {
+          machine: machineScope.machine,
+          machines: machineScope.machines,
+          settings,
+          view,
+          theme: theme ?? "system",
+          sidebarHidden,
+        },
       }}
     >
       {children}

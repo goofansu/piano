@@ -109,6 +109,8 @@ test("rows keep their place while the page is open: new ones append, gone ones d
 
 test("on a project's home, Mod+K offers its menu's Project settings and Delete project", () => {
   const ctx = {
+    machine: LOCAL,
+    machines: [LOCAL],
     settings: null,
     view: { groupBy: "date", sortBy: "recent", folderAndBranch: false },
   } as const;
@@ -140,6 +142,8 @@ test("on a project's home, Mod+K offers its menu's Project settings and Delete p
 
 test("on a project's home, Mod+K offers exactly its header menu's rows, named as they are", () => {
   const ctx = {
+    machine: LOCAL,
+    machines: [LOCAL],
     settings: null,
     view: { groupBy: "date", sortBy: "recent", folderAndBranch: false },
   } as const;

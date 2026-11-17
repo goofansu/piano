@@ -2,6 +2,7 @@ import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import { type RadioChoice, radioChoiceOf } from "./commands.ts";
 import { canDecideTrust, displayedTrust, pendingTrust } from "./directoryTrust.ts";
+import type { Machine } from "./machine.ts";
 import type { MachineOffers } from "./machineOffers.ts";
 import { type EditorPage, isEditorPage, PAGE_EDITORS } from "./pageEditor.ts";
 import {
@@ -98,6 +99,8 @@ export interface GlobalCommand {
 }
 
 export interface GlobalCommandContext {
+  machine: Machine;
+  machines: readonly Machine[];
   settings: SettingsSection | null;
   view: SidebarView;
   theme?: string;
@@ -281,6 +284,15 @@ export function globalCommands(
       pressed: ctx.view.folderAndBranch,
       intent: { kind: "view", change: { folderAndBranch: !ctx.view.folderAndBranch } },
     },
+    ...(ctx.machines.length > 1 ? ctx.machines : []).map((machine): GlobalCommand => ({
+      id: `machine-${machine.id}`,
+      label: `Switch to ${machine.name}`,
+      icon: "machine",
+      group: "navigate",
+      enabled: machine.id !== ctx.machine.id,
+      checked: machine.id === ctx.machine.id,
+      intent: { kind: "machine", id: machine.id },
+    })),
   ];
   return commands.filter(offers.command);
 }

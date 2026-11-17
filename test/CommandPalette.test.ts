@@ -70,6 +70,8 @@ const selected: SessionView = {
 };
 const inSession: AppState = { ...home, view: { kind: "session" }, session: selected };
 const ctx: GlobalCommandContext = {
+  machine: LOCAL,
+  machines: [LOCAL],
   settings: null,
   view: { groupBy: "date", sortBy: "recent", folderAndBranch: false },
   theme: "dark",
