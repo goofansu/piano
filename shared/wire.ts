@@ -730,7 +730,7 @@ export const ClientMessage = Schema.Union([
   Schema.TaggedStruct("registry", {}),
   Schema.TaggedStruct("worktrees", {
     folder: Schema.String,
-    requestId: Schema.optional(Schema.String),
+    requestId: Schema.String,
   }),
   Schema.TaggedStruct("models", {
     cwd: Schema.String,
@@ -866,7 +866,7 @@ export const ServerMessage = Schema.Union([
   }),
   Schema.TaggedStruct("models_failed", {
     cwd: Schema.String,
-    requestId: Schema.optional(Schema.String),
+    requestId: Schema.String,
     message: Schema.String,
   }),
   Schema.TaggedStruct("catalogs_invalidated", {}),
@@ -884,7 +884,7 @@ export const ServerMessage = Schema.Union([
   }),
   Schema.TaggedStruct("worktrees", {
     folder: Schema.String,
-    requestId: Schema.optional(Schema.String),
+    requestId: Schema.String,
     discovery: WorktreeDiscovery,
   }),
   Schema.TaggedStruct("trust", {
