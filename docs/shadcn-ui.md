@@ -86,18 +86,16 @@ remains disconnected from Piano's reveal, as below. Neither upstream consumer ow
 
 ### Stock sidebar shortcut
 
-`ui/sidebar.tsx` carries the intentional shortcut patch in `ui/`, marked `Piano patch` in its
-source: an optional `keyboardShortcut` provider prop (default `true`) can disable the listener
-entirely; when enabled, the built-in shortcut still toggles on ⌘B alone. Upstream also takes Ctrl+B, which on macOS moves the
-caret back a character in text fields and elsewhere is the browser's or a field's own, and takes
-⌘ chords with Shift or Alt, which belong to the browser (the latter is
-[shadcn-ui/ui#11418](https://github.com/shadcn-ui/ui/pull/11418), still open). Other platforms toggle
-the sidebar from the palette or its button. Reapply the patch on every sidebar upgrade until upstream
-carries it; drop the #11418 part once that merges.
+`ui/sidebar.tsx` carries one intentional patch in `ui/`, marked `Piano patch` in its source: an
+optional `keyboardShortcut` provider prop (default `true`) that disables the stock listener
+entirely. The stock listener's key condition stays upstream's; Piano never enables it.
 
 Piano passes `keyboardShortcut={false}` from `AppLayout`. Its one global listener lives with the
 page-lifetime controller in `useSidebarLayoutController`, alongside the separate Mod+K palette
-listener. It preserves the same exact-key/modifier policy and toggles once per matching keydown,
+listener. It toggles on ⌘B alone: upstream also takes Ctrl+B, which on macOS moves the caret back a character
+in text fields and elsewhere is the browser's or a field's own, and takes ⌘ chords with Shift or
+Alt, which belong to the browser ([shadcn-ui/ui#11418](https://github.com/shadcn-ui/ui/pull/11418)).
+Other platforms toggle the sidebar from the palette or its button. It toggles once per matching keydown,
 including held-key repeats; it does not filter editing targets or Settings. It calls `layout.toggle()`
 just like Piano's controls use that controller, so the CSS-aligned 48rem query chooses between
 collapsing/expanding the column and opening/closing the modal reveal. Two presses restore the
@@ -122,16 +120,13 @@ and navigation. Cancellation discards pending frames and returns the surfaces to
    `npx shadcn@latest add <component> --dry-run --diff <file>`. Include transitive components,
    dependency and CSS changes in the review.
 2. Take reviewed upstream source changes without carrying local component patches, except the
-   [sidebar shortcut patch](#stock-sidebar-shortcut). Avoid
+   [sidebar shortcut opt-out](#stock-sidebar-shortcut). Avoid
    overwriting `index.css`, app wrappers or unrelated dependencies as a side effect.
-   The `--diff` for `sidebar.tsx` shows removal of the `keyboardShortcut` prop, its default,
-   effect guard/dependency, and the `handleKeyDown` modifier restriction. These hunks revert Piano,
-   not upstream changes: restore both the opt-out and the patched condition/comments after writing
-   the file. Confirm `AppLayout` still disables the stock listener and only the application listener
-   handles ⌘B. If upstream supplies an equivalent opt-out, adopt it without enabling two listeners.
-   If its condition already excludes Shift and Alt (#11418 merged), keep only the Ctrl+B exclusion;
-   if it excludes Ctrl+B too, drop that condition patch/comment, not the opt-out. Update
-   [the shortcut section](#stock-sidebar-shortcut) accordingly.
+   The `--diff` for `sidebar.tsx` shows removal of the `keyboardShortcut` prop, its default and
+   effect guard/dependency. These hunks revert Piano, not upstream changes: restore the opt-out
+   after writing the file. Confirm `AppLayout` still disables the stock listener and only the
+   application listener handles ⌘B. If upstream supplies an equivalent opt-out, adopt it and drop
+   the patch without enabling two listeners.
 3. Check changed props, slots and internal composition against app wrappers. In particular,
    upstream composites import their own `ui/` children: they do not automatically use Piano
    wrappers. `PianoCommand` composes its own dialog, and `PianoSidebarMenuButton` its own tooltip.
