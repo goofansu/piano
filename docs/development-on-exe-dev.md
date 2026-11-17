@@ -35,6 +35,9 @@ requirement and revision it supports. See INV-09 and INV-13.
 
 ## PR evidence
 
+Stage local captures and logs under the [shared evidence root](testing.md#evidence-directories),
+`~/piano-evidence/`, with separate task/run directories rather than new home-level folders.
+
 The GitHub proxy rejects `gh pr comment --attach` with “attaching files is not supported on GitHub
 Enterprise Server”. Include textual results directly in the PR. For screenshots or recordings,
 use a supported publication route when available; before reporting delivery, verify that the link

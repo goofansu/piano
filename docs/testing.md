@@ -169,7 +169,8 @@ For production startup observations, first run `npm run build` in the checkout b
 prefix a journey with `PIANO_BROWSER_PRODUCTION=1`. The same isolated backend serves that
 `web/dist` build through `server/main.ts`; no Vite process runs. The harness records this mode in
 `run.json`. Rebuild after source changes: this opt-in mode deliberately does not build for you.
-For example, `PIANO_BROWSER_PRODUCTION=1 node test/browser/open-session.mjs /tmp/piano-open`.
+After allocating an [evidence run](#evidence-directories), use
+`PIANO_BROWSER_PRODUCTION=1 node test/browser/open-session.mjs "$EVIDENCE_RUN/open-session"`.
 
 ### Managed preview host journey
 
@@ -237,13 +238,40 @@ JS
 ±1. Keep the output with the screenshot: the screenshot shows the row, the numbers show it is
 aligned.
 
+## Evidence directories
+
+Keep local verification evidence in one root, `~/piano-evidence/`, shared across Piano worktrees.
+Group checks under a uniquely allocated task/run directory rather than creating new top-level
+folders in home. Before running checks, allocate a run in the shell that will invoke them:
+
+```sh
+mkdir -p "$HOME/piano-evidence"
+# Replace short-task-name with an issue ID or task slug.
+EVIDENCE_RUN=$(mktemp -d "$HOME/piano-evidence/short-task-name.XXXXXX")
+export VERIFY_EVIDENCE="$EVIDENCE_RUN/manual"
+```
+
+Pass a separate child path to each explicit-output command, such as
+`npm run verify -- "$EVIDENCE_RUN/baseline"` or
+`node test/browser/start-session.mjs "$EVIDENCE_RUN/start-session"`. For retries or before/after
+comparisons, use new child paths or allocate another run; preserve earlier output. Manual
+`verify-piano` launches use `VERIFY_EVIDENCE` as their parent and append their own run ID.
+It does not configure the baseline or browser harness: those need the positional path.
+
+This is a contributor convention, not a change to tool defaults: commands without explicit paths
+still use the defaults below; the manual launcher defaults to `${TMPDIR:-/tmp}/verify-piano-evidence`.
+CI may keep its own artifact paths. Disposable scratch state stays separate and is cleaned up by
+its owning harness. Local retention is not PR publication. Leave existing evidence folders and
+historical path references intact; moving or deleting retained evidence is a separate cleanup task.
+
 ## File evidence provenance
 
 `npm run verify -- <evidence-directory>` and `test/browser/harness.mjs` write `run.json`, command
 logs and (for browser journeys) screenshots and fake-Pi audits outside scratch state. Defaults are
-ignored `.scratch/verify/<run-id>` and `.scratch/browser/<journey>`; use a fresh explicit directory
-for durable comparisons. Cleanup removes only the run's disposable state, not evidence. Temp
-cleanup may eventually remove `/tmp`; publish the relevant output on the PR. Review logs before
+ignored `.scratch/verify/<run-id>` and `.scratch/browser/<journey>`; use fresh explicit paths under
+the [shared evidence root](#evidence-directories) for retained local runs. Cleanup removes only the
+run's disposable state, not evidence. Temp cleanup may eventually remove `/tmp`; publish the relevant
+output on the PR. Review logs before
 publication: source/config **bytes** are not in the fingerprint manifest, but paths, output and
 screenshots can still contain private information.
 
@@ -292,9 +320,9 @@ still names the acceptance claim/invariants and any checks not run (INV-07–09,
 Harness failure/cleanup probes, separate from the critical-path suite:
 
 ```sh
-node test/fixtures/verification-journey.mjs /tmp/piano-setup-failure setup
-node test/fixtures/verification-journey.mjs /tmp/piano-journey-failure failure
-node test/fixtures/verification-journey.mjs /tmp/piano-cancelled cancel
+node test/fixtures/verification-journey.mjs "$EVIDENCE_RUN/setup-failure" setup
+node test/fixtures/verification-journey.mjs "$EVIDENCE_RUN/journey-failure" failure
+node test/fixtures/verification-journey.mjs "$EVIDENCE_RUN/cancelled" cancel
 ```
 
 These deliberately exit nonzero. Inspect `run.json` for the intended error/cancellation, retained
