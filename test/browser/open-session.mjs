@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { run } from "./harness.mjs";
+import { withPromptResizeTrace } from "./prompt-resize-trace.mjs";
 
 const listsOwnTheirItems = async (page, where) => {
   const strays = await page.evaluate(`[...document.querySelectorAll('[role="list"]')]
@@ -485,32 +486,34 @@ await run(
       return t.scrollHeight - t.scrollTop - t.clientHeight < 2;
     })()`);
 
-    await page.click("button", "Show more");
-    await page.until(
-      `document.querySelector('[data-slot="transcript"] button[aria-expanded="true"][aria-controls]')?.textContent.includes('Show less')`,
-    );
-    const promptSize = () =>
-      page.evaluate(`(() => {
+    await withPromptResizeTrace(page, async () => {
+      await page.click("button", "Show more");
+      await page.until(
+        `document.querySelector('[data-slot="transcript"] button[aria-expanded="true"][aria-controls]')?.textContent.includes('Show less')`,
+      );
+      const promptSize = () =>
+        page.evaluate(`(() => {
       const toggle = [...document.querySelectorAll('button[aria-controls]')]
         .find(b => /Show (more|less)/.test(b.textContent));
       const text = document.getElementById(toggle.getAttribute('aria-controls'));
       return { height: text.clientHeight, content: text.scrollHeight };
     })()`);
-    const expanded = await promptSize();
-    assert.equal(expanded.height, expanded.content, "expanded prompt shows all its text");
-    await page.click("button", "Show less");
-    await page.see("Show more");
-    const collapsed = await promptSize();
-    assert.ok(collapsed.height < collapsed.content, "collapsed prompt is capped again");
-    await page.ab("set", "viewport", "800", "900");
-    await page.until(`(() => {
+      const expanded = await promptSize();
+      assert.equal(expanded.height, expanded.content, "expanded prompt shows all its text");
+      await page.click("button", "Show less");
+      await page.see("Show more");
+      const collapsed = await promptSize();
+      assert.ok(collapsed.height < collapsed.content, "collapsed prompt is capped again");
+      await page.ab("set", "viewport", "800", "900");
+      await page.until(`(() => {
       const t = document.querySelector('[data-slot="transcript"]');
       return t.scrollHeight - t.scrollTop - t.clientHeight < 2;
     })()`);
-    await page.click("button", "Show more");
-    await page.see("Show less");
-    const resized = await promptSize();
-    assert.equal(resized.height, resized.content, "prompt still expands after resizing");
+      await page.click("button", "Show more");
+      await page.see("Show less");
+      const resized = await promptSize();
+      assert.equal(resized.height, resized.content, "prompt still expands after resizing");
+    });
     const copyOpacity = (label) =>
       page.evaluate(`(() => {
         const button = document.querySelector('button[aria-label="${label}"]');
