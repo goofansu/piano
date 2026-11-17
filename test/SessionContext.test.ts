@@ -746,25 +746,26 @@ test("New session here, from a folder row or a session, asks the machine's one r
     selectionId: "sel",
     folders: [folder, research(status)],
   });
-  const hereEnabled = (state: AppState, offers: MachineOffers) =>
-    sessionCommands(state, undefined, { offers }).find((c) => c.id === "new-session-here")?.enabled;
+  const here = (state: AppState, offers: MachineOffers) =>
+    sessionCommands(state, undefined, { offers }).find((c) => c.id === "new-session-here");
   const cases = [
     { name: "a folder root on disk", cwd: "/research", status: "current", local: true, far: true },
     {
       name: "a missing folder root",
       cwd: "/research",
       status: "missing",
-      local: false,
-      far: false,
+      local: "checkout-missing",
+      far: "checkout-missing",
     },
     {
       name: "a directory no folder holds",
       cwd: "/scratch",
       status: "current",
       local: true,
-      far: false,
+      far: "folder-closed",
     },
   ] as const;
+  const details = { "checkout-missing": "Checkout removed", "folder-closed": "Folder closed" };
   for (const c of cases) {
     const state = at(c.cwd, c.status);
     const row = { path: c.cwd, name: c.cwd.slice(1) };
@@ -772,14 +773,22 @@ test("New session here, from a folder row or a session, asks the machine's one r
       ["Local", machineOffers(LOCAL), c.local],
       ["remote", remote, c.far],
     ] as const) {
-      const rule = offers.startsSessionIn;
-      assert.equal(rule(state, c.cwd), expected, `${machine}: ${c.name}`);
+      const starts = expected === true;
+      const refusal = starts ? undefined : expected;
+      assert.equal(offers.startsSessionIn(state, c.cwd), starts, `${machine}: ${c.name}`);
+      assert.equal(offers.startRefusal(state, c.cwd), refusal, `${machine} refusal: ${c.name}`);
       assert.equal(
         folderCommands(state, row, offers).create?.enabled,
-        expected,
+        starts,
         `${machine} row: ${c.name}`,
       );
-      assert.equal(hereEnabled(state, offers), expected, `${machine} session: ${c.name}`);
+      const command = here(state, offers);
+      assert.equal(command?.enabled, starts, `${machine} session: ${c.name}`);
+      assert.equal(
+        command?.detail,
+        refusal ? details[refusal] : c.cwd,
+        `${machine} session detail: ${c.name}`,
+      );
     }
   }
 });

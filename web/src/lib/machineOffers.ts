@@ -10,8 +10,23 @@ export interface MachineOffers {
   browse: boolean;
   settings: boolean;
   command: (command: Command) => boolean;
+  startRefusal: (state: AppState, cwd: string) => StartRefusal | undefined;
   startsSessionIn: (state: AppState, cwd: string) => boolean;
 }
+
+export type StartRefusal = "checkout-missing" | "folder-closed";
+
+export const START_REFUSAL_LABELS: Record<StartRefusal, string> = {
+  "checkout-missing": "Checkout removed",
+  "folder-closed": "Folder closed",
+};
+
+const offersStart = (
+  startRefusal: MachineOffers["startRefusal"],
+): Pick<MachineOffers, "startRefusal" | "startsSessionIn"> => ({
+  startRefusal,
+  startsSessionIn: (state, cwd) => !startRefusal(state, cwd),
+});
 
 const LOCAL_OFFERS: MachineOffers = {
   providerAccounts: true,
@@ -19,7 +34,7 @@ const LOCAL_OFFERS: MachineOffers = {
   browse: true,
   settings: true,
   command: () => true,
-  startsSessionIn: (state, cwd) => !checkoutMissingAt(state, cwd),
+  ...offersStart((state, cwd) => (checkoutMissingAt(state, cwd) ? "checkout-missing" : undefined)),
 };
 
 const SENT_CHANGES: ReadonlySet<string> = new Set([
@@ -67,7 +82,13 @@ const REMOTE_OFFERS: MachineOffers = {
         return false;
     }
   },
-  startsSessionIn: (state, cwd) => !!folderFor(state, cwd) && !checkoutMissingAt(state, cwd),
+  ...offersStart((state, cwd) =>
+    checkoutMissingAt(state, cwd)
+      ? "checkout-missing"
+      : folderFor(state, cwd)
+        ? undefined
+        : "folder-closed",
+  ),
 };
 
 export const machineOffers = (machine: Machine): MachineOffers =>

@@ -175,7 +175,9 @@ address is `/m/eng-1/s/<sessionId>`; reload and back/forward retain that machine
 **New session** (or **New session here** in Cmd+K or on an open folder's sidebar row) starts a
 session on the selected machine. Its directory picker lists only the folders open on that machine,
 and **New session here** is unavailable for a session whose folder is closed there (pinned and
-project sessions stay listed); its first message may contain text, images or both. A remote
+project sessions stay listed, and Cmd+K shows **Folder closed** beside it). If the folder is
+closed on the remote while its New page is open, the page keeps the directory, disables Send and
+says **Folder closed**. Its first message may contain text, images or both. A remote
 folder's row has no folder menu: Close stays on the owning Piano.
 The session runs and stays on the remote. A worktree for parallel work comes from the remote
 session's own dispatch, which runs on the remote, not from this picker.

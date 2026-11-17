@@ -1,6 +1,6 @@
 import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
-import type { MachineOffers } from "./machineOffers.ts";
+import { type MachineOffers, START_REFUSAL_LABELS } from "./machineOffers.ts";
 import type { SessionLayout } from "./navigation.ts";
 import { type PreviewObservationState, seenPreview } from "./previewObservation.ts";
 import { pullRequestView } from "./pullRequestView.ts";
@@ -178,7 +178,7 @@ export function sessionCommands(
   state: AppState,
   target: SessionTarget | undefined,
   options: {
-    offers: Pick<MachineOffers, "command" | "startsSessionIn">;
+    offers: Pick<MachineOffers, "command" | "startRefusal">;
     messagesOnly?: boolean;
     codeWrap?: boolean;
     layout?: SessionLayout;
@@ -390,13 +390,14 @@ export function sessionCommands(
     );
   }
   if (selected && session) {
+    const refusal = options.offers.startRefusal(state, session.cwd);
     commands.push({
       id: "new-session-here",
       label: "New session here",
       icon: "new",
-      enabled: options.offers.startsSessionIn(state, session.cwd),
+      enabled: !refusal,
       keywords: ["directory"],
-      detail: session.cwd,
+      detail: refusal ? START_REFUSAL_LABELS[refusal] : session.cwd,
       intent: { kind: "new-session", cwd: session.cwd },
     });
   }
