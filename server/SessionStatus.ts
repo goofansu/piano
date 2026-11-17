@@ -141,6 +141,10 @@ export const SessionStatusLive = Layer.effect(
           return yield* new SessionStatusError({
             detail: `Piano lists session ${target.sessionId} under more than one directory (${found.cwds.join(", ")}) and does not guess which one is meant.`,
           });
+        if (found.entry.archived)
+          return yield* new SessionStatusError({
+            detail: `Session ${target.sessionId} is archived. Unarchive it in Settings → Data controls to read its status.`,
+          });
         return [yield* statusOf(found.entry, deadline)];
       }
       if (!data.projects.some((p) => p.id === target.projectId))
