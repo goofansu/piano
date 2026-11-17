@@ -7,6 +7,8 @@ webhook without contacting its receiver. These observations do not prove sign-in
 
 ## Sub-features
 
+- `headers`: Settings section headers show the section name and its actions, without a Machine
+  picker. Settings belongs to Local; use a peer's own Piano for its settings.
 - `providers`: Providers has Radius, Accounts and API keys groups. Unsigned-in Radius offers
   Sign in to Radius; Install Radius MCP and Install web search are disabled until setup permits them.
 - `api-key-setup`: the API keys group offers Add key for DeepSeek, Fireworks, Google, OpenCode
@@ -36,7 +38,11 @@ Preconditions: seeded launch, `. "$RUN/run.env"`, doctor passed;
 - `providers`
   - Action: `ab open "$WEB_URL/settings/providers"; ab wait '[aria-label="Sign in to Radius"]'`.
   - Result: Radius shows Account, Radius MCP and Web search; installation buttons are disabled
-    on the unsigned-in scratch instance. Capture `01-providers`. Do not install or sign in to
+    on the unsigned-in scratch instance. Capture `01-providers`; its header has no Machine
+    picker. Inspect the same header boundary on Webhooks at `ab set viewport 390 844`, then
+    widen to 1280×800. Without configured peers this proves the local header only; the remote
+    journey separately checks suppression when a peer picker would otherwise be available.
+    Do not install or sign in to
     turn this read-only setup check into an authenticated claim.
 - `api-key-setup` (no credentials)
   - Action: on Providers, `ab find role button click --name 'Add Fireworks API key' --exact;

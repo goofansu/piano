@@ -18,6 +18,10 @@ with "Stop". The row's "Session menu for <title>" archives or deletes it.
   the sidebar. Cmd+B is `Meta+b` even on Linux, not Control+B. A narrow viewport uses a sheet;
   opening or dismissing that sheet preserves the desktop column preference on widening.
 - `history`: the saved user message and reply render; "Jump to message" lists them.
+- `long-message`: a long user message starts capped; Show more expands it and Show less caps it
+  again, including after resizing. The text button is the toggle, without a chevron.
+- `code-copy`: a fenced code block has a quiet Copy code button visible without hover, including
+  on narrow screens. Copy changes it to Code copied briefly and copies only the code.
 - `header`: on desktop, one line: the project crumb ("Project: <name>", only for a member session) and the
   title with "Session information and actions" beside it; at its end "Changes" / "Hide changes" then
   "Show session rail" / "Hide session rail". An observed app URL adds "Open preview in new tab" in every layout.
@@ -103,8 +107,11 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
 
 - Harness
   - Command: `node test/browser/open-session.mjs "$EVIDENCE/open-session/harness"`
-  - Result: exit 0 and `PASS open-session ...` (sidebar, long-history jumps, cost, follow-up,
+  - Result: exit 0 and `PASSED open-session ...` (sidebar, long-history jumps, cost, follow-up,
     inline questions, stop, streaming scroll anchoring and persistent tool disclosure).
+    The Release notes fixture also proves `long-message` expansion/collapse across resize and
+    `code-copy`: visible at rest at 1280, 390 and 800px, copied feedback, and code-only clipboard
+    content on Linux (the clipboard-content assertion is skipped on macOS).
     It also checks `session-arrows`: rapid/cold selection, offscreen-row reveal, hidden sidebar,
     collapsed groups, boundaries, composer draft/focus restoration and menu/palette key ownership.
     Its 80-row fixture proves offscreen navigation; the two-session seed does not.
@@ -189,6 +196,11 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
     `ab find role radio click --name "Full suite" --exact;
     ab find role button click --name "Send answer" --exact; ab wait --text "Answer: Full suite"`.
   - Result: the question closes and the answer appears. Capture `02d-answered`.
+  - Phone: before answering, `ab set viewport 390 844`; capture `02e-phone-question` and record
+    `ab eval "({width:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth})"`.
+    Both are 390; Full suite and Send answer remain reachable. Answer as above, capture the
+    result, then widen to 1280×800. This short question does not prove long Markdown/options
+    scrolling or a real phone's keyboard behavior.
 - `stop`
   - Action: `ab fill '[aria-label="Message"]' "hold"; ab press Enter; ab wait '[aria-label="Stop"]';
     ab find role button click --name "Stop" --exact`
