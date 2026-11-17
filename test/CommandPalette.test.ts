@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { SessionState, WorktreeView } from "../shared/wire.ts";
 import {
-  commandPalette,
   createPaletteCatalog,
+  type PaletteInput,
   PROJECTS_ONLY,
   paletteFilter,
   paletteScope,
@@ -70,9 +70,10 @@ const ctx: GlobalCommandContext = {
   view: { groupBy: "date", sortBy: "recent", folderAndBranch: false },
   theme: "dark",
 };
+const freshPalette = (state: AppState, input: PaletteInput) => createPaletteCatalog()(state, input);
 const palette = (state: AppState, search = "", c = ctx) =>
   searchPalette(
-    commandPalette(state, {
+    freshPalette(state, {
       globalCommands: globalCommands(state, c),
       sessionCommands: sessionCommands(state),
       sessionProject: state.session?.sessionId
@@ -119,7 +120,7 @@ test("a session row is found by its title, folder, branch, project and ID, and n
 
 test("a command only the other layout offers is left out, while an unavailable one is greyed", () => {
   const rows = (single: boolean) => {
-    const groups = commandPalette(inSession, {
+    const groups = freshPalette(inSession, {
       globalCommands: [],
       sessionCommands: sessionCommands(inSession, undefined, {
         layout: { single, agent: true, surface: false, rail: false, agentTab: false },
@@ -232,7 +233,7 @@ test("!p browses and searches only active project navigation, not related sessio
 });
 
 test("standalone ! answers with only the project filter row, selected, without searching any catalog rows", () => {
-  const groups = commandPalette(inSession, {
+  const groups = freshPalette(inSession, {
     globalCommands: globalCommands(inSession, ctx),
     sessionCommands: sessionCommands(inSession),
     sessionProject: sessionProjectMenu(inSession, { cwd: "/repo", sessionId: "s1" }),
@@ -311,7 +312,7 @@ test("worker project-only browsing keeps bounded pages and switches back to ordi
       name: `Launch ${String(i).padStart(2, "0")}`,
     })),
   };
-  const groups = commandPalette(state, {
+  const groups = freshPalette(state, {
     globalCommands: globalCommands(state, ctx),
     sessionCommands: sessionCommands(state),
   });
@@ -344,7 +345,7 @@ test("blank input pages active projects as a search does, without the worker", (
       name: `Project ${String(i).padStart(2, "0")}`,
     })),
   };
-  const groups = commandPalette(state, { globalCommands: [], sessionCommands: [] });
+  const groups = freshPalette(state, { globalCommands: [], sessionCommands: [] });
   const projects = (pages: Parameters<typeof answerPalette>[2]) =>
     answerPalette(groups, "", pages).find((p) => p.group.id === "projects")!;
   assert.deepEqual(
@@ -480,7 +481,7 @@ test("Session commands place the menus' sections in the menus' order, whatever t
   };
   const labels = (order: (c: SessionCommand[]) => SessionCommand[]) => {
     const [group] = searchPalette(
-      commandPalette(member, {
+      freshPalette(member, {
         globalCommands: [],
         sessionCommands: order(sessionCommands(member)),
         sessionProject: sessionProjectMenu(member, { cwd: "/repo", sessionId: "s1" }),
@@ -612,7 +613,7 @@ test("search pages replace rows, preserve stable ties and reach the oldest match
       }),
     ),
   };
-  const groups = commandPalette(state, { globalCommands: [], sessionCommands: [] });
+  const groups = freshPalette(state, { globalCommands: [], sessionCommands: [] });
   const search = createPaletteSearch();
   const first = search({ id: 1, groups, query: "Repeated", pages: {} });
   assert.equal(first.pages[0].total, 123);
@@ -716,7 +717,11 @@ test("only readable sessions enter recents and search as availability changes", 
   const changed = catalog(unavailable, input);
   const sessions = changed.find((g) => g.id === "sessions");
   assert.ok(sessions?.id === "sessions");
-  assert.deepEqual(changed, commandPalette(unavailable, input), "cached and direct catalogs agree");
+  assert.deepEqual(
+    changed,
+    freshPalette(unavailable, input),
+    "a reused catalog matches a fresh one",
+  );
   assert.deepEqual(
     sessionIds(unavailable),
     ["s8", "s7", "s6", "s5", "s4", "s3", "s2", "s1"],
@@ -732,7 +737,7 @@ test("only readable sessions enter recents and search as availability changes", 
   for (const query of ["", "Session"]) {
     assert.deepEqual(
       searchPalette(changed, query),
-      searchPalette(commandPalette(unavailable, input), query),
+      searchPalette(freshPalette(unavailable, input), query),
     );
     assert.ok(
       searchPalette(changed, query).every((g) =>
@@ -750,7 +755,7 @@ test("only readable sessions enter recents and search as availability changes", 
     );
   }
   const restored = catalog(home, input);
-  assert.deepEqual(restored, commandPalette(home, input));
+  assert.deepEqual(restored, freshPalette(home, input));
   const back = searchPalette(restored, "s9")[0];
   assert.equal(back?.id === "sessions" && back.rows[0].session.sessionId, "s9");
   assert.equal(
@@ -773,8 +778,8 @@ test("a cached palette follows Pi starting and finishing for its sessions", () =
   for (const state of [home, starting, started, home]) {
     assert.deepEqual(
       catalog(state, input),
-      commandPalette(state, input),
-      "cached and direct agree",
+      freshPalette(state, input),
+      "a reused catalog matches a fresh one",
     );
   }
   assert.ok(!sessionIds(starting).includes("s8"), "a starting session is not openable yet");
@@ -787,18 +792,17 @@ test("unavailable-only catalogs have no sessions group", () => {
     sessionReferences: [sessionReference("/repo", "gone", { unavailable: "history" })],
   };
   const input = { globalCommands: [], sessionCommands: [] };
-  for (const groups of [commandPalette(state, input), createPaletteCatalog()(state, input)]) {
-    assert.ok(groups.every((g) => g.id !== "sessions"));
-    assert.deepEqual(searchPalette(groups, "gone"), []);
-  }
+  const groups = freshPalette(state, input);
+  assert.ok(groups.every((g) => g.id !== "sessions"));
+  assert.deepEqual(searchPalette(groups, "gone"), []);
 });
 
 test("worker search replaces its catalog even when the query is unchanged", () => {
   const search = createPaletteSearch();
   const input = { globalCommands: [], sessionCommands: [] };
-  const groups = commandPalette(home, input);
+  const groups = freshPalette(home, input);
   assert.equal(search({ id: 1, query: "Session", pages: {}, groups }).pages[0].total, 9);
-  const archived = commandPalette(
+  const archived = freshPalette(
     { ...home, sessionReferences: home.sessionReferences.map((r) => ({ ...r, archived: true })) },
     input,
   );
