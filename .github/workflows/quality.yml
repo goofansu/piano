@@ -100,17 +100,14 @@ jobs:
           test "$BUILD_RESULT" = success
           test "$TESTS_RESULT" = success
 
-  # The multi-peer journey takes longer than the other three together, so it gets its own
-  # runner. Each group is an npm script; npm run test:browser still runs both in sequence.
   browser:
-    name: Critical paths (${{ matrix.group }})
+    name: Critical paths (${{ matrix.journey }})
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
-      # Finish both groups even when one fails, retaining every journey's evidence.
       fail-fast: false
       matrix:
-        group: [local, remote]
+        journey: [start-session, open-session, transcript-rows, remote-session]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -122,19 +119,19 @@ jobs:
       - name: Clean install
         run: npm ci
       - name: Install the latest Worktrunk
-        if: matrix.group == 'local'
+        if: matrix.journey == 'start-session'
         uses: ./.github/actions/setup-worktrunk
       - name: Install agent-browser 0.43.0 and its browser
         run: |
           npm install --global agent-browser@0.43.0
           agent-browser install
       # A scratch Piano with a fake Pi: no model credentials, no paid calls.
-      - name: Browser journeys
-        run: npm run test:browser:${{ matrix.group }}
+      - name: Browser journey
+        run: node test/browser/${{ matrix.journey }}.mjs
       - name: Keep journey screenshots
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: critical-path-screenshots-${{ matrix.group }}
+          name: critical-path-screenshots-${{ matrix.journey }}
           path: .scratch/browser
           if-no-files-found: ignore
