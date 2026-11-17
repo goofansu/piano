@@ -273,7 +273,7 @@ export function SessionView({ state, send, captureSend }: Props) {
                 draftKey={draftKey}
                 completion={completionTarget(state)}
                 place={place}
-                disabled={!draftKey || input?.outcome === "starting"}
+                disabled={pane.editorDisabled}
                 actionsDisabled={pane.composerDisabled}
                 readOnly={readOnly}
                 send={send}

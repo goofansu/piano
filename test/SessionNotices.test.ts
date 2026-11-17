@@ -8,6 +8,7 @@ import {
   type PendingCreate,
   type SessionView,
 } from "../web/src/store.ts";
+import { sessionReference } from "./fixtures/sessionReference.ts";
 
 const folder = (discovery: FolderView["discovery"]): FolderView => ({
   path: "/repo",
@@ -307,4 +308,18 @@ test("a missing checkout replaces the composer with a read-only notice", () => {
   assert.equal(missing?.placement, "composer");
   assert.equal(missing?.title, "Checkout removed · Read-only session");
   assert.equal(find(at(), "checkout-missing"), undefined);
+});
+
+test("an archived session's composer says it is archived and never offers archiving it", () => {
+  const archivedRef = { sessionReferences: [sessionReference("/repo", "s1", { archived: true })] };
+  for (const state of [{}, { checkoutMissing: true }]) {
+    const all = notices(at(state, archivedRef)).filter((n) => n.placement === "composer");
+    assert.deepEqual(
+      all.map((n) => n.id),
+      ["archived"],
+      JSON.stringify(state),
+    );
+    assert.equal(all[0]?.title, "Archived · Read-only session");
+    assert.doesNotMatch(all[0]?.details.join(" ") ?? "", /archive or delete/);
+  }
 });

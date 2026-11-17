@@ -184,6 +184,27 @@ export function sessionCheckoutMissing(state: AppState, target: SessionRef): boo
   return checkoutMissingAt(state, target.cwd) || (!!reference && !sessionOpenable(reference));
 }
 
+export type SessionInputMode =
+  | "writable"
+  | "not-ready"
+  | "starting"
+  | "archived"
+  | "checkout-missing"
+  | "no-session";
+
+export function sessionInputMode(state: AppState): SessionInputMode {
+  const t = state.session;
+  if (!t) return "no-session";
+  if (t.sessionId && sessionReference(state, { cwd: t.cwd, sessionId: t.sessionId })?.archived)
+    return "archived";
+  if (checkoutMissingAt(state, t.cwd)) return "checkout-missing";
+  if (state.pendingCreate?.outcome === "starting") return "starting";
+  return sessionReady(state) ? "writable" : "not-ready";
+}
+
+const keepsDraft = (mode: SessionInputMode): boolean =>
+  mode === "writable" || mode === "not-ready" || mode === "starting";
+
 export interface SessionContext {
   cwd: string | undefined;
   folder: FolderView | undefined;
@@ -251,7 +272,7 @@ export function sessionContext(state: AppState): SessionContext {
         : undefined,
     pullRequest: reference?.pullRequest,
     checkoutMissing,
-    draftKey: session && !checkoutMissing ? sessionDraftKey(session) : null,
+    draftKey: session && keepsDraft(sessionInputMode(state)) ? sessionDraftKey(session) : null,
   };
 }
 
@@ -290,6 +311,7 @@ export interface SessionActivity {
 
 export function sessionActivity(state: AppState, messagesOnly: boolean): SessionActivity {
   const t = state.session;
+  const mode = sessionInputMode(state);
   const receipt = submissionReceipt(state);
   const streaming = !!t && isWorking(t.state);
   const working = !!t && workUnderWay(t.state);
@@ -319,28 +341,22 @@ export function sessionActivity(state: AppState, messagesOnly: boolean): Session
           ? "Reconnecting"
           : !t
             ? "Loading"
-            : checkoutMissingAt(state, t.cwd)
-              ? "Read-only"
-              : sessionArchived(state)
-                ? "Archived"
+            : mode === "archived"
+              ? "Archived"
+              : mode === "checkout-missing"
+                ? "Read-only"
                 : t.state.closure
                   ? "Exited"
                   : activity || (working ? "Working" : t.hosted ? "Ready" : "Not running");
   return { status, replyActivity };
 }
 
-const sessionArchived = (state: AppState): boolean => {
-  const t = state.session;
-  return (
-    !!t?.sessionId && !!sessionReference(state, { cwd: t.cwd, sessionId: t.sessionId })?.archived
-  );
-};
-
 export interface SessionPane {
   list: boolean;
   skeleton: boolean;
   placeholder: string | undefined;
   composerDisabled: boolean;
+  editorDisabled: boolean;
 }
 
 const inputOnItsWay = (t: NonNullable<AppState["session"]>): boolean =>
@@ -351,11 +367,12 @@ export function sessionPane(state: AppState): SessionPane {
   const input = state.pendingCreate;
   const onItsWay = !!t && inputOnItsWay(t);
   const hasContent = !!t && (t.messages.length > 0 || !!t.pending);
+  const mode = sessionInputMode(state);
   return {
     list: !!t || !!input,
     skeleton: !input && !state.selectionFailure && !(t && (hasContent || !onItsWay)),
     placeholder: t && !input && !hasContent && !onItsWay ? "No messages yet." : undefined,
-    composerDisabled:
-      !sessionReady(state) || !t || input?.outcome === "starting" || sessionArchived(state),
+    composerDisabled: mode !== "writable",
+    editorDisabled: mode !== "writable" && mode !== "not-ready",
   };
 }
