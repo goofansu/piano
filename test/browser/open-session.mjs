@@ -414,6 +414,36 @@ await run(
     await page.press("Mod+k");
     await page.press("Alt+ArrowDown");
     assert.equal(await page.evaluate("location.pathname"), "/s/login-bug", "palette owns its keys");
+    await page.until(
+      "document.querySelector('[cmdk-list]')?.getAttribute('aria-busy') === 'false'",
+    );
+    const paletteRows = await page.evaluate(`(() => {
+      const list = document.querySelector('[cmdk-list]');
+      return { rows: list.querySelectorAll('[cmdk-item]').length, overflows: list.scrollHeight > list.clientHeight };
+    })()`);
+    assert.ok(paletteRows.overflows, "the palette has more rows than fit");
+    const selectedRowShown = `(() => {
+      const list = document.querySelector('[cmdk-list]');
+      const row = list.querySelector('[cmdk-item][aria-selected="true"]');
+      const box = list.getBoundingClientRect();
+      const at = row.getBoundingClientRect();
+      return at.top >= box.top - 0.5 && at.bottom <= box.bottom + 0.5;
+    })()`;
+    for (const key of ["ArrowDown", "ArrowUp"])
+      for (let step = 1; step < paletteRows.rows; step++) {
+        await page.press(key);
+        assert.ok(
+          await page.evaluate(selectedRowShown),
+          `the selected palette row is fully shown after ${key} ${step}`,
+        );
+      }
+    assert.ok(
+      await page.evaluate(`(() => {
+        const list = document.querySelector('[cmdk-list]');
+        return list.querySelector('[cmdk-group-heading]').getBoundingClientRect().top >= list.getBoundingClientRect().top - 0.5;
+      })()`),
+      "returning to the first palette row shows its heading",
+    );
     await page.ab("fill", "[cmdk-input]", "release notes");
     await page.until(
       "document.querySelector('[cmdk-list]')?.getAttribute('aria-busy') === 'false'",
