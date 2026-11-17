@@ -153,13 +153,43 @@ function PaletteContents({
     if (next !== selected) setSelected(next);
     if (reset || next !== selected) list.current?.scrollTo({ top: 0, behavior: "instant" });
   }, [results.result, results.selectionKey, pending, selected, setSelected]);
+  const pointerSelects = useRef(false);
+  const keyed = useCallback(() => {
+    pointerSelects.current = false;
+  }, []);
+  // cmdk 1.1.1 scrolls to the row still marked aria-selected, which is the previous one here:
+  // the memoized rows re-render only after its layout effect. Scroll to the row by value instead.
+  useEffect(() => {
+    if (pointerSelects.current) return;
+    const row = list.current?.querySelector(`[cmdk-item][data-value="${CSS.escape(selected)}"]`);
+    if (!row) return;
+    if (row.parentElement?.firstElementChild === row)
+      row.closest("[cmdk-group]")?.querySelector("[cmdk-group-heading]")?.scrollIntoView({
+        block: "nearest",
+      });
+    row.scrollIntoView({ block: "nearest" });
+  }, [selected]);
 
   return (
-    <PaletteInput input={input} active={open} pending={pending} edit={edit} commit={commit}>
+    <PaletteInput
+      input={input}
+      active={open}
+      pending={pending}
+      edit={edit}
+      commit={commit}
+      keyed={keyed}
+    >
       {(replace) => {
         replaceText.current = replace;
         return (
-          <CommandList ref={list} aria-busy={pending} className="max-h-[min(24rem,60dvh)]">
+          <CommandList
+            ref={list}
+            aria-busy={pending}
+            className="max-h-[min(24rem,60dvh)]"
+            onPointerMove={() => {
+              pointerSelects.current = true;
+            }}
+          >
             <CommandEmpty>
               {results.error
                 ? "Search unavailable. Close and reopen to retry."
@@ -188,6 +218,7 @@ const PaletteInput = memo(function PaletteInput({
   pending,
   edit,
   commit,
+  keyed,
   children,
 }: {
   input: RefObject<HTMLInputElement | null>;
@@ -195,6 +226,7 @@ const PaletteInput = memo(function PaletteInput({
   pending: boolean;
   edit: () => void;
   commit: (query: string) => void;
+  keyed: () => void;
   children: (replaceText: (value: string) => void) => ReactNode;
 }) {
   const [text, setText] = useState("");
@@ -234,6 +266,7 @@ const PaletteInput = memo(function PaletteInput({
           schedule(event.currentTarget.value);
         }}
         onKeyDown={(event) => {
+          keyed();
           if (pending && ["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key))
             event.preventDefault();
           if (event.key !== "Enter") return;
