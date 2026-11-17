@@ -17,7 +17,9 @@ the session without sending the message again; a message that cannot be sent kee
   remembered root is skipped. A fresh `/projects/<id>/new` needs a directory choice.
 - `directory-trust`: a directory with `.pi` resources or `.agents/skills` shows "Directory trust"
   beside Directory: Untrusted / Trusted. Toggling changes that machine's decision about loading
-  those resources, not another machine's decision for the same path.
+  those resources, not another machine's decision for the same path. A decision whose answer
+  never arrives warns "Connection lost. <Trust|Untrust> folder may have finished; …" (or
+  "No reply. …"), never "Pi marked this folder as …".
 - `remote-new`: `/m/<machine>/new` uses the configured peer's registered directories, with trust
   where needed, but no Browse… or worktree creation. A remembered directory no longer open on
   that peer falls back to an open folder; it must not start on Local instead.

@@ -13,15 +13,16 @@ import type {
 import { type CreationContext, creationVerdictOf } from "../../shared/creationVerdict.ts";
 import { applySessionEvent, cursorStep } from "../../shared/sessionProjection.ts";
 import { sameSession, sessionKey as wireSessionKey } from "../../shared/wire.ts";
-import {
-  applyTrustFrame,
-  beginTrustDecision,
-  dropTrustDecisions,
-  type PendingTrust,
-} from "./lib/directoryTrust.ts";
+import { observeTrust } from "./lib/directoryTrust.ts";
 import * as FirstMessage from "./lib/firstMessage.ts";
 import type { UnavailableSessionReason } from "./lib/sessionCatalog.ts";
 import { startPage } from "./lib/startPage.ts";
+import {
+  reduceTrustDecision,
+  type TrustDecision,
+  type TrustDecisionAction,
+  trustObserved,
+} from "./lib/trustDecision.ts";
 
 export type { PendingCreate } from "./lib/firstMessage.ts";
 
@@ -47,7 +48,7 @@ export interface AppState {
   catalogs: Record<string, ModelCatalog>;
   catalogRevision: number;
   trusts: Record<string, ProjectTrust>;
-  pendingTrust: readonly PendingTrust[];
+  trustDecisions: readonly TrustDecision[];
   session: SessionView | null;
   selecting: { cwd: string; sessionId: string | null } | null;
   selectionFailure: { cwd: string; sessionId: string | null; message: string } | null;
@@ -87,7 +88,7 @@ export const initialState: AppState = {
   catalogs: {},
   catalogRevision: 0,
   trusts: {},
-  pendingTrust: [],
+  trustDecisions: [],
   session: null,
   selecting: null,
   selectionFailure: null,
@@ -99,7 +100,7 @@ export type Action =
   | { type: "dismiss_creation" }
   | { type: "connected"; connected: boolean; lost?: boolean }
   | { type: "server"; message: ServerMessage }
-  | { type: "trust_pending"; cwd: string }
+  | TrustDecisionAction
   | {
       type: "selecting";
       selectionId: string;
@@ -130,7 +131,7 @@ function reduceAction(s: AppState, a: Action): AppState {
   switch (a.type) {
     case "connected":
       return {
-        ...(a.connected ? s : dropTrustDecisions(s)),
+        ...s,
         connected: a.connected,
         unreachable: a.connected ? false : (a.lost ?? s.unreachable),
         selectionId: a.connected ? s.selectionId : null,
@@ -139,8 +140,9 @@ function reduceAction(s: AppState, a: Action): AppState {
       };
     case "dismiss_creation":
       return { ...s, selectionFailure: null, pendingCreate: null };
-    case "trust_pending":
-      return beginTrustDecision(s, a.cwd);
+    case "trust_decision":
+    case "trust_settled":
+      return reduceTrustDecision(s, a);
     case "selecting": {
       const next: AppState = {
         ...s,
@@ -253,8 +255,7 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
     case "catalogs_invalidated":
       return { ...s, catalogRevision: s.catalogRevision + 1 };
     case "trust":
-    case "trust_failed":
-      return applyTrustFrame(s, m);
+      return trustObserved(observeTrust(s, m), m);
     case "selected":
       if (m.selectionId !== s.selectionId || s.resync) return s;
       if (

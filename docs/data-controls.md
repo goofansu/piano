@@ -42,7 +42,8 @@ server's reason; only a request that never left the browser reads plain **Could 
   display projection rather than inventing title/folder formatting, and keeps only its state and
   wording. `web/src/lib/correlatedRequest.ts` sends each request and decides its outcome: not
   sent, failed with the server's detail, confirmed, or unconfirmed (connection lost or no reply).
-  The worktree picker (`web/src/lib/worktreeOperation.ts`) uses the same module.
+  The worktree picker (`web/src/lib/worktreeOperation.ts`) and folder trust decisions
+  (`web/src/lib/trustDecision.ts`) use the same module.
 - `shared/wire.ts`: local `unarchive_session`, `archive_all_sessions`, and read-only
   `archive_sessions_count`; each carries `requestId`. `data_controls_result` correlates terminal
   success/count or failure. Mutations additionally emit one server-confirmed success toast.

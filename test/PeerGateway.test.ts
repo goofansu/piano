@@ -868,7 +868,7 @@ test(
       const connection = await f.open();
       const messages = [
         { _tag: "select", selectionId: "s", cwd: identity.cwd, sessionId: "terminal-only" },
-        { _tag: "set_trust", path: identity.cwd, trusted: true },
+        { _tag: "set_trust", requestId: "trust-1", path: identity.cwd, trusted: true },
         { _tag: "act", selectionId: "s", action: { _tag: "set_name", name: "rename" } },
         { _tag: "ping", nonce: "forwarded" },
       ];

@@ -271,8 +271,14 @@ test(
     );
 
     await t.test("settings and unselected actions are refused with their replies", async () => {
-      const [trust] = await peer.answers({ _tag: "set_trust", path: "/different", trusted: true });
+      const [trust] = await peer.answers({
+        _tag: "set_trust",
+        requestId: "refused-trust",
+        path: "/different",
+        trusted: true,
+      });
       assert.equal(trust?._tag, "trust_failed");
+      assert.equal(trust?.requestId, "refused-trust");
       assert.equal(trust?.cwd, "/different");
       assert.match(String(trust?.message), notAvailable);
 
@@ -314,14 +320,21 @@ test(
 
     await t.test("a registered folder's trust is decided from another machine", async () => {
       const from = peer.frames.length;
-      peer.ws.send(JSON.stringify({ _tag: "set_trust", path: f.checkout, trusted: true }));
+      peer.ws.send(
+        JSON.stringify({
+          _tag: "set_trust",
+          requestId: "peer-trust",
+          path: f.checkout,
+          trusted: true,
+        }),
+      );
       const answer = await peer.next(
         (frame) =>
           (frame._tag === "trust" || frame._tag === "trust_failed") && frame.cwd === f.checkout,
         from,
       );
       assert.equal(answer._tag, "trust", JSON.stringify(answer));
-      assert.equal(answer.requested, true);
+      assert.equal(answer.requestId, "peer-trust");
       await peer.next(
         (frame) => frame._tag === "models" && (frame.catalog as { cwd: string }).cwd === f.checkout,
         from,
@@ -330,7 +343,14 @@ test(
 
     await t.test("the same requests reach their work on this machine's own /ws", async () => {
       let from = local.frames.length;
-      local.ws.send(JSON.stringify({ _tag: "set_trust", path: "/different", trusted: true }));
+      local.ws.send(
+        JSON.stringify({
+          _tag: "set_trust",
+          requestId: "local-trust",
+          path: "/different",
+          trusted: true,
+        }),
+      );
       const trust = await local.next(
         (frame) =>
           (frame._tag === "trust" || frame._tag === "trust_failed") && frame.cwd === "/different",

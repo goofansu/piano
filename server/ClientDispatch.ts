@@ -319,11 +319,12 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
             request.trusted,
           );
           yield* send({ _tag: "toast", level, message: notice });
-          yield* send({ _tag: "trust", cwd, trust, requested: request.trusted });
+          yield* send({ _tag: "trust", cwd, trust, requestId: request.requestId });
           yield* send({ _tag: "models", catalog });
         }),
-      unanswered: ({ path }, reason) => ({
+      unanswered: ({ path, requestId }, reason) => ({
         _tag: "trust_failed",
+        requestId,
         cwd: path,
         message: unansweredText(reason),
       }),

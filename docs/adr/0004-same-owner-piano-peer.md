@@ -150,6 +150,9 @@ sessions there, and a prompt can run anything the directory holds (INV-11).
   stays the step taken on the peer's own Piano.
 - Pi on the peer owns the decision and its file. The reply is the one the peer's own browser
   gets: Pi's notice, the directory's trust and its model list, which the decision can change.
+- The decision carries a request ID that the peer echoes on its `trust` or `trust_failed`
+  answer; main relays both unchanged. A peer on another Piano version may answer without it;
+  the browser then reports the decision as unconfirmed, never as Pi's own change.
 - The New page's trust control and the palette's Trust folder / Untrust folder appear on a remote
   where Pi says the directory needs the decision, as on Local.
 

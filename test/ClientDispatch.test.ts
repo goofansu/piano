@@ -944,7 +944,12 @@ test("a trust decision answers the requester with a notice, the new trust and th
       Effect.gen(function* () {
         const { receive } = yield* client;
         const from = sent.length;
-        yield* yield* receive({ _tag: "set_trust", path: cwd, trusted: true });
+        yield* yield* receive({
+          _tag: "set_trust",
+          requestId: "trust-1",
+          path: cwd,
+          trusted: true,
+        });
         const [toast, trust, models, ...rest] = answers(from);
         assert.ok(toast?._tag === "toast" && toast.level === "success");
         assert.match(toast.message, /^Trusted\./);
@@ -952,7 +957,7 @@ test("a trust decision answers the requester with a notice, the new trust and th
           _tag: "trust",
           cwd,
           trust: { required: true, trusted: true },
-          requested: true,
+          requestId: "trust-1",
         });
         assert.equal(models?._tag, "models");
         assert.deepEqual(rest, []);
@@ -991,7 +996,12 @@ test("untrust reports the final outcome when a Pi extension remembers trust agai
       assert.equal((yield* facts.trust(directory)).trust.trusted, true);
       const { receive } = yield* client;
       const from = sent.length;
-      yield* yield* receive({ _tag: "set_trust", path: directory, trusted: false });
+      yield* yield* receive({
+        _tag: "set_trust",
+        requestId: "untrust-1",
+        path: directory,
+        trusted: false,
+      });
       const replies = answers(from);
       const final = yield* facts.trust(directory);
       assert.equal(final.trust.trusted, true, "the extension saved trust during reload");
@@ -1000,7 +1010,7 @@ test("untrust reports the final outcome when a Pi extension remembers trust agai
         {
           _tag: "trust",
           ...final,
-          requested: false,
+          requestId: "untrust-1",
         },
       );
       const notices = replies.filter((m) => m._tag === "toast");
@@ -1173,8 +1183,8 @@ const refusals: {
     { _tag: "error", message: "REFUSED" },
   ],
   set_trust: [
-    { _tag: "set_trust", path: cwd, trusted: true },
-    { _tag: "trust_failed", cwd, message: "REFUSED" },
+    { _tag: "set_trust", requestId: "t1", path: cwd, trusted: true },
+    { _tag: "trust_failed", requestId: "t1", cwd, message: "REFUSED" },
   ],
   rename_session: [
     { _tag: "rename_session", cwd, sessionId: "x", title: "t" },

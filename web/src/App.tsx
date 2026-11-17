@@ -110,7 +110,12 @@ function MachineApp() {
     <SidebarActivityContext.Provider value={anyWorking}>
       <NavigationContext.Provider value={navigation}>
         <SessionFilesContext value={sessionFiles}>
-          <CommandHost state={state} send={send} listen={client.listen}>
+          <CommandHost
+            state={state}
+            send={send}
+            decideTrust={client.decideTrust}
+            listen={client.listen}
+          >
             <AppLayout
               navigationTitle={settings ? "Settings navigation" : "Folders and sessions"}
               navigation={

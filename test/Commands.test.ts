@@ -108,10 +108,7 @@ test("a disabled command does nothing, whichever surface offers it", () => {
 test("enabled commands reach the effect their intent names", () => {
   const byId = <C extends Command>(list: C[], id: string) => list.find((c) => c.id === id)!;
   const cases: [Command, unknown[]][] = [
-    [
-      trustCommand(online, "/repo", local)!,
-      ["send", { _tag: "set_trust", path: "/repo", trusted: true }],
-    ],
+    [trustCommand(online, "/repo", local)!, ["decideTrust", "/repo", true]],
     [
       byId(
         globalCommands(

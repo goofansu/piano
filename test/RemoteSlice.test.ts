@@ -99,6 +99,7 @@ async function browserSends(machine: Machine): Promise<ClientMessage[]> {
   let handlers: ConnectionHandlers | undefined;
   let ids = 0;
   const client = createClient({
+    timers: { setTimeout: () => undefined, clearTimeout: () => {} },
     startsSessionIn: offers.startsSessionIn,
     initial: initialState,
     connect: (h) => {
@@ -206,7 +207,7 @@ async function browserSends(machine: Machine): Promise<ClientMessage[]> {
 
   handlers!.onMessage({ _tag: "trust", cwd: CWD, trust: { required: true, trusted: false } });
   const trust = trustCommand(client.getState(), CWD, offers);
-  if (trust?.intent.kind === "send") send(trust.intent.command);
+  if (trust?.intent.kind === "trust") client.decideTrust(trust.intent.path, trust.intent.trusted);
 
   const listed = { cwd: CWD, sessionId: SESSION };
   const project = { id: "p1", name: "Launch" };

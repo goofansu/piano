@@ -757,7 +757,11 @@ export const ClientMessage = Schema.Union([
   }),
   Schema.TaggedStruct("set_project_done", { id: Schema.String, done: Schema.Boolean }),
   Schema.TaggedStruct("remove_folder", { path: Schema.String }),
-  Schema.TaggedStruct("set_trust", { path: Schema.String, trusted: Schema.Boolean }),
+  Schema.TaggedStruct("set_trust", {
+    requestId: Schema.String,
+    path: Schema.String,
+    trusted: Schema.Boolean,
+  }),
   Schema.TaggedStruct("directory", { cwd: Schema.String, requestId: Schema.String }),
   Schema.TaggedStruct("create_worktree", {
     requestId: Schema.String,
@@ -886,9 +890,13 @@ export const ServerMessage = Schema.Union([
   Schema.TaggedStruct("trust", {
     cwd: Schema.String,
     trust: ProjectTrust,
-    requested: Schema.optional(Schema.Boolean),
+    requestId: Schema.optional(Schema.String),
   }),
-  Schema.TaggedStruct("trust_failed", { cwd: Schema.String, message: Schema.String }),
+  Schema.TaggedStruct("trust_failed", {
+    requestId: Schema.String,
+    cwd: Schema.String,
+    message: Schema.String,
+  }),
   Schema.TaggedStruct("hosts", { hosts: Schema.Array(HostInfo) }),
   Schema.TaggedStruct("selected", {
     selectionId: Schema.String,
