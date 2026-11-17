@@ -54,10 +54,11 @@ implementations and recommends federating existing Piano backends through system
 Herdr integration or separate runner framework, following the user's minimal-dependency constraint.
 [ADR 0004](adr/0004-same-owner-piano-peer.md) supersedes that transport recommendation for the
 same-owner exe.dev peer slice; [remote Piano](remote-piano.md) documents its bounded setup and use.
-The [Machines setup research](research/2026-11-17-machines-setup.md) proposes Settings discovery of
-attached exe.dev integrations and manual setup from an outside main. It records Reflection's missing
-peer/target descriptor and the required confirmation fallback; discovery and live configuration are
-proposals, not shipped behavior or an accepted expansion of ADR 0004.
+The [Machines setup research](research/2026-11-17-machines-setup.md) proposes selecting attached
+exe.dev integrations in Settings, confirming a VM name prefilled from the integration name, and
+saving connections in the registry without Piano-managed tokens or config files. Manual/outside-main
+setup is deferred; discovery and live configuration are proposals, not shipped behavior or an
+accepted expansion of ADR 0004.
 The [Pi Durable reassessment](research/2026-11-11-pi-durable-adoption.md) separates published 1.5.2
 from unreleased orchestration primitives, records the removed experimental host and p2's unsupported
 status, and compares a bounded recovery prototype with ordinary RPC plus persisted job records.
