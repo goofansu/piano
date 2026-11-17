@@ -137,15 +137,7 @@ jobs:
           agent-browser install
       # A scratch Piano with a fake Pi: no model credentials, no paid calls.
       - name: Browser journey (${{ matrix.first }})
-        run: |
-          if [ "${{ matrix.first }}" = open-session ]; then
-            # Diagnose agent-browser's intermittent resize click; remove once a failing trace identifies the cause.
-            for attempt in $(seq 1 10); do
-              node test/browser/open-session.mjs ".scratch/browser/open-session-$attempt"
-            done
-          else
-            node test/browser/${{ matrix.first }}.mjs
-          fi
+        run: node test/browser/${{ matrix.first }}.mjs
       - name: Browser journey (${{ matrix.second }})
         if: ${{ !cancelled() && steps.browser-install.outcome == 'success' && matrix.second != '' }}
         run: node test/browser/${{ matrix.second }}.mjs
