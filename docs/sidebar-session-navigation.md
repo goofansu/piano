@@ -180,7 +180,10 @@ read-only creation read-back, not navigation to a listed session; see
   takes one ordinary lease and answers by `requestId` on success, failure or refusal.
 - [`ClientSessions.ts`](../server/ClientSessions.ts) exposes `select(selection)`: it claims the
   selection at once and returns the work that reads the session (`SessionHosts.read`, which never
-  starts Pi) and sends `selected` only if that selection is still current.
+  starts Pi) and sends `selected` only if that selection is still current. The latest claim wins:
+  a newer claim ends the older selection's waits for a creation's outcome or for the session lock
+  a starting Pi holds, so the drain moves on; a history read already holding the lock finishes
+  first, unanswered.
 - [`PeerScope.ts`](../server/PeerScope.ts)'s `peerVerdict` admits a peer's `select` only for a
   session it lists (or a registered directory for a read-back) and `directory` only for a
   registered directory; the browser's offers do not decide this.
@@ -204,8 +207,9 @@ Module checks are grouped by the contract they protect:
 - Server admission: [`ClientDispatch.test.ts`](../test/ClientDispatch.test.ts) shows cold
   cross-directory focus unable to fill admission while saved selections advance, 32 superseded
   selections during startup ending with only the first and the latest shown while an unrelated
-  mutation is refused explicitly and a ping still answers, and saturation rejecting before any
-  selection changes; [`ClientSessions.test.ts`](../test/ClientSessions.test.ts) shows a saved
+  mutation is refused explicitly and a ping still answers, a newer selection shown while the
+  one it superseded still waits on a held creation or on a session whose Pi is starting, and
+  saturation rejecting before any selection changes; [`ClientSessions.test.ts`](../test/ClientSessions.test.ts) shows a saved
   selection spending one discovery read without starting Pi, a lookup that finishes after a
   reselect showing nothing, and an act for a replaced selection refused as stale.
 - Reveal geometry has no module test: `useSidebarWindow.ts` is proven only by the browser

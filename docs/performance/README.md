@@ -96,8 +96,8 @@ browser target), CDP installs instrumentation before application code and measur
   element count. Not browser RSS or sidebar-only heap. Screenshots show the actual tested surface.
 
 The implementation path is `web/src/store.ts` (registry snapshot) →
-`web/src/lib/sessionCatalog.ts` → `sidebarList.ts` / `sidebarView.ts` (filter/group/sort, cached
-against sidebar facts) → `useSidebarList.ts` → `web/src/components/Sidebar.tsx`.
+`web/src/lib/sessionCatalog.ts` (cached against the state it reads) → `sidebarList.ts` /
+`sidebarView.ts` (filter/group/sort, cached against the catalog and the sidebar's view) → `useSidebarList.ts` → `web/src/components/Sidebar.tsx`.
 `SessionRows` uses `useSidebarWindow.ts` to mount visible rows plus five rows of overscan on each
 side, against the shared Radix `ScrollArea` viewport. Group headers stay in normal flow. A CSS ruler
 measures the existing responsive row heights and list gap/padding; each list preserves its full

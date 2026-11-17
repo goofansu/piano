@@ -129,7 +129,7 @@ export function ChangesPanel({
               data-pull-request-trigger
               size="header"
               label="Pull request"
-              disabled={!pullRequest.addressable || pullRequest.busy}
+              disabled={!pullRequest.changeable || pullRequest.busy}
               onClick={pullRequest.open}
             >
               <GitPullRequestIcon />

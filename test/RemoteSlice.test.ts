@@ -116,6 +116,12 @@ async function browserSends(machine: Machine): Promise<ClientMessage[]> {
   });
   client.start();
   handlers!.onStatus(true);
+  handlers!.onMessage({
+    _tag: "registry",
+    folders: [],
+    workspaces: registry.workspaces,
+    sessionReferences: registry.sessions.map((s) => ({ ...s, workspaceId: "ws1", branch: null })),
+  });
   const send = client.send;
   let preparations = 0;
   const sender = createImageSender({
@@ -417,4 +423,63 @@ test("on a remote, every enabled New session here opens a New page where the rem
     [CWD],
     "the open folder's session offers it; the closed one's does not",
   );
+});
+
+test("a remote starts in every directory the browser lists under an open folder", () => {
+  const SIBLING = "/sibling";
+  const data: RegistryData = {
+    ...registry,
+    workspaces: [...registry.workspaces, { id: "ws2", folder: SIBLING, path: SIBLING }],
+    worktrees: [{ folder: CWD, path: SIBLING, branch: "feature" }],
+  };
+  const offers = machineOffers({ id: "eng-1", name: "Eng" });
+  let handlers: ConnectionHandlers | undefined;
+  const client = createClient({
+    initial: initialState,
+    connect: (h) => {
+      handlers = h;
+      return { send: () => "sent", close: () => {} };
+    },
+    notify: () => {},
+    startsSessionIn: offers.startsSessionIn,
+  });
+  client.start();
+  handlers!.onStatus(true);
+  const view = (path: string, root: boolean) => ({
+    workspace: data.workspaces.find((w) => w.path === path)!,
+    trust: { required: false, trusted: false },
+    branch: root ? "main" : "feature",
+    path,
+    root,
+    status: "current" as const,
+  });
+  handlers!.onMessage({
+    _tag: "registry",
+    folders: [
+      {
+        path: CWD,
+        name: "repo",
+        worktrees: [view(CWD, true), view(SIBLING, false)],
+        discovery: {
+          status: "ready",
+          observedAt: "",
+          currentPath: CWD,
+          worktrees: [],
+        },
+      },
+    ],
+    workspaces: data.workspaces,
+    sessionReferences: [],
+  });
+  assert.ok(offers.startsSessionIn(client.getState(), SIBLING), "the browser offers it");
+  const create: ClientMessage = {
+    _tag: "create_session",
+    cwd: SIBLING,
+    selectionId: "sel-new",
+    options: {},
+    text: "Reply with exactly: X",
+  };
+  assert.equal(peerVerdict(data, create, null), "admit");
+  const closed = { ...data, folders: [] };
+  assert.equal(peerVerdict(closed, create, null), "refuse", "a closed folder stays closed");
 });

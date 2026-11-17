@@ -1,14 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { FolderView, SessionState, WorktreeView } from "../shared/wire.ts";
-import { addressFor } from "../web/src/lib/navigation.ts";
+import { addressFor, decideRoute } from "../web/src/lib/navigation.ts";
 import {
   archivedSessionCatalog,
   catalogEntry,
   folderFor,
   recentSessions,
+  sessionAddress,
   sessionCatalog,
   sessionDestination,
+  unavailableSessionPage,
 } from "../web/src/lib/sessionCatalog.ts";
 import { sessionContext } from "../web/src/lib/sessionContext.ts";
 import {
@@ -239,6 +241,59 @@ test("a session opens at the catalog's directory only while it is not archived a
   assert.equal(sessionDestination(state, "missing"), "unlisted");
 });
 
+test("a session's address selects it only while it is registered, unarchived and its history is there", () => {
+  assert.deepEqual(sessionAddress(state, "closed-member"), {
+    kind: "select",
+    cwd: "/closed/app",
+    sessionId: "closed-member",
+  });
+  assert.deepEqual(sessionAddress(state, "missing"), { kind: "unavailable", reason: "missing" });
+  assert.deepEqual(sessionAddress(state, "lost"), { kind: "unavailable", reason: "history" });
+  assert.deepEqual(sessionAddress(state, "archived"), { kind: "unavailable", reason: "archived" });
+  const archivedLost: AppState = {
+    ...state,
+    sessionReferences: [ref("/repo", "both", "Both", { archived: true, unavailable: "history" })],
+  };
+  assert.deepEqual(
+    sessionAddress(archivedLost, "both"),
+    { kind: "unavailable", reason: "archived" },
+    "the server refuses an archived session before it looks for history",
+  );
+});
+
+test("an unavailable session's page and browser tab agree on why, and only Settings offers Data controls", () => {
+  const loaded: AppState = { ...state, registryLoaded: true };
+  const pages = (["missing", "lost", "archived"] as const).map((sessionId) => {
+    const address = sessionAddress(loaded, sessionId);
+    assert.equal(address.kind, "unavailable");
+    const decision = decideRoute({ kind: "session", sessionId }, loaded);
+    assert.equal(decision.kind, "open");
+    const shown: AppState = { ...loaded, view: decision.page };
+    const tab = addressFor(shown, null, `/s/${sessionId}`)?.title;
+    const reason = address.kind === "unavailable" ? address.reason : "missing";
+    for (const settings of [true, false]) {
+      const page = unavailableSessionPage(reason, { settings });
+      assert.equal(tab, `${page.title} - Piano`, `${reason} with settings ${settings}`);
+    }
+    return {
+      reason,
+      local: unavailableSessionPage(reason, { settings: true }),
+      remote: unavailableSessionPage(reason, { settings: false }),
+    };
+  });
+  assert.deepEqual(
+    pages.map(({ reason, local, remote }) => [reason, local.action, remote.action]),
+    [
+      ["missing", "new-session", "new-session"],
+      ["history", "new-session", "new-session"],
+      ["archived", "data-controls", "new-session"],
+    ],
+  );
+  const archived = pages[2]!;
+  assert.match(archived.local.description, /Settings → Data controls/);
+  assert.doesNotMatch(archived.remote.description, /Settings/);
+});
+
 test("an untitled session is called Untitled in the sidebar, its header and the browser tab", () => {
   const untitled: AppState = {
     ...state,
@@ -281,7 +336,7 @@ test("the palette lists newest first by creation time, a closed folder's session
       }),
     ],
   };
-  const order = recentSessions(dated);
+  const order = recentSessions(sessionCatalog(dated));
   assert.deepEqual(
     order.map((s) => s.sessionId),
     ["newest-closed", "middle-open", "older-open"],

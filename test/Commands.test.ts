@@ -14,6 +14,7 @@ import {
 } from "../web/src/lib/projectCommands.ts";
 import { sessionCommands } from "../web/src/lib/sessionCommands.ts";
 import { type AppState, initialState } from "../web/src/store.ts";
+import { sessionReference } from "./fixtures/sessionReference.ts";
 
 const launch: Project = { id: "p1", name: "Launch" };
 const folder = { path: "/repo", name: "repo" };
@@ -23,6 +24,7 @@ const online: AppState = {
   projects: [launch],
   view: { kind: "new", cwd: "/repo" },
   trusts: { "/repo": { required: true, trusted: false } },
+  sessionReferences: [sessionReference("/repo", "s1"), sessionReference("/repo", "s2")],
 };
 const other = { cwd: "/repo", sessionId: "s2", title: "Other" };
 const selected: AppState = {
@@ -85,7 +87,7 @@ function effectsOf(command: Command) {
   return { ran: runCommand(command, effects), calls };
 }
 
-const { startsSessionIn: startsLocally } = machineOffers(LOCAL);
+const local = machineOffers(LOCAL);
 
 test("a disabled command does nothing, whichever surface offers it", () => {
   const offline = { ...online, connected: false };
@@ -94,7 +96,7 @@ test("a disabled command does nothing, whichever surface offers it", () => {
     ...projectCommands(offline, launch).filter((c) => c.id === "delete"),
     newProjectCommand(offline),
     assignProjectCommand(offline, other, "p1"),
-    folderCommands(offline, folder, startsLocally).close,
+    folderCommands(offline, folder, local).close!,
     ...sessionCommands(offline, other),
   ];
   for (const command of disabled) {
@@ -145,11 +147,8 @@ test("enabled commands reach the effect their intent names", () => {
       assignProjectCommand(online, other, null),
       ["send", { _tag: "assign_project", cwd: "/repo", sessionId: "s2", projectId: null }],
     ],
-    [folderCommands(online, folder, startsLocally).create, ["openNew", "/repo"]],
-    [
-      folderCommands(online, folder, startsLocally).close,
-      ["openForm", { kind: "close-folder", folder }],
-    ],
+    [folderCommands(online, folder, local).create!, ["openNew", "/repo"]],
+    [folderCommands(online, folder, local).close!, ["openForm", { kind: "close-folder", folder }]],
     [
       byId(sessionCommands(online, other), "rename"),
       ["openForm", { kind: "rename-session", target: other }],

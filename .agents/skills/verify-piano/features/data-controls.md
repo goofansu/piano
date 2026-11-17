@@ -8,6 +8,8 @@ sessions in bulk without deleting their transcripts. Settings → Data controls 
 
 - `archived-rows`: Sessions comes first, Archived sessions last. Each archived row shows its title,
   small folder name (full path in `title`) and an outline Unarchive button; no Unarchive all.
+- `archived-address`: an archived session's `/s/<sessionId>` address shows Session archived and
+  a Data controls button, not an “Unable to open session.” banner; the button opens its recovery page.
 - `unarchive`: restores the reference and toasts Session unarchived. Reading its saved history
   does not start a user Pi; an uncached composer catalog can start a probe.
 - `archive-all`: Archive all asks for confirmation with the eligible count and “Running and
@@ -23,6 +25,7 @@ sessions in bulk without deleting their transcripts. Settings → Data controls 
 
 - Sidebar Settings → Data controls.
 - Mod+K → Data controls, including from another Settings section.
+- An archived session's `/s/<sessionId>` address → Data controls.
 - Address bar: `/settings/data-controls`. Settings is local-only, not a peer-session action.
 
 ## Driving it with agent-browser
@@ -40,7 +43,12 @@ recipes need the folder open. Capture with `capture.sh` as in the skill body.
     ab open "$WEB_URL/settings/data-controls"; ab wait --text 'Archived sessions'`.
   - Result: capture `02-archived`; the row has Loose session, repo and Unarchive. Read its full
     path with `ab eval "document.querySelector('main [data-slot=item-description]')?.title"`.
-    Restore this row with
+  - Archived address: before restoring, `ab open "$WEB_URL/s/verify-loose";
+    ab wait --text 'Session archived'`; capture `02b-archived-address`. Confirm no
+    “Unable to open session.” banner, then
+    `ab find role button click --name 'Data controls' --exact;
+    ab wait --url '**/settings/data-controls'; ab wait --text 'Loose session'`.
+    The session is still under Archived sessions. Restore this row with
     `ab click 'main [data-slot=item]:has([title="Loose session"]) button';
     ab wait --text 'Session unarchived'`. Capture `03-unarchived`; open `/s/verify-loose` again
     and wait for Answer 4. The saved history returns, with no non-probe start for `verify-loose`

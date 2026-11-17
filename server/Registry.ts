@@ -74,6 +74,14 @@ export const shownReference = ({
   ...shown
 }: SessionEntry): Omit<SessionEntry, "stats" | "changesScope" | "retentionVersion"> => shown;
 
+export const archivable = (entry: SessionEntry) => !entry.archived && !entry.pinned;
+
+const retained = (entry: SessionEntry, archived: boolean): SessionEntry => ({
+  ...entry,
+  archived,
+  retentionVersion: (entry.retentionVersion ?? 0) + 1,
+});
+
 const sameReference = (entry: SessionEntry, expected: SessionEntry, link?: SessionLinkKey) =>
   entry.createdAt === expected.createdAt &&
   (entry.retentionVersion ?? 0) === (expected.retentionVersion ?? 0) &&
@@ -102,6 +110,10 @@ export interface RegistryData {
   readonly worktrees: ReadonlyArray<WorktreeEntry>;
   readonly sessions: ReadonlyArray<SessionEntry>;
 }
+
+export const inOpenFolder = (data: RegistryData, cwd: string): boolean =>
+  data.folders.includes(cwd) ||
+  data.worktrees.some((w) => w.path === cwd && data.folders.includes(w.folder));
 
 export const DEFAULT_DB_PATH = resolve(
   join(process.env.XDG_DATA_HOME || join(homedir(), ".local", "share"), "piano", "piano.db"),
@@ -312,6 +324,7 @@ export class Registry extends Context.Service<
     readonly archiveSessions: (
       expected: ReadonlyArray<SessionEntry>,
     ) => Effect.Effect<number, RegistryError>;
+    readonly archivableCount: (expected: ReadonlyArray<SessionEntry>) => Effect.Effect<number>;
     readonly removeSession: (
       cwd: string,
       sessionId: string,
@@ -378,6 +391,25 @@ export const RegistryLive = Layer.effect(
     const currentIn = (d: RegistryData, expected: SessionEntry, link?: SessionLinkKey) => {
       const entry = d.sessions.find(isSession(expected.cwd, expected.sessionId));
       return entry && sameReference(entry, expected, link) ? entry : undefined;
+    };
+    const archiveIn = (d: RegistryData, expected: ReadonlyArray<SessionEntry>) => {
+      let count = 0;
+      const candidates = new Map(expected.map((s) => [sessionKey(s.cwd, s.sessionId), s]));
+      const sessions = d.sessions.map((s) => {
+        const before = candidates.get(sessionKey(s.cwd, s.sessionId));
+        if (!before || !archivable(s) || !sameReference(s, before)) return s;
+        count++;
+        return retained(s, true);
+      });
+      return { data: { ...d, sessions }, count };
+    };
+    const changeableIn = (d: RegistryData, cwd: string, sessionId: string) => {
+      const entry = d.sessions.find(isSession(cwd, sessionId));
+      if (!entry || entry.archived)
+        throw new RegistryError({
+          detail: "Session reference is unavailable. Refresh and try again.",
+        });
+      return entry;
     };
 
     const workspace = (id: string) =>
@@ -478,10 +510,7 @@ export const RegistryLive = Layer.effect(
         update((d) => {
           const parsed = Schema.decodeUnknownSync(Project)(project);
           if (!parsed.name.trim()) throw new RegistryError({ detail: "A project needs a name." });
-          if (assign && !d.sessions.some(isSession(assign.cwd, assign.sessionId)))
-            throw new RegistryError({
-              detail: "Session reference is unavailable. Refresh and try again.",
-            });
+          const assigned = assign && changeableIn(d, assign.cwd, assign.sessionId);
           if (d.projects.some((p) => p.id === parsed.id))
             throw new RegistryError({ detail: "Project already exists. Refresh and try again." });
           const instructions = parsed.instructions?.trim();
@@ -491,10 +520,8 @@ export const RegistryLive = Layer.effect(
             ...(instructions ? { instructions } : {}),
           };
           const projects = [...d.projects, next];
-          const sessions = assign
-            ? d.sessions.map((s) =>
-                isSession(assign.cwd, assign.sessionId)(s) ? { ...s, projectId: next.id } : s,
-              )
+          const sessions = assigned
+            ? d.sessions.map((s) => (s === assigned ? { ...s, projectId: next.id } : s))
             : d.sessions;
           return { ...d, projects, sessions };
         }),
@@ -540,16 +567,13 @@ export const RegistryLive = Layer.effect(
         }),
       assignProject: (cwd, sessionId, projectId) =>
         update((d) => {
-          if (!d.sessions.some(isSession(cwd, sessionId)))
-            throw new RegistryError({
-              detail: "Session reference is unavailable. Refresh and try again.",
-            });
+          const entry = changeableIn(d, cwd, sessionId);
           if (projectId !== null && !d.projects.some((p) => p.id === projectId))
             throw new RegistryError({ detail: "Project is unavailable. Refresh and try again." });
           return {
             ...d,
             sessions: d.sessions.map((s) =>
-              isSession(cwd, sessionId)(s) ? { ...s, projectId: projectId ?? undefined } : s,
+              s === entry ? { ...s, projectId: projectId ?? undefined } : s,
             ),
           };
         }),
@@ -651,7 +675,7 @@ export const RegistryLive = Layer.effect(
         let saved: SessionEntry | undefined;
         yield* update((d) => {
           const entry = currentIn(d, expected, link);
-          if (!entry) return d;
+          if (!entry || entry.archived) return d;
           const next: SessionEntry = { ...entry, [link]: value };
           saved = next;
           return { ...d, sessions: d.sessions.map((s) => (s === entry ? next : s)) };
@@ -660,11 +684,7 @@ export const RegistryLive = Layer.effect(
       }),
       pinSession: Effect.fn("Registry.pinSession")(function* (cwd, sessionId, pinned) {
         yield* update((d) => {
-          const entry = d.sessions.find(isSession(cwd, sessionId));
-          if (!entry || entry.archived)
-            throw new RegistryError({
-              detail: "Session reference is unavailable. Refresh and try again.",
-            });
+          const entry = changeableIn(d, cwd, sessionId);
           if (!!entry.pinned === pinned) return d;
           return {
             ...d,
@@ -677,11 +697,7 @@ export const RegistryLive = Layer.effect(
       setSessionChangesScope: Effect.fn("Registry.setSessionChangesScope")(
         function* (cwd, sessionId, scope) {
           yield* update((d) => {
-            const entry = d.sessions.find(isSession(cwd, sessionId));
-            if (!entry || entry.archived)
-              throw new RegistryError({
-                detail: "Session reference is unavailable. Refresh and try again.",
-              });
+            const entry = changeableIn(d, cwd, sessionId);
             if (entry.changesScope === scope) return d;
             return {
               ...d,
@@ -694,9 +710,7 @@ export const RegistryLive = Layer.effect(
         update((d) => ({
           ...d,
           sessions: d.sessions.map((t) =>
-            isSession(cwd, sessionId)(t) && !t.archived
-              ? { ...t, archived: true, retentionVersion: (t.retentionVersion ?? 0) + 1 }
-              : t,
+            isSession(cwd, sessionId)(t) && !t.archived ? retained(t, true) : t,
           ),
         })),
       unarchiveSession: (cwd, sessionId) =>
@@ -708,27 +722,20 @@ export const RegistryLive = Layer.effect(
             });
           return {
             ...d,
-            sessions: d.sessions.map((s) =>
-              s === entry
-                ? { ...s, archived: false, retentionVersion: (s.retentionVersion ?? 0) + 1 }
-                : s,
-            ),
+            sessions: d.sessions.map((s) => (s === entry ? retained(s, false) : s)),
           };
         }),
       archiveSessions: Effect.fn("Registry.archiveSessions")(function* (expected) {
         let count = 0;
-        const candidates = new Map(expected.map((s) => [sessionKey(s.cwd, s.sessionId), s]));
-        yield* update((d) => ({
-          ...d,
-          sessions: d.sessions.map((s) => {
-            const before = candidates.get(sessionKey(s.cwd, s.sessionId));
-            if (!before || s.archived || s.pinned || !sameReference(s, before)) return s;
-            count++;
-            return { ...s, archived: true, retentionVersion: (s.retentionVersion ?? 0) + 1 };
-          }),
-        }));
+        yield* update((d) => {
+          const archived = archiveIn(d, expected);
+          count = archived.count;
+          return archived.data;
+        });
         return count;
       }),
+      archivableCount: (expected) =>
+        Effect.map(Ref.get(state), (d) => archiveIn(d, expected).count),
       removeSession: (cwd, sessionId, reopened) =>
         update((d) => {
           const at = d.sessions.findIndex(isSession(cwd, sessionId));

@@ -8,7 +8,6 @@ export interface MachineOffers {
   providerAccounts: boolean;
   worktrees: boolean;
   browse: boolean;
-  folders: boolean;
   settings: boolean;
   command: (command: Command) => boolean;
   startsSessionIn: (state: AppState, cwd: string) => boolean;
@@ -18,7 +17,6 @@ const LOCAL_OFFERS: MachineOffers = {
   providerAccounts: true,
   worktrees: true,
   browse: true,
-  folders: true,
   settings: true,
   command: () => true,
   startsSessionIn: (state, cwd) => !checkoutMissingAt(state, cwd),
@@ -37,7 +35,6 @@ const REMOTE_OFFERS: MachineOffers = {
   providerAccounts: false,
   worktrees: false,
   browse: false,
-  folders: false,
   settings: false,
   command: (command) => {
     switch (command.intent.kind) {

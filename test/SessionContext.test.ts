@@ -466,12 +466,19 @@ test("directory trust prefers the latest probe over discovery", () => {
 test("the selected session waits for a settled attachment before registry changes; other sessions do not", () => {
   const selected = { cwd: "/work/repo.feature", sessionId: "s1" };
   const other = { cwd: "/repo", sessionId: "s2" };
-  const settled = { ...base, session: session("/work/repo.feature") };
+  const settled = {
+    ...base,
+    sessionReferences: [...base.sessionReferences, sessionReference("/repo", "s2")],
+    session: session("/work/repo.feature"),
+  };
   assert.equal(sessionMutable(settled, selected), true);
   assert.equal(sessionMutable({ ...settled, resync: true }, selected), false);
   assert.equal(sessionMutable({ ...settled, resync: true }, other), true);
   assert.equal(sessionMutable({ ...settled, connected: false }, other), false);
-  assert.equal(sessionMutable({ ...base, selectionId: null, view: { kind: "new" } }, other), true);
+  assert.equal(
+    sessionMutable({ ...settled, selectionId: null, session: null, view: { kind: "new" } }, other),
+    true,
+  );
   assert.equal(
     sessionCheckoutMissing(
       { ...base, session: session("/work/repo.feature", { checkoutMissing: true }) },
@@ -651,12 +658,15 @@ test("one rule answers whether a folder with no sessions can start one when its 
     ["repo"],
     "the picker leaves the missing root out",
   );
-  assert.equal(folderCommands(gone, research("missing"), startsLocally).create.enabled, false);
+  assert.equal(
+    folderCommands(gone, research("missing"), machineOffers(LOCAL)).create?.enabled,
+    false,
+  );
   assert.deepEqual(focusedDirectory(gone), { cwd: "/research", checkoutMissing: true });
   assert.equal(trustCommand(gone, "/research"), undefined, "Pi cannot be asked about its trust");
 
   assert.equal(checkoutMissingAt(gone, "/repo"), false, "a current folder beside it is unaffected");
-  assert.equal(folderCommands(gone, folder, startsLocally).create.enabled, true);
+  assert.equal(folderCommands(gone, folder, machineOffers(LOCAL)).create?.enabled, true);
   assert.deepEqual(focusedDirectory({ ...gone, view: { kind: "new", cwd: "/repo" } }), {
     cwd: "/repo",
     checkoutMissing: false,
@@ -665,7 +675,7 @@ test("one rule answers whether a folder with no sessions can start one when its 
   for (const status of ["current", "unknown", "non-git"] as const) {
     const s = state(status);
     assert.equal(checkoutMissingAt(s, "/research"), false, `${status} is not evidence of absence`);
-    assert.equal(folderCommands(s, research(status), startsLocally).create.enabled, true);
+    assert.equal(folderCommands(s, research(status), machineOffers(LOCAL)).create?.enabled, true);
     assert.equal(focusedDirectory(s)?.checkoutMissing, false);
   }
 
@@ -682,7 +692,7 @@ test("one rule answers whether a folder with no sessions can start one when its 
 });
 
 test("New session here, from a folder row or a session, asks the machine's one rule where a session may start", () => {
-  const remote = machineOffers({ id: "eng-1", name: "eng-1" }).startsSessionIn;
+  const remote = machineOffers({ id: "eng-1", name: "eng-1" });
   const research = (status: WorktreeView["status"]): FolderView => ({
     ...folder,
     path: "/research",
@@ -719,13 +729,14 @@ test("New session here, from a folder row or a session, asks the machine's one r
   for (const c of cases) {
     const state = at(c.cwd, c.status);
     const row = { path: c.cwd, name: c.cwd.slice(1) };
-    for (const [machine, rule, expected] of [
-      ["Local", startsLocally, c.local],
+    for (const [machine, offers, expected] of [
+      ["Local", machineOffers(LOCAL), c.local],
       ["remote", remote, c.far],
     ] as const) {
+      const rule = offers.startsSessionIn;
       assert.equal(rule(state, c.cwd), expected, `${machine}: ${c.name}`);
       assert.equal(
-        folderCommands(state, row, rule).create.enabled,
+        folderCommands(state, row, offers).create?.enabled,
         expected,
         `${machine} row: ${c.name}`,
       );

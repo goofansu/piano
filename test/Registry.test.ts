@@ -384,16 +384,17 @@ test("INV-01/07: a session link is set only on the same reference, not archived 
       assert.equal(yield* r.setSessionLink(latest, "pullRequest", null), undefined);
       assert.equal(yield* r.current(latest), undefined, "archived since it was read");
       const archived = (yield* r.get).sessions[0]!;
-      assert.ok(
+      assert.equal(
         yield* r.setSessionLink(archived, "pullRequest", null),
-        "a reference read as archived still keeps its links",
+        undefined,
+        "a reference read as archived refuses a link write",
       );
     }),
   );
   const persisted = (await f.get()).sessions[0];
   assert.deepEqual(
     persisted && [persisted.archived, persisted.pullRequest],
-    [true, null],
+    [true, linked],
     "links persist across restart",
   );
 });
@@ -478,6 +479,42 @@ test("PIN-152: reversible archive preserves metadata and refuses stale writes af
       const r = yield* Registry;
       assert.equal((yield* r.get).sessions[0]!.retentionVersion, 2);
       assert.equal(yield* r.current(stale!), undefined, "the generation survives restart");
+    }),
+  );
+});
+
+test("INV-01: every user write to a session reference refuses an archived reference with one detail", async (t) => {
+  const f = fixture(t),
+    cwd = join(f.root, "folder");
+  await f.run(
+    Effect.gen(function* () {
+      const r = yield* Registry;
+      yield* r.addSession(cwd, "one", "One");
+      yield* r.saveProject({ id: "launch", name: "Launch" });
+      yield* r.archiveSession(cwd, "one");
+      const before = yield* r.get;
+      const writes = {
+        pinSession: r.pinSession(cwd, "one", true),
+        setSessionChangesScope: r.setSessionChangesScope(cwd, "one", "uncommitted"),
+        assignProject: r.assignProject(cwd, "one", "launch"),
+        "saveProject with assign": r.saveProject(
+          { id: "assigned", name: "Assigned" },
+          { cwd, sessionId: "one" },
+        ),
+      };
+      for (const [name, write] of Object.entries(writes))
+        assert.equal(
+          yield* Effect.match(write, { onFailure: (e) => e.detail, onSuccess: () => "succeeded" }),
+          "Session reference is unavailable. Refresh and try again.",
+          name,
+        );
+      const archived = before.sessions.find((s) => s.sessionId === "one")!;
+      assert.equal(
+        yield* r.setSessionLink(archived, "pullRequest", null),
+        undefined,
+        "setSessionLink",
+      );
+      assert.deepEqual(yield* r.get, before, "no refused write changes Piano's database");
     }),
   );
 });

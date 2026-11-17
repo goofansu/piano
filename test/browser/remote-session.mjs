@@ -138,6 +138,26 @@ const unsupported = async (page) => {
   for (const label of ["Add folder", "Settings", "Preview", "Open preview in new tab"])
     assert.ok(!controls.includes(label), `remote does not offer unsupported ${label}`);
 };
+const groupBy = async (page, label) => {
+  await page.press("Mod+k");
+  await page.ab("fill", "[cmdk-input]", label);
+  await page.until("document.querySelector('[cmdk-list]')?.getAttribute('aria-busy') === 'false'");
+  await page.ab("press", "Enter");
+  await page.until("!document.querySelector('[cmdk-input]')");
+};
+const folderRow = async (page, machineName, capture) => {
+  await groupBy(page, "Group by folder");
+  await page.until(`!!document.querySelector('[aria-label="New session in repo"]')`);
+  const menu = await page.evaluate(
+    `!!document.querySelector('[aria-label="Folder menu for repo"]')`,
+  );
+  assert.equal(menu, machineName === "Local", `${machineName} folder row's Close menu`);
+  await page.ab("hover", '[aria-label="New session in repo"]');
+  await page.capture(capture);
+  await page.ab("hover", "main");
+  await groupBy(page, "Group by date");
+  await page.until(`!document.querySelector('[aria-label="New session in repo"]')`);
+};
 const remoteNewPage = async (page) => {
   await page.until(`!!document.querySelector('[aria-label="First message"]')`);
   await page.ab("click", '[aria-label="Directory"]');
@@ -187,12 +207,25 @@ await run(
       );
     }
     await page.capture("0-settings-without-machine-picker");
+    await page.open("/m/eng-1/settings/data-controls");
+    await page.until(`location.pathname === '/m/eng-1/new'`);
+    await page.see("What should we work on?");
+    assert.equal(await page.evaluate(`document.title`), "New session - Piano");
+    assert.equal(
+      await page.evaluate(`!!document.querySelector('[aria-label="Settings"]')`),
+      false,
+      "a remote's Settings address opens a page, not Settings",
+    );
+    await page.capture("0a-remote-settings-address");
+    await page.open("/settings/data-controls");
+    await page.until(`!!document.querySelector('[aria-label="Settings"] header h1')`);
     await page.click("button", "Show sidebar");
     await page.click("button", "Home");
     await page.see("Local collision session");
     await page.click("button", "Local collision session");
     await page.see("Local collision session saved history");
     await ready(page);
+    await folderRow(page, "Local", "1-local-folder-row");
     await catalog(page, "local", "remote", "LOCAL-DRAFT");
     await page.capture("1-local-draft");
 
@@ -280,6 +313,7 @@ await run(
         );
         await unsupported(page);
         await page.capture("2-remote-new-page");
+        await folderRow(page, "eng-1", "2-remote-folder-row");
         await page.ab("find", "role", "button", "click", "--name", "Remote collision session");
         await page.until(`location.pathname === '/m/eng-1/s/${sessionId}'`);
         await page.see("Remote collision session saved history");

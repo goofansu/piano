@@ -17,7 +17,13 @@ import { Directories } from "./Directories.ts";
 import { FolderWorktrees, FolderWorktreesLive } from "./FolderWorktrees.ts";
 import { directoryPath } from "./PiEnv.ts";
 import { type PiSession, PiSessionError, type PiSessions } from "./PiSessions.ts";
-import { Registry, RegistryError, type SessionEntry } from "./Registry.ts";
+import {
+  archivable,
+  inOpenFolder,
+  Registry,
+  RegistryError,
+  type SessionEntry,
+} from "./Registry.ts";
 import {
   type CloseHow,
   listedFacts,
@@ -150,15 +156,20 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         cwd: string,
         sessionId: string,
         work: (key: string) => Effect.Effect<A, E>,
-      ) =>
-        owned(
-          Effect.gen(function* () {
-            const { physical } = yield* references.checkout(cwd);
-            const key = sessionKey(physical, sessionId);
-            const lock = yield* lockFor(key);
-            return yield* Semaphore.withPermits(lock, 1)(Effect.suspend(() => work(key)));
-          }),
-        );
+        { abandonable = false }: { abandonable?: boolean } = {},
+      ) => {
+        const locked = Effect.gen(function* () {
+          const { physical } = yield* references.checkout(cwd);
+          const key = sessionKey(physical, sessionId);
+          const lock = yield* lockFor(key);
+          const held = Effect.suspend(() => work(key));
+          return yield* Semaphore.withPermits(
+            lock,
+            1,
+          )(abandonable ? Effect.uninterruptible(held) : held);
+        });
+        return abandonable ? locked : owned(locked);
+      };
 
       const list = Effect.gen(function* () {
         const live = new Set([...hosts.values()].map((h) => h.session.spec.sessionId));
@@ -195,20 +206,28 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         cwd: string,
         id: string,
         work: (r: Resolved) => Effect.Effect<A, E>,
-        { create = false, how }: { create?: boolean; how?: CloseHow } = {},
+        {
+          create = false,
+          how,
+          abandonable,
+        }: { create?: boolean; how?: CloseHow; abandonable?: boolean } = {},
       ) =>
-        keyed(cwd, id, (key) =>
-          Effect.gen(function* () {
-            const fresh = create && !hosts.has(key);
-            let ref = yield* references.resolve(cwd, id, { create: fresh });
-            let host = hosts.get(key);
-            if (host && (ref.checkoutMissing || (yield* host.session.state).closure)) {
-              yield* close(key, host, how);
-              host = undefined;
-              ref = yield* references.resolve(cwd, id);
-            }
-            return yield* work({ key, ref, host });
-          }),
+        keyed(
+          cwd,
+          id,
+          (key) =>
+            Effect.gen(function* () {
+              const fresh = create && !hosts.has(key);
+              let ref = yield* references.resolve(cwd, id, { create: fresh });
+              let host = hosts.get(key);
+              if (host && (ref.checkoutMissing || (yield* host.session.state).closure)) {
+                yield* close(key, host, how);
+                host = undefined;
+                ref = yield* references.resolve(cwd, id);
+              }
+              return yield* work({ key, ref, host });
+            }),
+          { abandonable },
         );
 
       const start = <E>(
@@ -452,19 +471,23 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         cwd: string,
         id: string,
       ): Effect.fn.Return<SessionReadback, PiSessionError> {
-        return yield* resolved(cwd, id, ({ key, ref, host }) =>
-          Effect.gen(function* (): Effect.fn.Return<SessionReadback> {
-            if (host) return { _tag: "live", session: host.session };
-            const snapshot = yield* references.peek(ref);
-            yield* mirrorSession(registry, ref.cwd, id, {
-              sessionName: snapshot.state.sessionName,
-            });
-            return {
-              _tag: "saved",
-              cwd: ref.cwd,
-              snapshot: { ...snapshot, state: { ...snapshot.state, closure: exits.get(key) } },
-            };
-          }),
+        return yield* resolved(
+          cwd,
+          id,
+          ({ key, ref, host }) =>
+            Effect.gen(function* (): Effect.fn.Return<SessionReadback> {
+              if (host) return { _tag: "live", session: host.session };
+              const snapshot = yield* references.peek(ref);
+              yield* mirrorSession(registry, ref.cwd, id, {
+                sessionName: snapshot.state.sessionName,
+              });
+              return {
+                _tag: "saved",
+                cwd: ref.cwd,
+                snapshot: { ...snapshot, state: { ...snapshot.state, closure: exits.get(key) } },
+              };
+            }),
+          { abandonable: true },
         );
       });
 
@@ -534,37 +557,18 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
       const archiveCandidates = Effect.fn("SessionHosts.archiveCandidates")(function* (
         write: boolean,
       ) {
-        const groups = new Map<string, SessionEntry[]>();
-        for (const entry of (yield* registry.get).sessions) {
-          const checkout = yield* references.checkout(entry.cwd).pipe(Effect.option);
-          if (checkout._tag === "None") continue;
-          const key = sessionKey(checkout.value.physical, entry.sessionId);
-          groups.set(key, [...(groups.get(key) ?? []), entry]);
-        }
         const candidates: SessionEntry[] = [];
-        for (const [key, entries] of groups) {
-          const entry = entries[0]!;
-          if (
-            entries.length !== 1 ||
-            entry.archived ||
-            entry.pinned ||
-            hosts.has(key) ||
-            starting.has(entry.sessionId)
-          )
-            continue;
+        for (const { key, entry } of yield* references.canonical) {
+          if (!archivable(entry) || hosts.has(key) || starting.has(entry.sessionId)) continue;
           const lock = yield* lockFor(key);
           const acquired = yield* Effect.acquireRelease(lock.takeIfAvailable(1), (held) =>
             held ? lock.release(1) : Effect.void,
           );
           if (acquired && !hosts.has(key) && !starting.has(entry.sessionId)) candidates.push(entry);
         }
-        if (write) return yield* registry.archiveSessions(candidates);
-        let count = 0;
-        for (const candidate of candidates) {
-          const current = yield* registry.current(candidate);
-          if (current && !current.archived && !current.pinned) count++;
-        }
-        return count;
+        return yield* write
+          ? registry.archiveSessions(candidates)
+          : registry.archivableCount(candidates);
       }, Effect.scoped);
 
       if (options.idleMs > 0)
@@ -608,9 +612,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
           keyed(cwd, id, () =>
             Effect.gen(function* () {
               const owner = yield* references.unarchive(cwd, id);
-              const data = yield* registry.get;
-              const folder = data.workspaces.find((w) => w.path === owner)?.folder ?? owner;
-              return !data.folders.includes(folder);
+              return !inOpenFolder(yield* registry.get, owner);
             }),
           ),
         archiveAll: owned(archiveCandidates(true)),

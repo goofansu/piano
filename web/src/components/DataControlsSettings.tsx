@@ -1,6 +1,5 @@
 import { ArchiveIcon } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { toast } from "sonner";
 import { PianoButton } from "@/components/PianoButton";
 import { RemovalDialog } from "@/components/RemovalDialog";
 import { ListRow } from "@/components/RowActions";
@@ -16,12 +15,11 @@ import { Spinner } from "@/components/ui/spinner";
 import type { Client } from "@/lib/client";
 import { archiveConfirmation, createDataControls } from "@/lib/dataControls";
 import { archivedSessionCatalog } from "@/lib/sessionCatalog";
+import { toastNotify } from "@/lib/toastNotify";
 import { type AppState, sessionKey } from "@/store";
 
 export function DataControlsSettings({ state, client }: { state: AppState; client: Client }) {
-  const [controls] = useState(() =>
-    createDataControls({ client, failure: (message) => toast.error(message) }),
-  );
+  const [controls] = useState(() => createDataControls({ client, notify: toastNotify }));
   useEffect(() => controls.start(), [controls]);
   const operation = useSyncExternalStore(controls.subscribe, controls.getState);
   const confirmation = archiveConfirmation(operation, state.connected);

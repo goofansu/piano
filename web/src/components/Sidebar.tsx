@@ -197,7 +197,7 @@ function SidebarSessions({ state, list: { pinned, body }, toggle }: SessionsProp
       case "loading":
         return unavailable ? empty(unavailable) : <SidebarSkeleton />;
       case "empty":
-        return empty(unavailable ?? (offers.folders ? body.text : "No sessions yet"));
+        return empty(unavailable ?? (offers.browse ? body.text : "No sessions yet"));
       case "sections": {
         return (
           <div className="flex flex-col gap-1">
@@ -536,8 +536,7 @@ function FolderGroup({
   select,
 }: GroupProps & { folder: FolderView; sessions: readonly SessionEntry[] }) {
   const { run } = useCommands();
-  const offers = useOffers();
-  const { create, close } = folderCommands(state, folder, offers.startsSessionIn);
+  const { create, close } = folderCommands(state, folder, useOffers());
 
   return (
     <SidebarGroup
@@ -550,7 +549,7 @@ function FolderGroup({
       details={details}
       select={select}
       actions={[
-        offers.folders && create.enabled && (
+        create?.enabled && (
           <IconButton
             key="new"
             size="row"
@@ -561,7 +560,7 @@ function FolderGroup({
             <SquarePenIcon />
           </IconButton>
         ),
-        offers.folders && (
+        close && (
           <DropdownMenu key="menu">
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="row" aria-label={`Folder menu for ${folder.name}`}>

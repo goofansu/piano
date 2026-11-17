@@ -172,10 +172,11 @@ sessions there; Local's defaults are unchanged. Cmd+K searches
 only the selected machine and offers a **Switch to …** command for each configured machine. A remote session's
 address is `/m/eng-1/s/<sessionId>`; reload and back/forward retain that machine.
 
-**New session** (or **New session here** in Cmd+K) starts a session on the selected machine. Its
-directory picker lists only the folders open on that machine, and **New session here** is
-unavailable for a session whose folder is closed there (pinned and project sessions stay listed);
-its first message may contain text, images or both.
+**New session** (or **New session here** in Cmd+K or on an open folder's sidebar row) starts a
+session on the selected machine. Its directory picker lists only the folders open on that machine,
+and **New session here** is unavailable for a session whose folder is closed there (pinned and
+project sessions stay listed); its first message may contain text, images or both. A remote
+folder's row has no folder menu: Close stays on the owning Piano.
 The session runs and stays on the remote. A worktree for parallel work comes from the remote
 session's own dispatch, which runs on the remote, not from this picker.
 
@@ -224,7 +225,8 @@ A remote session's menu, in the sidebar and in its header, offers **Rename**, **
 **Archive** and **Delete** as on Local. Archive and Delete stop the session on the remote, and
 Delete removes its history there. To unarchive a remote session, use **Settings → Data controls**
 on that remote's own Piano. Unarchive and Archive all are not offered or accepted through a peer;
-Settings remains local-only.
+Settings remains local-only: a remote's `/settings/...` address opens its New page and
+corrects the address.
 
 ### Artifacts and pull request
 
@@ -345,7 +347,10 @@ owns the trust and scope decisions; [browser storage](browser-storage.md) and
   own remote sessions or inject/renumber their frames. [`Router.ts`](../server/Router.ts)
   wires the relay, `/ws/peer` and the public `/api/machines` list.
 - [`PeerScope.ts`](../server/PeerScope.ts)'s `peerVerdict(data, request, selection)`, `registered`
-  and `inputTarget` decide the owning peer's admitted operations and input targets.
+  and `inputTarget` decide the owning peer's admitted operations and input targets. A new session
+  starts only where [`Registry.ts`](../server/Registry.ts)'s `inOpenFolder(data, cwd)` holds: an
+  open folder or a worktree registered under one, the directories the sidebar lists. Unarchive's
+  closed-folder notice and a session's saved branch use the same rule.
   [`WsClient.ts`](../server/WsClient.ts) identifies peer connections;
   [`ClientDispatch.ts`](../server/ClientDispatch.ts) applies the verdict and sends ordinary
   refusals in the peer's delivery sequence. This is distinct from browser offers.

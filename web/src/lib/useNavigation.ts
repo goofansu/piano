@@ -10,7 +10,7 @@ import {
   type NavigationState,
 } from "./navigation.ts";
 import { createPreference } from "./preference.ts";
-import { useMachineId } from "./useMachine.ts";
+import { useMachineId, useOffers } from "./useMachine.ts";
 
 const railPreference = createPreference<boolean>({
   key: "piano.details",
@@ -24,6 +24,7 @@ export function useNavigationController(
   moved: () => void,
 ): Navigation {
   const machineId = useMachineId();
+  const offers = useOffers();
   const [navigation] = useState(() =>
     createNavigation({
       client,
@@ -32,6 +33,7 @@ export function useNavigationController(
         workspaceFile(workspaceId, path, { ...options, machineId }),
       memory: browserSurfaceMemory(machineId),
       rail: railPreference,
+      settings: offers.settings,
       moved,
     }),
   );

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { FolderView, SessionPreview, SessionState, WorktreeView } from "../shared/wire.ts";
 import type { SessionLayout } from "../web/src/lib/navigation.ts";
+import { sessionProjectMenu } from "../web/src/lib/projectCommands.ts";
 import {
   environmentRowMenu,
   type SessionCommandId,
@@ -220,6 +221,30 @@ test("pin commands reflect registry state and stay available independently of Pi
     enabled({ ...base, session: session("/work/repo.feature", { isStreaming: true }) }).pin,
     true,
   );
+});
+
+test("an archived reference keeps read and copy commands but offers no change, project assignment included", () => {
+  const archived: AppState = {
+    ...base,
+    projects: [{ id: "p1", name: "Launch" }],
+    sessionReferences: base.sessionReferences.map((s) => ({ ...s, archived: true })),
+  };
+  assert.equal(enabled(archived)["copy-session-id"], true, "copying stays available");
+  assert.equal(enabled(base)["pull-request"], true);
+  assert.equal(enabled(archived)["pull-request"], false, "header Pull request");
+  for (const target of [undefined, other]) {
+    const commands = enabled(archived, target);
+    for (const id of ["rename", "pin", "archive", "delete"] as const)
+      assert.equal(commands[id], false, `${target ? "row" : "header"} ${id}`);
+
+    const project = sessionProjectMenu(
+      archived,
+      target ?? { cwd: "/work/repo.feature", sessionId: "s1" },
+    );
+    assert.equal(project.entry.enabled, false, "Move/Add to project");
+    for (const c of [project.create, ...project.destinations.map((d) => d.command)])
+      assert.equal(c.enabled, false, c.label);
+  }
 });
 
 test("Messages only is off by default; running it toggles, and it is checked while on", () => {

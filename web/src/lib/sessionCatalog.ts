@@ -1,5 +1,6 @@
 import type { FolderView, Project, SessionReference, WorktreeView } from "@shared/wire";
 import { type AppState, isSession, sessionKey } from "../store.ts";
+import type { MachineOffers } from "./machineOffers.ts";
 import { findProject } from "./projectCommands.ts";
 
 export type SessionActivity = "working" | "done" | "idle" | "off";
@@ -38,6 +39,69 @@ export const HISTORY_UNAVAILABLE = {
   title: "History unavailable",
   description: "Restore the Pi session file to open it.",
 } as const;
+
+export type UnavailableSessionReason = "missing" | "history" | "archived";
+
+export type SessionAddress =
+  | { kind: "select"; cwd: string; sessionId: string }
+  | { kind: "unavailable"; reason: UnavailableSessionReason };
+
+export interface UnavailableSessionPage {
+  title: string;
+  description: string;
+  action: "data-controls" | "new-session";
+}
+
+export function unavailableSessionTitle(reason: UnavailableSessionReason): string {
+  switch (reason) {
+    case "missing":
+      return "Session not found";
+    case "history":
+      return HISTORY_UNAVAILABLE.title;
+    case "archived":
+      return "Session archived";
+  }
+}
+
+export function unavailableSessionPage(
+  reason: UnavailableSessionReason,
+  offers: Pick<MachineOffers, "settings">,
+): UnavailableSessionPage {
+  const title = unavailableSessionTitle(reason);
+  switch (reason) {
+    case "missing":
+      return {
+        title,
+        description: "This session is not in Piano's database.",
+        action: "new-session",
+      };
+    case "history":
+      return { title, description: HISTORY_UNAVAILABLE.description, action: "new-session" };
+    case "archived":
+      return offers.settings
+        ? {
+            title,
+            description: "Unarchive it in Settings → Data controls to open it.",
+            action: "data-controls",
+          }
+        : {
+            title,
+            description: "Unarchive it in that machine's own Piano to open it.",
+            action: "new-session",
+          };
+  }
+}
+
+export function sessionAddress(
+  state: Pick<AppState, "sessionReferences">,
+  sessionId: string,
+): SessionAddress {
+  const ref = state.sessionReferences.find((r) => r.sessionId === sessionId);
+  if (!ref) return { kind: "unavailable", reason: "missing" };
+  if (ref.archived) return { kind: "unavailable", reason: "archived" };
+  if (!sessionOpenable(ref)) return { kind: "unavailable", reason: "history" };
+  return { kind: "select", cwd: ref.cwd, sessionId };
+}
 
 const HINTS = {
   history: `${HISTORY_UNAVAILABLE.title}. ${HISTORY_UNAVAILABLE.description}`,
@@ -117,8 +181,30 @@ export function inSidebarGroups(s: Pick<SessionEntry, "listed" | "pinned">): boo
   return s.listed && !s.pinned;
 }
 
-export function recentSessions(state: AppState): SessionEntry[] {
-  return sessionCatalog(state)
+export function createSessionCatalog(): (state: AppState) => SessionEntry[] {
+  let inputs: unknown[] = [];
+  let catalog: SessionEntry[] = [];
+  return (state) => {
+    const current = state.session ?? state.selecting;
+    const next = [
+      state.sessionReferences,
+      state.folders,
+      state.projects,
+      state.hosts,
+      state.done,
+      current?.cwd,
+      current?.sessionId,
+    ];
+    if (next.some((value, i) => value !== inputs[i])) {
+      inputs = next;
+      catalog = sessionCatalog(state);
+    }
+    return catalog;
+  };
+}
+
+export function recentSessions(catalog: readonly SessionEntry[]): SessionEntry[] {
+  return catalog
     .filter((s) => !s.disabled)
     .sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0));
 }
@@ -137,6 +223,7 @@ export function sessionDestination(
   state: AppState,
   sessionId: string,
 ): SessionDestination | "unlisted" {
-  const entry = sessionCatalog(state).find((s) => s.sessionId === sessionId);
+  if (sessionAddress(state, sessionId).kind !== "select") return "unlisted";
+  const entry = catalogEntry(state, sessionId);
   return entry && !entry.disabled ? { sessionId, cwd: entry.cwd, label: entry.label } : "unlisted";
 }

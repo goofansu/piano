@@ -8,7 +8,12 @@ import {
   parseJson,
 } from "./preference.ts";
 import { isProjectDone } from "./projectCommands.ts";
-import { folderFor, inSidebarGroups, type SessionEntry, sessionCatalog } from "./sessionCatalog.ts";
+import {
+  createSessionCatalog,
+  folderFor,
+  inSidebarGroups,
+  type SessionEntry,
+} from "./sessionCatalog.ts";
 import { sessionReference } from "./sessionContext.ts";
 import {
   dateGroup,
@@ -167,12 +172,12 @@ function rowDetails(
 
 function buildList(
   state: AppState,
+  catalog: readonly SessionEntry[],
   view: SidebarView,
   today: Date,
   isOpen: (key: string) => boolean,
 ): SidebarList {
   if (!state.registryLoaded) return { pinned: null, body: { kind: "loading" } };
-  const catalog = sessionCatalog(state);
   const pinnedSessions = sortSessions(
     catalog.filter((s) => s.pinned),
     view.sortBy,
@@ -247,13 +252,10 @@ export function createSidebarList({
   let projects: ReadonlySet<string> | null = null;
   let doneProjects: ReadonlySet<string> | null = null;
   const listeners = new Set<() => void>();
+  const sessionsOf = createSessionCatalog();
   let cache: {
-    facts: Pick<
-      AppState,
-      "registryLoaded" | "folders" | "sessionReferences" | "projects" | "hosts" | "done"
-    >;
-    cwd: string | undefined;
-    sessionId: string | null | undefined;
+    registryLoaded: boolean;
+    catalog: readonly SessionEntry[];
     view: SidebarView;
     open: ReadonlySet<string>;
     closed: ReadonlySet<string>;
@@ -298,17 +300,11 @@ export function createSidebarList({
 
   const list: SidebarListModel["list"] = (state, view) => {
     const pinnedOpen = preferences.pinnedOpen.get();
-    const current = state.session ?? state.selecting;
-    const { registryLoaded, folders, sessionReferences, projects, hosts, done } = state;
+    const { registryLoaded } = state;
+    const catalog = sessionsOf(state);
     if (
-      cache?.facts.registryLoaded === registryLoaded &&
-      cache.facts.folders === folders &&
-      cache.facts.sessionReferences === sessionReferences &&
-      cache.facts.projects === projects &&
-      cache.facts.hosts === hosts &&
-      cache.facts.done === done &&
-      cache.cwd === current?.cwd &&
-      cache.sessionId === current?.sessionId &&
+      cache?.registryLoaded === registryLoaded &&
+      cache.catalog === catalog &&
       cache.view === view &&
       cache.open === open &&
       cache.closed === closed &&
@@ -316,11 +312,10 @@ export function createSidebarList({
       cache.today === today
     )
       return cache.list;
-    const built = buildList(state, view, today, (key) => isOpen(key, pinnedOpen));
+    const built = buildList(state, catalog, view, today, (key) => isOpen(key, pinnedOpen));
     cache = {
-      facts: { registryLoaded, folders, sessionReferences, projects, hosts, done },
-      cwd: current?.cwd,
-      sessionId: current?.sessionId,
+      registryLoaded,
+      catalog,
       view,
       open,
       closed,

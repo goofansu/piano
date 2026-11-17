@@ -11,7 +11,7 @@ import {
   routePath,
   type SettingsSection,
 } from "./routes.ts";
-import { HISTORY_UNAVAILABLE, sessionLabel, sessionOpenable } from "./sessionCatalog.ts";
+import { sessionAddress, sessionLabel, unavailableSessionTitle } from "./sessionCatalog.ts";
 import { checkoutMissingAt, workspaceFor } from "./sessionContext.ts";
 
 export type SurfaceView = "changes";
@@ -130,6 +130,7 @@ export interface NavigationOptions {
   ) => ReturnType<typeof workspaceFile>;
   memory?: SurfaceMemory;
   rail?: Preference<boolean>;
+  settings?: boolean;
   moved?: () => void;
 }
 
@@ -186,7 +187,7 @@ function pageAddress(state: AppState, page: Page): { route: Route; title: string
     case "missing-session":
       return {
         route: { kind: "session", sessionId: page.sessionId },
-        title: page.reason === "history" ? HISTORY_UNAVAILABLE.title : "Session not found",
+        title: unavailableSessionTitle(page.reason ?? "missing"),
       };
   }
 }
@@ -213,15 +214,17 @@ export function decideRoute(route: Route, state: AppState): RouteDecision {
       : { kind: "open", page };
   }
   if (!state.registryLoaded) return { kind: "wait" };
-  const session = state.sessionReferences.find((ref) => ref.sessionId === route.sessionId);
-  if (!session)
-    return { kind: "open", page: { kind: "missing-session", sessionId: route.sessionId } };
-  return sessionOpenable(session)
-    ? { kind: "select", cwd: session.cwd, sessionId: session.sessionId }
-    : {
-        kind: "open",
-        page: { kind: "missing-session", sessionId: route.sessionId, reason: "history" },
-      };
+  const address = sessionAddress(state, route.sessionId);
+  if (address.kind === "select") return address;
+  const { reason } = address;
+  return {
+    kind: "open",
+    page: {
+      kind: "missing-session",
+      sessionId: route.sessionId,
+      ...(reason !== "missing" && { reason }),
+    },
+  };
 }
 
 export interface Address {
@@ -338,9 +341,15 @@ export function createNavigation({
   readFile,
   memory,
   rail: railPreference,
+  settings: offersSettings = true,
   moved = () => {},
 }: NavigationOptions): Navigation {
-  let wanted: Route | null = parseRoute(address.location());
+  const refused = (route: Route) => route.kind === "settings" && !offersSettings;
+  const routeAt = (): Route => {
+    const route = parseRoute(address.location());
+    return refused(route) ? { kind: "new" } : route;
+  };
+  let wanted: Route | null = routeAt();
   const fields = {
     surface: null,
     rail: railPreference?.get() ?? false,
@@ -522,8 +531,9 @@ export function createNavigation({
       const { pathname, search } = address.location();
       const target = addressFor(c, state.settings, pathname);
       if (target) {
+        const replace = target.mode === "replace" || refused(parseRoute({ pathname }));
         if (target.path !== pathname + search)
-          (target.mode === "replace" ? address.replace : address.push)(target.path);
+          (replace ? address.replace : address.push)(target.path);
         if (target.title !== syncedTitle) {
           address.setTitle(target.title);
           syncedTitle = target.title;
@@ -697,7 +707,7 @@ export function createNavigation({
       const stopPop = address.onPop(() =>
         batch(() => {
           moved();
-          const route = parseRoute(address.location());
+          const route = routeAt();
           set({ settings: route.kind === "settings" ? route.section : null });
           wanted = route;
           moving = true;
@@ -716,12 +726,14 @@ export function createNavigation({
     openNew: (cwd, projectId) => open({ kind: "new", cwd, projectId }),
     openProjects: () => open({ kind: "projects" }),
     openProject: (projectId) => open({ kind: "project", projectId }),
-    openSettings: (section = DEFAULT_SETTINGS_SECTION) =>
+    openSettings: (section = DEFAULT_SETTINGS_SECTION) => {
+      if (!offersSettings) return;
       batch(() => {
         wanted = null;
         set({ settings: section });
         moved();
-      }),
+      });
+    },
     closeSettings,
     openChanges: () => openView("changes"),
     toggleRail: () => {

@@ -13,6 +13,7 @@ import {
   sessionMutable,
   sessionReady,
   sessionReference,
+  sessionReferenceChangeable,
   sessionWorking,
 } from "./sessionContext.ts";
 import {
@@ -320,7 +321,7 @@ export function sessionCommands(
         id: "pull-request",
         label: "Pull request",
         icon: "pull-request",
-        enabled: !!ctx.pullRequestTarget,
+        enabled: !!ctx.pullRequestTarget && !!ref && sessionReferenceChangeable(state, ref),
         detail: ctx.changesUnavailable,
         keywords: ["pr"],
         intent: { kind: "pull-request", linked },
@@ -354,7 +355,7 @@ export function sessionCommands(
               id: "pin" as const,
               label: reference?.pinned ? "Unpin" : "Pin",
               icon: reference?.pinned ? ("unpin" as const) : ("pin" as const),
-              enabled: state.connected && !!reference && !reference.archived,
+              enabled: sessionReferenceChangeable(state, subject),
               intent: {
                 kind: "send" as const,
                 command: {

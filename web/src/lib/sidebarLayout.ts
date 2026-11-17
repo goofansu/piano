@@ -11,6 +11,8 @@ export interface SidebarLayoutState {
   width: number;
   resizing: boolean;
   mobileOpen: boolean;
+  wide: boolean;
+  hidden: boolean;
 }
 
 export interface SidebarEnvironment<T> {
@@ -57,20 +59,27 @@ export function createSidebarLayout<T>(env: SidebarEnvironment<T>): SidebarLayou
   let returnFocus: T | null = null;
   const fallbacks = new Set<T>();
   const listeners = new Set<() => void>();
-  let state: SidebarLayoutState = { collapsed, width, resizing: false, mobileOpen };
-
-  const publish = () => {
-    const next: SidebarLayoutState = {
+  const snapshot = (): SidebarLayoutState => {
+    const wide = env.desktop();
+    return {
       collapsed,
       width: drag ? drag.width : width,
       resizing: drag !== null,
       mobileOpen,
+      wide,
+      hidden: wide ? collapsed : !mobileOpen,
     };
+  };
+  let state = snapshot();
+
+  const publish = () => {
+    const next = snapshot();
     if (
       next.collapsed === state.collapsed &&
       next.width === state.width &&
       next.resizing === state.resizing &&
-      next.mobileOpen === state.mobileOpen
+      next.mobileOpen === state.mobileOpen &&
+      next.wide === state.wide
     )
       return;
     state = next;
@@ -139,6 +148,7 @@ export function createSidebarLayout<T>(env: SidebarEnvironment<T>): SidebarLayou
         mobileOpen = false;
         publish();
       });
+      publish();
       return () => {
         stop();
         cancelResize();

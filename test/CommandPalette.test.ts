@@ -759,6 +759,28 @@ test("only readable sessions enter recents and search as availability changes", 
   );
 });
 
+test("a cached palette follows Pi starting and finishing for its sessions", () => {
+  const catalog = createPaletteCatalog();
+  const input = { globalCommands: [], sessionCommands: [] };
+  const starting: AppState = {
+    ...home,
+    hosts: [{ cwd: "/repo", sessionId: "s8", working: false, starting: true }],
+  };
+  const started: AppState = {
+    ...starting,
+    hosts: [{ cwd: "/repo", sessionId: "s8", working: true }],
+  };
+  for (const state of [home, starting, started, home]) {
+    assert.deepEqual(
+      catalog(state, input),
+      commandPalette(state, input),
+      "cached and direct agree",
+    );
+  }
+  assert.ok(!sessionIds(starting).includes("s8"), "a starting session is not openable yet");
+  assert.ok(sessionIds(started).includes("s8"));
+});
+
 test("unavailable-only catalogs have no sessions group", () => {
   const state: AppState = {
     ...home,

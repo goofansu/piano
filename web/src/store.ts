@@ -58,7 +58,7 @@ export type Page =
   | { kind: "new"; cwd?: string; projectId?: string }
   | { kind: "projects" }
   | { kind: "project"; projectId: string; cwd?: string }
-  | { kind: "missing-session"; sessionId: string; reason?: "history" };
+  | { kind: "missing-session"; sessionId: string; reason?: "history" | "archived" };
 
 export const sessionKey = (s: { cwd: string; sessionId: string | null }) =>
   wireSessionKey(s.cwd, s.sessionId ?? "");

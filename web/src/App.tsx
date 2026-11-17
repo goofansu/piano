@@ -20,7 +20,7 @@ import { machineFrameBytes, machineLocation, machineSocketUrl } from "@/lib/mach
 import { initialView } from "@/lib/navigation";
 import { pendingDialogs } from "@/lib/piDialogs";
 import { parseRoute } from "@/lib/routes";
-import { HISTORY_UNAVAILABLE } from "@/lib/sessionCatalog";
+import { type UnavailableSessionPage, unavailableSessionPage } from "@/lib/sessionCatalog";
 import { toastNotify as notify } from "@/lib/toastNotify";
 import { useClient } from "@/lib/useClient";
 import { useMachineScope, useOffers, usePreviews } from "@/lib/useMachine";
@@ -114,7 +114,7 @@ function MachineApp() {
             <AppLayout
               navigationTitle={settings ? "Settings navigation" : "Folders and sessions"}
               navigation={
-                offers.settings && settings ? (
+                settings ? (
                   <SettingsNavigation
                     section={settings}
                     onSelect={openSettings}
@@ -126,7 +126,7 @@ function MachineApp() {
               }
               content={
                 <>
-                  <LayoutView key={state.view.kind} active={!offers.settings || !settings}>
+                  <LayoutView key={state.view.kind} active={!settings}>
                     {state.view.kind === "new" ? (
                       <NewSession
                         state={state}
@@ -144,24 +144,16 @@ function MachineApp() {
                         projectId={state.view.projectId}
                       />
                     ) : state.view.kind === "missing-session" ? (
-                      <PaneNotFound
-                        {...(state.view.reason === "history"
-                          ? HISTORY_UNAVAILABLE
-                          : {
-                              title: "Session not found",
-                              description: "This session is not in Piano's database.",
-                            })}
-                        action={
-                          <Button variant="outline" onClick={() => openNew()}>
-                            New session
-                          </Button>
-                        }
+                      <UnavailableSession
+                        page={unavailableSessionPage(state.view.reason ?? "missing", offers)}
+                        openDataControls={() => openSettings("data-controls")}
+                        openNew={() => openNew()}
                       />
                     ) : (
                       <SessionView state={state} send={send} captureSend={client.captureSend} />
                     )}
                   </LayoutView>
-                  {offers.settings && settings && (
+                  {settings && (
                     <LayoutView>
                       <SettingsPage section={settings} state={state} client={client} />
                     </LayoutView>
@@ -185,5 +177,33 @@ function MachineApp() {
         </SessionFilesContext>
       </NavigationContext.Provider>
     </SidebarActivityContext.Provider>
+  );
+}
+
+function UnavailableSession({
+  page,
+  openDataControls,
+  openNew,
+}: {
+  page: UnavailableSessionPage;
+  openDataControls: () => void;
+  openNew: () => void;
+}) {
+  return (
+    <PaneNotFound
+      title={page.title}
+      description={page.description}
+      action={
+        page.action === "data-controls" ? (
+          <Button variant="outline" onClick={openDataControls}>
+            Data controls
+          </Button>
+        ) : (
+          <Button variant="outline" onClick={openNew}>
+            New session
+          </Button>
+        )
+      }
+    />
   );
 }

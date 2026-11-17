@@ -1,10 +1,15 @@
 import { realpath, rm } from "node:fs/promises";
 import { Context, Effect, Layer } from "effect";
 import { withLastKnownStats } from "../shared/sessionProjection.ts";
-import type { SessionReference, SessionStats, Snapshot } from "../shared/wire.ts";
+import {
+  type SessionReference,
+  type SessionStats,
+  type Snapshot,
+  sessionKey,
+} from "../shared/wire.ts";
 import { directoryPath } from "./PiEnv.ts";
 import { PiSessionError, PiSessions } from "./PiSessions.ts";
-import { Registry } from "./Registry.ts";
+import { Registry, type SessionEntry } from "./Registry.ts";
 
 export interface Checkout {
   readonly physical: string;
@@ -36,6 +41,9 @@ export class SessionReferences extends Context.Service<
       sessionId: string,
       options?: { readonly create?: boolean; readonly confirmAbsent?: boolean },
     ) => Effect.Effect<SessionLocation, PiSessionError>;
+    readonly canonical: Effect.Effect<
+      ReadonlyArray<{ readonly key: string; readonly entry: SessionEntry }>
+    >;
     readonly availability: (
       sessions: ReadonlyArray<{ readonly cwd: string; readonly sessionId: string }>,
     ) => Effect.Effect<(cwd: string, sessionId: string) => SessionReference["unavailable"]>;
@@ -72,20 +80,26 @@ export const SessionReferencesLive = Layer.effect(
       return { ...at, spellings: new Set([directoryPath(cwd), at.physical]) };
     });
 
+    const grouped = Effect.fnUntraced(function* (entries: ReadonlyArray<SessionEntry>) {
+      const groups = new Map<string, SessionEntry[]>();
+      for (const entry of entries) {
+        const at = yield* checkout(entry.cwd).pipe(Effect.option);
+        if (at._tag === "None") continue;
+        const key = sessionKey(at.value.physical, entry.sessionId);
+        const group = groups.get(key);
+        if (group) group.push(entry);
+        else groups.set(key, [entry]);
+      }
+      return groups;
+    });
+
     const reference = Effect.fn("SessionReferences.reference")(function* (
       cwd: string,
       sessionId: string,
     ) {
       const { physical } = yield* checkout(cwd);
       const candidates = (yield* registry.get).sessions.filter((s) => s.sessionId === sessionId);
-      const matching = [];
-      for (const entry of candidates) {
-        const path = yield* checkout(entry.cwd).pipe(
-          Effect.map((c) => c.physical),
-          Effect.orElseSucceed(() => undefined),
-        );
-        if (path === physical) matching.push(entry);
-      }
+      const matching = (yield* grouped(candidates)).get(sessionKey(physical, sessionId)) ?? [];
       if (matching.length > 1)
         return yield* rejected(
           `Conflicting session references for ${sessionId}: ${matching.map((s) => s.cwd).join(", ")}. Keep the original references and resolve the duplicate explicitly; Piano has not merged or moved history.`,
@@ -125,6 +139,13 @@ export const SessionReferencesLive = Layer.effect(
         checkoutMissing: at.missing,
       };
     });
+
+    const canonical = Effect.gen(function* () {
+      const groups = yield* grouped((yield* registry.get).sessions);
+      return [...groups].flatMap(([key, [entry, ...conflicts]]) =>
+        entry && conflicts.length === 0 ? [{ key, entry }] : [],
+      );
+    }).pipe(Effect.withSpan("SessionReferences.canonical"));
 
     const availability = Effect.fn("SessionReferences.availability")(function* (
       refs: ReadonlyArray<{ readonly cwd: string; readonly sessionId: string }>,
@@ -176,6 +197,7 @@ export const SessionReferencesLive = Layer.effect(
           Effect.flatMap(({ missing }) => (missing ? Effect.fail(checkoutMissing) : Effect.void)),
         ),
       resolve,
+      canonical,
       availability,
       peek,
       archive: (location) =>

@@ -48,9 +48,8 @@ apply configuration to them. Do not send `/reload` as a Piano prompt: stock Pi
   even when `pi auth check --provider radius` is ready. This page does not use that
   CLI result to claim connectivity or ask for a redundant OAuth login.
 - Pi does not export its provider-auth MCP writer publicly. The adapter deliberately
-  imports the **locked 1.5.0** configuration helper through `McpConfigEntries`, rather
-  than reimplementing Pi's loader. It is identical to 1.4.0's; since 1.4.0,
-  reads and edits accept a UTF-8 BOM. `test/RadiusSetup.test.ts` exercises the
+  imports the **locked 1.5.2** configuration helper through `McpConfigEntries`, rather
+  than reimplementing Pi's loader; [MCP setup](mcp-setup.md#boundaries) records its recheck. `test/RadiusSetup.test.ts` exercises the
   installed helper; `test/McpConfigEntries.test.ts` covers BOM-prefixed config. Recheck this
   dependency on every Pi upgrade and replace it with a public interface when one
   is available. Public SDK settings/package APIs and the locked CLI handle the rest.
