@@ -364,6 +364,7 @@ test("the session pane: a loading session shows the skeleton and nothing else", 
     skeleton: true,
     placeholder: undefined,
     composerDisabled: true,
+    editorDisabled: true,
   });
 });
 
@@ -374,6 +375,7 @@ test("the session pane: a first message shows at once, without skeleton, until P
     skeleton: false,
     placeholder: undefined,
     composerDisabled: true,
+    editorDisabled: true,
   });
   const attached = sessionPane({ ...base, pendingCreate: input, session: session("/repo") });
   assert.equal(attached.skeleton, false);
@@ -408,6 +410,7 @@ test("the session pane: a settled empty session says so and drops the skeleton",
       skeleton: false,
       placeholder: "No messages yet.",
       composerDisabled: false,
+      editorDisabled: false,
     });
   }
   const withHistory = sessionPane({
@@ -454,6 +457,38 @@ test("the session pane: the composer waits for a ready attachment", () => {
     { ...current, selectionId: null },
   ])
     assert.equal(sessionPane(state).composerDisabled, true);
+});
+
+test("an archived session refuses input as archived, even when its checkout is also missing", () => {
+  const archived = (state: Partial<SessionState> = {}): AppState => ({
+    ...base,
+    sessionReferences: [
+      sessionReference("/work/repo.feature", "s1", { branch: "feature", archived: true }),
+    ],
+    session: session("/work/repo.feature", state),
+  });
+  for (const [name, state] of [
+    ["checkout missing", archived({ checkoutMissing: true })],
+    ["checkout present", archived()],
+  ] as const) {
+    assert.equal(sessionActivity(state, false).status, "Archived", name);
+    assert.equal(sessionContext(state).draftKey, null, `${name}: no draft takes additions`);
+    assert.equal(sessionPane(state).composerDisabled, true, name);
+    assert.equal(sessionPane(state).editorDisabled, true, name);
+  }
+});
+
+test("the session pane: the editor keeps its draft while reconnecting but not while starting", () => {
+  const current = { ...base, session: session("/repo") };
+  assert.equal(sessionPane(current).editorDisabled, false);
+  assert.equal(sessionPane({ ...current, connected: false }).editorDisabled, false);
+  const starting = { attemptId: "a", cwd: "/repo", text: "hi", outcome: "starting" as const };
+  assert.equal(sessionPane({ ...current, pendingCreate: starting }).editorDisabled, true);
+  assert.equal(sessionPane({ ...base, session: null }).editorDisabled, true);
+  assert.equal(
+    sessionPane({ ...base, session: session("/repo", { checkoutMissing: true }) }).editorDisabled,
+    true,
+  );
 });
 
 test("directory trust prefers the latest probe over discovery", () => {

@@ -2,7 +2,7 @@ import { closureNeedsAttention } from "../../../shared/sessionStatus.ts";
 import type { ClientCommand, ExtensionState } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import { answerReceipt } from "./piDialogs.ts";
-import { sessionContext } from "./sessionContext.ts";
+import { sessionContext, sessionInputMode } from "./sessionContext.ts";
 import { submissionReceipt } from "./submissionReceipt.ts";
 
 export type SessionNoticePlacement = "banner" | "status" | "composer";
@@ -18,6 +18,7 @@ export type SessionNoticeId =
   | "dialog-resolution"
   | "submission"
   | "extension"
+  | "archived"
   | "checkout-missing";
 
 export interface SessionNotice {
@@ -48,7 +49,8 @@ const notice = (
 
 export function sessionNotices(state: AppState, _messagesOnly: boolean): SessionNotice[] {
   const t = state.session;
-  const { folder, checkoutMissing } = sessionContext(state);
+  const { folder } = sessionContext(state);
+  const mode = sessionInputMode(state);
   const receipt = submissionReceipt(state);
   const notices: SessionNotice[] = [];
 
@@ -155,7 +157,14 @@ export function sessionNotices(state: AppState, _messagesOnly: boolean): Session
     notices.push(notice("extension", "status", "quiet", "Extension state", [], { extension }));
   }
 
-  if (checkoutMissing) {
+  if (mode === "archived") {
+    notices.push(
+      notice("archived", "composer", "neutral", "Archived · Read-only session", [
+        "History is still available. Unarchive it in Settings → Data controls to continue.",
+      ]),
+    );
+  }
+  if (mode === "checkout-missing") {
     notices.push(
       notice("checkout-missing", "composer", "neutral", "Checkout removed · Read-only session", [
         "History is still available. You can archive or delete this session, or restore the checkout at its original path to continue.",

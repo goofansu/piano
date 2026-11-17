@@ -21,7 +21,8 @@ ownership lock is held (including shutdown). A count read is only an observation
 rechecks eligibility and the success toast reports the actual count written.
 
 The initiating client's selected stopped session is cleared if archived. Other clients keep the
-existing Archived view, which refuses further input: its menus keep read and copy actions but
+existing Archived view, which refuses further input: its composer is replaced by **Archived ·
+Read-only session**, which takes precedence over a removed checkout's notice. Its menus keep read and copy actions but
 disable Rename, Pin, Archive, Delete, project assignment and pull request link changes (the
 Pull request command and Changes button, and a linked pull request's Change link, Find from branch
 and Remove link). An archived session cannot be deleted until it is unarchived. Unarchive is one session at a time. Opening an archived session's address
@@ -71,7 +72,9 @@ server's reason; only a request that never left the browser reads plain **Could 
   protect delayed integration writes across archive → unarchive (ABA); database migration 17
   persists the generation.
   It is internal metadata, excluded from the sidebar projection.
-- `web/src/lib/sessionContext.ts`: `sessionReferenceChangeable` is the client's matching rule;
+- `web/src/lib/sessionContext.ts`: `sessionInputMode` decides whether the selected session takes
+  input (archived before checkout missing); its status, composer notice, draft and disabled
+  controls all read it. `sessionReferenceChangeable` is the client's matching rule;
   `sessionMutable` adds selection readiness for Rename, Archive and Delete. `SessionView` passes it
   to `useSessionPullRequest` as `changeable` for the pull request link controls.
 - `server/PeerScope.ts` keeps all three requests outside the peer allowlist.
@@ -95,7 +98,9 @@ Web tests cover archived row formatting/order, outcome wording, Settings navigat
 (`test/Navigation.test.ts`) an unavailable session's page opening the session once it is
 available, and
 (`test/SessionCommands.test.ts`) an archived session's menus offering no change;
-`test/CorrelatedRequest.test.ts` covers the four request outcomes.
+`test/CorrelatedRequest.test.ts` covers the four request outcomes. `test/SessionContext.test.ts`
+and `test/SessionNotices.test.ts` cover an archived session, with or without its checkout, reading
+Archived and never offering Archive.
 Use [the Data controls verification entry](../.agents/skills/verify-piano/features/data-controls.md)
 for the scratch browser journey and Quiet UI comparison with Webhooks. These are observation
 instructions, not a claim that a particular revision passed. The recipe runs on fake Pi and Local
