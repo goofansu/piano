@@ -20,6 +20,7 @@ import {
   type PendingTrust,
 } from "./lib/directoryTrust.ts";
 import * as FirstMessage from "./lib/firstMessage.ts";
+import type { UnavailableSessionReason } from "./lib/sessionCatalog.ts";
 import { startPage } from "./lib/startPage.ts";
 
 export type { PendingCreate } from "./lib/firstMessage.ts";
@@ -58,7 +59,7 @@ export type Page =
   | { kind: "new"; cwd?: string; projectId?: string }
   | { kind: "projects" }
   | { kind: "project"; projectId: string; cwd?: string }
-  | { kind: "missing-session"; sessionId: string; reason?: "history" | "archived" };
+  | { kind: "missing-session"; sessionId: string; reason: UnavailableSessionReason };
 
 export const sessionKey = (s: { cwd: string; sessionId: string | null }) =>
   wireSessionKey(s.cwd, s.sessionId ?? "");

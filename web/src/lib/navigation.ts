@@ -187,7 +187,7 @@ function pageAddress(state: AppState, page: Page): { route: Route; title: string
     case "missing-session":
       return {
         route: { kind: "session", sessionId: page.sessionId },
-        title: unavailableSessionTitle(page.reason ?? "missing"),
+        title: unavailableSessionTitle(page.reason),
       };
   }
 }
@@ -216,14 +216,9 @@ export function decideRoute(route: Route, state: AppState): RouteDecision {
   if (!state.registryLoaded) return { kind: "wait" };
   const address = sessionAddress(state, route.sessionId);
   if (address.kind === "select") return address;
-  const { reason } = address;
   return {
     kind: "open",
-    page: {
-      kind: "missing-session",
-      sessionId: route.sessionId,
-      ...(reason !== "missing" && { reason }),
-    },
+    page: { kind: "missing-session", sessionId: route.sessionId, reason: address.reason },
   };
 }
 
@@ -489,10 +484,25 @@ export function createNavigation({
     else if (decision.kind === "select") selectSession(decision.cwd, decision.sessionId);
   };
 
+  const followUnavailable = () => {
+    const c = client.getState();
+    if (wanted || state.settings || c.view.kind !== "missing-session") return;
+    const shown = c.view;
+    const decision = decideRoute({ kind: "session", sessionId: shown.sessionId }, c);
+    if (decision.kind === "select") selectSession(decision.cwd, decision.sessionId);
+    else if (
+      decision.kind === "open" &&
+      decision.page.kind === "missing-session" &&
+      decision.page.reason !== shown.reason
+    )
+      client.dispatch({ type: "open", page: decision.page });
+  };
+
   function settle() {
     depth++;
     try {
       applyWanted();
+      followUnavailable();
       const next = panelOwner(client.getState());
       if (next !== owner) {
         owner = next;
