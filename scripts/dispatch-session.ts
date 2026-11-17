@@ -98,21 +98,45 @@ function promptFrom(file: string) {
 }
 
 const nonblank = z.string().refine((value) => value.trim().length > 0, "must not be blank");
-const jsonRequest = z.strictObject({
+const startRequest = z.strictObject({
   prompt: nonblank,
   cwd: nonblank,
-  outFile: nonblank,
-  wsUrl: nonblank,
-  origin: nonblank,
   worktree: z
     .strictObject({
-      branch: nonblank.refine((value) => !value.trim().startsWith("-"), "must name a new branch"),
+      branch: z
+        .string()
+        .trim()
+        .refine((value) => value.length > 0 && !value.startsWith("-"), "must name a new branch"),
       hooks: z.boolean().optional(),
     })
     .optional(),
-  parentSession: nonblank.optional(),
+  parentSession: z.string().trim().min(1, "must not be blank").optional(),
   inheritProject: z.boolean().optional(),
 });
+const jsonRequest = startRequest.extend({
+  outFile: nonblank,
+  wsUrl: nonblank,
+  origin: nonblank,
+});
+
+function parsed<T extends z.ZodType>(
+  schema: T,
+  input: unknown,
+  names: Record<string, string> = {},
+) {
+  const result = schema.safeParse(input);
+  if (!result.success)
+    throw new CliError(
+      2,
+      result.error.issues
+        .map((issue) => {
+          const path = issue.path.join(".");
+          return `${names[path] ?? (path || "request")}: ${issue.message}`;
+        })
+        .join("\n"),
+    );
+  return result.data as z.output<T>;
+}
 
 function requestFromStdin() {
   let input: unknown;
@@ -121,16 +145,14 @@ function requestFromStdin() {
   } catch {
     throw new CliError(2, "Invalid JSON on stdin: expected one dispatch request object.");
   }
-  const parsed = jsonRequest.safeParse(input);
-  if (!parsed.success)
-    throw new CliError(
-      2,
-      parsed.error.issues
-        .map((issue) => `${issue.path.join(".") || "request"}: ${issue.message}`)
-        .join("\n"),
-    );
-  return parsed.data;
+  return parsed(jsonRequest, input);
 }
+
+const flagNames = {
+  cwd: "<cwd>",
+  "worktree.branch": "--worktree",
+  parentSession: "--parent-session",
+};
 
 async function main() {
   const { values, positionals } = argumentsFromCommandLine();
@@ -181,8 +203,6 @@ async function main() {
     (values["parent-session"] !== undefined || values["no-inherit-project"] !== undefined)
   )
     throw new CliError(2, "--parent-session and --no-inherit-project belong to start");
-  const parentSession = values["parent-session"]?.trim();
-  if (parentSession === "") throw new CliError(2, "--parent-session must not be empty");
   if (values.steer && command !== "follow-up")
     throw new CliError(2, "--steer belongs to follow-up");
   if (command === "follow-up") {
@@ -225,21 +245,21 @@ async function main() {
   if (values.project !== undefined) throw new CliError(2, "--project belongs to list");
   if (values.hooks && values.worktree === undefined)
     throw new CliError(2, "--hooks needs --worktree");
-  const worktree = values.worktree?.trim();
-  if (worktree !== undefined && (!worktree || worktree.startsWith("-")))
-    throw new CliError(2, "--worktree must name a new branch");
-  const [promptFile, rawCwd, outFile] = positionals;
-  await dispatch(
+  const [promptFile, cwd, outFile] = positionals;
+  const { parentSession, ...request } = parsed(
+    startRequest,
     {
-      prompt: promptFrom(promptFile),
-      cwd: rawCwd,
-      dispatchedFrom: parentSession,
+      prompt: promptFrom(promptFile!),
+      cwd,
+      parentSession: values["parent-session"],
       inheritProject: values["no-inherit-project"] ? false : undefined,
-      ...(worktree ? { worktree: { branch: worktree, hooks: values.hooks } } : {}),
+      ...(values.worktree !== undefined
+        ? { worktree: { branch: values.worktree, hooks: values.hooks } }
+        : {}),
     },
-    outFile,
-    configured(),
+    flagNames,
   );
+  await dispatch({ ...request, dispatchedFrom: parentSession }, outFile, configured());
 }
 
 async function dispatch(

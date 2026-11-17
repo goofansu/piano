@@ -88,6 +88,8 @@ Malformed JSON, missing fields, wrong types, blank required values, unknown fiel
 model/effort overrides), invalid connection configuration or an unavailable local directory
 exit `2` before reserving output or connecting. The server still performs ordinary admission
 checks, such as whether the worktree branch or parent is available; inspect its result.
+JSON and terminal starts pass one validation: `parentSession` and the worktree `branch` are
+trimmed, and a blank `cwd` exits `2` in both forms.
 `prompt` is validated as nonblank but is **not trimmed or otherwise rewritten**. The first
 prompt, including leading/trailing whitespace, reaches Pi unchanged, as follow-ups do.
 

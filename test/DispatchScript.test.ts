@@ -316,6 +316,51 @@ test("JSON stdin validates the whole request before reserving output or connecti
   assert.deepEqual(p.requests, []);
 });
 
+test("both start forms send one spelling of the same request", async (t) => {
+  const f = fixture(t);
+  const p = await peer(t);
+  const positional = await run(
+    [
+      f.prompt,
+      f.cwd,
+      "--worktree",
+      " task-a ",
+      "--parent-session",
+      " parent-session\n",
+      "--no-inherit-project",
+    ],
+    p.url,
+  );
+  assert.equal(positional.code, 0, positional.stderr);
+  const input = JSON.stringify({
+    prompt: readFileSync(f.prompt, "utf8"),
+    cwd: f.cwd,
+    outFile: join(f.dir, "start.json"),
+    wsUrl: p.url,
+    origin,
+    worktree: { branch: " task-a " },
+    parentSession: " parent-session\n",
+    inheritProject: false,
+  });
+  const json = await run(["--json"], p.url, {}, input);
+  assert.equal(json.code, 0, json.stderr);
+  const creates = p.requests
+    .filter((m) => m._tag === "create_session")
+    .map(
+      (m) =>
+        m._tag === "create_session" && [m.text, m.cwd, m.worktree, m.options, m.inheritProject],
+    );
+  assert.equal(creates.length, 2);
+  assert.deepEqual(creates[0], [
+    "Reply with exactly: PORTABLE",
+    f.cwd,
+    { branch: "task-a" },
+    { dispatchedFrom: "parent-session" },
+    false,
+  ]);
+  assert.deepEqual(creates[1], creates[0]);
+});
+
 test("explicit flags override env and save full JSON exclusively", async (t) => {
   const f = fixture(t);
   const p = await peer(t);
@@ -372,6 +417,7 @@ test("invalid configuration and input fail before network side effects and reser
     assert.equal(result.code, 2, result.stderr);
   }
   assert.equal((await run([f.prompt, join(f.dir, "missing"), out], p.url)).code, 2);
+  for (const cwd of ["", " \n"]) assert.equal((await run([f.prompt, cwd, out], p.url)).code, 2);
   writeFileSync(f.prompt, "  \n");
   assert.equal((await run([f.prompt, f.cwd, out], p.url)).code, 2);
   assert.equal(existsSync(out), false);
