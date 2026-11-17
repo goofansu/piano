@@ -2,12 +2,13 @@ import type { ClientCommand, ServerMessage } from "@shared/wire";
 import { refusedAttempt } from "../../../shared/creationVerdict.ts";
 import { closureNeedsAttention } from "../../../shared/sessionStatus.ts";
 import { type Action, type AppState, reduce, sessionDelivery } from "../store.ts";
-import { canDecideTrust, trustNotice } from "./directoryTrust.ts";
+import { browserTimers, type RequestTimers } from "./correlatedRequest.ts";
 import { machineMemory } from "./machineMemory.ts";
 import type { MachineOffers } from "./machineOffers.ts";
 import { projectStartDirectory } from "./projectHome.ts";
 import { focusedDirectory, sessionReady } from "./sessionContext.ts";
 import { startPage } from "./startPage.ts";
+import { createTrustDecisions, trustNotice } from "./trustDecision.ts";
 import type { Connection, ConnectionHandlers, DisconnectReason, SendDisposition } from "./ws.ts";
 
 export type NotifyLevel = "success" | "info" | "warning" | "error";
@@ -15,7 +16,7 @@ export type Notify = (message: string, level?: NotifyLevel) => void;
 
 export type LocalAction = Exclude<
   Action,
-  { type: "connected" | "server" | "selecting" | "trust_pending" }
+  { type: "connected" | "server" | "selecting" | "trust_decision" | "trust_settled" }
 >;
 
 export interface LastDirectory {
@@ -60,6 +61,7 @@ export interface ClientOptions {
   newSelectionId?: () => string;
   lastDirectory?: LastDirectory;
   startsSessionIn: MachineOffers["startsSessionIn"];
+  timers?: RequestTimers;
 }
 
 export type ClientUpdate = "live" | "immediate";
@@ -69,6 +71,7 @@ export interface Client {
   subscribe: (listener: (update: ClientUpdate) => void) => () => void;
   start: () => () => void;
   send: (command: ClientCommand) => SendDisposition;
+  decideTrust: (path: string, trusted: boolean) => void;
   captureSend: () => (
     command: ClientCommand,
     preview?: ReturnType<typeof firstMessage>,
@@ -85,6 +88,7 @@ export function createClient({
   newSelectionId = () => crypto.randomUUID(),
   lastDirectory = { read: () => null, write: () => {} },
   startsSessionIn,
+  timers = browserTimers,
 }: ClientOptions): Client {
   let unverifiedDefault: string | undefined;
   const withNewPageDirectory = (s: AppState) => {
@@ -192,13 +196,7 @@ export function createClient({
           );
       }
       return disposition;
-    } else {
-      if (m._tag === "set_trust") {
-        if (!canDecideTrust(state, m.path)) return "not-sent";
-        apply({ type: "trust_pending", cwd: m.path });
-      }
-      return connection?.send(m) ?? "not-sent";
-    }
+    } else return connection?.send(m) ?? "not-sent";
   };
 
   const reselect = (current: { cwd: string; sessionId: string | null } | null) => {
@@ -241,7 +239,7 @@ export function createClient({
     apply({ type: "server", message: m });
     if (notice) notify(notice, "info");
     if (!wasResync && state.resync && state.connected) reselect(state.session);
-    if (m._tag === "error" || m._tag === "trust_failed") notify(m.message, "error");
+    if (m._tag === "error") notify(m.message, "error");
     else if (elsewhere) notify(`Could not start session: ${m.message}`, "error");
     else if (m._tag === "toast") notify(m.message, m.level);
     else if (m._tag === "action_result" && m.result._tag === "queue_restored" && m.result.stopError)
@@ -263,14 +261,33 @@ export function createClient({
     for (const listener of messageListeners) listener(m);
   };
 
+  const subscribe = (listener: (update: ClientUpdate) => void) => {
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  };
+  const listen = (listener: (message: ServerMessage) => void) => {
+    messageListeners.add(listener);
+    return () => {
+      messageListeners.delete(listener);
+    };
+  };
+  const decideTrust = createTrustDecisions({
+    client: {
+      getState: () => state,
+      subscribe,
+      listen,
+      send,
+    },
+    timers,
+    notify,
+    dispatch: apply,
+  });
+
   return {
     getState: () => state,
-    subscribe: (listener) => {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
+    subscribe,
     start: () => {
       const opened = connect({ onMessage, onStatus });
       connection = opened;
@@ -280,6 +297,7 @@ export function createClient({
       };
     },
     send,
+    decideTrust,
     captureSend: () => {
       const epoch = navigationEpoch;
       const socket = connection;
@@ -301,11 +319,6 @@ export function createClient({
       send({ _tag: "select", cwd, sessionId });
     },
     dispatch: apply,
-    listen: (listener) => {
-      messageListeners.add(listener);
-      return () => {
-        messageListeners.delete(listener);
-      };
-    },
+    listen,
   };
 }

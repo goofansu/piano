@@ -19,7 +19,9 @@ function harness() {
   let handlers: ConnectionHandlers | undefined;
   let ids = 0;
   let disposition: SendDisposition = "sent";
+  const timers = manualTimers();
   const client = createClient({
+    timers,
     startsSessionIn: machineOffers(LOCAL).startsSessionIn,
     initial: initialState,
     connect: (h) => {
@@ -77,7 +79,34 @@ function harness() {
     transport: (result: SendDisposition) => {
       disposition = result;
     },
+    trustId: () => lastTrustId(sent),
+    expire: timers.expire,
   };
+}
+
+function manualTimers() {
+  const due = new Map<number, () => void>();
+  let next = 0;
+  return {
+    setTimeout: (run: () => void) => {
+      due.set(++next, run);
+      return next;
+    },
+    clearTimeout: (timer: unknown) => {
+      due.delete(timer as number);
+    },
+    expire: () => {
+      const runs = [...due.values()];
+      due.clear();
+      for (const run of runs) run();
+    },
+  };
+}
+
+function lastTrustId(sent: readonly ClientMessage[]) {
+  const request = sent.filter((m) => m._tag === "set_trust").at(-1);
+  assert.ok(request?._tag === "set_trust", "a trust decision was sent");
+  return request.requestId;
 }
 
 const act = { _tag: "act", action: { _tag: "abort" } } as const;
@@ -437,22 +466,28 @@ test("the first probe explains a change from the directory trust already display
 
 test("manual trust changes keep their confirmation without an automatic-change toast", () => {
   const h = harness();
-  const trust = (trusted: boolean, requested?: boolean) =>
-    h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted }, requested });
+  const trust = (trusted: boolean, requestId?: string) =>
+    h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted }, requestId });
   h.status(true);
   h.client.dispatch({ type: "new_directory", cwd: "/a" });
   trust(false);
-  h.client.send({ _tag: "set_trust", path: "/a", trusted: true });
+  h.client.decideTrust("/a", true);
   trust(false);
   h.server({ _tag: "catalogs_invalidated" });
   trust(true);
   h.server({ _tag: "toast", level: "success", message: "Trusted." });
-  trust(true, true);
+  trust(true, h.trustId());
   assert.deepEqual(h.notes, [["Trusted.", "success"]]);
   trust(false);
   assert.deepEqual(h.notes[1], ["Pi marked this folder as untrusted.", "info"]);
-  h.client.send({ _tag: "set_trust", path: "/a", trusted: true });
-  h.server({ _tag: "trust_failed", cwd: "/a", message: "Could not save trust" });
+  h.client.decideTrust("/a", true);
+  h.server({
+    _tag: "trust_failed",
+    requestId: h.trustId(),
+    cwd: "/a",
+    message: "Could not save trust",
+  });
+  assert.deepEqual(h.notes.at(-1), ["Could not trust folder: Could not save trust", "error"]);
   trust(true);
   assert.deepEqual(h.notes.at(-1), ["Pi marked this folder as trusted.", "info"]);
 });
@@ -462,7 +497,7 @@ test("a reversed manual decision settles without duplicate or permanently suppre
   h.status(true);
   h.client.dispatch({ type: "new_directory", cwd: "/a" });
   h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: true } });
-  h.client.send({ _tag: "set_trust", path: "/a", trusted: false });
+  h.client.decideTrust("/a", false);
   h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: false } });
   assert.equal(
     trustCommand(h.client.getState(), "/a", local)?.pressed,
@@ -480,7 +515,7 @@ test("a reversed manual decision settles without duplicate or permanently suppre
     _tag: "trust",
     cwd: "/a",
     trust: { required: true, trusted: true },
-    requested: false,
+    requestId: h.trustId(),
   });
   h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: true } });
   assert.deepEqual(h.notes, [["Pi changed this folder back to trusted.", "warning"]]);
@@ -500,8 +535,8 @@ test("trust decisions disable every command surface immediately and reject repea
   h.client.subscribe((update) => {
     if (update === "immediate") updated = true;
   });
-  const request = { _tag: "set_trust", path: "/a", trusted: true } as const;
-  h.client.send(request);
+  const request = () => h.client.decideTrust("/a", true);
+  request();
   assert.equal(updated, true, "pending feedback does not wait for a server frame or paint");
   assert.equal(trustCommand(h.client.getState(), "/a", local)?.pending, true);
   assert.equal(trustCommand(h.client.getState(), "/a", local)?.enabled, false);
@@ -513,10 +548,10 @@ test("trust decisions disable every command surface immediately and reject repea
   assert.equal(trustCommand(h.client.getState(), "/b", local)?.enabled, true);
   h.client.dispatch({ type: "new_directory", cwd: "/b" });
   h.client.dispatch({ type: "new_directory", cwd: "/a" });
-  h.client.send(request);
-  h.client.send({ ...request, trusted: false });
+  request();
+  h.client.decideTrust("/a", false);
   h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: true } });
-  h.client.send(request);
+  request();
   assert.equal(h.sent.filter((m) => m._tag === "set_trust").length, 1);
   assert.equal(
     trustCommand(h.client.getState(), "/a", local)?.pending,
@@ -528,7 +563,12 @@ test("trust decisions disable every command surface immediately and reject repea
     false,
     "keep the pre-click label until the decision reply",
   );
-  h.server({ _tag: "trust", cwd: "/b", trust: { required: true, trusted: true }, requested: true });
+  h.server({
+    _tag: "trust",
+    cwd: "/b",
+    trust: { required: true, trusted: true },
+    requestId: "another request",
+  });
   assert.equal(
     trustCommand(h.client.getState(), "/a", local)?.pending,
     true,
@@ -538,7 +578,7 @@ test("trust decisions disable every command surface immediately and reject repea
     _tag: "trust",
     cwd: "/a",
     trust: { required: true, trusted: false },
-    requested: true,
+    requestId: h.trustId(),
   });
   assert.equal(
     trustCommand(h.client.getState(), "/a", local)?.pending,
@@ -546,9 +586,14 @@ test("trust decisions disable every command surface immediately and reject repea
     "even a reversed decision settles",
   );
   assert.equal(trustCommand(h.client.getState(), "/a", local)?.enabled, true);
-  h.client.send(request);
+  request();
   assert.equal(h.sent.filter((m) => m._tag === "set_trust").length, 2);
-  h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: true }, requested: true });
+  h.server({
+    _tag: "trust",
+    cwd: "/a",
+    trust: { required: true, trusted: true },
+    requestId: h.trustId(),
+  });
   assert.equal(
     trustCommand(h.client.getState(), "/a", local)?.pressed,
     true,
@@ -563,25 +608,35 @@ for (const ending of ["error", "disconnect"] as const) {
     h.status(true);
     h.client.dispatch({ type: "new_directory", cwd: "/a" });
     h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: true } });
-    const request = { _tag: "set_trust", path: "/a", trusted: false } as const;
-    h.client.send(request);
+    const request = () => h.client.decideTrust("/a", false);
+    request();
     h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: false } });
     assert.equal(trustCommand(h.client.getState(), "/a", local)?.pressed, true);
     h.server({ _tag: "error", selectionId: "unrelated", message: "Session error" });
     h.server({ _tag: "error", message: "Could not rename session" });
-    h.server({ _tag: "trust_failed", cwd: "/b", message: "Could not save trust" });
+    h.server({
+      _tag: "trust_failed",
+      requestId: "another request",
+      cwd: "/b",
+      message: "Could not save trust",
+    });
     assert.equal(
       trustCommand(h.client.getState(), "/a", local)?.pending,
       true,
       "only this decision's own failure settles it",
     );
     if (ending === "error") {
-      h.server({ _tag: "trust_failed", cwd: "/a", message: "Could not save trust" });
-      assert.deepEqual(h.notes.at(-1), ["Could not save trust", "error"]);
+      h.server({
+        _tag: "trust_failed",
+        requestId: h.trustId(),
+        cwd: "/a",
+        message: "Could not save trust",
+      });
+      assert.deepEqual(h.notes.at(-1), ["Could not untrust folder: Could not save trust", "error"]);
     } else {
       h.status(false);
       assert.equal(trustCommand(h.client.getState(), "/a", local)?.pending, false);
-      h.client.send(request);
+      request();
       assert.equal(
         h.sent.filter((m) => m._tag === "set_trust").length,
         1,
@@ -597,10 +652,56 @@ for (const ending of ["error", "disconnect"] as const) {
     );
     assert.equal(trustCommand(h.client.getState(), "/a", local)?.enabled, true);
     assert.equal(h.sent.filter((m) => m._tag === "set_trust").length, 1);
-    h.client.send(request);
+    request();
     assert.equal(h.sent.filter((m) => m._tag === "set_trust").length, 2);
   });
 }
+
+test("an unconfirmed trust decision says so and is never credited to Pi after reconnecting", () => {
+  const h = harness();
+  h.status(true);
+  h.client.dispatch({ type: "new_directory", cwd: "/a" });
+  h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: true } });
+  h.client.decideTrust("/a", false);
+  h.status(false);
+  h.status(true);
+  h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: true } });
+  h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: false } });
+  assert.deepEqual(
+    h.notes,
+    [
+      [
+        "Connection lost. Untrust folder may have finished; check the folder's trust after reconnecting.",
+        "warning",
+      ],
+    ],
+    "the decision may land after the reconnect's first observation",
+  );
+  assert.equal(trustCommand(h.client.getState(), "/a", local)?.pressed, false);
+  h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: true } });
+  assert.deepEqual(
+    h.notes.at(-1),
+    ["Pi marked this folder as trusted.", "info"],
+    "a later change is Pi's again",
+  );
+});
+
+test("a trust decision without a reply says so; its late answer is still not credited to Pi", () => {
+  const h = harness();
+  h.status(true);
+  h.client.dispatch({ type: "new_directory", cwd: "/a" });
+  h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: false } });
+  h.client.decideTrust("/a", true);
+  const requestId = h.trustId();
+  h.expire();
+  assert.deepEqual(h.notes, [
+    ["No reply. Trust folder may have finished; check the folder's trust.", "warning"],
+  ]);
+  assert.equal(trustCommand(h.client.getState(), "/a", local)?.pending, false);
+  h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: true }, requestId });
+  assert.equal(h.notes.length, 1, "the late answer is the user's own decision");
+  assert.equal(trustCommand(h.client.getState(), "/a", local)?.pressed, true);
+});
 
 test("INV-02: a closure notifies by its kind, never by its wording", () => {
   const cases: Array<[SessionClosure, boolean]> = [
@@ -749,6 +850,7 @@ function focusHarness(
   let handlers: ConnectionHandlers | undefined;
   let ids = 0;
   const client = createClient({
+    timers: manualTimers(),
     initial: options.initial ?? initialState,
     connect: (h) => {
       handlers = h;
@@ -957,7 +1059,7 @@ test("explicit refresh and trust outcomes neither release nor get consumed by a 
   const unfollow = catalogs.follow(h.client);
   catalogs.refresh("/a");
   const manual = h.sent.find((m) => m._tag === "models")!;
-  h.client.send({ _tag: "set_trust", path: "/a", trusted: false });
+  h.client.decideTrust("/a", false);
   h.client.dispatch({ type: "new_directory", cwd: "/b" });
   assert.deepEqual(h.asked(), ["directory /a"]);
   h.complete(first);
@@ -974,7 +1076,7 @@ test("explicit refresh and trust outcomes neither release nor get consumed by a 
   });
   assert.equal(catalogs.getState().refreshing["/a"], undefined);
   assert.equal(
-    h.client.getState().pendingTrust.length,
+    h.client.getState().trustDecisions.length,
     1,
     "automatic trust is not a decision receipt",
   );
@@ -982,10 +1084,10 @@ test("explicit refresh and trust outcomes neither release nor get consumed by a 
   h.server({
     _tag: "trust",
     cwd: "/a",
-    requested: false,
+    requestId: lastTrustId(h.sent),
     trust: { required: true, trusted: false },
   });
-  assert.equal(h.client.getState().pendingTrust.length, 0);
+  assert.equal(h.client.getState().trustDecisions.length, 0);
   assert.deepEqual(h.asked(), []);
   h.complete();
   assert.equal(h.sent.filter((m) => m._tag === "models").length, 1);

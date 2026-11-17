@@ -1,7 +1,6 @@
 import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import { type RadioChoice, radioChoiceOf } from "./commands.ts";
-import { canDecideTrust, displayedTrust, pendingTrust } from "./directoryTrust.ts";
 import type { Machine } from "./machine.ts";
 import type { MachineOffers } from "./machineOffers.ts";
 import { type EditorPage, isEditorPage, PAGE_EDITORS } from "./pageEditor.ts";
@@ -18,6 +17,7 @@ import {
 import { SETTINGS_SECTIONS, type SettingsSection, type SettingsSectionIconName } from "./routes.ts";
 import { checkoutMissingAt, focusedDirectory } from "./sessionContext.ts";
 import { GROUP_BY, type GroupBy, type SidebarView, SORT_BY, type SortBy } from "./sidebarView.ts";
+import { canDecideTrust, displayedTrust, pendingTrust } from "./trustDecision.ts";
 
 export type Appearance = "light" | "dark" | "system";
 export const APPEARANCES = [
@@ -80,6 +80,7 @@ export type GlobalCommandIntent =
   | ProjectCommandIntent
   | { kind: "page-editor"; page: EditorPage }
   | { kind: "send"; command: ClientCommand }
+  | { kind: "trust"; path: string; trusted: boolean }
   | { kind: "toggle-sidebar" }
   | { kind: "appearance"; appearance: Appearance }
   | { kind: "view"; change: Partial<SidebarView> };
@@ -134,7 +135,7 @@ export function trustCommand(
     enabled: canDecideTrust(state, cwd),
     pending,
     pressed: trust.trusted,
-    intent: { kind: "send", command: { _tag: "set_trust", path: cwd, trusted: !trust.trusted } },
+    intent: { kind: "trust", path: cwd, trusted: !trust.trusted },
   };
   return offers.command(command) ? command : undefined;
 }

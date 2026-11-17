@@ -204,7 +204,8 @@ eng-1's sessions only, and its address is `/m/eng-1/projects/<id>`.
 Where a remote folder holds project extensions or skills Pi loads only when trusted, the New
 page shows the same **Trust folder** control as Local, and Cmd+K lists it. Trusting it lets that
 folder's extensions run on the remote for sessions started there. Only folders and worktrees the
-remote already registered can be trusted from here.
+remote already registered can be trusted from here. If the connection drops or the remote does not
+answer, Piano says the change may have finished; check the folder's trust before trying again.
 
 ### Changes, files and the session rail
 

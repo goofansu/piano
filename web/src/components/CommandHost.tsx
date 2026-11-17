@@ -200,11 +200,13 @@ export function CommandLink({
 export function CommandHost({
   state,
   send,
+  decideTrust,
   listen,
   children,
 }: {
   state: AppState;
   send: (command: ClientCommand) => SendDisposition;
+  decideTrust: (path: string, trusted: boolean) => void;
   listen: (listener: (message: ServerMessage) => void) => () => void;
   children: React.ReactNode;
 }) {
@@ -256,6 +258,7 @@ export function CommandHost({
   const effects: CommandEffects = {
     switchMachine: machineScope.switchMachine,
     send,
+    decideTrust,
     closeSettings,
     openSettings,
     openNew,

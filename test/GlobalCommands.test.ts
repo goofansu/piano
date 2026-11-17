@@ -83,18 +83,16 @@ test("trust is never offered for a selected session's missing checkout", () => {
 
 test("running trust flips the directory's trusted state", () => {
   assert.deepEqual(trustCommand(onNewPage, "/repo", local)?.intent, {
-    kind: "send",
-    command: { _tag: "set_trust", path: "/repo", trusted: true },
+    kind: "trust",
+    path: "/repo",
+    trusted: true,
   });
   const trusted = { ...onNewPage, trusts: { "/repo": { required: true, trusted: true } } };
   const untrust = trustCommand(trusted, "/repo", local);
   assert.equal(untrust?.label, "Untrust folder");
   assert.equal(untrust?.pressed, true);
   assert.equal(untrust?.checked, undefined, "the palette marks no row as current");
-  assert.deepEqual(untrust?.intent, {
-    kind: "send",
-    command: { _tag: "set_trust", path: "/repo", trusted: false },
-  });
+  assert.deepEqual(untrust?.intent, { kind: "trust", path: "/repo", trusted: false });
 });
 
 test("the palette offers Settings, or Home while Settings is open", () => {

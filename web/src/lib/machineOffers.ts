@@ -28,7 +28,6 @@ const SENT_CHANGES: ReadonlySet<string> = new Set([
   "set_project_done",
   "assign_project",
   "pin_session",
-  "set_trust",
 ]);
 
 const REMOTE_OFFERS: MachineOffers = {
@@ -40,6 +39,8 @@ const REMOTE_OFFERS: MachineOffers = {
     switch (command.intent.kind) {
       case "send":
         return SENT_CHANGES.has(command.intent.command._tag);
+      case "trust":
+        return true;
       case "rename":
       case "archive":
       case "delete":

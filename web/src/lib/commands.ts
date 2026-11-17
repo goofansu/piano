@@ -39,6 +39,7 @@ export type CommandForm =
 export interface CommandEffects {
   switchMachine?: (id: string) => void;
   send: (message: ClientCommand) => void;
+  decideTrust: (path: string, trusted: boolean) => void;
   closeSettings: () => void;
   openSettings: (section?: SettingsSection) => void;
   openNew: (cwd?: string, projectId?: string) => void;
@@ -71,6 +72,9 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
       break;
     case "send":
       effects.send(intent.command);
+      break;
+    case "trust":
+      effects.decideTrust(intent.path, intent.trusted);
       break;
     case "home":
       effects.closeSettings();
