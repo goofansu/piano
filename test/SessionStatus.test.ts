@@ -173,6 +173,30 @@ test("a stopped session's history proves settlement only when it ends with a fin
   );
 });
 
+test("a session ID registered under two directories is refused, not guessed; one listing reads", async () => {
+  saved(plain, "twice", [user("fix it"), reply("done")]);
+  await run(
+    Effect.gen(function* () {
+      const registry = yield* Registry;
+      const status = yield* SessionStatus;
+      yield* registry.addSession(plain, "twice");
+      assert.equal((yield* status.read({ sessionId: "twice" }))[0]?.cwd, plain);
+      yield* registry.addSession(repo, "twice");
+      for (const archived of [false, true]) {
+        if (archived) {
+          const entry = (yield* registry.get).sessions.find((s) => s.cwd === repo)!;
+          yield* registry.archiveSession(entry.cwd, entry.sessionId);
+        }
+        const refused = yield* status.read({ sessionId: "twice" }).pipe(Effect.flip);
+        assert.match(refused.detail, /more than one directory/);
+        assert.ok(refused.detail.includes(plain) && refused.detail.includes(repo));
+      }
+      const unknown = yield* status.read({ sessionId: "nowhere" }).pipe(Effect.flip);
+      assert.match(unknown.detail, /lists no session nowhere/);
+    }),
+  );
+});
+
 test("a session's changes name its branch and linked pull request, with state only when GitHub answers", async () => {
   saved(repo, "linked", [user("open a PR"), reply("Opened #7.")]);
   saved(repo, "unreadable", [user("open a PR"), reply("Opened #8.")]);
