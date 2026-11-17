@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { setTimeout } from "node:timers/promises";
 import { run } from "./harness.mjs";
 import {
   checkTranscriptResizeReadiness,
@@ -266,6 +267,18 @@ await run(
     await page.until(`!!document.querySelector('[role="menu"]')`);
     await page.press("Alt+ArrowDown");
     assert.equal(await page.evaluate("location.pathname"), "/s/nav-051", "menu owns its keys");
+    const behindMenu = `[location.pathname, document.querySelector('[aria-label="Message"]').value]`;
+    const beforeKeys = await page.evaluate(behindMenu);
+    await page.evaluate(`(() => {
+      for (const init of [{ key: 'ArrowDown', altKey: true }, { key: 'x' }])
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { ...init, bubbles: true, cancelable: true }));
+    })()`);
+    await setTimeout(300);
+    assert.deepEqual(
+      await page.evaluate(behindMenu),
+      beforeKeys,
+      "an open overlay keeps Alt+Down and typing from reaching the session behind it",
+    );
     await page.press("Escape");
     await page.until(`!document.querySelector('[role="menu"]')`);
     await page.ab("focus", '[aria-label="Message"]');

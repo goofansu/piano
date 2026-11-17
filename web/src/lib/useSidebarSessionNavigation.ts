@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import type { Client } from "./client.ts";
-import { sessionNavigationKey } from "./keys.ts";
+import { overlayOpen, ownsTextInput, sessionNavigationKey } from "./keys.ts";
 import type { Navigation } from "./navigation.ts";
 import { adjacentSidebarSession, type SidebarList } from "./sidebarList.ts";
 
@@ -38,22 +38,10 @@ export function useSidebarSessionNavigation(
       if (key === "modifier") return;
       if (!key) editing.current = null;
       if (!key || navigation.getState().settings || navigation.getState().palette) return;
-      if (
-        document.querySelector(
-          '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [cmdk-root]',
-        )
-      )
-        return;
+      if (overlayOpen()) return;
       const target = event.target;
       const composer = sessionComposer(target);
-      if (
-        !composer &&
-        target instanceof HTMLElement &&
-        (target.isContentEditable ||
-          /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) ||
-          target.closest('form, [role="textbox"]'))
-      )
-        return;
+      if (!composer && ownsTextInput(target)) return;
       event.preventDefault();
       const state = client.getState();
       const next = adjacentSidebarSession(list, state.session ?? state.selecting, key);
