@@ -15,7 +15,7 @@ import {
   projectMenu,
 } from "./projectCommands.ts";
 import { SETTINGS_SECTIONS, type SettingsSection, type SettingsSectionIconName } from "./routes.ts";
-import { checkoutMissingAt, focusedDirectory } from "./sessionContext.ts";
+import { focusedDirectory } from "./sessionContext.ts";
 import { GROUP_BY, type GroupBy, type SidebarView, SORT_BY, type SortBy } from "./sidebarView.ts";
 import { canDecideTrust, displayedTrust, pendingTrust } from "./trustDecision.ts";
 
@@ -115,7 +115,7 @@ export function radioChoice(
   return radioChoiceOf(commands.filter((c) => c.group === group));
 }
 
-type Offers = Pick<MachineOffers, "command">;
+type Offers = Pick<MachineOffers, "command" | "startRefusal">;
 
 export function trustCommand(
   state: AppState,
@@ -123,7 +123,7 @@ export function trustCommand(
   offers: Offers,
 ): GlobalCommand | undefined {
   if (!cwd) return undefined;
-  if (checkoutMissingAt(state, cwd)) return undefined;
+  if (offers.startRefusal(state, cwd) === "checkout-missing") return undefined;
   const pending = !!pendingTrust(state, cwd);
   const trust = displayedTrust(state, cwd);
   if (!trust?.required) return undefined;

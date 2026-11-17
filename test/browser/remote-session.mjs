@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { once } from "node:events";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { WebSocket } from "@effect/platform-node/NodeWS";
 import { run } from "./harness.mjs";
 import { machine, png, remoteFixture, sessionId } from "./remote-fixture.mjs";
 import { prepareDictation } from "./voice-input.mjs";
@@ -1044,6 +1046,29 @@ await run(
           "the place is kept with the tab, not for every tab",
         );
         await page.capture("9m-remote-reopened-where-left");
+        await page.click("button", "New session");
+        await page.until(`location.pathname === '/m/eng-1/new'`);
+        await page.ab("fill", '[aria-label="First message"]', "CLOSED-FOLDER");
+        await page.until(
+          `document.querySelector('[aria-label="Directory"]')?.textContent.includes('repo') && document.querySelector('[aria-label="Send"]')?.disabled === false`,
+        );
+        const owner = new WebSocket(`${page.remote.endpoint.replace("http", "ws")}/ws`, {
+          headers: { Origin: page.remote.origin },
+        });
+        await once(owner, "open");
+        owner.send(JSON.stringify({ _tag: "remove_folder", path: cwd }));
+        await page.see(
+          "Folder closed. Reopen it in this machine's Piano or choose another directory.",
+        );
+        owner.close();
+        assert.deepEqual(
+          await page.evaluate(
+            `[location.pathname, document.querySelector('[aria-label="Directory"]')?.textContent.includes('repo'), document.querySelector('[aria-label="Send"]')?.disabled]`,
+          ),
+          ["/m/eng-1/new", true, true],
+          "the New page keeps the closed folder, cannot send there and says why",
+        );
+        await page.capture("9n-remote-folder-closed");
         await page.open("/m/not-configured/s/same-session");
         await page.see("Machine unavailable");
         assert.equal(

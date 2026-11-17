@@ -51,12 +51,7 @@ import {
   projectDestinations,
 } from "@/lib/projectCommands";
 import { folderFor } from "@/lib/sessionCatalog";
-import {
-  checkoutMissingAt,
-  completionTarget,
-  directoryChoices,
-  startPlace,
-} from "@/lib/sessionContext";
+import { completionTarget, directoryChoices, startPlace } from "@/lib/sessionContext";
 import { startPage } from "@/lib/startPage";
 import { composerInput, picker } from "@/lib/styles";
 import { useImageSend } from "@/lib/useImageSend";
@@ -142,10 +137,11 @@ export function NewSessionComposer({
       : undefined,
   );
   const imageSend = useImageSend(editor, client.captureSend, { cwd }, state.selectionId, choice);
-  const checkoutMissing = !!cwd && checkoutMissingAt(state, cwd);
+  const refusal = cwd ? offers.startRefusal(state, cwd) : undefined;
+  const checkoutMissing = refusal === "checkout-missing";
   const ready =
     !editor.preparing &&
-    (!cwd || offers.startsSessionIn(state, cwd)) &&
+    !refusal &&
     newSessionReady({
       text: editor.message,
       images: editor.attachments,
@@ -233,7 +229,14 @@ export function NewSessionComposer({
             </AlertDescription>
           </Alert>
         )}
-        {offers.worktrees && !checkoutMissing && folder?.discovery.status === "error" && (
+        {refusal === "folder-closed" && state.registryLoaded && (
+          <Alert data-motion="fade" className="mt-2">
+            <AlertDescription>
+              Folder closed. Reopen it in this machine's Piano or choose another directory.
+            </AlertDescription>
+          </Alert>
+        )}
+        {offers.worktrees && !refusal && folder?.discovery.status === "error" && (
           <Alert data-motion="fade" variant="destructive" className="mt-2">
             <AlertDescription>
               Git status unavailable. Open Worktrees to inspect and refresh.
