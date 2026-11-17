@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { run } from "./harness.mjs";
+import {
+  checkTranscriptResizeReadiness,
+  measuredTranscriptAtBottom,
+} from "./transcript-resize.mjs";
 
 const listsOwnTheirItems = async (page, where) => {
   const strays = await page.evaluate(`[...document.querySelectorAll('[role="list"]')]
@@ -480,10 +484,7 @@ await run(
     });
     console.log(`Reopened 60 turns: ${layouts} browser layouts`);
     assert.ok(layouts < 20, `switching a 60-turn session took ${layouts} layouts`);
-    await page.until(`(() => {
-      const t = document.querySelector('[data-slot="transcript"]');
-      return t.scrollHeight - t.scrollTop - t.clientHeight < 2;
-    })()`);
+    await page.until(measuredTranscriptAtBottom);
 
     await page.click("button", "Show more");
     await page.until(
@@ -503,10 +504,7 @@ await run(
     const collapsed = await promptSize();
     assert.ok(collapsed.height < collapsed.content, "collapsed prompt is capped again");
     await page.ab("set", "viewport", "800", "900");
-    await page.until(`(() => {
-      const t = document.querySelector('[data-slot="transcript"]');
-      return t.scrollHeight - t.scrollTop - t.clientHeight < 2;
-    })()`);
+    await page.until(measuredTranscriptAtBottom);
     await page.click("button", "Show more");
     await page.see("Show less");
     const resized = await promptSize();
@@ -875,5 +873,6 @@ await run(
     assert.equal(answers()[0].answer.value, "Full suite");
     await page.until("!document.querySelector('[aria-label=Question]')");
     await page.capture("15-inline-answered");
+    await checkTranscriptResizeReadiness(page);
   },
 );
