@@ -1204,7 +1204,7 @@ test("INV-01/02: creating registers the folder, reference and project, attaches,
           m.event._tag === "message_end" &&
           m.event.message.role === "user"
         ) {
-          assert.equal(m.event.message.text, "hello");
+          assert.equal(m.event.message.text, "  hello  ");
           const session = (yield* hosts.get(m.cursor.cwd, m.cursor.sessionId))!;
           const submission = (yield* session.state).submission;
           assert.equal(submission?.inputId, "new", "creation proof belongs to its request");

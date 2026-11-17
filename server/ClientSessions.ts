@@ -453,11 +453,10 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
           selectionId,
           opening.pipe(Effect.map((session) => ({ session }))),
         );
-        const trimmed = text?.trim() ?? "";
-        if (!trimmed && !attachments?.length) return;
+        if (!text?.trim() && !attachments?.length) return;
         yield* deliver(session, {
           _tag: "prompt",
-          text: trimmed,
+          text: text ?? "",
           attachments,
           inputId: attemptId ?? selectionId,
         }).pipe(

@@ -240,8 +240,9 @@ async function runJourney(name, setup, journey, options, owned, record) {
   saveRun(evidence, record);
   const local = (owned.local = await fixture(root, setup));
   owned.check();
+  const requiredTools = ["git", "agent-browser", ...(options.requiresWorktrunk ? ["wt"] : [])];
   const missing = Object.entries(record.environment.tools).filter(
-    ([tool, version]) => ["git", "agent-browser"].includes(tool) && typeof version !== "string",
+    ([tool, version]) => requiredTools.includes(tool) && typeof version !== "string",
   );
   if (missing.length) {
     record.outcome = "blocked";

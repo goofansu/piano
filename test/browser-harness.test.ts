@@ -5,34 +5,41 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
 
-test("browser preflight blocks required tools, not optional version observations", () => {
-  const evidence = mkdtempSync(join(tmpdir(), "piano-harness-prerequisites-"));
-  try {
-    const path = join(evidence, "empty-path");
-    mkdirSync(path);
-    const result = spawnSync(
-      process.execPath,
-      ["test/fixtures/verification-journey.mjs", evidence, "cancel"],
-      {
-        cwd: resolve(import.meta.dirname, ".."),
-        env: { ...process.env, PATH: path },
-        encoding: "utf8",
-        timeout: 30000,
-      },
-    );
-    assert.equal(result.status, 1, result.stderr);
-    const record = JSON.parse(readFileSync(join(evidence, "run.json"), "utf8"));
-    assert.equal(record.outcome, "blocked");
-    assert.match(record.error, /Missing prerequisites: git, agent-browser;/);
-    assert.ok(record.environment.tools.wt.unavailable, "missing Worktrunk is still recorded");
-    assert.ok(record.environment.tools.npm.unavailable, "direct Node journeys do not need npm");
-    assert.equal(record.cleanup.outcome, "passed");
-    assert.equal(existsSync(record.scratch), false);
-    assert.deepEqual(record.pids, []);
-  } finally {
-    rmSync(evidence, { recursive: true, force: true });
-  }
-});
+for (const mode of ["cancel", "worktree"]) {
+  test(`browser preflight requires Worktrunk only for a journey that uses it (${mode})`, () => {
+    const evidence = mkdtempSync(join(tmpdir(), "piano-harness-prerequisites-"));
+    try {
+      const path = join(evidence, "empty-path");
+      mkdirSync(path);
+      const result = spawnSync(
+        process.execPath,
+        ["test/fixtures/verification-journey.mjs", evidence, mode],
+        {
+          cwd: resolve(import.meta.dirname, ".."),
+          env: { ...process.env, PATH: path },
+          encoding: "utf8",
+          timeout: 30000,
+        },
+      );
+      assert.equal(result.status, 1, result.stderr);
+      const record = JSON.parse(readFileSync(join(evidence, "run.json"), "utf8"));
+      assert.equal(record.outcome, "blocked");
+      assert.match(
+        record.error,
+        mode === "worktree"
+          ? /Missing prerequisites: git, wt, agent-browser;/
+          : /Missing prerequisites: git, agent-browser;/,
+      );
+      assert.ok(record.environment.tools.wt.unavailable, "missing Worktrunk is still recorded");
+      assert.ok(record.environment.tools.npm.unavailable, "direct Node journeys do not need npm");
+      assert.equal(record.cleanup.outcome, "passed");
+      assert.equal(existsSync(record.scratch), false);
+      assert.deepEqual(record.pids, []);
+    } finally {
+      rmSync(evidence, { recursive: true, force: true });
+    }
+  });
+}
 
 test("browser setup failure replaces old pass evidence and tears down its scratch root", () => {
   const evidence = mkdtempSync(join(tmpdir(), "piano-harness-evidence-"));

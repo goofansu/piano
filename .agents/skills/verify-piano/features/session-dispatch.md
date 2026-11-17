@@ -1,12 +1,16 @@
 # Session dispatch
 
 `scripts/dispatch-session.ts` lets an orchestrator (a script or another agent) start a Piano session
-from a prompt file in a folder, optionally in a new worktree, then read its status or list a
+from JSON stdin or a prompt file in a folder, optionally in a new worktree, then read its status or list a
 project's active sessions. It talks to Piano's `/ws` with an allowed Origin and prints JSON with a
 link a person can open.
 
 ## Sub-features
 
+- `structured-start`: `--json` reads one request object from stdin, preserving literal prompt
+  text. Required fields: `prompt`, `cwd`, `outFile`, `wsUrl`, `origin`; see
+  [the caller contract](../../../../docs/session-dispatch.md#structured-input-for-bots).
+  Invalid input exits 2 before connection; an existing `outFile` exits 3.
 - `start`: `<prompt-file> <cwd>` creates and starts a session; prints `creation`, `submission`,
   `handle.sessionId`, `link`.
 - `worktree`: `--worktree BRANCH` has Piano create a worktree first and start there; the isolated
@@ -39,6 +43,15 @@ link a person can open.
 - The printed `link` opens the session in the web UI.
 
 ## Driving it with agent-browser
+
+For the structured-input path, run `node test/browser/start-session.mjs <evidence-directory>`.
+It owns its scratch instance and browser: run it before manual Launch, not alongside it. Its final
+step sends JSON through process stdin (no shell), dispatches into a new worktree, opens the returned
+session link, compares the shell-sensitive prompt exactly with the fake-Pi audit, and checks that
+command substitutions did not create a marker file. It retains `structured-start.json` and
+`4-structured-dispatch.png`; this proves a real Piano session with fake Pi, not a model response.
+
+For the remaining manual checks:
 
 Preconditions: a seeded launch, `. "$RUN/run.env"` (exports `PIANO_SESSION_WS_URL=ws://127.0.0.1:$PORT/ws`,
 the backend, and `PIANO_SESSION_ORIGIN=$WEB_URL`), doctor passed; `echo "dispatch hello" > "$RUN/prompt.txt"`;
@@ -75,7 +88,7 @@ the backend, and `PIANO_SESSION_ORIGIN=$WEB_URL`), doctor passed; `echo "dispatc
   - Result: exit 0 with `"delivery": "follow-up"`, `"submission": "started"` and `link`; the
     audit gains `{"command":"prompt","text":"one more",...}` for that ID, and `status <id>` after
     the reply finishes reports `"lastAnswer": "echo: one more"`. A follow-up sends the file verbatim, so `echo`'s
-    trailing newline would reach Pi (`"one more\n"`); the first message of a start arrives trimmed.
+    trailing newline would reach Pi (`"one more\n"`); a start also preserves its first message verbatim.
 - `refusals`
   - Command: `node scripts/dispatch-session.ts "$RUN/prompt.txt" "$RUN/missing"; echo $?`
   - Result: `ENOENT: no such file or directory, stat '<path>'` and exit 2; the audit gains no

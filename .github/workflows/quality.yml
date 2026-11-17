@@ -73,19 +73,7 @@ jobs:
       # Piano supports the latest Worktrunk, so CI tests the latest release, checked against
       # the checksum file published with it.
       - name: Install the latest Worktrunk
-        shell: bash
-        run: |
-          cd "$RUNNER_TEMP"
-          asset=worktrunk-x86_64-unknown-linux-musl.tar.xz
-          for file in "$asset" "$asset.sha256"; do
-            curl --fail --location --silent --show-error --retry 3 --remote-name \
-              "https://github.com/max-sixty/worktrunk/releases/latest/download/$file"
-          done
-          sha256sum --check "$asset.sha256"
-          mkdir -p worktrunk
-          tar -xJf "$asset" --strip-components=1 -C worktrunk
-          echo "$RUNNER_TEMP/worktrunk" >> "$GITHUB_PATH"
-          "$RUNNER_TEMP/worktrunk/wt" --version
+        uses: ./.github/actions/setup-worktrunk
       - name: Clean install
         run: npm ci
       # Same preload and file glob as npm test. Node partitions all files across the shards;
@@ -133,6 +121,9 @@ jobs:
           cache: npm
       - name: Clean install
         run: npm ci
+      - name: Install the latest Worktrunk
+        if: matrix.group == 'local'
+        uses: ./.github/actions/setup-worktrunk
       - name: Install agent-browser 0.43.0 and its browser
         run: |
           npm install --global agent-browser@0.43.0

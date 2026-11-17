@@ -151,7 +151,9 @@ every merge-queue candidate, on Node 24. Independent jobs run:
   preload and file glob as `npm test`. Every shard installs the latest Worktrunk release, checked
   against its published checksum. All shards finish even if another fails.
 - **Critical paths (local, remote):** each runs `npm ci` and one group of browser journeys,
-  retaining its screenshots. `npm run test:browser:remote` is the multi-peer journey, which takes
+  retaining its screenshots. The local group installs Worktrunk through the same checksum-verified
+  action as module tests, because `start-session` dispatches into a real worktree.
+  `npm run test:browser:remote` is the multi-peer journey, which takes
   longer than the rest together; `npm run test:browser:local` is the other three. Both finish even
   if one fails.
 
