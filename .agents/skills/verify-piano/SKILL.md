@@ -27,11 +27,12 @@ either, finish teardown of the previous run-owned resource using [Cleanup](#clea
 its [evidence](#evidence). If teardown cannot be confirmed, stop and report the blocker rather than
 start a replacement.
 
-**Narrow exception:** `node test/browser/remote-session.mjs <evidence-directory>` may own main plus
-two headless peers and one browser, as one serial journey. Its existing harness gives each machine
+**Narrow exception:** `node test/browser/remote-session.mjs <evidence-directory>` and
+`node test/browser/remote-inputs.mjs <evidence-directory>` may each own main plus two headless
+peers and one browser. Run the two portions serially, each finishing cleanup before the next. Its existing harness gives each machine
 a separate database, HOME, XDG/Pi state and audit, loopback ports and recorded child ownership;
 the one harness tears all of them down before another journey or Launch. Run no other scratch
-instance alongside it. This exception is only for that committed multi-peer journey, not arbitrary
+instance alongside it. This exception is only for those committed multi-peer portions, not arbitrary
 parallel launches or reuse of live peers. Confirm its `run.json` cleanup result before continuing.
 
 ## Launch
@@ -153,8 +154,8 @@ after `web/dist` was built (then the running backend or UI predates the checkout
    error or inconclusive runs exit nonzero. Inspect `run.json`, not just the exit code.
    They do not need `launch.sh`: run them one at a time before Launch (or after cleaning up an
    existing run), and let each finish its own teardown before the next journey or Launch.
-   `npm run test:browser` runs these and the remote journey serially under the narrow exception
-   above; on macOS the remote journey skips with exit 0, which is not a pass. `npm run verify` is the separate typecheck/lint/module-test baseline, not browser coverage.
+   `npm run test:browser` runs these and both remote portions serially under the narrow exception
+   above; on macOS both remote portions skip with exit 0, which is not a pass. `npm run verify` is the separate typecheck/lint/module-test baseline, not browser coverage.
 
    For mapped Preview behavior, also run `node test/browser/preview.mjs <evidence-directory>`
    serially before Launch. It needs the native supervisor and free ports described in
@@ -162,8 +163,9 @@ after `web/dist` was built (then the running backend or UI predates the checkout
    `PIANO_PREVIEW_CONFIG` containing `{"origin":"http://127.0.0.1"}` enables external-tab
    interaction without exe.dev authentication; it does not prove authenticated HTTPS access.
 
-   For peer coverage, run `node test/browser/remote-session.mjs <evidence-directory>` alone, before
-   Launch or after cleanup. `test/browser/voice-input.mjs` is only an imported helper: running it
+   For peer coverage, run `node test/browser/remote-session.mjs <evidence-directory>` and then
+   `node test/browser/remote-inputs.mjs <another-evidence-directory>`, before Launch or after cleanup.
+   Confirm the first run’s cleanup before starting the second. `test/browser/voice-input.mjs` is only an imported helper: running it
    directly performs no checks. The default manual launch still has no configured peer; report
    that prerequisite honestly (see [Open a session](features/open-session.md)).
 

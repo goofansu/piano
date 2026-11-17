@@ -85,7 +85,7 @@ Preconditions: seeded launch, `. "$RUN/run.env"`, doctor passed;
 ## Gotchas
 
 - `test/browser/voice-input.mjs` is an exported helper, not a standalone journey. It runs inside
-  `remote-session.mjs` with main and two peers: real scratch settings, controlled browser device
+  `remote-inputs.mjs` with main and two peers: real scratch settings, controlled browser device
   APIs and a CDP transcription response, no paid call. It checks all-machine visibility, draft
   insertion, cancellation and source isolation. Run that journey alone, under the narrow run-limit
   exception; the key-dialog recipe above remains runnable on the default launch.

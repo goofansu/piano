@@ -387,10 +387,13 @@ Use the existing `verify-piano` entries for [Start a session](../.agents/skills/
 Their configured-peer prerequisites are not coverage from a default scratch launch, which has no
 peers; see the map's [coverage boundaries](../.agents/skills/verify-piano/features/README.md#coverage-boundaries).
 
-The committed journey is [`remote-session.mjs`](../test/browser/remote-session.mjs), run with
-`npm run test:browser:remote -- <evidence-directory>`. It owns main plus two isolated peers with
-colliding paths/session IDs, exercising machine navigation, sessions, projects, trust, memory,
-Changes/files/rail and images, with main-origin voice checks through its imported helper.
+The committed remote coverage is split between
+[`remote-session.mjs`](../test/browser/remote-session.mjs) (machine navigation, sessions, projects,
+trust, memory, Changes/files/rail, images and reviewed dictation with an image) and
+[`remote-inputs.mjs`](../test/browser/remote-inputs.mjs) (settings routes and main-origin voice
+preferences, cancellation and draft ownership). Each owns main plus two isolated peers with
+colliding paths/session IDs. Run `node test/browser/<name>.mjs <evidence-directory>` separately
+for explicit evidence paths, or `npm run test:browser:remote` to run both serially.
 Follow [browser-test scope](testing.md#browser-tests) and the
 [three-instance run-limit exception](../.agents/skills/verify-piano/SKILL.md#run-limits).
 Fake Pi and fake voice devices/providers establish Piano's boundaries, not authenticated exe.dev

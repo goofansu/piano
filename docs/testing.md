@@ -156,13 +156,19 @@ tests are only the critical paths, which must keep working on every change and r
   leaves Local's trust for the same path as it was. Each machine's model list and last directory
   are stored under its own ID, and a machine no longer configured is forgotten on load. The harness's optional
   `peers` fixtures each own separate database/history/audit; `remote` is the one-peer shorthand.
+- `test/browser/remote-inputs.mjs`: the settings-route and voice-input portion of remote coverage,
+  with its own main and two peers. Settings headers stay local; the main voice preference controls
+  every machine, transcription returns to its source draft, switching cancels recording, and
+  dictation never sends itself. `remote-session.mjs` still checks reviewed voice text sent with an
+  image through the peer. CI runs these independent portions in parallel; local commands run
+  them serially with full cleanup between them.
 
 `npm run test:browser` runs these and the transcript-row alignment check against scratch registries, Pi history and
 `test/browser/fake-pi.mjs`, with no model calls. They drive the UI by role and accessible name and
 assert what a user sees and what Pi receives, not markup. Add a journey only for a new critical
 path; cover rules and edge cases with module tests. Earlier documents cite `test/browser-*.mjs`
 scripts as the evidence of their time; those scripts no longer exist. On macOS
-`remote-session.mjs` skips (exit 0, no `run.json`) and `open-session.mjs` skips its copied-content
+`remote-session.mjs` and `remote-inputs.mjs` skip (exit 0, no `run.json`), and `open-session.mjs` skips its copied-content
 check, so only a Linux run or CI covers them.
 
 For production startup observations, first run `npm run build` in the checkout being tested, then

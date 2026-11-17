@@ -151,12 +151,13 @@ every merge-queue candidate, on Node 24. Independent jobs run:
 - **Module tests (1–8/8):** each runs `npm ci` and one native Node test shard, using the same
   preload and file glob as `npm test`. Every shard installs the latest Worktrunk release, checked
   against its published checksum. All shards finish even if another fails.
-- **Critical paths (local, remote):** each runs `npm ci` and one group of browser journeys,
-  retaining its screenshots. The local group installs Worktrunk through the same checksum-verified
-  action as module tests, because `start-session` dispatches into a real worktree.
-  `npm run test:browser:remote` is the multi-peer journey, which takes
-  longer than the rest together; `npm run test:browser:local` is the other three. Both finish even
-  if one fails.
+- **Critical paths (start-session, open-session, transcript-rows, remote-session, remote-inputs):** each runs
+  `npm ci` and one browser journey on its own runner, retaining its screenshots on failure.
+  Only `start-session` installs Worktrunk through the same checksum-verified action as module
+  tests, because it dispatches into a real worktree. All jobs finish even if one fails.
+  `npm run test:browser:local` runs the first three serially; `npm run test:browser:remote` runs
+  both multi-peer portions serially, and `npm run test:browser` runs both groups. The remote split
+  preserves existing coverage while keeping settings/voice checks off the lifecycle job’s critical path.
 
 **Quality gates** keeps its existing check name and passes only when static checks, the build and every
 module shard succeed; failed, cancelled or skipped dependencies cannot pass it. CI gets no model secrets.
@@ -171,7 +172,7 @@ Keep the preload and glob aligned with `npm test`. Options must precede the glob
 `--test-shard` with `npm test --` does not shard the suite. `npm test` still runs the whole suite locally.
 
 No branch protection enforces these jobs: the owner canceled it (PIN-17). Before you merge, check
-that **Quality gates** and both **Critical paths** jobs passed on the latest commit.
+that **Quality gates** and all **Critical paths** jobs passed on the latest commit.
 
 ## Dependency security
 
