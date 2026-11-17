@@ -56,7 +56,8 @@ the [feature verification mapping policy](../../../../docs/testing.md#feature-ve
   [Input limits](../../../../docs/runtime-input-limits.md),
   [Remote Pianos](../../../../docs/remote-piano.md#developer-navigation).
 - [Open and continue a session](./open-session.md): open from the sidebar, palette or project
-  home or Alt+Up/Down; read history and cost; follow up; edit queued messages without stopping;
+  home or Alt+Up/Down; read history and cost; expand long user messages and copy fenced code;
+  answer inline questions on desktop and narrow screens; follow up; edit queued messages without stopping;
   stop a running reply; archive and delete from the row's
   menu; responsive sidebar controls and narrow inline View options; the narrow session-menu
   sheet and its project picker;
@@ -94,7 +95,8 @@ the [feature verification mapping policy](../../../../docs/testing.md#feature-ve
   `/settings/prompts` from the sidebar and palette; New skill / New prompt; View and Delete;
   empty states; the separate agent-authored approval path's real-Pi prerequisite.
   Docs: [Prompts](../../../../docs/prompts.md).
-- [Settings › Providers, Webhooks and Preferences](./settings-other.md): unsigned-in provider/Radius
+- [Settings › Providers, Webhooks and Preferences](./settings-other.md): local-only section headers
+  without a Machine picker; unsigned-in provider/Radius
   setup and API-key dialogs (including Fireworks and OpenCode), the main-owned voice-input
   preference, key prerequisite and cancellation, inactive webhook CRUD and URL refusal;
   authenticated setup, transcription and webhook delivery remain separate checks.

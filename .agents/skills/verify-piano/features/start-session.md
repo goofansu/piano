@@ -59,7 +59,7 @@ project and reload on its own scratch instance, with its own folders and models 
 
 - Harness
   - Command: `node test/browser/start-session.mjs "$EVIDENCE/start-session/harness"`
-  - Result: exit 0 and `PASS start-session (<s>s), evidence in <dir>` with its screenshots.
+  - Result: exit 0 and `PASSED start-session (<s>s), evidence in <dir>` with its screenshots.
     It also measures compact Send/Mic faces inside nonoverlapping 44px touch targets at 390px,
     414px and wide coarse-pointer layouts, returning to mouse layout without sending the draft.
     The Mic uses a dummy scratch key; this proves geometry, not recording or transcription.
