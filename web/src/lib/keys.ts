@@ -13,6 +13,17 @@ export const isImeKey = (e: ImeFields | { nativeEvent: ImeFields }) => {
   return key.isComposing || key.keyCode === 229;
 };
 
+export const ownsTextInput = (el: EventTarget | null) =>
+  el instanceof HTMLElement &&
+  (el.isContentEditable ||
+    /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) ||
+    !!el.closest('form, [role="textbox"]'));
+
+export const overlayOpen = () =>
+  !!document.querySelector(
+    '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [cmdk-root]',
+  );
+
 const MODIFIERS = new Set(["Alt", "AltGraph", "Control", "Meta", "Shift"]);
 
 export function sessionNavigationKey(e: KeyboardEvent): -1 | 1 | "modifier" | undefined {
