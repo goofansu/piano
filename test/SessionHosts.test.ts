@@ -1724,6 +1724,34 @@ test("INV-01: a closed folder's registered worktree reopens its folder, under it
     );
 });
 
+test("INV-01: a new session in an open folder that is also a closed folder's worktree reopens nothing", async () => {
+  const base = realpathSync(root),
+    owner = join(base, "dual-owner"),
+    dual = join(base, "dual-open"),
+    dualAlias = join(base, "dual-open-alias");
+  mkdirSync(owner);
+  mkdirSync(dual);
+  symlinkSync(dual, dualAlias);
+  for (const [name, spelling] of [
+    ["dual-own", dual],
+    ["dual-alias", dualAlias],
+  ] as const)
+    await run(
+      Effect.gen(function* () {
+        const hosts = yield* SessionHosts,
+          registry = yield* Registry;
+        yield* registry.addFolder(dual);
+        yield* registry.addFolder(owner);
+        yield* registry.addWorktree({ folder: owner, path: dual, branch: "feature" });
+        yield* registry.removeFolder(owner);
+        const session = yield* hosts.create({ cwd: spelling, options: {} });
+        assert.equal(session.spec.cwd, dual, `${spelling} starts in the open folder`);
+        assert.deepEqual((yield* registry.get).folders, [dual], "the closed folder stays closed");
+      }),
+      { fakePi: name },
+    );
+});
+
 test("INV-01: a new session in a main checkout reached by another spelling starts in its registered folder", async () => {
   const repo = join(root, "aliased-repo"),
     repoAlias = join(root, "aliased-repo-alias");
