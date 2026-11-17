@@ -36,6 +36,10 @@ parallel launches or reuse of live peers. Confirm its `run.json` cleanup result 
 
 ## Launch
 
+First allocate an [evidence run](../../../docs/testing.md#evidence-directories) in this shell.
+That sets `EVIDENCE_RUN` for explicit harness output and `VERIFY_EVIDENCE` for manual launches.
+Choose one launch below after any harness journey has completed its cleanup.
+
 ```bash
 .agents/skills/verify-piano/scripts/launch.sh                      # seeded: folder repo, 2 projects, 2 saved sessions
 .agents/skills/verify-piano/scripts/launch.sh --empty              # empty database: nothing registered
@@ -78,7 +82,7 @@ READY registry over ws://127.0.0.1:<ui-port>/ws: 1 folder(s)
 api      http://127.0.0.1:<api-port>  (server pid <pid>)
 ui       http://127.0.0.1:<ui-port>  (vite pid <pid>)
 database /tmp/verify-piano/<run-id>/db/piano.db  seeded=1  fake-pi=browser
-evidence /tmp/verify-piano-evidence/<run-id>
+evidence <EVIDENCE_RUN>/manual/<run-id>
 RUN=/tmp/verify-piano/<run-id>
 ```
 
@@ -134,14 +138,15 @@ after `web/dist` was built (then the running backend or UI predates the checkout
 
 ## Drive
 
-1. **The repo harness first.** The committed critical paths start their own scratch instance and
-   browser, assert what a user sees and what Pi receives, and write screenshots into the directory
-   given as the first argument:
+1. **The repo harness first.** Allocate an [evidence run](../../../docs/testing.md#evidence-directories)
+   if not already set in this shell. The committed critical paths start their own scratch instance
+   and browser, assert what a user sees and what Pi receives, and write screenshots into the
+   directory given as the first argument:
 
    ```bash
-   node test/browser/start-session.mjs "$EVIDENCE/harness-start-session"
-   node test/browser/open-session.mjs "$EVIDENCE/harness-open-session"
-   node test/browser/transcript-rows.mjs "$EVIDENCE/harness-transcript-rows"
+   node test/browser/start-session.mjs "$EVIDENCE_RUN/harness-start-session"
+   node test/browser/open-session.mjs "$EVIDENCE_RUN/harness-open-session"
+   node test/browser/transcript-rows.mjs "$EVIDENCE_RUN/harness-transcript-rows"
    ```
 
    Each prints its outcome and evidence directory. `PASSED` exits 0; failed, blocked, cancelled,
@@ -197,9 +202,10 @@ after `web/dist` was built (then the running backend or UI predates the checkout
 
 ## Evidence
 
-Evidence goes to `${TMPDIR:-/tmp}/verify-piano-evidence/<run-id>/` (`VERIFY_EVIDENCE` overrides
-the parent), outside the run dir, so Cleanup keeps it. System temp cleanup may remove it later;
-set `VERIFY_EVIDENCE` to a persistent directory when longer retention is needed.
+With the [evidence directory setup](../../../docs/testing.md#evidence-directories), manual launch
+evidence goes to `$EVIDENCE_RUN/manual/<run-id>/`, outside the scratch run dir, so Cleanup keeps it.
+After sourcing `run.env`, `$EVIDENCE` names that manual launch directory; `$EVIDENCE_RUN` remains
+the parent for the overall verification run. Keep retained logs and drive scripts there too.
 
 ```bash
 .agents/skills/verify-piano/scripts/capture.sh "$RUN" <feature-id> <step>

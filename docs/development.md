@@ -29,12 +29,11 @@ Model credentials are needed for real sessions, but not for the fake-Pi tests.
 restart by hand instead, run `npm run build` and `npm start`. To run the two processes in separate
 terminals, use `npm run dev:server` and `npm run dev:web`.
 
-Before you commit code or dependency changes, run:
+Before you commit code or dependency changes, allocate an
+[evidence run](testing.md#evidence-directories) under `~/piano-evidence/`, then run:
 
 ```bash
-npm run verify
-# Keep evidence in a chosen directory (outside Git):
-npm run verify -- /tmp/piano-baseline
+npm run verify -- "$EVIDENCE_RUN/baseline"
 ```
 
 `verify` runs the unchanged required gates: `npm run typecheck`, `npm run lint`, then `npm test`.
@@ -126,19 +125,21 @@ remain trusted, not a security sandbox (INV-01, INV-09).
 
 Module tests (`npm test`) run against a fake Pi and need no model credentials. One test drives a
 real Worktrunk and needs `wt` 0.80.0 or later on `PATH`. The critical-path browser journeys in
-`test/browser/` run with `npm run test:browser`. To focus without a selection DSL:
+`test/browser/` run with `npm run test:browser`. To focus without a selection DSL, first allocate an
+[evidence run](testing.md#evidence-directories), then use:
 
 ```sh
 node --test --import ./test/setup.ts test/lint-boundaries.test.ts
 node --test --test-name-pattern='revision identifies' --import ./test/setup.ts test/verification-evidence.test.ts
-node test/browser/start-session.mjs /tmp/piano-start
+node test/browser/start-session.mjs "$EVIDENCE_RUN/start-session"
 ```
 
 Node options go **before** the test path; `npm test -- --test-name-pattern=…` does not select tests.
 Browser prerequisites and journey choices live in [testing](testing.md#browser-tests); manual
 setup/readiness/capture/cleanup remain in the [verify-piano skill](../.agents/skills/verify-piano/SKILL.md).
-Use a fresh evidence directory for each observation. See [provenance](testing.md#file-evidence-provenance)
-for exactly what a recorded pass does and does not establish.
+Use a fresh child directory within the evidence run for each observation. See
+[provenance](testing.md#file-evidence-provenance) for exactly what a recorded pass does and does not
+establish.
 
 ## CI and merging
 
