@@ -35,7 +35,7 @@ export function captureRevision(cwd, { production = false } = {}) {
           target: decode(readlinkSync(join(cwd, path), { encoding: "buffer" })),
         });
         try {
-          const target = relative(cwd, realpathSync(join(cwd, path)));
+          const target = relative(realpathSync(cwd), realpathSync(join(cwd, path)));
           if (
             isAbsolute(target) ||
             target.startsWith("..") ||
