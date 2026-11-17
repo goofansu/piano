@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { LOCAL, machineFrameBytes, PEER_FRAME_BYTES } from "../shared/machine.ts";
-import { type ClientMessage, encodeServerMessage } from "../shared/wire.ts";
+import { type ClientMessage, encodeServerMessage, type PromptSubmission } from "../shared/wire.ts";
 import { createClient } from "../web/src/lib/client.ts";
 import { messageCommand, newSessionCommand } from "../web/src/lib/composerControl.ts";
 import { createDrafts, NEW_SESSION_DRAFT, sessionDraftKey } from "../web/src/lib/messageDraft.ts";
@@ -9,17 +9,24 @@ import { emptyChoice, type ModelTarget, modelChoice } from "../web/src/lib/model
 import { openConnection, type SocketEnvironment, type SocketEvents } from "../web/src/lib/ws.ts";
 import { initialState } from "../web/src/store.ts";
 
-function harness({ select = true, frameBytes = machineFrameBytes(LOCAL.id) } = {}) {
+function harness({ select = true, hosted = true, frameBytes = machineFrameBytes(LOCAL.id) } = {}) {
   const sockets: Array<{
     events: SocketEvents;
     open: boolean;
     sent: ClientMessage[];
     throws: boolean;
+    serverSequence: number;
   }> = [];
   let online = () => {};
   const env: SocketEnvironment = {
     open: (_url, events) => {
-      const socket = { events, open: false, sent: [] as ClientMessage[], throws: false };
+      const socket = {
+        events,
+        open: false,
+        sent: [] as ClientMessage[],
+        throws: false,
+        serverSequence: 0,
+      };
       sockets.push(socket);
       return {
         isOpen: () => socket.open,
@@ -58,7 +65,7 @@ function harness({ select = true, frameBytes = machineFrameBytes(LOCAL.id) } = {
     last().open = true;
     last().events.open();
   };
-  const selected = () =>
+  const selected = (submission?: PromptSubmission) =>
     last().events.message(
       encodeServerMessage(
         {
@@ -66,15 +73,15 @@ function harness({ select = true, frameBytes = machineFrameBytes(LOCAL.id) } = {
           cwd: "/scratch",
           sessionId: "existing",
           selectionId: client.getState().selectionId!,
-          hosted: true,
+          hosted,
           cursor: { cwd: "/scratch", sessionId: "existing", generation: "g1", sequence: 1 },
           snapshot: {
-            state: { sessionId: "existing", isStreaming: false },
+            state: { sessionId: "existing", isStreaming: false, submission },
             messages: [],
             dialogs: [],
           },
         },
-        1,
+        ++last().serverSequence,
       ),
     );
   accept();
@@ -94,6 +101,43 @@ function harness({ select = true, frameBytes = machineFrameBytes(LOCAL.id) } = {
     creations: () => sockets.flatMap((s) => s.sent).filter((m) => m._tag === "create_session"),
   };
 }
+
+test("disconnect and navigation keep an inactive send locked until its snapshot confirms delivery", (t) => {
+  const h = harness({ hosted: false });
+  t.after(h.stop);
+  const drafts = createDrafts();
+  t.after(drafts.follow(h.client));
+  const key = sessionDraftKey({ cwd: "/scratch", sessionId: "existing" });
+  drafts.setText(key, "Only once");
+  let inputId = "";
+  const submit = () =>
+    drafts.submit(
+      key,
+      (message, id) => {
+        inputId = id;
+        return h.client.send(messageCommand("follow-up", message, {}, id));
+      },
+      { waitForConfirmation: true },
+    );
+  assert.equal(submit(), true);
+  h.last().events.close(1006);
+  assert.equal(drafts.get(key).delivery?.status, "uncertain");
+  assert.equal(drafts.get(key).text, "Only once");
+  h.reconnect();
+  h.accept();
+  h.selected();
+  assert.equal(submit(), false, "a snapshot without this receipt is not permission to resend");
+  h.client.select("/scratch", "other");
+  const other = sessionDraftKey({ cwd: "/scratch", sessionId: "other" });
+  drafts.setText(other, "Other session");
+  h.client.select("/scratch", "existing");
+  h.selected({ id: 1, inputId, outcome: "started" });
+  assert.equal(drafts.get(key).text, "");
+  assert.equal(drafts.get(key).delivery, undefined);
+  assert.equal(drafts.get(other).text, "Other session");
+  assert.equal(h.actions().length, 1, "reconnect and navigation only observe");
+  assert.deepEqual(h.notices, []);
+});
 
 test("failed creation restores text, quotes, images and options; reconnect only reads the original attempt", async (t) => {
   const h = harness({ select: false });

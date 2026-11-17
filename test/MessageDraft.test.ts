@@ -252,6 +252,118 @@ test("submit delivers text, quotes and images as one message, then empties all t
   );
 });
 
+test("inactive-session sends retain their draft and block duplicates until a matching verdict", async () => {
+  const drafts = createDrafts();
+  const client = source();
+  const stop = drafts.follow(client);
+  const key = sessionDraftKey({ cwd: "/scratch", sessionId: "starting" });
+  drafts.setText(key, "Keep visible");
+  drafts.addQuote(key, "Context");
+  await drafts.addImages(key, [pngFile("shot.png")], encode);
+  const before = drafts.message(key);
+  let inputId = "";
+  let calls = 0;
+  const submit = () =>
+    drafts.submit(
+      key,
+      (_, id) => {
+        calls++;
+        inputId = id;
+        return "sent";
+      },
+      { waitForConfirmation: true },
+    );
+  assert.equal(submit(), true);
+  assert.deepEqual(drafts.message(key), before);
+  assert.equal(drafts.get(key).delivery?.status, "starting");
+  assert.equal(submit(), false);
+  assert.equal(calls, 1);
+  drafts.setText(key, "accidental edit");
+  drafts.removeImage(key, 0);
+  assert.deepEqual(drafts.message(key), before);
+  const verdict = (id: string, outcome: "uncertain" | "started") =>
+    client.emit({
+      _tag: "session",
+      selectionId: "selection",
+      cursor: { cwd: "/scratch", sessionId: "starting", generation: "g", sequence: 1 },
+      event: { _tag: "submission", submission: { id: 1, inputId: id, outcome } },
+    } as ServerMessage);
+  verdict("other", "started");
+  assert.deepEqual(drafts.message(key), before);
+  verdict(inputId, "uncertain");
+  assert.equal(drafts.get(key).delivery?.status, "uncertain");
+  assert.equal(submit(), false);
+  verdict(inputId, "started");
+  assert.equal(drafts.get(key), EMPTY_DRAFT);
+  stop();
+});
+
+test("confirmed inactive-session failure retains images and allows only deliberate retry", async () => {
+  const drafts = createDrafts();
+  const client = source();
+  const stop = drafts.follow(client);
+  const key = sessionDraftKey({ cwd: "/scratch", sessionId: "starting" });
+  drafts.setText(key, "Retry me");
+  await drafts.addImages(key, [pngFile("shot.png")], encode);
+  const before = drafts.message(key);
+  let inputId = "";
+  const submit = () =>
+    drafts.submit(
+      key,
+      (_, id) => {
+        inputId = id;
+        return "sent";
+      },
+      { waitForConfirmation: true },
+    );
+  submit();
+  client.emit({ _tag: "error", inputId, message: "Pi failed to start" });
+  assert.deepEqual(drafts.message(key), before);
+  assert.equal(drafts.get(key).delivery?.status, "failed");
+  assert.equal(drafts.sendable(key), true);
+  const failedId = inputId;
+  assert.equal(submit(), true);
+  assert.notEqual(inputId, failedId);
+  client.emit({ _tag: "error", inputId: failedId, message: "late failure" });
+  assert.equal(drafts.get(key).delivery?.status, "starting");
+  assert.equal(drafts.sendable(key), false);
+  stop();
+});
+
+test("a prepared inactive send observes receipts arriving before the send promise returns", async () => {
+  for (const outcome of ["started", "uncertain", "not_sent"] as const) {
+    const drafts = createDrafts();
+    const client = source();
+    const stop = drafts.follow(client);
+    const key = sessionDraftKey({ cwd: "/scratch", sessionId: "prepared" });
+    drafts.setText(key, "Prepared message");
+    await drafts.prepareSubmit(
+      key,
+      async (_, inputId) => {
+        client.emit({
+          _tag: "session",
+          selectionId: "selection",
+          cursor: { cwd: "/scratch", sessionId: "prepared", generation: "g", sequence: 1 },
+          event: { _tag: "submission", submission: { id: 1, inputId, outcome } },
+        });
+        return "sent";
+      },
+      { waitForConfirmation: true },
+    );
+    assert.equal(drafts.get(key).preparing, undefined);
+    if (outcome === "started") assert.equal(drafts.get(key), EMPTY_DRAFT);
+    else {
+      assert.equal(drafts.get(key).text, "Prepared message");
+      assert.equal(
+        drafts.get(key).delivery?.status,
+        outcome === "not_sent" ? "failed" : "uncertain",
+      );
+      assert.equal(drafts.sendable(key), outcome === "not_sent");
+    }
+    stop();
+  }
+});
+
 test("submit refuses while images are being read and keeps the whole draft", async () => {
   const drafts = createDrafts();
   const key = sessionDraftKey({ cwd: "/scratch", sessionId: "busy" });

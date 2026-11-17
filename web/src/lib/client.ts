@@ -1,5 +1,6 @@
 import type { ClientCommand, ServerMessage } from "@shared/wire";
 import { refusedAttempt } from "../../../shared/creationVerdict.ts";
+import { inputVerdictOf } from "../../../shared/inputVerdict.ts";
 import { closureNeedsAttention } from "../../../shared/sessionStatus.ts";
 import { type Action, type AppState, reduce, sessionDelivery } from "../store.ts";
 import { canDecideTrust, trustNotice } from "./directoryTrust.ts";
@@ -115,6 +116,7 @@ export function createClient({
   let observing: string | null = null;
   const listeners = new Set<(update: ClientUpdate) => void>();
   const messageListeners = new Set<(message: ServerMessage) => void>();
+  const startingInputs = new Set<string>();
 
   const askAboutFocus = () => {
     if (!state.connected) {
@@ -181,12 +183,17 @@ export function createClient({
       return disposition;
     } else if (m._tag === "act") {
       const ready = sessionReady(state) && state.selectionId;
+      const inputId = "inputId" in m.action ? m.action.inputId : undefined;
+      const starting = !!ready && !state.session?.hosted && inputId !== undefined;
+      if (starting) startingInputs.add(inputId);
       const disposition = ready
         ? (connection?.send({ ...m, selectionId: state.selectionId! }) ?? "not-sent")
         : "not-sent";
       if (m.action._tag === "prompt" || m.action._tag === "steer") {
-        if (disposition === "not-sent") notify(ready ? notSent() : NOT_SENT, "warning");
-        else if (disposition === "uncertain")
+        if (disposition === "not-sent") {
+          if (inputId) startingInputs.delete(inputId);
+          notify(ready ? notSent() : NOT_SENT, "warning");
+        } else if (disposition === "uncertain" && !starting)
           notify(
             "Message delivery is uncertain. Check the conversation before sending again.",
             "warning",
@@ -242,7 +249,11 @@ export function createClient({
     apply({ type: "server", message: m });
     if (notice) notify(notice, "info");
     if (!wasResync && state.resync && state.connected) reselect(state.session);
-    if (m._tag === "error" || m._tag === "trust_failed") notify(m.message, "error");
+    const verdict = inputVerdictOf(m);
+    const inlineFailure = verdict && startingInputs.has(verdict.inputId);
+    if (verdict && verdict.outcome !== "uncertain") startingInputs.delete(verdict.inputId);
+    if (m._tag === "trust_failed" || (m._tag === "error" && !inlineFailure))
+      notify(m.message, "error");
     else if (elsewhere) notify(`Could not start session: ${m.message}`, "error");
     else if (m._tag === "toast") notify(m.message, m.level);
     else if (m._tag === "action_result" && m.result._tag === "queue_restored" && m.result.stopError)

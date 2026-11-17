@@ -26,7 +26,13 @@ import { Spinner } from "@/components/ui/spinner";
 import { VoiceInputButton } from "@/components/VoiceInputButton";
 import type { ControlHint } from "@/lib/composerControl";
 import { isModelPickerKey, isSendKey } from "@/lib/keys";
-import { type DraftKey, type DraftMessage, draftMessage } from "@/lib/messageDraft";
+import {
+  type DraftKey,
+  type DraftMessage,
+  draftMessage,
+  draftPending,
+  type DraftSubmitOptions,
+} from "@/lib/messageDraft";
 import { modelPickerEnabled } from "@/lib/modelPicker";
 import { composerCard, composerToolbar } from "@/lib/styles";
 import { useTypeToFocus } from "@/lib/typeToFocus";
@@ -35,7 +41,7 @@ import { useDrafts } from "@/lib/useMachine";
 import type { ModelControl } from "@/lib/useModelChoice";
 import type { SendDisposition } from "@/lib/ws";
 
-export function useDraftEditor(key: DraftKey | null) {
+export function useDraftEditor(key: DraftKey | null, options?: DraftSubmitOptions) {
   const drafts = useDrafts();
   const draft = useSyncExternalStore(drafts.subscribe, () => drafts.get(key));
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -45,9 +51,11 @@ export function useDraftEditor(key: DraftKey | null) {
     text: draft.text,
     preparing: draft.preparing,
     prepareError: draft.prepareError,
+    delivery: draft.delivery,
+    pending: draftPending(draft),
     prepareSubmit: (
       deliver: (message: DraftMessage, inputId: string) => Promise<SendDisposition>,
-    ) => drafts.prepareSubmit(key, deliver),
+    ) => drafts.prepareSubmit(key, deliver, options),
     message: draftMessage(draft).text,
     attachments: attachmentDraft(key, draft.images, drafts),
     quotes: {
@@ -58,7 +66,7 @@ export function useDraftEditor(key: DraftKey | null) {
     setText: (value: string) => drafts.setText(key, value),
     append,
     submit: (deliver: (message: DraftMessage, inputId: string) => SendDisposition) =>
-      drafts.submit(key, deliver),
+      drafts.submit(key, deliver, options),
   };
 }
 export type DraftEditorState = ReturnType<typeof useDraftEditor>;
@@ -78,6 +86,7 @@ interface Props {
   onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   above?: ReactNode;
   delivery?: ReactNode;
+  status?: string;
   actions: ReactNode;
   cancelUpload?: () => void;
   voice?: () => VoiceHints;
@@ -89,7 +98,7 @@ export function DraftEditor({
   editor,
   completion,
   disabled = false,
-  attachmentsDisabled = disabled,
+  attachmentsDisabled = disabled || editor.pending,
   label,
   inputClassName,
   className,
@@ -101,20 +110,22 @@ export function DraftEditor({
   above,
   actions,
   delivery,
+  status,
   voice,
   cancelUpload,
 }: Props) {
   const { ref, text, attachments, quotes } = editor;
   const [modelOpen, setModelOpen] = useState(false);
   useAutoGrow(ref, text, maxHeight);
-  useTypeToFocus(ref, editor.append, !disabled);
+  const locked = disabled || editor.pending;
+  useTypeToFocus(ref, editor.append, !locked);
   const quoteCount = useRef(quotes.items.length);
   useEffect(() => {
     if (quotes.items.length > quoteCount.current && !disabled) ref.current?.focus();
     quoteCount.current = quotes.items.length;
   }, [quotes.items.length, disabled, ref]);
   const pickerAvailable = modelPickerEnabled({
-    disabled,
+    disabled: locked,
     catalog: model.models.catalog,
     canRefresh: !!model.models.refresh,
   });
@@ -126,16 +137,18 @@ export function DraftEditor({
     >
       {editor.preparing && (
         <>
-          <AttachmentDraftView
-            draft={{
-              items: editor.preparing.attachments,
-              busy: false,
-              error: "",
-              add: async () => {},
-              remove: () => {},
-            }}
-            disabled
-          />
+          {!editor.pending && (
+            <AttachmentDraftView
+              draft={{
+                items: editor.preparing.attachments,
+                busy: false,
+                error: "",
+                add: async () => {},
+                remove: () => {},
+              }}
+              disabled
+            />
+          )}
           <div
             role="status"
             className="flex items-center gap-2 px-3 pt-2 text-sm text-muted-foreground"
@@ -158,7 +171,7 @@ export function DraftEditor({
         </Alert>
       )}
       <AttachmentDraftView draft={attachments} disabled={attachmentsDisabled} />
-      <QuoteChips draft={quotes} disabled={disabled} />
+      <QuoteChips draft={quotes} disabled={locked} />
       {above}
       <SlashTextarea
         ref={ref}
@@ -166,6 +179,8 @@ export function DraftEditor({
         autoFocus={autoFocus}
         value={text}
         disabled={disabled}
+        readOnly={editor.pending}
+        aria-busy={editor.pending}
         rows={1}
         aria-label={label}
         className={inputClassName}
@@ -177,12 +192,20 @@ export function DraftEditor({
           } else if (isSendKey(e)) {
             e.preventDefault();
             onSend(e.altKey);
-          } else if (e.key === "Backspace" && !text && quotes.items.length) {
+          } else if (!locked && e.key === "Backspace" && !text && quotes.items.length) {
             e.preventDefault();
             quotes.remove(quotes.items.length - 1);
           } else onKeyDown?.(e);
         }}
       />
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="px-3 text-sm text-muted-foreground"
+      >
+        {status}
+      </div>
       <div className={composerToolbar}>
         <AttachButton draft={attachments} disabled={attachmentsDisabled} />
         <ModelSelect
@@ -190,11 +213,11 @@ export function DraftEditor({
           onOpenChange={setModelOpen}
           returnFocusRef={ref}
           control={model}
-          disabled={disabled}
+          disabled={locked}
         />
         {delivery}
         <div className="ml-auto flex shrink-0 items-center gap-1">
-          <VoiceInputButton editor={editor} session={voice ?? noVoiceContext} disabled={disabled} />
+          <VoiceInputButton editor={editor} session={voice ?? noVoiceContext} disabled={locked} />
           {actions}
         </div>
       </div>
@@ -208,6 +231,7 @@ export function ComposerSend({
   label = "Send",
   hint = SEND_HINT,
   disabled,
+  busy,
   onClick,
   face,
   className,
@@ -216,6 +240,7 @@ export function ComposerSend({
   label?: string;
   hint?: ControlHint;
   disabled: boolean;
+  busy?: boolean;
   onClick: () => void;
   face?: ComposerActionFace;
   className?: string;
@@ -233,6 +258,7 @@ export function ComposerSend({
       face={face}
       className={className}
       disabled={disabled}
+      aria-busy={busy}
       onClick={onClick}
     >
       {children}

@@ -47,6 +47,7 @@ let model = { provider, id };
 let thinkingLevel = arg("--thinking") ?? settings.defaultThinkingLevel ?? "medium";
 let sessionName = arg("--name");
 let streaming = false;
+let firstState = true;
 let streamTimer;
 const steering = [],
   followUp = [];
@@ -141,15 +142,33 @@ function handle(cmd) {
         );
         return;
       }
-      return respond(cmd, {
-        sessionId,
-        sessionFile,
-        sessionName,
-        model,
-        thinkingLevel,
-        isStreaming: streaming,
-        isCompacting: false,
-      });
+      {
+        const ready = () =>
+          respond(cmd, {
+            sessionId,
+            sessionFile,
+            sessionName,
+            model,
+            thinkingLevel,
+            isStreaming: streaming,
+            isCompacting: false,
+          });
+        const gate = join(process.cwd(), ".piano-test-resume");
+        if (firstState && file && process.env.PIANO_TEST_RESUME_GATE && existsSync(gate)) {
+          firstState = false;
+          const timer = setInterval(() => {
+            const state = readFileSync(gate, "utf8");
+            if (state === "pending") return;
+            clearInterval(timer);
+            if (state === "fail")
+              respond(cmd, undefined, "Fixture: resumed Pi could not become ready");
+            else ready();
+          }, 50);
+          return;
+        }
+        firstState = false;
+        return ready();
+      }
     case "get_messages":
       return respond(cmd, { messages });
     case "get_entries": {

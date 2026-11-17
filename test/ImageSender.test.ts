@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { PreparedImages } from "../shared/remoteImages.ts";
-import type { ClientCommand } from "../shared/wire.ts";
+import type { ClientCommand, ServerMessage } from "../shared/wire.ts";
 import { messageCommand } from "../web/src/lib/composerControl.ts";
 import { createImageSender, type ImageSend } from "../web/src/lib/imageSender.ts";
 import { createDrafts, type DraftKey, sessionDraftKey } from "../web/src/lib/messageDraft.ts";
@@ -17,7 +17,7 @@ const addImage = (drafts: ReturnType<typeof createDrafts>) =>
     Buffer.from(png).toString("base64"),
   );
 
-async function harness(disposition: SendDisposition = "sent") {
+async function harness(disposition: SendDisposition = "sent", waitForConfirmation = false) {
   const drafts = createDrafts();
   drafts.setText(KEY, "Reply with exactly: X");
   await addImage(drafts);
@@ -37,8 +37,8 @@ async function harness(disposition: SendDisposition = "sent") {
     get preparing() {
       return drafts.get(key).preparing;
     },
-    submit: (deliver) => drafts.submit(key, deliver),
-    prepareSubmit: (deliver) => drafts.prepareSubmit(key, deliver),
+    submit: (deliver) => drafts.submit(key, deliver, { waitForConfirmation }),
+    prepareSubmit: (deliver) => drafts.prepareSubmit(key, deliver, { waitForConfirmation }),
   });
   const send = () =>
     sender.send(
@@ -102,6 +102,44 @@ for (const disposition of ["not-sent", "sent", "uncertain"] as const) {
     }
   });
 }
+
+test("inactive remote sends keep their text and images through upload and confirmation", async (t) => {
+  const h = await harness("sent", true);
+  let receive!: (message: ServerMessage) => void;
+  t.after(
+    h.drafts.follow({
+      listen: (listener) => {
+        receive = listener;
+        return () => {};
+      },
+    }),
+  );
+  const before = h.drafts.message(KEY);
+  const first = h.send();
+  assert.deepEqual(h.drafts.message(KEY), before);
+  await h.send();
+  assert.equal(h.uploads.length, 1);
+  h.uploads[0]!.resolve({ id: "prepared" });
+  await first;
+  assert.deepEqual(h.drafts.message(KEY), before);
+  await h.send();
+  assert.equal(h.uploads.length, 1, "pending confirmation cannot upload a second lease");
+  assert.equal(h.sent.length, 1);
+  assert.deepEqual(h.discarded, [], "a possibly consumed lease cannot be discarded");
+  const input = h.sent[0];
+  assert.ok(input._tag === "act" && input.action._tag === "prompt");
+  receive({ _tag: "error", inputId: input.action.inputId, message: "startup failed" });
+  assert.deepEqual(h.drafts.message(KEY), before);
+  assert.equal(h.drafts.sendable(KEY), true);
+  const retry = h.send();
+  assert.equal(h.uploads.length, 2, "deliberate retry prepares a new lease");
+  h.sender.abandon();
+  h.uploads[1].resolve({ id: "abandoned" });
+  await retry;
+  assert.deepEqual(h.discarded, ["abandoned"]);
+  assert.deepEqual(h.drafts.message(KEY), before, "cancel never doubles the retained images");
+  assert.equal(h.drafts.sendable(KEY), true);
+});
 
 test("a second send while images upload is ignored", async () => {
   const h = await harness();

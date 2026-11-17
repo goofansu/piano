@@ -172,6 +172,37 @@ Where to begin: where a session may start, `startsSessionIn` in
   **Check start** (the same `select` with `attemptId` that reconnect sends). The New page's Could
   not start session banner with Retry and Dismiss is rendered by `NewSession.tsx`.
 
+#### Continuing an inactive session
+
+`Composer` opts into `messageDraft.submit` / `prepareSubmit`'s `waitForConfirmation` when
+its selected session is not hosted. The draft keeps its text, quotes and images visible and
+read-only, with a busy Send control and a polite **Starting session…** status. After eight
+seconds this becomes **Still starting session…**, not a failure. Remote images first show
+**Uploading images…** and retain their existing cancellation and one-use lease rules.
+`ComposerControl` blocks click, Enter, Alt+Enter and queue/Stop actions for this pending input;
+`messageDraft` also blocks duplicate submissions synchronously. The textarea stays focusable.
+
+The original action already asks the server to start Pi and then submit once; there is no
+second send on readiness. Only a receipt matching the draft's `inputId` clears it. A confirmed
+`not_sent` unlocks the retained draft and shows **Could not start session** for deliberate Send
+retry, without a duplicate error toast. A disconnected socket or uncertain receipt keeps the
+draft locked as **Delivery unconfirmed**. Reconnect/return reads the authoritative snapshot;
+without a matching receipt, the outcome remains unknown and Piano never replays the input.
+This is page-load memory, not durable recovery: reload still discards drafts. An already hosted
+session keeps the existing immediate-clear behavior, allowing the next message to be typed.
+
+Owners: [`Composer.tsx`](../web/src/components/Composer.tsx) and
+[`DraftEditor.tsx`](../web/src/components/DraftEditor.tsx) render feedback and preserve focus;
+[`messageDraft.ts`](../web/src/lib/messageDraft.ts) owns pending input and verdict reconciliation;
+[`client.ts`](../web/src/lib/client.ts) owns transport, read-back and inline-vs-toast feedback.
+[`ImageSender.test.ts`](../test/ImageSender.test.ts),
+[`MessageDraft.test.ts`](../test/MessageDraft.test.ts) and
+[`DraftSubmission.test.ts`](../test/DraftSubmission.test.ts) cover duplicate suppression,
+retention, lease disposal, receipt races and reconnect/navigation without replay.
+The [open-session recipe](../.agents/skills/verify-piano/features/open-session.md) and
+[`open-session.mjs`](../test/browser/open-session.mjs) exercise gated fake-Pi startup, long wait,
+failure, focus/accessibility and deliberate retry with one delivered image-bearing prompt.
+
 #### Shared contracts
 
 - [`wire.ts`](../shared/wire.ts) defines `create_session { selectionId, attemptId?, cwd,

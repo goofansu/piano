@@ -41,6 +41,7 @@ export interface ComposerSituation {
   compacting: boolean;
   stopping: boolean;
   preparing?: boolean;
+  pending?: boolean;
   queued: number;
   mode: DeliveryMode;
 }
@@ -64,9 +65,9 @@ export interface ComposerControl {
 
 export function composerControl(s: ComposerSituation): ComposerControl {
   const draft = { text: s.text, images: s.images };
-  const showDelivery = s.streaming && !s.compacting;
-  const idle = !s.disabled && !s.stopping;
-  if (s.streaming && !hasContent(draft)) {
+  const showDelivery = s.streaming && !s.compacting && !s.pending;
+  const idle = !s.disabled && !s.stopping && !s.pending;
+  if (s.streaming && !s.pending && !hasContent(draft)) {
     return {
       primary: "stop",
       enabled: idle,
@@ -87,9 +88,15 @@ export function composerControl(s: ComposerSituation): ComposerControl {
   }
   const enabled = idle && !s.preparing && sendable(draft);
   return {
-    primary: s.streaming ? "queue" : "send",
+    primary: s.streaming && !s.pending ? "queue" : "send",
     enabled,
-    label: showDelivery ? DELIVERY[s.mode].label : s.streaming ? "Queue message" : "Send",
+    label: s.pending
+      ? "Send"
+      : showDelivery
+        ? DELIVERY[s.mode].label
+        : s.streaming
+          ? "Queue message"
+          : "Send",
     hint: {
       lead: showDelivery
         ? `${DELIVERY[s.mode].label}: ${DELIVERY[s.mode].detail}`

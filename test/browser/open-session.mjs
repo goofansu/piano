@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { run } from "./harness.mjs";
 
 const listsOwnTheirItems = async (page, where) => {
@@ -10,6 +12,7 @@ const listsOwnTheirItems = async (page, where) => {
   const lists = await page.evaluate(`document.querySelectorAll('[role="list"]').length`);
   console.log(`Lists on ${where}: ${lists}, every row a list item`);
 };
+let resumeGate;
 const timestamp = Date.now();
 const usage = {
   input: 1000,
@@ -40,6 +43,8 @@ await run(
   "open-session",
   ({ repository, history }) => {
     const cwd = repository("api");
+    resumeGate = join(cwd, ".piano-test-resume");
+    writeFileSync(resumeGate, "pending");
     const now = new Date().toISOString();
     const reference = (sessionId, title, cost) => ({
       sessionId,
@@ -381,8 +386,61 @@ await run(
       "the session's cost when opened",
     );
 
+    const imageFile = join(page.evidence, "startup.png");
+    writeFileSync(
+      imageFile,
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aA1sAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    );
+    await page.ab("upload", 'input[aria-label="Image files"]', imageFile);
+    await page.until(`!!document.querySelector('[aria-label="Remove startup.png"]')`);
     await page.ab("fill", '[aria-label="Message"]', "Add a regression test");
     await page.ab("press", "Enter");
+    await page.see("Starting session…");
+    const retained = `document.querySelector('[aria-label="Message"]').value === 'Add a regression test'
+      && document.querySelector('[aria-label="Message"]').readOnly
+      && document.activeElement === document.querySelector('[aria-label="Message"]')
+      && document.querySelector('button[aria-label="Send"]').disabled
+      && document.querySelector('button[aria-label="Send"]').getAttribute('aria-busy') === 'true'
+      && !!document.querySelector('button[aria-label="Send"] [data-slot="spinner"]')
+      && !!document.querySelector('[data-slot="session-composer"] [role="status"][aria-live="polite"]')
+      && document.querySelector('[aria-label="Remove startup.png"]').disabled`;
+    await page.until(retained);
+    await page.capture("3a-starting-retained");
+    await page.ab("press", "Enter");
+    await page.ab("press", "Alt+Enter");
+    assert.equal(page.prompts().length, 0, "startup has not submitted to Pi");
+    await page.see("Still starting session…");
+    await page.until(retained);
+    await page.capture("3b-still-starting");
+    writeFileSync(resumeGate, "fail");
+    await page.see("Could not start session");
+    await page.until(`document.querySelector('[aria-label="Message"]').value === 'Add a regression test'
+      && !document.querySelector('[aria-label="Message"]').readOnly
+      && !document.querySelector('button[aria-label="Send"]').disabled`);
+    assert.equal(page.prompts().length, 0, "failure does not resend");
+    assert.equal(
+      await page.evaluate(`!!document.querySelector('[data-sonner-toast]')`),
+      false,
+      "failure answers inline, not in a duplicate toast",
+    );
+    await page.capture("3c-start-failed");
+    writeFileSync(resumeGate, "pending");
+    await page.click("button", "Send");
+    await page.see("Starting session…");
+    await page.until(retained);
+    await page.ab("press", "Enter");
+    writeFileSync(resumeGate, "ready");
+    await page.until(`document.querySelector('[aria-label="Message"]').value === ''
+      && !document.querySelector('[aria-label="Remove startup.png"]')`);
+    assert.equal(page.prompts().filter((text) => text === "Add a regression test").length, 1);
+    assert.equal(
+      page.received().find((r) => r.command === "prompt" && r.text === "Add a regression test")
+        .images.length,
+      1,
+    );
     await page.click("button", "Jump to message");
     await page.see("echo: Add a regression test");
     await page.ab("press", "Escape");
@@ -876,4 +934,5 @@ await run(
     await page.until("!document.querySelector('[aria-label=Question]')");
     await page.capture("15-inline-answered");
   },
+  { backendEnv: { PIANO_TEST_RESUME_GATE: "1" } },
 );

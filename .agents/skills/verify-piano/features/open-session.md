@@ -69,6 +69,15 @@ with "Stop". The row's "Session menu for <title>" archives or deletes it.
   and question replies last only for the page load. Removed machine IDs are forgotten on load.
 - `follow-up`: "Message" plus Enter sends to the same Pi session. Image controls are shared
   with New; see [Start a session](./start-session.md) `images`.
+- `inactive-send`: sending to a Not running session keeps text, quotes and images visible,
+  makes Send busy and blocks duplicate clicks/Enter. The composer says "Starting session…",
+  then "Still starting session…" after eight seconds; elapsed time never means failure.
+  A matching delivery receipt clears the draft automatically. Confirmed startup failure says
+  "Could not start session" inline and retains the editable draft for Send retry. Disconnection
+  or an uncertain receipt says "Delivery unconfirmed" and keeps the draft locked until a
+  matching receipt arrives; reconnect/navigation never resends. The textarea retains focus.
+  The open-session journey gates fake Pi's first resumed `get_state`, captures pending/long-wait/
+  failed states and retries once with text and an image. See [runtime ownership](../../../../docs/runtime-ownership.md#continuing-an-inactive-session).
 - `stop`: "Stop" aborts a running reply.
 - `queue-edit`: while Pi works, a nonempty draft changes Stop to `steer` or `follow-up`, chosen
   through "Delivery: <mode>"; Enter uses that mode, Alt+Enter the other. "Queued messages (n)"

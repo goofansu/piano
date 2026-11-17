@@ -104,6 +104,18 @@ export interface Draft {
   quotes: readonly string[];
   preparing?: DraftMessage;
   prepareError?: string;
+  delivery?: {
+    inputId: string;
+    startedAt: number;
+    status: "starting" | "uncertain" | "failed";
+  };
+}
+
+export const draftPending = (draft: Pick<Draft, "delivery">) =>
+  !!draft.delivery && draft.delivery.status !== "failed";
+
+export interface DraftSubmitOptions {
+  waitForConfirmation?: boolean;
 }
 
 export interface DraftMessage {
@@ -121,7 +133,9 @@ export const draftMessage = (draft: Draft): DraftMessage => ({
 
 export interface DraftSource {
   listen: (listener: (message: ServerMessage) => void) => () => void;
+  subscribe?: (listener: () => void) => () => void;
   getState?: () => {
+    connected?: boolean;
     selectionId: string | null;
     session: { cwd: string; sessionId: string | null } | null;
   };
@@ -146,11 +160,13 @@ export interface Drafts {
   submit: (
     key: DraftKey | null,
     deliver: (message: DraftMessage, inputId: string) => SendDisposition,
+    options?: DraftSubmitOptions,
   ) => boolean;
   follow: (source: DraftSource) => () => void;
   prepareSubmit: (
     key: DraftKey | null,
     deliver: (message: DraftMessage, inputId: string) => Promise<SendDisposition>,
+    options?: DraftSubmitOptions,
   ) => Promise<boolean>;
 }
 
@@ -172,7 +188,7 @@ const inputPrefix = () =>
 
 export function createDrafts(): Drafts {
   const drafts = new Map<DraftKey, Draft>();
-  const unconfirmed = new Map<string, { key: DraftKey; draft: Draft }>();
+  const unconfirmed = new Map<string, { key: DraftKey; draft: Draft; retained: boolean }>();
   const prefix = inputPrefix();
   let inputs = 0;
   const listeners = new Set<() => void>();
@@ -187,12 +203,15 @@ export function createDrafts(): Drafts {
       next.quotes.length ||
       next.images !== NO_IMAGES ||
       next.preparing ||
-      next.prepareError
+      next.prepareError ||
+      next.delivery
     )
       drafts.set(key, next);
     else drafts.delete(key);
     for (const notify of listeners) notify();
   };
+  const editDraft = (key: DraftKey | null, change: (draft: Draft) => Draft) =>
+    update(key, (draft) => (draftPending(draft) ? draft : change(draft)));
   const setImages = (key: DraftKey, images: ImageDraft) =>
     update(key, (d) => ({
       ...d,
@@ -203,7 +222,11 @@ export function createDrafts(): Drafts {
     unconfirmed.delete(inputId);
     if (!refused) return;
     const key = refused.key === NEW_SESSION_DRAFT && created ? created : refused.key;
-    update(key, (now) => restore(refused.draft, now));
+    update(key, (now) =>
+      refused.retained
+        ? { ...now, preparing: undefined, delivery: { ...now.delivery!, status: "failed" } }
+        : restore(refused.draft, now),
+    );
   };
   const sessionOf = (m: ServerMessage, source: DraftSource): DraftKey | undefined => {
     if (m._tag === "selected" || m._tag === "error")
@@ -217,9 +240,11 @@ export function createDrafts(): Drafts {
       : undefined;
   };
   const isSendable = (draft: Draft) =>
-    !draft.preparing && sendable({ text: draftMessage(draft).text, images: draft.images });
+    !draft.preparing &&
+    !draftPending(draft) &&
+    sendable({ text: draftMessage(draft).text, images: draft.images });
   const paragraph = (key: DraftKey | null, text: string) =>
-    update(key, (d) => ({ ...d, text: appendParagraph(d.text, text) }));
+    editDraft(key, (d) => ({ ...d, text: appendParagraph(d.text, text) }));
 
   return {
     get,
@@ -231,12 +256,12 @@ export function createDrafts(): Drafts {
     },
     message: (key) => draftMessage(get(key)),
     sendable: (key) => isSendable(get(key)),
-    setText: (key, text) => update(key, (d) => (d.text === text ? d : { ...d, text })),
-    append: (key, text) => update(key, (d) => (text ? { ...d, text: d.text + text } : d)),
+    setText: (key, text) => editDraft(key, (d) => (d.text === text ? d : { ...d, text })),
+    append: (key, text) => editDraft(key, (d) => (text ? { ...d, text: d.text + text } : d)),
     paragraph,
     async addImages(key, files, encode) {
       const before = get(key).images;
-      if (!key || !files.length || before.busy) return;
+      if (!key || !files.length || before.busy || draftPending(get(key))) return;
       setImages(key, { ...before, busy: true, error: "" });
       try {
         const candidates = await Promise.all(
@@ -269,36 +294,57 @@ export function createDrafts(): Drafts {
     },
     removeImage(key, index) {
       const { images } = get(key);
-      if (!key || images.busy) return;
+      if (!key || images.busy || draftPending(get(key))) return;
       const items = images.items.filter((_, i) => i !== index);
       const error = overLimit(items) || (overLimit(images.items) ? "" : images.error);
       setImages(key, { ...images, items, error });
     },
     addQuote(key, selected) {
       const quote = quoteText(selected);
-      update(key, (d) =>
+      editDraft(key, (d) =>
         quote && !d.quotes.includes(quote) ? { ...d, quotes: [...d.quotes, quote] } : d,
       );
     },
     removeQuote: (key, index) =>
-      update(key, (d) =>
+      editDraft(key, (d) =>
         index in d.quotes ? { ...d, quotes: d.quotes.filter((_, i) => i !== index) } : d,
       ),
-    submit(key, deliver) {
+    submit(key, deliver, { waitForConfirmation = false } = {}) {
       const draft = get(key);
       if (!key || !isSendable(draft)) return false;
       const inputId = `input-${prefix}-${++inputs}`;
-      if (deliver(draftMessage(draft), inputId) === "not-sent") return false;
-      unconfirmed.set(inputId, { key, draft });
-      update(key, () => EMPTY_DRAFT);
+      unconfirmed.set(inputId, { key, draft, retained: waitForConfirmation });
+      if (waitForConfirmation)
+        update(key, () => ({
+          ...draft,
+          prepareError: undefined,
+          delivery: { inputId, startedAt: Date.now(), status: "starting" },
+        }));
+      const disposition = deliver(draftMessage(draft), inputId);
+      if (disposition === "not-sent") {
+        unconfirmed.delete(inputId);
+        if (waitForConfirmation) update(key, () => draft);
+        return false;
+      }
+      if (!waitForConfirmation) update(key, () => EMPTY_DRAFT);
+      else if (disposition === "uncertain" && unconfirmed.has(inputId))
+        update(key, (now) => ({ ...now, delivery: { ...now.delivery!, status: "uncertain" } }));
       return true;
     },
-    async prepareSubmit(key, deliver) {
+    async prepareSubmit(key, deliver, { waitForConfirmation = false } = {}) {
       const draft = get(key);
       if (!key || !isSendable(draft)) return false;
       const inputId = `input-${prefix}-${++inputs}`;
       const message = draftMessage(draft);
-      update(key, () => ({ ...EMPTY_DRAFT, preparing: message }));
+      unconfirmed.set(inputId, { key, draft, retained: waitForConfirmation });
+      update(key, () => ({
+        ...(waitForConfirmation ? draft : EMPTY_DRAFT),
+        preparing: message,
+        prepareError: undefined,
+        ...(waitForConfirmation
+          ? { delivery: { inputId, startedAt: Date.now(), status: "starting" as const } }
+          : {}),
+      }));
       let disposition: SendDisposition = "not-sent";
       let error = "";
       try {
@@ -306,23 +352,58 @@ export function createDrafts(): Drafts {
       } catch (e) {
         error = e instanceof Error ? e.message : "Could not upload images. Try again.";
       }
-      if (disposition !== "not-sent") unconfirmed.set(inputId, { key, draft });
-      update(key, (now) => {
-        const remaining = { ...now, preparing: undefined, prepareError: error };
-        return disposition === "not-sent" ? restore(draft, remaining) : remaining;
-      });
+      const pending = unconfirmed.has(inputId);
+      if (disposition === "not-sent") unconfirmed.delete(inputId);
+      if (!pending)
+        update(key, (now) => (now.preparing === message ? { ...now, preparing: undefined } : now));
+      if (pending)
+        update(key, (now) => {
+          const remaining = { ...now, preparing: undefined, prepareError: error };
+          if (!waitForConfirmation)
+            return disposition === "not-sent" ? restore(draft, remaining) : remaining;
+          if (disposition === "not-sent") return { ...remaining, delivery: undefined };
+          return {
+            ...remaining,
+            delivery: {
+              ...now.delivery!,
+              status: disposition === "uncertain" ? "uncertain" : now.delivery!.status,
+            },
+          };
+        });
       return disposition !== "not-sent";
     },
-    follow: (source) =>
-      source.listen((m) => {
+    follow: (source) => {
+      const stopMessages = source.listen((m) => {
         const verdict = inputVerdictOf(m);
-        if (verdict)
+        if (verdict) {
+          const pending = unconfirmed.get(verdict.inputId);
           if (verdict.outcome === "not_sent") giveBack(verdict.inputId, sessionOf(m, source));
-          else unconfirmed.delete(verdict.inputId);
-        else if (m._tag === "action_result" && m.result._tag === "queue_restored") {
+          else if (pending?.retained && verdict.outcome === "uncertain")
+            update(pending.key, (now) => ({
+              ...now,
+              delivery: { ...now.delivery!, status: "uncertain" },
+            }));
+          else {
+            unconfirmed.delete(verdict.inputId);
+            if (pending?.retained) update(pending.key, () => EMPTY_DRAFT);
+          }
+        } else if (m._tag === "action_result" && m.result._tag === "queue_restored") {
           const restored = m.result.messages.map((message) => message.text).join("\n\n");
           if (restored) paragraph(sessionDraftKey(m), restored);
         }
-      }),
+      });
+      const stopState = source.subscribe?.(() => {
+        if (source.getState?.().connected !== false) return;
+        for (const { key, retained } of unconfirmed.values()) {
+          const draft = get(key);
+          if (retained && draft.delivery?.status === "starting")
+            update(key, (now) => ({ ...now, delivery: { ...now.delivery!, status: "uncertain" } }));
+        }
+      });
+      return () => {
+        stopMessages();
+        stopState?.();
+      };
+    },
   };
 }

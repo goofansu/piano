@@ -246,6 +246,9 @@ You can keep typing and answer dialogs. **Cancel**, changing directory/session/m
 before submission cancels the pending send and keeps its original draft. New typing is preserved.
 If upload fails, the draft comes back for an explicit retry, with the peer's own reason when it
 refused the images; there is no automatic upload retry.
+When continuing a Not running session, the original text and images instead stay visible and
+read-only through upload and startup, until a matching delivery receipt arrives; see
+[inactive-session sending](runtime-ownership.md#continuing-an-inactive-session).
 Once a prompt may have reached Pi, check the authoritative conversation before sending it again.
 
 Transcript thumbnails and **Open attached image** read from that session's peer, never Local.

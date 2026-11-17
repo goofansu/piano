@@ -2,6 +2,7 @@ import { isWorking } from "@shared/sessionProjection";
 import type { VoiceHints } from "@shared/voiceInput";
 import { cn } from "cn";
 import { ArrowUpIcon, ChevronDownIcon, PencilIcon, SquareIcon } from "lucide-react";
+import { useEffect, useState } from "react";
 import { ContextDetails } from "@/components/ContextDetails";
 import { ComposerSend, DraftEditor, useDraftEditor } from "@/components/DraftEditor";
 import { JumpTo } from "@/components/JumpTo";
@@ -19,6 +20,7 @@ import type { CompletionContext } from "@/components/SlashTextarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { Spinner } from "@/components/ui/spinner";
 import type { Client } from "@/lib/client";
 import {
   composerControl,
@@ -92,7 +94,28 @@ export function Composer({
   const usage = t?.state;
   const messages = t?.messages ?? [];
   const queuedMessages = t?.state.queuedMessages ?? [];
-  const editor = useDraftEditor(draftKey);
+  const editor = useDraftEditor(draftKey, { waitForConfirmation: !t?.hosted });
+  const startedAt = editor.delivery?.startedAt;
+  const [longStart, setLongStart] = useState<number>();
+  useEffect(() => {
+    if (startedAt === undefined) return;
+    const timer = setTimeout(
+      () => setLongStart(startedAt),
+      Math.max(0, startedAt + 8000 - Date.now()),
+    );
+    return () => clearTimeout(timer);
+  }, [startedAt]);
+  const status = editor.preparing
+    ? undefined
+    : editor.delivery?.status === "failed"
+      ? "Could not start session"
+      : editor.delivery?.status === "uncertain"
+        ? "Delivery unconfirmed"
+        : editor.pending
+          ? longStart === startedAt
+            ? "Still starting session…"
+            : "Starting session…"
+          : undefined;
   const imageSend = useImageSend(
     editor,
     captureSend,
@@ -109,6 +132,7 @@ export function Composer({
     compacting: !!t?.state.isCompacting,
     stopping: !!t?.state.isStopping,
     preparing: !!editor.preparing,
+    pending: editor.pending,
     queued: queuedMessages.length,
     mode: queueMode,
   });
@@ -118,6 +142,7 @@ export function Composer({
     const kind = control.delivery(alt);
     if (!kind) return;
     imageSend.send((message, inputId, start) => messageCommand(kind, message, start, inputId));
+    editor.ref.current?.focus();
   };
   const stop = () => {
     imageSend.cancel();
@@ -142,6 +167,7 @@ export function Composer({
     >
       <DraftEditor
         editor={editor}
+        status={status}
         cancelUpload={imageSend.cancel}
         completion={completion}
         disabled={disabled}
@@ -251,6 +277,7 @@ export function Composer({
             label={control.label}
             hint={control.hint}
             disabled={!control.enabled}
+            busy={editor.pending}
             onClick={showStop ? stop : () => send(false)}
           >
             <span
@@ -261,7 +288,11 @@ export function Composer({
                 showStop ? "scale-75 opacity-0 blur-[2px]" : "scale-100 opacity-100",
               )}
             >
-              <ArrowUpIcon />
+              {editor.pending ? (
+                <Spinner className="motion-reduce:animate-none" />
+              ) : (
+                <ArrowUpIcon />
+              )}
             </span>
             <span
               aria-hidden
