@@ -27,6 +27,8 @@ Pull request command and Changes button, and a linked pull request's Change link
 and Remove link). An archived session cannot be deleted until it is unarchived. Unarchive is one session at a time. Opening an archived session's address
 (`/s/<id>`) shows **Session archived** instead of trying to open it; its **Data controls** button
 opens Settings → Data controls, or, on a remote machine, the page points to that machine's Piano.
+The page follows the session's reference: once it is unarchived (or its history restored), the
+session opens at the same address — at once, or when Settings closes — just as reloading it would.
 
 A mutation keeps running on the server after the client disconnects. A lost connection or a
 missing reply (75 s) is therefore not reported as a failure: the warning says the change may have
@@ -88,7 +90,9 @@ conflicting alias references skipped by both count and Archive all, closed/missi
 start. `test/ClientDispatch.test.ts` covers count, confirmation, selection clearing and admission
 refusal. `test/PeerScope.test.ts` exercises refusal through `/ws/peer`.
 
-Web tests cover archived row formatting/order, outcome wording, Settings navigation, and
+Web tests cover archived row formatting/order, outcome wording, Settings navigation,
+(`test/Navigation.test.ts`) an unavailable session's page opening the session once it is
+available, and
 (`test/SessionCommands.test.ts`) an archived session's menus offering no change;
 `test/CorrelatedRequest.test.ts` covers the four request outcomes.
 Use [the Data controls verification entry](../.agents/skills/verify-piano/features/data-controls.md)
