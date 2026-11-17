@@ -487,7 +487,8 @@ function ProjectGroup({
   sessions: readonly SessionEntry[];
 }) {
   const { run } = useCommands();
-  const commands = project ? projectCommands(state, project) : [];
+  const offers = useOffers();
+  const commands = project ? projectCommands(state, project, offers) : [];
   const create = commands.find((c) => c.id === "new-session");
   return (
     <SidebarGroup

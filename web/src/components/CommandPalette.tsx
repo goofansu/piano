@@ -36,6 +36,7 @@ import {
   paletteItems,
   paletteSelection,
 } from "@/lib/paletteSearch";
+import { useOffers } from "@/lib/useMachine";
 import { useNavigation } from "@/lib/useNavigation";
 import { usePaletteSearch } from "@/lib/usePaletteSearch";
 import type { AppState } from "@/store";
@@ -102,7 +103,9 @@ function PaletteContents({
   );
   const { commands: sessionCommandList } = useSessionCommands();
   const sessionProject = useSessionProjectMenu();
+  const offers = useOffers();
   const groups = catalog(state, {
+    offers,
     globalCommands: globalCommandList,
     sessionCommands: sessionCommandList,
     sessionProject,

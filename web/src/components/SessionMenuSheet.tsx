@@ -408,7 +408,7 @@ export function SessionMenuSheet({
                 <Separator className="my-1" />
               </>
             )}
-            <ProjectCommandRow command={projects.create} run={run} />
+            {projects.create && <ProjectCommandRow command={projects.create} run={run} />}
             {projects.destinations.map((d) => (
               <ProjectCommandRow
                 key={d.project.id}

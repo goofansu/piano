@@ -3,9 +3,8 @@ import { refusedAttempt } from "../../../shared/creationVerdict.ts";
 import { closureNeedsAttention } from "../../../shared/sessionStatus.ts";
 import { type Action, type AppState, reduce, sessionDelivery } from "../store.ts";
 import { canDecideTrust, trustNotice } from "./directoryTrust.ts";
-import { LOCAL } from "./machine.ts";
 import { machineMemory } from "./machineMemory.ts";
-import { machineOffers } from "./machineOffers.ts";
+import type { MachineOffers } from "./machineOffers.ts";
 import { projectStartDirectory } from "./projectHome.ts";
 import { focusedDirectory, sessionReady } from "./sessionContext.ts";
 import { startPage } from "./startPage.ts";
@@ -60,7 +59,7 @@ export interface ClientOptions {
   notify: Notify;
   newSelectionId?: () => string;
   lastDirectory?: LastDirectory;
-  startsSessionIn?: (state: AppState, cwd: string) => boolean;
+  startsSessionIn: MachineOffers["startsSessionIn"];
 }
 
 export type ClientUpdate = "live" | "immediate";
@@ -85,7 +84,7 @@ export function createClient({
   notify,
   newSelectionId = () => crypto.randomUUID(),
   lastDirectory = { read: () => null, write: () => {} },
-  startsSessionIn = machineOffers(LOCAL).startsSessionIn,
+  startsSessionIn,
 }: ClientOptions): Client {
   let unverifiedDefault: string | undefined;
   const withNewPageDirectory = (s: AppState) => {

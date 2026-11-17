@@ -99,6 +99,7 @@ async function browserSends(machine: Machine): Promise<ClientMessage[]> {
   let handlers: ConnectionHandlers | undefined;
   let ids = 0;
   const client = createClient({
+    startsSessionIn: offers.startsSessionIn,
     initial: initialState,
     connect: (h) => {
       handlers = h;
@@ -204,20 +205,21 @@ async function browserSends(machine: Machine): Promise<ClientMessage[]> {
     reply(createDialogAnswer({ dialog: question, send }));
 
   handlers!.onMessage({ _tag: "trust", cwd: CWD, trust: { required: true, trusted: false } });
-  const trust = trustCommand(client.getState(), CWD);
-  if (trust && offers.command(trust) && trust.intent.kind === "send") send(trust.intent.command);
+  const trust = trustCommand(client.getState(), CWD, offers);
+  if (trust?.intent.kind === "send") send(trust.intent.command);
 
   const listed = { cwd: CWD, sessionId: SESSION };
   const project = { id: "p1", name: "Launch" };
   const state = client.getState();
-  const creation = newProjectCommand(state, { assign: listed });
   for (const command of [
-    ...projectCommands(state, project),
-    assignProjectCommand(state, listed, project.id),
-    assignProjectCommand(state, listed, null),
-    creation,
+    ...projectCommands(state, project, offers),
+    ...[
+      assignProjectCommand(state, listed, project.id),
+      assignProjectCommand(state, listed, null),
+    ].filter(offers.command),
+    newProjectCommand(state, { assign: listed }, offers),
   ]) {
-    if (!offers.command(command)) continue;
+    if (!command) continue;
     if (command.intent.kind === "send") send(command.intent.command);
     if (command.intent.kind === "project-dialog") {
       const answer = answerForm(
@@ -229,8 +231,7 @@ async function browserSends(machine: Machine): Promise<ClientMessage[]> {
     }
   }
 
-  for (const command of sessionCommands(state, { ...listed, title: "Session" })) {
-    if (!offers.command(command)) continue;
+  for (const command of sessionCommands(state, { ...listed, title: "Session" }, { offers })) {
     const { intent } = command;
     if (intent.kind === "send") send(intent.command);
     if (intent.kind === "archive" && intent.target)
@@ -398,9 +399,7 @@ test("on a remote, every enabled New session here opens a New page where the rem
       cursor: { cwd, sessionId, generation: "g1", sequence: 1 },
       snapshot: { state: { sessionId, isStreaming: false }, messages: [], dialogs: [] },
     });
-    const commands = sessionCommands(client.getState(), undefined, {
-      startsSessionIn: offers.startsSessionIn,
-    }).filter(offers.command);
+    const commands = sessionCommands(client.getState(), undefined, { offers });
     for (const command of commands) {
       if (command.intent.kind !== "new-session" || !command.enabled) continue;
       const target = command.intent.cwd;

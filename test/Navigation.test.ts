@@ -3,6 +3,8 @@ import { test } from "node:test";
 import type { ClientMessage, ServerMessage } from "../shared/wire.ts";
 import type { workspaceFile } from "../web/src/lib/api.ts";
 import { createClient } from "../web/src/lib/client.ts";
+import { LOCAL } from "../web/src/lib/machine.ts";
+import { machineOffers } from "../web/src/lib/machineOffers.ts";
 import {
   type AddressBar,
   activeTab,
@@ -73,6 +75,7 @@ function page(
   let handlers: ConnectionHandlers | undefined;
   let ids = 0;
   const client = createClient({
+    startsSessionIn: machineOffers(LOCAL).startsSessionIn,
     initial: { ...initialState, view: initialView(parseRoute(address.bar.location())) },
     connect: (h) => {
       handlers = h;

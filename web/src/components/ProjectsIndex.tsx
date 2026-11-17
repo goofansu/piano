@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { timeAgo } from "@/lib/format";
 import { isProjectDone, projectCommands } from "@/lib/projectCommands";
 import { type ProjectsIndexRow, projectsIndex, projectsIndexContext } from "@/lib/projectsIndex";
+import { useOffers } from "@/lib/useMachine";
 import { useNavigation } from "@/lib/useNavigation";
 import type { AppState } from "@/store";
 
@@ -30,6 +31,7 @@ function ProjectRow({
 }) {
   const { openProject } = useNavigation();
   const { run } = useCommands();
+  const offers = useOffers();
   return (
     <ListRow
       title={row.project.name}
@@ -42,7 +44,7 @@ function ProjectRow({
       menu={
         <ProjectCommandsMenu
           project={row.project}
-          commands={projectCommands(state, row.project)}
+          commands={projectCommands(state, row.project, offers)}
           run={run}
           size="list"
         />

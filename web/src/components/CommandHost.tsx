@@ -135,12 +135,12 @@ export function useSessionCommands(target?: SessionTarget) {
   const observed = usePreviewObservation();
   return {
     commands: sessionCommands(state, target, {
+      offers,
       messagesOnly,
       codeWrap,
       layout,
       previewObservation: observed,
-      startsSessionIn: offers.startsSessionIn,
-    }).filter(offers.command),
+    }),
     run,
     messagesOnly,
   };
@@ -148,9 +148,10 @@ export function useSessionCommands(target?: SessionTarget) {
 
 export function useSessionProjectMenu() {
   const { state } = useCommands();
+  const offers = useOffers();
   const session = state.session;
   return session?.sessionId
-    ? sessionProjectMenu(state, { cwd: session.cwd, sessionId: session.sessionId })
+    ? sessionProjectMenu(state, { cwd: session.cwd, sessionId: session.sessionId }, offers)
     : undefined;
 }
 
@@ -158,7 +159,7 @@ export function useGlobalCommands() {
   const { state, run, global } = useCommands();
   const scope = useMachineScope();
   const offers = useOffers();
-  const commands = globalCommands(state, global).filter(offers.command);
+  const commands = globalCommands(state, global, offers);
   if (scope.machines.length > 1)
     commands.push(
       ...scope.machines.map((machine): GlobalCommand => ({
@@ -239,7 +240,6 @@ export function CommandHost({
     settings,
     layout,
   } = useNavigation();
-  const offers = useOffers();
   const machineScope = useMachineScope();
   const previews = machineScope.previews;
   const [messagesOnly, setMessagesOnly] = useMessagesOnly();
@@ -303,10 +303,7 @@ export function CommandHost({
     },
     openPageEditor,
   };
-  const run = (command: Command) => {
-    if (!offers.command(command)) return;
-    runCommand(command, effects);
-  };
+  const run = (command: Command) => runCommand(command, effects);
 
   return (
     <CommandsContext.Provider

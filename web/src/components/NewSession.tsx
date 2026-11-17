@@ -44,7 +44,12 @@ import type { Client } from "@/lib/client";
 import { newSessionCommand, newSessionReady } from "@/lib/composerControl";
 import { type GlobalCommand, trustCommand } from "@/lib/globalCommands";
 import { NEW_SESSION_DRAFT } from "@/lib/messageDraft";
-import { findProject, newProjectCommand, projectDestinations } from "@/lib/projectCommands";
+import {
+  findProject,
+  newProjectCommand,
+  type ProjectCommand,
+  projectDestinations,
+} from "@/lib/projectCommands";
 import { folderFor } from "@/lib/sessionCatalog";
 import {
   checkoutMissingAt,
@@ -124,7 +129,7 @@ export function NewSessionComposer({
 
   const folder = folderFor(state, cwd);
   const place = startPlace(state, cwd, projectId);
-  const trust = trustCommand(state, cwd);
+  const trust = trustCommand(state, cwd, offers);
   const models = useModelCatalog(cwd || undefined);
   const { catalog } = models;
   const choice = useModelChoice(
@@ -259,10 +264,10 @@ function ProjectSelect({
 }) {
   const { run } = useCommands();
   const [open, setOpen] = useState(false);
-  const create = newProjectCommand(state, { newPage: true });
-  const onCreate = () => {
+  const create = newProjectCommand(state, { newPage: true }, useOffers());
+  const onCreate = (command: ProjectCommand) => {
     setOpen(false);
-    run(create);
+    run(command);
   };
   const current = findProject(state, value);
   const choices = projectDestinations(state, current, { keepCurrent: true });

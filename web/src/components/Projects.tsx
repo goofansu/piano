@@ -141,22 +141,24 @@ export function ProjectDestinationItems<D extends { project: Project; command?: 
   onPick,
   selected,
 }: {
-  create: ProjectCommand;
+  create: ProjectCommand | undefined;
   destinations: readonly D[];
-  onCreate: () => void;
+  onCreate: (create: ProjectCommand) => void;
   onPick: (destination: D) => void;
   selected?: string;
 }) {
   return (
     <>
-      <DropdownMenuGroup>
-        <DropdownMenuItem disabled={!create.enabled} onSelect={onCreate}>
-          <ProjectCommandIconView icon={create.icon} /> {create.label}
-        </DropdownMenuItem>
-      </DropdownMenuGroup>
+      {create && (
+        <DropdownMenuGroup>
+          <DropdownMenuItem disabled={!create.enabled} onSelect={() => onCreate(create)}>
+            <ProjectCommandIconView icon={create.icon} /> {create.label}
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+      )}
       {destinations.length > 0 && (
         <>
-          <DropdownMenuSeparator />
+          {create && <DropdownMenuSeparator />}
           <DropdownMenuGroup>
             {destinations.map((d) => (
               <DropdownMenuItem
@@ -199,7 +201,7 @@ export function ProjectMenu({
           <ProjectDestinationItems
             create={create}
             destinations={menu.destinations}
-            onCreate={() => run(create)}
+            onCreate={run}
             onPick={(d) => run(d.command)}
           />
         </DropdownMenuSubContent>

@@ -321,7 +321,9 @@ owns the trust and scope decisions; [browser storage](browser-storage.md) and
 - [`machineMemory.ts`](../web/src/lib/machineMemory.ts) exposes `machineMemory`,
   `machineLocationMemory` and `forgetUnconfiguredMachines` for per-machine persistence and
   removal of unconfigured identities. [`machineOffers`](../web/src/lib/machineOffers.ts) decides
-  what the browser offers, not what the server authorizes.
+  what the browser offers, not what the server authorizes. Every command builder (session,
+  global, page, project, folder and trust commands) takes the machine's offers as a required
+  argument and returns only what that machine offers, so surfaces draw and run what they receive.
 - [`remoteImages.ts`](../web/src/lib/remoteImages.ts) exposes `prepareImages`, `discardImages`
   and `remoteImageUrl` for peer image preparation, cancellation and preview addressing.
   [Voice input](#voice-input) instead uses main-origin utilities and writes the captured machine's

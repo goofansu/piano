@@ -8,6 +8,8 @@ import type {
 } from "../shared/wire.ts";
 import { createClient } from "../web/src/lib/client.ts";
 import { RECEIPT_TIMEOUT_MS } from "../web/src/lib/correlatedRequest.ts";
+import { LOCAL } from "../web/src/lib/machine.ts";
+import { machineOffers } from "../web/src/lib/machineOffers.ts";
 import {
   createWorktreeOperation,
   filterWorktrees,
@@ -35,6 +37,7 @@ function picker() {
   let handlers: ConnectionHandlers | undefined;
   let disposition: SendDisposition = "sent";
   const client = createClient({
+    startsSessionIn: machineOffers(LOCAL).startsSessionIn,
     initial: initialState,
     connect: (h) => {
       handlers = h;

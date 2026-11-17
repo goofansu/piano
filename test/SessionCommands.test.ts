@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { FolderView, SessionPreview, SessionState, WorktreeView } from "../shared/wire.ts";
+import { LOCAL } from "../web/src/lib/machine.ts";
+import { machineOffers } from "../web/src/lib/machineOffers.ts";
 import type { SessionLayout } from "../web/src/lib/navigation.ts";
 import { sessionProjectMenu } from "../web/src/lib/projectCommands.ts";
 import {
@@ -15,6 +17,8 @@ import {
 } from "../web/src/lib/sessionCommands.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
+
+const local = machineOffers(LOCAL);
 
 const ws = (path: string) => ({ id: `ws:${path}`, folder: "/repo", path });
 const worktree = (path: string, branch: string | null): WorktreeView => ({
@@ -56,9 +60,9 @@ const base: AppState = {
 const other = { cwd: "/repo", sessionId: "s2", title: "Other" };
 
 const enabled = (state: AppState, target?: typeof other) =>
-  Object.fromEntries(sessionCommands(state, target).map((c) => [c.id, c.enabled])) as Partial<
-    Record<SessionCommandId, boolean>
-  >;
+  Object.fromEntries(
+    sessionCommands(state, target, { offers: local }).map((c) => [c.id, c.enabled]),
+  ) as Partial<Record<SessionCommandId, boolean>>;
 
 test("Artifacts is available from receipts without any direct tool-result messages", () => {
   for (const hosted of [true, false]) {
@@ -83,7 +87,7 @@ test("Artifacts is available from receipts without any direct tool-result messag
 test("saved session path copies without a running Pi, and is unavailable without a file", () => {
   const path = "/home/test/.pi/agent/sessions/--repo--/2026-01-01_s1.jsonl";
   const saved = { ...session("/repo", { sessionFile: path }), hosted: false };
-  const command = sessionCommands({ ...base, session: saved }).find(
+  const command = sessionCommands({ ...base, session: saved }, undefined, { offers: local }).find(
     (c) => c.id === "copy-session-path",
   );
   assert.equal(command?.enabled, true);
@@ -142,7 +146,7 @@ test("session command availability: settled, disconnected, resyncing, unavailabl
     [false, false, false, true, true],
   );
   const changesOf = (state: AppState) =>
-    sessionCommands(state).find((c) => c.id === "changes")?.detail;
+    sessionCommands(state, undefined, { offers: local }).find((c) => c.id === "changes")?.detail;
   assert.equal(
     changesOf({ ...base, session: session("/work/repo.feature", { checkoutMissing: true }) }),
     "Checkout removed",
@@ -193,7 +197,7 @@ test("session command availability: settled, disconnected, resyncing, unavailabl
 });
 
 test("pin commands reflect registry state and stay available independently of Pi activity", () => {
-  const pin = sessionCommands(base, other).find((c) => c.id === "pin")!;
+  const pin = sessionCommands(base, other, { offers: local }).find((c) => c.id === "pin")!;
   assert.equal(pin.label, "Pin");
   assert.deepEqual(pin.intent, {
     kind: "send",
@@ -203,7 +207,7 @@ test("pin commands reflect registry state and stay available independently of Pi
     ...base,
     sessionReferences: base.sessionReferences.map((s) => ({ ...s, pinned: true })),
   };
-  const unpin = sessionCommands(pinned, other).find((c) => c.id === "pin")!;
+  const unpin = sessionCommands(pinned, other, { offers: local }).find((c) => c.id === "pin")!;
   assert.equal(unpin.label, "Unpin");
   assert.deepEqual(unpin.intent, {
     kind: "send",
@@ -240,22 +244,25 @@ test("an archived reference keeps read and copy commands but offers no change, p
     const project = sessionProjectMenu(
       archived,
       target ?? { cwd: "/work/repo.feature", sessionId: "s1" },
+      local,
     );
     assert.equal(project.entry.enabled, false, "Move/Add to project");
-    for (const c of [project.create, ...project.destinations.map((d) => d.command)])
+    for (const c of [project.create!, ...project.destinations.map((d) => d.command)])
       assert.equal(c.enabled, false, c.label);
   }
 });
 
 test("Messages only is off by default; running it toggles, and it is checked while on", () => {
   const command = (messagesOnly?: boolean) =>
-    sessionCommands(base, undefined, { messagesOnly }).find((c) => c.id === "messages-only");
+    sessionCommands(base, undefined, { offers: local, messagesOnly }).find(
+      (c) => c.id === "messages-only",
+    );
   assert.deepEqual(command()?.checked, false);
   assert.deepEqual(command()?.intent, { kind: "messages-only", on: true });
   assert.deepEqual(command(true)?.checked, true);
   assert.deepEqual(command(true)?.intent, { kind: "messages-only", on: false });
   assert.deepEqual(
-    sessionCommands(base, undefined, { messagesOnly: true })
+    sessionCommands(base, undefined, { offers: local, messagesOnly: true })
       .filter((c) => c.checked)
       .map((c) => c.id),
     ["messages-only"],
@@ -264,7 +271,9 @@ test("Messages only is off by default; running it toggles, and it is checked whi
 
 test("Wrap reflects the code wrap preference and is available whatever Changes can do", () => {
   const command = (state: AppState, codeWrap?: boolean) =>
-    sessionCommands(state, undefined, { codeWrap }).find((c) => c.id === "wrap-code")!;
+    sessionCommands(state, undefined, { offers: local, codeWrap }).find(
+      (c) => c.id === "wrap-code",
+    )!;
   assert.equal(command(base).checked, false);
   assert.deepEqual(command(base).intent, { kind: "wrap-code", on: true });
   assert.equal(command(base, true).checked, true);
@@ -275,7 +284,7 @@ test("Wrap reflects the code wrap preference and is available whatever Changes c
     assert.equal(command(state).enabled, true);
     assert.equal(command(state).detail, undefined);
   }
-  assert.ok(!sessionCommands(base, other).some((c) => c.id === "wrap-code"));
+  assert.ok(!sessionCommands(base, other, { offers: local }).some((c) => c.id === "wrap-code"));
 });
 
 const commandsOf = (sections: readonly (SessionMenuSection | "display")[]) =>
@@ -291,14 +300,16 @@ const headerIds = ({ details, sections, display }: SessionHeaderMenu) => [
 const rowCommands = ({ sections }: SessionRowMenu) => commandsOf(sections);
 
 test("the palette offers every command the session header and the sidebar row menu offer", () => {
-  const commands = sessionCommands(base);
+  const commands = sessionCommands(base, undefined, { offers: local });
   const palette = new Set(commands.map((c) => c.id));
   for (const id of headerIds(sessionHeaderMenu(commands)))
     assert.ok(palette.has(id), `header ${id}`);
   for (const id of rowCommands(sessionRowMenu(commands)).map((c) => c.id))
     assert.ok(palette.has(id), `row ${id}`);
   const row = rowCommands(
-    sessionRowMenu(sessionCommands(base, { cwd: "/work/repo.feature", sessionId: "s1" })),
+    sessionRowMenu(
+      sessionCommands(base, { cwd: "/work/repo.feature", sessionId: "s1" }, { offers: local }),
+    ),
   );
   const fromPalette = rowCommands(sessionRowMenu(commands));
   assert.deepEqual(
@@ -308,27 +319,31 @@ test("the palette offers every command the session header and the sidebar row me
 });
 
 test("each session menu places its project section after the manage commands and before Archive and Delete", () => {
-  const row = ids(sessionRowMenu(sessionCommands(base, other)).sections);
+  const row = ids(sessionRowMenu(sessionCommands(base, other, { offers: local })).sections);
   assert.deepEqual(row, [["rename", "pin"], "project", ["archive", "delete"]]);
-  const reversed = sessionCommands(base, other).reverse();
+  const reversed = sessionCommands(base, other, { offers: local }).reverse();
   assert.deepEqual(ids(sessionRowMenu(reversed).sections), row);
-  assert.deepEqual(ids(sessionHeaderMenu(sessionCommands(base)).sections), [
-    ["rename", "pin"],
-    "project",
-    "display",
-    ["archive", "delete"],
-  ]);
+  assert.deepEqual(
+    ids(sessionHeaderMenu(sessionCommands(base, undefined, { offers: local })).sections),
+    [["rename", "pin"], "project", "display", ["archive", "delete"]],
+  );
 });
 
 test("the header menu: copy beside the details, manage, a Messages only switch, then archive with delete", () => {
   for (const messagesOnly of [false, true]) {
-    const menu = sessionHeaderMenu(sessionCommands(base, undefined, { messagesOnly }));
+    const menu = sessionHeaderMenu(
+      sessionCommands(base, undefined, { offers: local, messagesOnly }),
+    );
     assert.deepEqual(
       menu.details.map((c) => c.id),
       ["copy-session-path"],
     );
     assert.ok(!headerIds(menu).includes("pull-request"), "PR linking lives in Changes");
-    assert.ok(sessionCommands(base).some((c) => c.id === "pull-request" && c.enabled));
+    assert.ok(
+      sessionCommands(base, undefined, { offers: local }).some(
+        (c) => c.id === "pull-request" && c.enabled,
+      ),
+    );
     assert.deepEqual(ids(menu.sections), [
       ["rename", "pin"],
       "project",
@@ -338,7 +353,9 @@ test("the header menu: copy beside the details, manage, a Messages only switch, 
     assert.equal(menu.display?.label, "Messages only");
     assert.equal(menu.display?.checked, messagesOnly);
   }
-  const other = sessionHeaderMenu(sessionCommands(base, { cwd: "/work/other", sessionId: "s9" }));
+  const other = sessionHeaderMenu(
+    sessionCommands(base, { cwd: "/work/other", sessionId: "s9" }, { offers: local }),
+  );
   assert.deepEqual(other.details, []);
   assert.equal(other.display, undefined);
   assert.ok(!other.sections.includes("display"));
@@ -357,7 +374,7 @@ const app = (preview: Partial<SessionPreview> = {}): SessionPreview => ({
   observedAt: 0,
   ...preview,
 });
-const seen = { previewObservation: { unconfirmed: null } };
+const seen = { offers: local, previewObservation: { unconfirmed: null } };
 const previewIds = (state: AppState) =>
   sessionCommands(state, undefined, seen)
     .filter((c) => c.id.includes("preview"))
@@ -372,7 +389,7 @@ test("preview commands exist only while the selected session's live Pi owns an a
     ["stop-preview", true],
   ]);
   assert.ok(
-    !sessionCommands(running).some((c) => c.id.includes("preview")),
+    !sessionCommands(running, undefined, { offers: local }).some((c) => c.id.includes("preview")),
     "without the page's observation, no app status is claimed",
   );
   const open = sessionCommands(running, undefined, seen).find((c) => c.id === "open-preview");
@@ -424,9 +441,24 @@ test("preview commands exist only while the selected session's live Pi owns an a
   );
 });
 
+test("on a remote the builder returns only the session commands that machine offers", () => {
+  const running = { ...base, session: session("/work/repo.feature", { preview: app() }) };
+  const ids = (offers: typeof local) =>
+    sessionCommands(running, undefined, { ...seen, offers }).map((c) => c.id);
+  const remote = ids(machineOffers({ id: "eng-1", name: "eng-1" }));
+  assert.ok(ids(local).includes("stop-preview"), "Local offers its app's commands");
+  assert.deepEqual(
+    remote,
+    ids(local).filter((id) => !id.includes("preview")),
+    "a remote keeps the conversation's commands and leaves its app to the remote",
+  );
+  for (const id of ["rename", "pin", "archive", "delete", "changes", "new-session-here"] as const)
+    assert.ok(remote.includes(id), id);
+});
+
 test("archiving a session that owns an app asks first, from the header or its sidebar row", () => {
   const archive = (state: AppState, target?: typeof other) =>
-    sessionCommands(state, target).find((c) => c.id === "archive")?.intent;
+    sessionCommands(state, target, { offers: local }).find((c) => c.id === "archive")?.intent;
   assert.equal((archive(base) as { confirm: boolean }).confirm, false);
   const running = { ...base, session: session("/work/repo.feature", { preview: app() }) };
   assert.equal((archive(running) as { confirm: boolean }).confirm, true);
@@ -437,7 +469,7 @@ test("archiving a session that owns an app asks first, from the header or its si
 test("view commands offer the rail side by side, Agent one at a time beside an open tab", () => {
   const ofLayout = (layout: SessionLayout, state = base) =>
     Object.fromEntries(
-      sessionCommands(state, undefined, { layout })
+      sessionCommands(state, undefined, { offers: local, layout })
         .filter((c) => ["changes", "session-rail", "agent"].includes(c.id))
         .map((c) => [c.id, c.enabled]),
     );
@@ -464,6 +496,7 @@ test("view commands offer the rail side by side, Agent one at a time beside an o
 
 test("one area at a time the rail command is left out: the session menu holds its facts", () => {
   const command = sessionCommands(base, undefined, {
+    offers: local,
     layout: { single: true, agent: true, surface: false, rail: false, agentTab: false },
   }).find((c) => c.id === "session-rail")!;
   assert.equal(command.hidden, true);
@@ -479,8 +512,12 @@ test("a pull request, linked or not, opens only where Changes can, and says why 
         sessionReference("/work/repo.feature", "s1", { branch: "feature", ...extra }),
       ],
     };
-    const command = sessionCommands(state).find((c) => c.id === "pull-request")!;
-    const changes = sessionCommands(state).find((c) => c.id === "changes")!;
+    const command = sessionCommands(state, undefined, { offers: local }).find(
+      (c) => c.id === "pull-request",
+    )!;
+    const changes = sessionCommands(state, undefined, { offers: local }).find(
+      (c) => c.id === "changes",
+    )!;
     return { command, changes };
   };
 
@@ -507,17 +544,21 @@ test("the rail's Environment rows offer the session's copy commands for their fa
     branch: string | null,
     extra: Parameters<typeof sessionReference>[2] = {},
   ) =>
-    sessionCommands({
-      ...base,
-      folders: [
-        {
-          ...folder,
-          worktrees: [checkout],
-          discovery: { ...folder.discovery, githubRepo: "acme/repo" } as FolderView["discovery"],
-        },
-      ],
-      sessionReferences: [sessionReference(path, "s1", { branch, ...extra })],
-    });
+    sessionCommands(
+      {
+        ...base,
+        folders: [
+          {
+            ...folder,
+            worktrees: [checkout],
+            discovery: { ...folder.discovery, githubRepo: "acme/repo" } as FolderView["discovery"],
+          },
+        ],
+        sessionReferences: [sessionReference(path, "s1", { branch, ...extra })],
+      },
+      undefined,
+      { offers: local },
+    );
   const menu = (commands: ReturnType<typeof at>, row: Parameters<typeof environmentRowMenu>[1]) =>
     environmentRowMenu(commands, row).map((c) => [c.label, c.intent]);
 

@@ -14,6 +14,8 @@ import { SETTINGS_SECTIONS } from "../web/src/lib/routes.ts";
 import { sessionCommands } from "../web/src/lib/sessionCommands.ts";
 import { type AppState, initialState } from "../web/src/store.ts";
 
+const local = machineOffers(LOCAL);
+
 const state: AppState = {
   ...initialState,
   connected: true,
@@ -49,11 +51,15 @@ test("Data controls is the seventh Settings destination, offered only on Local",
     label: "Data controls",
     icon: "archive",
   });
-  const commands = globalCommands(state, {
-    settings: null,
-    view: { groupBy: "date", sortBy: "recent", folderAndBranch: false },
-    theme: "dark",
-  });
+  const commands = globalCommands(
+    state,
+    {
+      settings: null,
+      view: { groupBy: "date", sortBy: "recent", folderAndBranch: false },
+      theme: "dark",
+    },
+    local,
+  );
   const command = commands.find((c) => c.id === "settings-data-controls");
   assert.ok(command);
   assert.equal(machineOffers(LOCAL).command(command), true);
@@ -72,7 +78,7 @@ test("Data controls is the seventh Settings destination, offered only on Local",
 test("Local offers every surface and command", () => {
   const offers = machineOffers(LOCAL);
   for (const [name, offered] of surfaces(offers)) assert.equal(offered, true, name);
-  assert.ok(offers.command(trustCommand(state, "/repo")!));
+  assert.ok(offers.command(trustCommand(state, "/repo", local)!));
   const { create, close } = folderCommands(state, folder, offers);
   assert.equal(create?.enabled, true, "New session here");
   assert.equal(close?.enabled, true, "Close folder");
@@ -90,17 +96,17 @@ test("a remote offers the conversation slice, its projects and its sessions' men
   const row = folderCommands(opened, folder, offers);
   assert.equal(row.create?.enabled, true, "New session here on an open folder's row");
   assert.equal(row.close, undefined, "Close folder stays on the remote");
+  assert.deepEqual(
+    projectCommands(state, project, offers).map((c) => c.id),
+    ["new-session", "settings", "done", "delete"],
+  );
+  assert.ok(newProjectCommand(state, {}, offers), "New project");
   for (const command of [
-    ...projectCommands(state, project),
-    newProjectCommand(state),
     assignProjectCommand(state, session, project.id),
     assignProjectCommand(state, session, null),
   ])
     assert.ok(offers.command(command), command.label);
-  assert.ok(offers.command(trustCommand(state, "/repo")!), "folder trust");
-  const commands = sessionCommands(state, { ...session, title: "Session" });
-  for (const id of ["rename", "pin", "archive", "delete"]) {
-    const command = commands.find((c) => c.id === id);
-    assert.ok(command && offers.command(command), id);
-  }
+  assert.ok(trustCommand(state, "/repo", offers), "folder trust");
+  const ids = sessionCommands(state, { ...session, title: "Session" }, { offers }).map((c) => c.id);
+  for (const id of ["rename", "pin", "archive", "delete"] as const) assert.ok(ids.includes(id), id);
 });
