@@ -82,11 +82,11 @@ Start a **new session** after a change; running Pi children are not reloaded.
   (INV-01/02/11/12). The browser never receives an `Authorization` header's value, only that one
   is set; other header values and environment values are shown as configured, so keep secrets in
   `${VAR}` references, as Pi documents.
-- Pi 1.5.0 still exports neither its MCP config writer, its validator nor its sign-in flow
+- Pi 1.5.2 still exports neither its MCP config writer, its validator nor its sign-in flow
   publicly, so `McpConfigEntries` and `McpSetup` import the pinned `dist` helpers, as Radius setup
-  does. Rechecked against 1.5.0: the config, MCP runtime and auth-storage helpers are identical to
-  1.4.0; since 1.4.0, config reads and edits strip a UTF-8 BOM. Recheck these
-  imports on every Pi upgrade.
+  does. Rechecked against 1.5.2 by diffing those four files with 1.5.0: the validator now delegates
+  the `mcpServers` shape to `@earendil-works/pi-mcp`, and the `auth.json` lock follows symlinks;
+  the names Piano imports are unchanged. Recheck these imports on every Pi upgrade.
 - Piano writes only the global file; project-level `.pi/mcp.json` overrides remain Pi's
   responsibility. An entry disabled or hidden in Pi is listed with that problem and no sign-in.
   When MCP is switched off in Pi's settings (`-builtin:mcp`) or the file is invalid, the page says
