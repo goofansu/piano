@@ -421,7 +421,9 @@ Reading never starts Pi, resumes work or resends input, and stores nothing.
 
 An unknown session or project is an error (exit code `2` from the script, a failed tool call in a
 session). So is a session ID Piano lists under more than one directory: Piano names them and
-refuses rather than guessing, as it does for a parent session. A read Piano does not answer in 30 seconds or refuses for capacity exits `1`: it says
+refuses rather than guessing, as it does for a parent session. So is an archived session: its history is kept but
+Piano reads no status for it until it is unarchived in Settings → Data controls, and `list --project`
+leaves it out. A read Piano does not answer in 30 seconds or refuses for capacity exits `1`: it says
 nothing about whether Piano lists the session. After a restart a session reads `unknown`, or `settled` when its saved history ends with
 a finished reply; it never reads `running` from history.
 

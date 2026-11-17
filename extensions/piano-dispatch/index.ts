@@ -234,7 +234,7 @@ export default function pianoDispatch(pi: ExtensionAPI) {
         INPUT_GUIDELINE,
       ],
       description:
-        "Read what a Piano session is doing and what it needs, by session ID, without waiting or opening it. Works for any session Piano lists, after a lost reply or a Piano restart. Returns disposition (running, needs_input, settled, exited or unknown) with since, what a needs_input session asks for, the last turn's final answer (bounded) or null, changes (branch, changed file count, linked pull request) and the session link. settled means execution stopped, not that the task succeeded; unknown means delivery or completion could not be established. Reads only: never starts Pi, resumes work or resends input. Current status does not attribute an answer to an earlier dispatch.",
+        "Read what a Piano session is doing and what it needs, by session ID, without waiting or opening it. Works for any session Piano lists and has not archived, after a lost reply or a Piano restart. Returns disposition (running, needs_input, settled, exited or unknown) with since, what a needs_input session asks for, the last turn's final answer (bounded) or null, changes (branch, changed file count, linked pull request) and the session link. settled means execution stopped, not that the task succeeded; unknown means delivery or completion could not be established. Reads only: never starts Pi, resumes work or resends input. Current status does not attribute an answer to an earlier dispatch.",
       parameters: StatusParameters,
       outputSchema: StatusOutput,
       async execute(_id, params: Static<typeof StatusParameters>, signal) {

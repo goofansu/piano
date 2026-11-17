@@ -173,6 +173,22 @@ test("a stopped session's history proves settlement only when it ends with a fin
   );
 });
 
+test("an archived session's status is refused as archived, not read as unknown", async () => {
+  saved(plain, "shelved", [user("fix it"), reply("done")]);
+  await run(
+    Effect.gen(function* () {
+      const registry = yield* Registry;
+      const status = yield* SessionStatus;
+      yield* registry.addSession(plain, "shelved");
+      assert.equal((yield* status.read({ sessionId: "shelved" }))[0]?.disposition, "settled");
+      yield* registry.archiveSession(plain, "shelved");
+      const refused = yield* status.read({ sessionId: "shelved" }).pipe(Effect.flip);
+      assert.match(refused.detail, /archived/);
+      assert.match(refused.detail, /Data controls/);
+    }),
+  );
+});
+
 test("a session ID registered under two directories is refused, not guessed; one listing reads", async () => {
   saved(plain, "twice", [user("fix it"), reply("done")]);
   await run(
