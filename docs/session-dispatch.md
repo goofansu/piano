@@ -170,6 +170,8 @@ node scripts/dispatch-session.ts follow-up 0b6f…-session-id .scratch/piano-cha
 The two examples are alternatives: running both starts two sessions. The prompt argument is a
 UTF-8 **file**, not inline text. Use `node /path/to/piano/scripts/dispatch-session.ts …` from
 another directory; prompt, cwd and output paths are relative to your shell's current directory.
+A cwd starting with `~` means your home directory in both start forms, as it does for
+`piano_start_session`; the JSON form gets no shell expansion, so the script expands it.
 
 `--ws-url` and `--origin` override the respective environment variables. Both are required via
 flags or environment. The WebSocket URL must use a loopback host (`127.0.0.1`, `localhost` or

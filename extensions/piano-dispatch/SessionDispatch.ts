@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { homedir } from "node:os";
+import { resolve } from "node:path";
 import { creationVerdictOf } from "../../shared/creationVerdict.ts";
 import {
   type Attribution,
@@ -37,6 +39,15 @@ import {
   type SendDisposition,
   type SocketEnvironment,
 } from "../../web/src/lib/ws.ts";
+
+const HOME_PREFIX = /^~(?=$|\/)/;
+
+export function startDirectory(requested: string | undefined, base: string): string {
+  if (requested === undefined) return base;
+  return HOME_PREFIX.test(requested)
+    ? requested.replace(HOME_PREFIX, homedir())
+    : resolve(base, requested);
+}
 
 export interface StartRequest {
   readonly prompt: string;

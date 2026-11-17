@@ -269,6 +269,31 @@ test("JSON stdin preserves literal prompt data and dispatch targeting, with an e
   assert.deepEqual(p.origins, [origin], "duplicate output prevents even a connection");
 });
 
+test("a home-relative cwd starts in the dispatching user's home in both start forms", async (t) => {
+  const f = fixture(t);
+  const p = await peer(t);
+  const home = { HOME: f.dir };
+  const json = await run(
+    ["--json"],
+    p.url,
+    home,
+    JSON.stringify({
+      prompt: "x",
+      cwd: "~/work dir",
+      outFile: join(f.dir, "start.json"),
+      wsUrl: p.url,
+      origin,
+    }),
+  );
+  assert.equal(json.code, 0, json.stderr);
+  const positional = await run([f.prompt, "~/work dir"], p.url, home);
+  assert.equal(positional.code, 0, positional.stderr);
+  assert.deepEqual(
+    p.requests.filter((m) => m._tag === "create_session").map((m) => m.cwd),
+    [f.cwd, f.cwd],
+  );
+});
+
 test("JSON stdin validates the whole request before reserving output or connecting", async (t) => {
   const f = fixture(t);
   const p = await peer(t);
