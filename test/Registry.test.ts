@@ -195,6 +195,52 @@ test("INV-01/07: every path a write adds has a workspace when the database reope
   );
 });
 
+test("INV-01/07: a directory first opened as its own folder names its folder once registered as a worktree", async (t) => {
+  const f = fixture(t),
+    folder = join(f.root, "folder"),
+    checkout = join(f.root, "checkout");
+  mkdirSync(folder);
+  mkdirSync(checkout);
+  await f.run(
+    Effect.gen(function* () {
+      const r = yield* Registry;
+      yield* r.addFolder(checkout);
+      yield* r.addSession(checkout, "s1");
+      yield* r.addFolder(folder);
+      yield* r.addWorktree({ folder, path: checkout, branch: "feature" });
+    }),
+  );
+  assert.equal((await f.get()).workspaces.find((w) => w.path === checkout)?.folder, folder);
+});
+
+test("INV-01/07: a saved workspace that still names itself is corrected to its worktree's folder on open", async (t) => {
+  const f = fixture(t),
+    folder = join(f.root, "folder"),
+    checkout = join(f.root, "checkout");
+  seedRegistry(f.dbPath, {
+    folders: [folder, checkout],
+    worktrees: [{ folder, path: checkout, branch: "feature" }],
+    workspaces: [
+      { id: "folder-id", folder, path: folder },
+      { id: "checkout-id", folder: checkout, path: checkout },
+    ],
+  });
+  assert.deepEqual(
+    (await f.get()).workspaces.find((w) => w.id === "checkout-id"),
+    {
+      id: "checkout-id",
+      folder,
+      path: checkout,
+    },
+  );
+  const db = openRegistryDatabase(f.dbPath);
+  try {
+    assert.equal(db.data.workspaces.find((w) => w.id === "checkout-id")?.folder, folder);
+  } finally {
+    db.close();
+  }
+});
+
 test("INV-01: a worktree's observed branch replaces its last-known one in one write and survives reopening", async (t) => {
   const f = fixture(t),
     folder = join(f.root, "folder"),

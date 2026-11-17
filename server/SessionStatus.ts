@@ -2,9 +2,9 @@ import { Clock, Context, Data, Effect, Layer, Option, Stream } from "effect";
 import { STATUS_CHANGES_MS } from "../shared/dispatch.ts";
 import { pullRequestIdentity } from "../shared/pullRequestIdentity.ts";
 import { dialogAsks, dispositionOf, lastAnswerOf } from "../shared/sessionStatus.ts";
-import type { SessionStatusFacts, Snapshot } from "../shared/wire.ts";
+import type { ClientMessage, SessionStatusFacts, Snapshot } from "../shared/wire.ts";
 import { GitHubPullRequests } from "./GitHubPullRequests.ts";
-import { Registry, type SessionEntry } from "./Registry.ts";
+import { Registry, type SessionEntry, sessionById } from "./Registry.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { WorkspaceChanges } from "./WorkspaceChanges.ts";
 
@@ -12,7 +12,7 @@ export class SessionStatusError extends Data.TaggedError("SessionStatusError")<{
   readonly detail: string;
 }> {}
 
-export type StatusTarget = { readonly sessionId: string } | { readonly projectId: string };
+export type StatusTarget = Extract<ClientMessage, { _tag: "session_status" }>["target"];
 
 const PULL_REQUEST_TIMEOUT = "5 seconds";
 export const StatusChangesMs = Context.Reference<number>("piano/StatusChangesMs", {
@@ -132,13 +132,16 @@ export const SessionStatusLive = Layer.effect(
       const data = yield* registry.get;
       const deadline = (yield* Clock.currentTimeMillis) + (yield* StatusChangesMs);
       if ("sessionId" in target) {
-        const matches = data.sessions.filter((s) => s.sessionId === target.sessionId);
-        const entry = matches.find((s) => !s.archived) ?? matches[0];
-        if (!entry)
+        const found = sessionById(data, target.sessionId);
+        if (found._tag === "unlisted")
           return yield* new SessionStatusError({
             detail: `Piano lists no session ${target.sessionId}.`,
           });
-        return [yield* statusOf(entry, deadline)];
+        if (found._tag === "ambiguous")
+          return yield* new SessionStatusError({
+            detail: `Piano lists session ${target.sessionId} under more than one directory (${found.cwds.join(", ")}) and does not guess which one is meant.`,
+          });
+        return [yield* statusOf(found.entry, deadline)];
       }
       if (!data.projects.some((p) => p.id === target.projectId))
         return yield* new SessionStatusError({

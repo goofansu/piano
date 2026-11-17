@@ -23,6 +23,7 @@ import {
   Registry,
   RegistryError,
   type SessionEntry,
+  sessionById,
 } from "./Registry.ts";
 import {
   type CloseHow,
@@ -423,16 +424,14 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
           spec.inheritProject !== false &&
           dispatchedFrom !== undefined
         ) {
-          const parents = (yield* registry.get).sessions.filter(
-            (session) => session.sessionId === dispatchedFrom,
-          );
-          if (parents.length !== 1)
+          const parent = sessionById(yield* registry.get, dispatchedFrom);
+          if (parent._tag !== "unique")
             return yield* new SessionNotCreated({
               detail:
                 "Cannot inherit project: parent session is unlisted or ambiguous. Choose a listed parent or set inheritProject to false to start ungrouped.",
               checkoutUnconfirmed: false,
             });
-          projectId = parents[0]!.projectId;
+          projectId = parent.entry.projectId;
         }
         const cwd = yield* destination({ ...spec, projectId });
         const kept = (error: SessionNotCreated) =>
