@@ -72,10 +72,10 @@ Every request has these fields, with explicit `null` for unavailable common valu
 - Failed: `failure: {reason, detail, exitCode}` and `answer` (possibly null).
 - Ping: `ignore: true`; workspace, session and pullRequest are null.
 
-`workspace.folder` is a folder name, never cwd or an absolute path. Free-form text uses Piano's
-display redaction, removes configured webhook tokens and strips filesystem paths best-effort.
-This is not a security boundary: an answer or dialog can still disclose sensitive conversation
-content. No prose summary or hook ID is included in the body.
+`workspace.folder` is the name of the folder the checkout belongs to (for a worktree, the folder it
+is registered under), never cwd or an absolute path. Free-form text uses Piano's display redaction,
+removes configured webhook tokens and strips filesystem paths best-effort. This is not a security
+boundary: an answer or dialog can still disclose sensitive conversation content. No prose summary or hook ID is included in the body.
 
 A pull request is included only when that session has a link in Piano's database:
 `{number, url, state: null}`. Delivery never reads Git or asks GitHub for current state. Session

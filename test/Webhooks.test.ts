@@ -267,6 +267,29 @@ test("subscription/active filtering is paired with positive delivery; payloads a
   );
 });
 
+test("a payload names the folder a checkout was later registered under, and redacts its path", async () => {
+  const requests: Received[] = [];
+  const folder = join(root, "main-folder");
+  mkdirSync(folder, { recursive: true });
+  await run(
+    "folder-rule",
+    Effect.gen(function* () {
+      const registry = yield* registered;
+      yield* registry.addFolder(cwd);
+      yield* registry.addFolder(folder);
+      yield* registry.addWorktree({ folder, path: cwd, branch: "feature" });
+      const hooks = yield* Webhooks;
+      yield* hooks.save({ ...input, events: WEBHOOK_EVENTS });
+      yield* stopped(hooks, { _tag: "exited", code: 3, detail: `Failed in ${folder}/sub` });
+      yield* wait(() => requests.length === 1);
+      const body = requests[0].body;
+      assert.equal(body.workspace?.folder, "main-folder");
+      assert.equal(JSON.stringify(body).includes(folder), false);
+    }),
+    receive(requests),
+  );
+});
+
 test("Webhooks decides which live events it sends: a completion, a dialog newly asked, a stop that needs attention; never an attachment's snapshot", async () => {
   const requests: Received[] = [];
   await run(

@@ -141,14 +141,22 @@ function withWorkspaces(
 ): RegistryData {
   const paths = new Set(data.workspaces.map((w) => w.path));
   const parents = new Map(data.worktrees.map((w) => [w.path, w.folder]));
-  const added: Workspace[] = [];
+  const folderOf = (path: string) => parents.get(path) ?? path;
+  let changed = false;
+  const workspaces = data.workspaces.map((w) => {
+    const folder = folderOf(w.path);
+    if (folder === w.folder) return w;
+    changed = true;
+    return { ...w, folder };
+  });
   for (const path of candidates) {
     if (!paths.has(path)) {
       paths.add(path);
-      added.push({ id: randomUUID(), path, folder: parents.get(path) ?? path });
+      changed = true;
+      workspaces.push({ id: randomUUID(), path, folder: folderOf(path) });
     }
   }
-  return added.length ? { ...data, workspaces: [...data.workspaces, ...added] } : data;
+  return changed ? { ...data, workspaces } : data;
 }
 function withAddedWorkspaces(before: RegistryData, after: RegistryData): RegistryData {
   const candidates: string[] = [];
@@ -342,7 +350,15 @@ export const RegistryLive = Layer.effect(
       (db) => Effect.sync(() => db.close()),
     );
     const state = yield* Ref.make(
-      yield* Effect.try({ try: () => decode(database.data), catch: (e) => recovery(path, e) }),
+      yield* Effect.try({
+        try: () => {
+          const stored = decode(database.data);
+          const data = withWorkspaces(stored, []);
+          if (data !== stored) database.save(stored, data);
+          return data;
+        },
+        catch: (e) => recovery(path, e),
+      }),
     );
     const lock = yield* Semaphore.make(1);
     const listeners = new Set<RegistryListener>();
