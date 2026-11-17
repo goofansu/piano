@@ -571,7 +571,11 @@ test("forward to a page supersedes a deferred history route", () => {
 test("an unknown session keeps its URL and shows Session not found", () => {
   const p = page("/s/gone");
   p.registry();
-  assert.deepEqual(p.client.getState().view, { kind: "missing-session", sessionId: "gone" });
+  assert.deepEqual(p.client.getState().view, {
+    kind: "missing-session",
+    sessionId: "gone",
+    reason: "missing",
+  });
   assert.deepEqual(p.selects(), []);
   assert.deepEqual(p.entries, ["/s/gone"]);
   assert.equal(p.title(), "Session not found - Piano");
@@ -621,6 +625,41 @@ test("an archived session's address keeps its URL and says it is archived instea
   assert.equal(p.client.getState().selectionFailure, null);
   assert.deepEqual(p.entries, ["/s/old"]);
   assert.equal(p.title(), "Session archived - Piano");
+});
+
+test("an unavailable session's page follows its session when its reference changes", () => {
+  const references = (opts: Parameters<typeof sessionReference>[2]) => ({
+    _tag: "registry" as const,
+    folders: [],
+    projects: [],
+    sessionReferences: [sessionReference("/scratch", "old", opts)],
+  });
+  const p = page("/s/old");
+  p.server(references({ archived: true }));
+  p.server(references({ unavailable: "history" }));
+  assert.deepEqual(p.client.getState().view, {
+    kind: "missing-session",
+    sessionId: "old",
+    reason: "history",
+  });
+  assert.equal(p.title(), "History unavailable - Piano");
+  p.server(references({}));
+  assert.deepEqual(p.selects(), ["old"], "a restored history opens the session it names");
+  p.selected("old");
+  assert.equal(p.client.getState().view.kind, "session");
+  assert.deepEqual(p.entries, ["/s/old"], "the address stays the session's own");
+
+  const q = page("/s/old");
+  q.server(references({ archived: true }));
+  q.navigation.openSettings("data-controls");
+  q.server(references({}));
+  assert.equal(q.navigation.getState().settings, "data-controls", "Settings stays open");
+  assert.deepEqual(q.selects(), []);
+  q.navigation.closeSettings();
+  assert.deepEqual(q.selects(), ["old"], "leaving Settings opens the unarchived session");
+  q.selected("old");
+  assert.equal(q.path(), "/s/old");
+  assert.equal(q.client.getState().view.kind, "session");
 });
 
 test("aliases are replaced and real moves are pushed, with a title for each screen", () => {

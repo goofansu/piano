@@ -145,7 +145,7 @@ function MachineApp() {
                       />
                     ) : state.view.kind === "missing-session" ? (
                       <UnavailableSession
-                        page={unavailableSessionPage(state.view.reason ?? "missing", offers)}
+                        page={unavailableSessionPage(state.view.reason, offers)}
                         openDataControls={() => openSettings("data-controls")}
                         openNew={() => openNew()}
                       />
