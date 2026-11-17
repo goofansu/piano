@@ -54,8 +54,9 @@ peer image. Pi remains the only durable image/history store. See
 [remote use](remote-piano.md#images), [ADR 0004](adr/0004-same-owner-piano-peer.md) and the
 [HTTP budgets](runtime-input-limits.md#remote-image-http-lane).
 
-The empty image-only queue behavior above was documented on Pi 1.2.0. The installed 1.5.0 source
-still guards queue removal with `if (messageText)`; this extension does not patch it. Fake-Pi
+The empty image-only queue behavior above was documented on Pi 1.2.0, whose queue removal was
+guarded by `if (messageText)`. Pi 1.5.2's source (`dist/core/agent-session.js`) no longer has that
+guard, so it should remove an image-only entry; this has not been observed with a real Pi. Fake-Pi
 remote checks deliberately report an empty text entry and verify Piano preserves it; they are
 not a new real-provider reproduction of Pi's behavior.
 

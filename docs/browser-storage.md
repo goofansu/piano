@@ -11,7 +11,8 @@ Answer three questions about the value, in order.
    - **A machine's:** it is named by that machine's paths, session IDs or project IDs, or it
      caches that machine's answer. Key: `piano.machine.<id>.<name>`.
    - **This browser's:** how the person likes Piano to look or behave on every machine.
-     Key: `piano.<name>`.
+     Key: `piano.<name>`. The folder picker's last path (`piano.pickerPath`) is kept here too: the
+     picker lists only Local's directories.
 2. **How long should it live?**
    - **With the tab:** it describes what this tab is showing now. Store: `sessionStorage`.
    - **Until changed:** a choice, or a cache worth having next week. Store: `localStorage`.
