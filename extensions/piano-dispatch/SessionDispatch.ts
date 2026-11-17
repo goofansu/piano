@@ -1031,7 +1031,7 @@ export function sendFollowUp(
   );
 }
 
-export type StatusTarget = { readonly sessionId: string } | { readonly projectId: string };
+export type StatusTarget = Extract<ClientMessage, { _tag: "session_status" }>["target"];
 
 export const withLinks = (
   facts: SessionStatusFacts,
@@ -1042,10 +1042,7 @@ export const withLinks = (
   needs: facts.needs && { ...facts.needs, link: link(facts.sessionId) },
 });
 
-export type StatusReply =
-  | { readonly status: "ready"; readonly sessions: ReadonlyArray<SessionStatusFacts> }
-  | { readonly status: "unlisted"; readonly detail: string }
-  | { readonly status: "error"; readonly detail: string };
+export type StatusReply = Extract<ServerMessage, { _tag: "session_status" }>["result"];
 
 export function readStatus(
   target: StatusTarget,
