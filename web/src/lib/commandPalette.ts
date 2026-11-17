@@ -7,12 +7,7 @@ import {
   projectDestinations,
   type SessionProjectMenu,
 } from "./projectCommands.ts";
-import {
-  createSessionCatalog,
-  recentSessions,
-  type SessionEntry,
-  sessionCatalog,
-} from "./sessionCatalog.ts";
+import { createSessionCatalog, recentSessions, type SessionEntry } from "./sessionCatalog.ts";
 import { type SessionCommand, type SessionMenuSection, sessionRowMenu } from "./sessionCommands.ts";
 
 export function paletteFilter(value: string, search: string, keywords?: string[]): number {
@@ -201,10 +196,10 @@ function sessionRows(input: PaletteInput): PaletteSessionCommandRow[] {
   ];
 }
 
-export function commandPalette(
+function commandPalette(
   state: AppState,
   input: PaletteInput,
-  sessions = recentSessions(sessionCatalog(state)).map(sessionRow),
+  sessions: PaletteSessionRow[],
 ): PaletteGroup[] {
   const groups: PaletteGroup[] = [];
   if (sessions.length > 0)
