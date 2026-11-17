@@ -1,4 +1,3 @@
-import { isAbsolute, resolve } from "node:path";
 import { type JsonValue, StringEnum } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
@@ -31,12 +30,13 @@ import {
 } from "../../shared/dispatch.ts";
 import { sessionLink } from "../../shared/sessionLink.ts";
 import { dispatchConfiguration, nodeSocketEnvironment } from "./NodeSocket.ts";
-import { readStatus, startSession, waitSessions, withLinks } from "./SessionDispatch.ts";
-
-const dispatchDirectory = (requested: string | undefined, parent: string): string =>
-  requested === undefined || isAbsolute(requested) || /^~(?=$|\/)/.test(requested)
-    ? (requested ?? parent)
-    : resolve(parent, requested);
+import {
+  readStatus,
+  startDirectory,
+  startSession,
+  waitSessions,
+  withLinks,
+} from "./SessionDispatch.ts";
 
 const Handle = obj({
   cwd: str(),
@@ -207,7 +207,7 @@ export default function pianoDispatch(pi: ExtensionAPI) {
           const result = await startSession(
             {
               prompt: params.prompt,
-              cwd: dispatchDirectory(params.cwd, ctx.cwd),
+              cwd: startDirectory(params.cwd, ctx.cwd),
               worktree: params.worktree,
               inheritProject: params.inheritProject,
               dispatchedFrom: ctx.sessionManager.getSessionId(),

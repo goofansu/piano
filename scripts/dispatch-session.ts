@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import { closeSync, openSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { z } from "zod";
 import {
@@ -14,6 +13,7 @@ import {
   type StatusReply,
   type StatusTarget,
   sendFollowUp,
+  startDirectory,
   startSession,
   withLinks,
 } from "../extensions/piano-dispatch/SessionDispatch.ts";
@@ -267,7 +267,7 @@ async function dispatch(
   outFile: string | undefined,
   config: DispatchConfiguration,
 ) {
-  const cwd = resolve(request.cwd);
+  const cwd = startDirectory(request.cwd, process.cwd());
   try {
     if (!statSync(cwd).isDirectory()) throw new Error("cwd must be a directory");
   } catch (error) {
