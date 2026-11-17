@@ -101,13 +101,22 @@ jobs:
           test "$TESTS_RESULT" = success
 
   browser:
-    name: Critical paths (${{ matrix.journey }})
+    name: Critical paths (${{ matrix.name }})
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        journey: [start-session, open-session, transcript-rows, remote-session, remote-inputs]
+        include:
+          - name: remote-session
+            first: remote-session
+            second: ''
+          - name: open-session + transcript-rows
+            first: open-session
+            second: transcript-rows
+          - name: start-session + remote-inputs
+            first: start-session
+            second: remote-inputs
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -119,19 +128,23 @@ jobs:
       - name: Clean install
         run: npm ci
       - name: Install the latest Worktrunk
-        if: matrix.journey == 'start-session'
+        if: matrix.first == 'start-session'
         uses: ./.github/actions/setup-worktrunk
       - name: Install agent-browser 0.43.0 and its browser
+        id: browser-install
         run: |
           npm install --global agent-browser@0.43.0
           agent-browser install
       # A scratch Piano with a fake Pi: no model credentials, no paid calls.
-      - name: Browser journey
-        run: node test/browser/${{ matrix.journey }}.mjs
+      - name: Browser journey (${{ matrix.first }})
+        run: node test/browser/${{ matrix.first }}.mjs
+      - name: Browser journey (${{ matrix.second }})
+        if: ${{ !cancelled() && steps.browser-install.outcome == 'success' && matrix.second != '' }}
+        run: node test/browser/${{ matrix.second }}.mjs
       - name: Keep journey screenshots
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: critical-path-screenshots-${{ matrix.journey }}
+          name: critical-path-screenshots-${{ matrix.first }}
           path: .scratch/browser
           if-no-files-found: ignore
