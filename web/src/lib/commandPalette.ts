@@ -1,10 +1,10 @@
 import { defaultFilter } from "cmdk";
 import { type AppState, sessionKey } from "../store.ts";
 import type { GlobalCommand } from "./globalCommands.ts";
+import type { MachineOffers } from "./machineOffers.ts";
 import {
-  openProjectCommand,
+  openProjectCommands,
   type ProjectCommand,
-  projectDestinations,
   type SessionProjectMenu,
 } from "./projectCommands.ts";
 import { createSessionCatalog, recentSessions, type SessionEntry } from "./sessionCatalog.ts";
@@ -118,6 +118,7 @@ export type PaletteGroup =
     };
 
 export interface PaletteInput {
+  offers: Pick<MachineOffers, "command">;
   globalCommands: readonly GlobalCommand[];
   sessionCommands: readonly SessionCommand[];
   sessionProject?: SessionProjectMenu;
@@ -163,7 +164,7 @@ function projectRows(menu: SessionProjectMenu): PaletteSessionCommandRow[] {
   });
   return [
     ...(menu.open ? [row(menu.open, "project:open")] : []),
-    row(choice(menu.create, menu.create.label), "project:new"),
+    ...(menu.create ? [row(choice(menu.create, menu.create.label), "project:new")] : []),
     ...menu.destinations.map((d) => ({
       ...row(choice(d.command, d.project.name), `project:${d.project.id}`),
       searchOnly: true,
@@ -208,13 +209,13 @@ function commandPalette(
       heading: "Sessions",
       rows: sessions,
     });
-  const projects = projectDestinations(state, undefined, { keepCurrent: true });
+  const projects = openProjectCommands(state, input.offers);
   if (projects.length > 0)
     groups.push({
       id: "projects",
       heading: "Projects",
-      rows: projects.map((project) =>
-        commandRow({ ...openProjectCommand(project), label: project.name }, project.id),
+      rows: projects.map(({ project, command }) =>
+        commandRow({ ...command, label: project.name }, project.id),
       ),
     });
   groups.push({

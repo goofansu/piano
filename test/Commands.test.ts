@@ -92,12 +92,12 @@ const local = machineOffers(LOCAL);
 test("a disabled command does nothing, whichever surface offers it", () => {
   const offline = { ...online, connected: false };
   const disabled: Command[] = [
-    trustCommand(offline, "/repo")!,
-    ...projectCommands(offline, launch).filter((c) => c.id === "delete"),
-    newProjectCommand(offline),
+    trustCommand(offline, "/repo", local)!,
+    ...projectCommands(offline, launch, local).filter((c) => c.id === "delete"),
+    newProjectCommand(offline, {}, local)!,
     assignProjectCommand(offline, other, "p1"),
     folderCommands(offline, folder, local).close!,
-    ...sessionCommands(offline, other),
+    ...sessionCommands(offline, other, { offers: local }),
   ];
   for (const command of disabled) {
     assert.equal(command.enabled, false, command.label);
@@ -108,21 +108,28 @@ test("a disabled command does nothing, whichever surface offers it", () => {
 test("enabled commands reach the effect their intent names", () => {
   const byId = <C extends Command>(list: C[], id: string) => list.find((c) => c.id === id)!;
   const cases: [Command, unknown[]][] = [
-    [trustCommand(online, "/repo")!, ["send", { _tag: "set_trust", path: "/repo", trusted: true }]],
+    [
+      trustCommand(online, "/repo", local)!,
+      ["send", { _tag: "set_trust", path: "/repo", trusted: true }],
+    ],
     [
       byId(
-        globalCommands(online, {
-          settings: null,
-          view: { groupBy: "date", sortBy: "recent", folderAndBranch: false },
-        }),
+        globalCommands(
+          online,
+          {
+            settings: null,
+            view: { groupBy: "date", sortBy: "recent", folderAndBranch: false },
+          },
+          local,
+        ),
         "new-session",
       ),
       ["openNew", undefined],
     ],
-    [byId(projectCommands(online, launch), "new-session"), ["openProject", "p1"]],
+    [byId(projectCommands(online, launch, local), "new-session"), ["openProject", "p1"]],
     [openProjectCommand(launch), ["openProject", "p1"]],
     [
-      byId(projectCommands(online, launch), "settings"),
+      byId(projectCommands(online, launch, local), "settings"),
       ["openForm", { kind: "project-settings", projectId: "p1" }],
     ],
     [
@@ -130,17 +137,18 @@ test("enabled commands reach the effect their intent names", () => {
         globalCommands(
           { ...online, view: { kind: "project", projectId: "p1" } },
           { settings: null, view: { groupBy: "date", sortBy: "recent", folderAndBranch: false } },
+          local,
         ),
         "project-settings",
       ),
       ["openForm", { kind: "project-settings", projectId: "p1" }],
     ],
     [
-      byId(projectCommands(online, launch), "delete"),
+      byId(projectCommands(online, launch, local), "delete"),
       ["openForm", { kind: "delete-project", project: launch }],
     ],
     [
-      newProjectCommand(online, { assign: other }),
+      newProjectCommand(online, { assign: other }, local)!,
       ["openForm", { kind: "project", dialog: { assign: { cwd: "/repo", sessionId: "s2" } } }],
     ],
     [
@@ -150,24 +158,28 @@ test("enabled commands reach the effect their intent names", () => {
     [folderCommands(online, folder, local).create!, ["openNew", "/repo"]],
     [folderCommands(online, folder, local).close!, ["openForm", { kind: "close-folder", folder }]],
     [
-      byId(sessionCommands(online, other), "rename"),
+      byId(sessionCommands(online, other, { offers: local }), "rename"),
       ["openForm", { kind: "rename-session", target: other }],
     ],
     [
-      byId(sessionCommands(online, other), "archive"),
+      byId(sessionCommands(online, other, { offers: local }), "archive"),
       ["send", { _tag: "archive_session", cwd: "/repo", sessionId: "s2" }],
     ],
-    [byId(sessionCommands(selected), "changes"), ["openChanges"]],
-    [byId(sessionCommands(selected), "session-rail"), ["toggleRail"]],
-    [byId(sessionCommands(selected), "pull-request"), ["openPullRequest"]],
-    [byId(sessionCommands(linked), "pull-request"), ["openChanges"]],
+    [byId(sessionCommands(selected, undefined, { offers: local }), "changes"), ["openChanges"]],
+    [byId(sessionCommands(selected, undefined, { offers: local }), "session-rail"), ["toggleRail"]],
+    [
+      byId(sessionCommands(selected, undefined, { offers: local }), "pull-request"),
+      ["openPullRequest"],
+    ],
+    [byId(sessionCommands(linked, undefined, { offers: local }), "pull-request"), ["openChanges"]],
   ];
   for (const [command, call] of cases)
     assert.deepEqual(effectsOf(command), { ran: true, calls: [call] }, command.label);
 });
 
 test("Artifacts is offered once the session published one, and opens the header's menu", () => {
-  const artifacts = (state: AppState) => sessionCommands(state).find((c) => c.id === "artifacts")!;
+  const artifacts = (state: AppState) =>
+    sessionCommands(state, undefined, { offers: local }).find((c) => c.id === "artifacts")!;
   assert.equal(artifacts(selected).hidden, true, "nothing to list before the first artifact");
   const published: AppState = {
     ...selected,
@@ -202,7 +214,9 @@ test("archiving a working background session asks before sending a destructive c
     ...online,
     hosts: [{ cwd: other.cwd, sessionId: other.sessionId, working: true }],
   };
-  const archive = sessionCommands(working, other).find((c) => c.id === "archive")!;
+  const archive = sessionCommands(working, other, { offers: local }).find(
+    (c) => c.id === "archive",
+  )!;
   assert.equal(archive.enabled, true);
   assert.deepEqual(effectsOf(archive), {
     ran: true,
@@ -229,7 +243,9 @@ test("archiving selected streaming, compacting, retrying or submitting work asks
         dialogs: [],
       },
     };
-    const archive = sessionCommands(working, other).find((c) => c.id === "archive")!;
+    const archive = sessionCommands(working, other, { offers: local }).find(
+      (c) => c.id === "archive",
+    )!;
     assert.deepEqual(effectsOf(archive), {
       ran: true,
       calls: [["openForm", { kind: "archive-session", target: other }]],
@@ -248,6 +264,8 @@ test("the selected session's New session here opens its directory", () => {
     dialogs: [],
   };
   const selected: AppState = { ...online, view: { kind: "session" }, session };
-  const here = sessionCommands(selected).find((c) => c.id === "new-session-here")!;
+  const here = sessionCommands(selected, undefined, { offers: local }).find(
+    (c) => c.id === "new-session-here",
+  )!;
   assert.deepEqual(effectsOf(here), { ran: true, calls: [["openNew", "/repo/wt"]] });
 });

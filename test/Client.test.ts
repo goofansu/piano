@@ -3,12 +3,15 @@ import { test } from "node:test";
 import type { ClientMessage, Dialog, ServerMessage, SessionClosure } from "../shared/wire.ts";
 import { createClient, type NotifyLevel } from "../web/src/lib/client.ts";
 import { trustCommand } from "../web/src/lib/globalCommands.ts";
+import { LOCAL } from "../web/src/lib/machine.ts";
 import { machineOffers } from "../web/src/lib/machineOffers.ts";
 import { createModelCatalogs } from "../web/src/lib/modelCatalogs.ts";
 import { createDialogAnswer, pendingDialogs } from "../web/src/lib/piDialogs.ts";
 import type { ConnectionHandlers, DisconnectReason, SendDisposition } from "../web/src/lib/ws.ts";
 import { initialState } from "../web/src/store.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
+
+const local = machineOffers(LOCAL);
 
 function harness() {
   const sent: ClientMessage[] = [];
@@ -17,6 +20,7 @@ function harness() {
   let ids = 0;
   let disposition: SendDisposition = "sent";
   const client = createClient({
+    startsSessionIn: machineOffers(LOCAL).startsSessionIn,
     initial: initialState,
     connect: (h) => {
       handlers = h;
@@ -461,7 +465,7 @@ test("a reversed manual decision settles without duplicate or permanently suppre
   h.client.send({ _tag: "set_trust", path: "/a", trusted: false });
   h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: false } });
   assert.equal(
-    trustCommand(h.client.getState(), "/a")?.pressed,
+    trustCommand(h.client.getState(), "/a", local)?.pressed,
     true,
     "a temporary probe must not change the pending label",
   );
@@ -480,8 +484,8 @@ test("a reversed manual decision settles without duplicate or permanently suppre
   });
   h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: true } });
   assert.deepEqual(h.notes, [["Pi changed this folder back to trusted.", "warning"]]);
-  assert.equal(trustCommand(h.client.getState(), "/a")?.pressed, true);
-  assert.equal(trustCommand(h.client.getState(), "/a")?.pending, false);
+  assert.equal(trustCommand(h.client.getState(), "/a", local)?.pressed, true);
+  assert.equal(trustCommand(h.client.getState(), "/a", local)?.pending, false);
   h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: false } });
   assert.deepEqual(h.notes.at(-1), ["Pi marked this folder as untrusted.", "info"]);
 });
@@ -499,10 +503,14 @@ test("trust decisions disable every command surface immediately and reject repea
   const request = { _tag: "set_trust", path: "/a", trusted: true } as const;
   h.client.send(request);
   assert.equal(updated, true, "pending feedback does not wait for a server frame or paint");
-  assert.equal(trustCommand(h.client.getState(), "/a")?.pending, true);
-  assert.equal(trustCommand(h.client.getState(), "/a")?.enabled, false);
-  assert.equal(trustCommand(h.client.getState(), "/a")?.pressed, false, "no optimistic trust");
-  assert.equal(trustCommand(h.client.getState(), "/b")?.enabled, true);
+  assert.equal(trustCommand(h.client.getState(), "/a", local)?.pending, true);
+  assert.equal(trustCommand(h.client.getState(), "/a", local)?.enabled, false);
+  assert.equal(
+    trustCommand(h.client.getState(), "/a", local)?.pressed,
+    false,
+    "no optimistic trust",
+  );
+  assert.equal(trustCommand(h.client.getState(), "/b", local)?.enabled, true);
   h.client.dispatch({ type: "new_directory", cwd: "/b" });
   h.client.dispatch({ type: "new_directory", cwd: "/a" });
   h.client.send(request);
@@ -510,15 +518,19 @@ test("trust decisions disable every command surface immediately and reject repea
   h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: true } });
   h.client.send(request);
   assert.equal(h.sent.filter((m) => m._tag === "set_trust").length, 1);
-  assert.equal(trustCommand(h.client.getState(), "/a")?.pending, true, "a probe is not a receipt");
   assert.equal(
-    trustCommand(h.client.getState(), "/a")?.pressed,
+    trustCommand(h.client.getState(), "/a", local)?.pending,
+    true,
+    "a probe is not a receipt",
+  );
+  assert.equal(
+    trustCommand(h.client.getState(), "/a", local)?.pressed,
     false,
     "keep the pre-click label until the decision reply",
   );
   h.server({ _tag: "trust", cwd: "/b", trust: { required: true, trusted: true }, requested: true });
   assert.equal(
-    trustCommand(h.client.getState(), "/a")?.pending,
+    trustCommand(h.client.getState(), "/a", local)?.pending,
     true,
     "another directory cannot settle it",
   );
@@ -529,20 +541,20 @@ test("trust decisions disable every command surface immediately and reject repea
     requested: true,
   });
   assert.equal(
-    trustCommand(h.client.getState(), "/a")?.pending,
+    trustCommand(h.client.getState(), "/a", local)?.pending,
     false,
     "even a reversed decision settles",
   );
-  assert.equal(trustCommand(h.client.getState(), "/a")?.enabled, true);
+  assert.equal(trustCommand(h.client.getState(), "/a", local)?.enabled, true);
   h.client.send(request);
   assert.equal(h.sent.filter((m) => m._tag === "set_trust").length, 2);
   h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: true }, requested: true });
   assert.equal(
-    trustCommand(h.client.getState(), "/a")?.pressed,
+    trustCommand(h.client.getState(), "/a", local)?.pressed,
     true,
     "a successful decision replaces the snapshot",
   );
-  assert.equal(trustCommand(h.client.getState(), "/a")?.pending, false);
+  assert.equal(trustCommand(h.client.getState(), "/a", local)?.pending, false);
 });
 
 for (const ending of ["error", "disconnect"] as const) {
@@ -554,12 +566,12 @@ for (const ending of ["error", "disconnect"] as const) {
     const request = { _tag: "set_trust", path: "/a", trusted: false } as const;
     h.client.send(request);
     h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: false } });
-    assert.equal(trustCommand(h.client.getState(), "/a")?.pressed, true);
+    assert.equal(trustCommand(h.client.getState(), "/a", local)?.pressed, true);
     h.server({ _tag: "error", selectionId: "unrelated", message: "Session error" });
     h.server({ _tag: "error", message: "Could not rename session" });
     h.server({ _tag: "trust_failed", cwd: "/b", message: "Could not save trust" });
     assert.equal(
-      trustCommand(h.client.getState(), "/a")?.pending,
+      trustCommand(h.client.getState(), "/a", local)?.pending,
       true,
       "only this decision's own failure settles it",
     );
@@ -568,7 +580,7 @@ for (const ending of ["error", "disconnect"] as const) {
       assert.deepEqual(h.notes.at(-1), ["Could not save trust", "error"]);
     } else {
       h.status(false);
-      assert.equal(trustCommand(h.client.getState(), "/a")?.pending, false);
+      assert.equal(trustCommand(h.client.getState(), "/a", local)?.pending, false);
       h.client.send(request);
       assert.equal(
         h.sent.filter((m) => m._tag === "set_trust").length,
@@ -577,13 +589,13 @@ for (const ending of ["error", "disconnect"] as const) {
       );
       h.status(true);
     }
-    assert.equal(trustCommand(h.client.getState(), "/a")?.pending, false);
+    assert.equal(trustCommand(h.client.getState(), "/a", local)?.pending, false);
     assert.equal(
-      trustCommand(h.client.getState(), "/a")?.pressed,
+      trustCommand(h.client.getState(), "/a", local)?.pressed,
       false,
       "ending pending reveals the latest observation",
     );
-    assert.equal(trustCommand(h.client.getState(), "/a")?.enabled, true);
+    assert.equal(trustCommand(h.client.getState(), "/a", local)?.enabled, true);
     assert.equal(h.sent.filter((m) => m._tag === "set_trust").length, 1);
     h.client.send(request);
     assert.equal(h.sent.filter((m) => m._tag === "set_trust").length, 2);
@@ -752,7 +764,7 @@ function focusHarness(
     notify: (message) => notes.push(message),
     newSelectionId: () => `sel${++ids}`,
     lastDirectory: { read: () => options.remembered ?? null, write: (cwd) => written.push(cwd) },
-    startsSessionIn: options.startsSessionIn,
+    startsSessionIn: options.startsSessionIn ?? machineOffers(LOCAL).startsSessionIn,
   });
   client.start();
   let seen = 0;

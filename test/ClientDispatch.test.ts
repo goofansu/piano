@@ -29,6 +29,8 @@ import type {
 } from "../shared/wire.ts";
 import { createClient } from "../web/src/lib/client.ts";
 import { messageCommand } from "../web/src/lib/composerControl.ts";
+import { LOCAL } from "../web/src/lib/machine.ts";
+import { machineOffers } from "../web/src/lib/machineOffers.ts";
 import { createDrafts, EMPTY_DRAFT, sessionDraftKey } from "../web/src/lib/messageDraft.ts";
 import { createModelCatalogs } from "../web/src/lib/modelCatalogs.ts";
 import { createPreviewObservation, seenPreview } from "../web/src/lib/previewObservation.ts";
@@ -216,6 +218,7 @@ test("INV-02/05: cold cross-directory focus cannot fill admission while saved se
       const replies: ServerMessage[] = [];
       let handlers: ConnectionHandlers | undefined;
       const browser = createClient({
+        startsSessionIn: machineOffers(LOCAL).startsSessionIn,
         initial: initialState,
         connect: (h) => {
           handlers = h;
@@ -643,6 +646,7 @@ test("INV-05: browser client recovers from dispatch saturation with a fresh expl
       const requests: ClientMessage[] = [];
       let handlers: ConnectionHandlers | undefined;
       const browser = createClient({
+        startsSessionIn: machineOffers(LOCAL).startsSessionIn,
         initial: initialState,
         connect: (h) => {
           handlers = h;
@@ -826,6 +830,7 @@ for (const outcome of ["refused", "probe failure", "dispatch failure"] as const)
           saveDefaults: async () => {},
         });
         const browser = createClient({
+          startsSessionIn: machineOffers(LOCAL).startsSessionIn,
           initial: { ...initialState, catalogs: { ...catalogs.seed() } },
           connect: (h) => {
             handlers = h;
@@ -887,6 +892,7 @@ test("INV-05: an admitted selection failure settles the browser and permits expl
       const requests: ClientMessage[] = [];
       let handlers: ConnectionHandlers | undefined;
       const browser = createClient({
+        startsSessionIn: machineOffers(LOCAL).startsSessionIn,
         initial: initialState,
         connect: (h) => {
           handlers = h;
@@ -1010,6 +1016,7 @@ function worktreePicker(receive: (m: ClientRequest) => Effect.Effect<Effect.Effe
   const commands: ClientRequest[] = [];
   let handlers: ConnectionHandlers | undefined;
   const page = createClient({
+    startsSessionIn: machineOffers(LOCAL).startsSessionIn,
     initial: initialState,
     connect: (h) => {
       handlers = h;
@@ -1671,6 +1678,7 @@ const archiveRace = (options: { startsClosingHost?: boolean } = {}) =>
     const requests: ClientMessage[] = [];
     let handlers: ConnectionHandlers | undefined;
     const browser = createClient({
+      startsSessionIn: machineOffers(LOCAL).startsSessionIn,
       initial: initialState,
       connect: (h) => {
         handlers = h;
@@ -1836,6 +1844,7 @@ test("INV-03: a first message its new session refuses before Pi sees it reads no
       const requests: ClientMessage[] = [];
       let handlers: ConnectionHandlers | undefined;
       const browser = createClient({
+        startsSessionIn: machineOffers(LOCAL).startsSessionIn,
         initial: initialState,
         connect: (h) => {
           handlers = h;

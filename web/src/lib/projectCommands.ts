@@ -5,6 +5,7 @@ import {
   type Project,
 } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
+import type { MachineOffers } from "./machineOffers.ts";
 import { sessionProject, sessionReferenceChangeable } from "./sessionContext.ts";
 import { byName } from "./sidebarView.ts";
 
@@ -65,9 +66,15 @@ export interface ProjectCommand {
 
 export const isProjectDone = (project: Pick<Project, "doneAt">) => project.doneAt !== undefined;
 
-export function projectCommands(state: AppState, project: Project): ProjectCommand[] {
+type Offers = Pick<MachineOffers, "command">;
+
+export function projectCommands(
+  state: AppState,
+  project: Project,
+  offers: Offers,
+): ProjectCommand[] {
   const done = isProjectDone(project);
-  return [
+  const commands: ProjectCommand[] = [
     {
       id: "new-session",
       label: "New session in project",
@@ -102,6 +109,7 @@ export function projectCommands(state: AppState, project: Project): ProjectComma
       intent: { kind: "delete-project", project },
     },
   ];
+  return commands.filter(offers.command);
 }
 
 export interface ProjectMenuSections {
@@ -212,9 +220,10 @@ export function openProjectCommand(project: Project): ProjectCommand {
 
 export function newProjectCommand(
   state: AppState,
-  { assign, newPage }: ProjectDialog = {},
-): ProjectCommand {
-  return {
+  { assign, newPage }: ProjectDialog,
+  offers: Offers,
+): ProjectCommand | undefined {
+  const command: ProjectCommand = {
     id: "new-project",
     label: "New project",
     icon: "create",
@@ -228,6 +237,7 @@ export function newProjectCommand(
           : {},
     },
   };
+  return offers.command(command) ? command : undefined;
 }
 
 export function assignProjectCommand(
@@ -261,28 +271,39 @@ export interface SessionProjectMenu {
   current: Project | undefined;
   open: ProjectCommand | undefined;
   entry: { label: "Move to project" | "Add to project"; enabled: boolean };
-  create: ProjectCommand;
+  create: ProjectCommand | undefined;
   destinations: ProjectDestination[];
   remove: ProjectCommand | undefined;
 }
 
-export function sessionProjectMenu(state: AppState, session: SessionRef): SessionProjectMenu {
+export function openProjectCommands(state: AppState, offers: Offers): ProjectDestination[] {
+  return projectDestinations(state, undefined, { keepCurrent: true })
+    .map((project) => ({ project, command: openProjectCommand(project) }))
+    .filter((d) => offers.command(d.command));
+}
+
+export function sessionProjectMenu(
+  state: AppState,
+  session: SessionRef,
+  offers: Offers,
+): SessionProjectMenu {
   const ref = { cwd: session.cwd, sessionId: session.sessionId };
   const current = sessionProject(state, ref);
+  const offered = (command: ProjectCommand | undefined) =>
+    command && offers.command(command) ? command : undefined;
   return {
     current,
-    open: current ? openProjectCommand(current) : undefined,
+    open: offered(current && openProjectCommand(current)),
     entry: {
       label: current ? "Move to project" : "Add to project",
       enabled: sessionReferenceChangeable(state, ref),
     },
-    create: newProjectCommand(state, { assign: ref }),
-    destinations: projectDestinations(state, current, { keepCurrent: false }).map((project) => ({
-      project,
-      command: assignProjectCommand(state, ref, project.id),
-    })),
-    remove: current
-      ? { ...assignProjectCommand(state, ref, null), label: "Remove from project" }
-      : undefined,
+    create: newProjectCommand(state, { assign: ref }, offers),
+    destinations: projectDestinations(state, current, { keepCurrent: false })
+      .map((project) => ({ project, command: assignProjectCommand(state, ref, project.id) }))
+      .filter((d) => offers.command(d.command)),
+    remove: offered(
+      current && { ...assignProjectCommand(state, ref, null), label: "Remove from project" },
+    ),
   };
 }

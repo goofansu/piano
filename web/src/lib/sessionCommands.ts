@@ -1,7 +1,6 @@
 import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
-import { LOCAL } from "./machine.ts";
-import { machineOffers } from "./machineOffers.ts";
+import type { MachineOffers } from "./machineOffers.ts";
 import type { SessionLayout } from "./navigation.ts";
 import { type PreviewObservationState, seenPreview } from "./previewObservation.ts";
 import { pullRequestView } from "./pullRequestView.ts";
@@ -177,14 +176,14 @@ export function canRenameSession(state: AppState, target: SessionTarget): boolea
 
 export function sessionCommands(
   state: AppState,
-  target?: SessionTarget,
+  target: SessionTarget | undefined,
   options: {
+    offers: Pick<MachineOffers, "command" | "startsSessionIn">;
     messagesOnly?: boolean;
     codeWrap?: boolean;
     layout?: SessionLayout;
     previewObservation?: Pick<PreviewObservationState, "unconfirmed">;
-    startsSessionIn?: (state: AppState, cwd: string) => boolean;
-  } = {},
+  },
 ): SessionCommand[] {
   const session = state.session;
   const ctx = sessionContext(state);
@@ -395,16 +394,13 @@ export function sessionCommands(
       id: "new-session-here",
       label: "New session here",
       icon: "new",
-      enabled: (options.startsSessionIn ?? machineOffers(LOCAL).startsSessionIn)(
-        state,
-        session.cwd,
-      ),
+      enabled: options.offers.startsSessionIn(state, session.cwd),
       keywords: ["directory"],
       detail: session.cwd,
       intent: { kind: "new-session", cwd: session.cwd },
     });
   }
-  return commands;
+  return commands.filter(options.offers.command);
 }
 
 function previewCommands(

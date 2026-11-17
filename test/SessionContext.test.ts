@@ -5,7 +5,7 @@ import { directoryTrust } from "../web/src/lib/directoryTrust.ts";
 import { folderCommands } from "../web/src/lib/folderCommands.ts";
 import { trustCommand } from "../web/src/lib/globalCommands.ts";
 import { LOCAL } from "../web/src/lib/machine.ts";
-import { machineOffers } from "../web/src/lib/machineOffers.ts";
+import { type MachineOffers, machineOffers } from "../web/src/lib/machineOffers.ts";
 import { sessionDraftKey } from "../web/src/lib/messageDraft.ts";
 import { sessionProjectMenu } from "../web/src/lib/projectCommands.ts";
 import { catalogEntry, sessionDirectories } from "../web/src/lib/sessionCatalog.ts";
@@ -30,6 +30,8 @@ import {
 import { sessionHasPreview } from "../web/src/lib/sessionPreview.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
+
+const local = machineOffers(LOCAL);
 
 const ws = (path: string) => ({ id: `ws:${path}`, folder: "/repo", path });
 const worktree = (
@@ -65,7 +67,7 @@ const session = (
   dialogs: [],
   ...extra,
 });
-const { startsSessionIn: startsLocally } = machineOffers(LOCAL);
+const { startsSessionIn: startsLocally } = local;
 const base: AppState = {
   ...initialState,
   connected: true,
@@ -238,7 +240,7 @@ test("the session's context and its catalog row agree on its branch, project and
     assert.deepEqual(
       {
         branch: ctx.branch ?? "",
-        project: sessionProjectMenu(selected, { cwd, sessionId: "s1" }).current,
+        project: sessionProjectMenu(selected, { cwd, sessionId: "s1" }, local).current,
         title: ctx.title,
       },
       {
@@ -663,7 +665,11 @@ test("one rule answers whether a folder with no sessions can start one when its 
     false,
   );
   assert.deepEqual(focusedDirectory(gone), { cwd: "/research", checkoutMissing: true });
-  assert.equal(trustCommand(gone, "/research"), undefined, "Pi cannot be asked about its trust");
+  assert.equal(
+    trustCommand(gone, "/research", local),
+    undefined,
+    "Pi cannot be asked about its trust",
+  );
 
   assert.equal(checkoutMissingAt(gone, "/repo"), false, "a current folder beside it is unaffected");
   assert.equal(folderCommands(gone, folder, machineOffers(LOCAL)).create?.enabled, true);
@@ -705,10 +711,8 @@ test("New session here, from a folder row or a session, asks the machine's one r
     selectionId: "sel",
     folders: [folder, research(status)],
   });
-  const hereEnabled = (state: AppState, rule: typeof startsLocally) =>
-    sessionCommands(state, undefined, { startsSessionIn: rule }).find(
-      (c) => c.id === "new-session-here",
-    )?.enabled;
+  const hereEnabled = (state: AppState, offers: MachineOffers) =>
+    sessionCommands(state, undefined, { offers }).find((c) => c.id === "new-session-here")?.enabled;
   const cases = [
     { name: "a folder root on disk", cwd: "/research", status: "current", local: true, far: true },
     {
@@ -740,13 +744,9 @@ test("New session here, from a folder row or a session, asks the machine's one r
         expected,
         `${machine} row: ${c.name}`,
       );
-      assert.equal(hereEnabled(state, rule), expected, `${machine} session: ${c.name}`);
+      assert.equal(hereEnabled(state, offers), expected, `${machine} session: ${c.name}`);
     }
   }
-  const byDefault = sessionCommands(at("/research", "missing")).find(
-    (c) => c.id === "new-session-here",
-  );
-  assert.equal(byDefault?.enabled, false, "Local's rule by default");
 });
 
 test("the New session directory picker labels a branchless worktree", () => {
@@ -836,10 +836,10 @@ test("a missing checkout is decided once: Trust, New session here, Rename, the f
   ];
   for (const c of cases) {
     const target = { cwd: c.cwd, sessionId: c.state.session?.sessionId ?? "s1" };
-    const commands = sessionCommands(c.state, target);
+    const commands = sessionCommands(c.state, target, { offers: local });
     const enabled = (id: string) => commands.find((x) => x.id === id)?.enabled;
     assert.equal(checkoutMissingAt(c.state, c.cwd), c.missing, c.name);
-    assert.equal(trustCommand(c.state, c.cwd) === undefined, c.missing, `${c.name}: Trust`);
+    assert.equal(trustCommand(c.state, c.cwd, local) === undefined, c.missing, `${c.name}: Trust`);
     assert.equal(enabled("new-session-here"), !c.missing, `${c.name}: New session here`);
     assert.equal(enabled("rename"), !c.missing, `${c.name}: Rename`);
     assert.equal(focusedDirectory(c.state)?.checkoutMissing, c.missing, `${c.name}: focus`);

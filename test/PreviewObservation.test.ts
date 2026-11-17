@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ClientCommand, ServerMessage, SessionPreview, SessionState } from "../shared/wire.ts";
+import { LOCAL } from "../web/src/lib/machine.ts";
+import { machineOffers } from "../web/src/lib/machineOffers.ts";
 import {
   claimedPreview,
   createPreviewObservation,
@@ -11,6 +13,8 @@ import { sessionCommands } from "../web/src/lib/sessionCommands.ts";
 import { previewClaim } from "../web/src/lib/sessionPreview.ts";
 import type { SendDisposition } from "../web/src/lib/ws.ts";
 import { type AppState, initialState, reduce } from "../web/src/store.ts";
+
+const local = machineOffers(LOCAL);
 
 const app: SessionPreview = {
   instanceId: "i1",
@@ -348,9 +352,10 @@ test("a refused read settles only its own request and leaves the app inspectable
     "only that app is unconfirmed",
   );
   const open = () =>
-    sessionCommands(state, undefined, { previewObservation: f.observation.getState() }).find(
-      (c) => c.id === "open-preview",
-    )?.enabled;
+    sessionCommands(state, undefined, {
+      offers: local,
+      previewObservation: f.observation.getState(),
+    }).find((c) => c.id === "open-preview")?.enabled;
   assert.equal(open(), false, "no ready-link action");
 
   f.focus(10_000);

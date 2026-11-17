@@ -4,6 +4,7 @@ import { LOCAL, machineFrameBytes, PEER_FRAME_BYTES } from "../shared/machine.ts
 import { type ClientMessage, encodeServerMessage } from "../shared/wire.ts";
 import { createClient } from "../web/src/lib/client.ts";
 import { messageCommand, newSessionCommand } from "../web/src/lib/composerControl.ts";
+import { machineOffers } from "../web/src/lib/machineOffers.ts";
 import { createDrafts, NEW_SESSION_DRAFT, sessionDraftKey } from "../web/src/lib/messageDraft.ts";
 import { emptyChoice, type ModelTarget, modelChoice } from "../web/src/lib/modelChoice.ts";
 import { openConnection, type SocketEnvironment, type SocketEvents } from "../web/src/lib/ws.ts";
@@ -46,6 +47,7 @@ function harness({ select = true, frameBytes = machineFrameBytes(LOCAL.id) } = {
   let ids = 0;
   const notices: string[] = [];
   const client = createClient({
+    startsSessionIn: machineOffers(LOCAL).startsSessionIn,
     initial: initialState,
     connect: (handlers) => openConnection(handlers, env),
     notify: (message) => notices.push(message),

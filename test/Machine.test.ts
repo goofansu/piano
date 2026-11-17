@@ -8,6 +8,7 @@ import { Endpoints } from "../shared/http.ts";
 import type { ModelCatalog } from "../shared/wire.ts";
 import { sessionCommands, workspaceFile } from "../web/src/lib/api.ts";
 import { createClient, type NotifyLevel } from "../web/src/lib/client.ts";
+import { LOCAL } from "../web/src/lib/machine.ts";
 import {
   machineAddress,
   machineLocation,
@@ -16,6 +17,7 @@ import {
   peerApiPath,
 } from "../web/src/lib/machine.ts";
 import { machineLocationMemory } from "../web/src/lib/machineMemory.ts";
+import { machineOffers } from "../web/src/lib/machineOffers.ts";
 import { createMachineStores } from "../web/src/lib/machineStores.ts";
 import { sessionDraftKey } from "../web/src/lib/messageDraft.ts";
 import type { Catalogs } from "../web/src/lib/modelCatalogs.ts";
@@ -143,6 +145,7 @@ test("same cwd/session IDs retain separate drafts, questions and model catalogs,
   assert.notEqual(remote.questions, local.questions);
   let events!: ConnectionHandlers;
   const client = createClient({
+    startsSessionIn: machineOffers(LOCAL).startsSessionIn,
     initial: initialState,
     notify: () => {},
     connect: (handlers) => {
@@ -158,6 +161,7 @@ test("same cwd/session IDs retain separate drafts, questions and model catalogs,
   assert.equal(local.catalogs.getState().catalogs["/same"].fetchedAt, "local");
   let secondEvents!: ConnectionHandlers;
   const secondClient = createClient({
+    startsSessionIn: machineOffers(LOCAL).startsSessionIn,
     initial: initialState,
     notify: () => {},
     connect: (handlers) => {

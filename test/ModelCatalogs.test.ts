@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ClientMessage, ModelCatalog, ServerMessage } from "../shared/wire.ts";
 import { createClient, type NotifyLevel } from "../web/src/lib/client.ts";
+import { LOCAL } from "../web/src/lib/machine.ts";
+import { machineOffers } from "../web/src/lib/machineOffers.ts";
 import { type Catalogs, createModelCatalogs } from "../web/src/lib/modelCatalogs.ts";
 import type { ConnectionHandlers } from "../web/src/lib/ws.ts";
 import { initialState } from "../web/src/store.ts";
@@ -33,6 +35,7 @@ function page(stored: Catalogs = {}, save: () => Promise<void> = async () => {})
     saveDefaults: save,
   });
   const client = createClient({
+    startsSessionIn: machineOffers(LOCAL).startsSessionIn,
     initial: { ...initialState, catalogs: { ...catalogs.seed() } },
     connect: (h) => {
       handlers = h;

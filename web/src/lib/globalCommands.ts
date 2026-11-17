@@ -2,6 +2,7 @@ import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import { type RadioChoice, radioChoiceOf } from "./commands.ts";
 import { canDecideTrust, displayedTrust, pendingTrust } from "./directoryTrust.ts";
+import type { MachineOffers } from "./machineOffers.ts";
 import { type EditorPage, isEditorPage, PAGE_EDITORS } from "./pageEditor.ts";
 import {
   findProject,
@@ -110,13 +111,19 @@ export function radioChoice(
   return radioChoiceOf(commands.filter((c) => c.group === group));
 }
 
-export function trustCommand(state: AppState, cwd: string | undefined): GlobalCommand | undefined {
+type Offers = Pick<MachineOffers, "command">;
+
+export function trustCommand(
+  state: AppState,
+  cwd: string | undefined,
+  offers: Offers,
+): GlobalCommand | undefined {
   if (!cwd) return undefined;
   if (checkoutMissingAt(state, cwd)) return undefined;
   const pending = !!pendingTrust(state, cwd);
   const trust = displayedTrust(state, cwd);
   if (!trust?.required) return undefined;
-  return {
+  const command: GlobalCommand = {
     id: "trust",
     label: trust.trusted ? "Untrust folder" : "Trust folder",
     icon: trust.trusted ? "untrusted" : "trusted",
@@ -126,6 +133,7 @@ export function trustCommand(state: AppState, cwd: string | undefined): GlobalCo
     pressed: trust.trusted,
     intent: { kind: "send", command: { _tag: "set_trust", path: cwd, trusted: !trust.trusted } },
   };
+  return offers.command(command) ? command : undefined;
 }
 
 const PROJECT_MENU_IDS = {
@@ -136,21 +144,21 @@ const PROJECT_MENU_IDS = {
 
 export function pageCommands(
   state: AppState,
-  settings: SettingsSection | null = null,
+  settings: SettingsSection | null,
+  offers: Offers,
 ): GlobalCommand[] {
   if (settings) {
     if (!isEditorPage(settings)) return [];
     const { id, label, editor } = PAGE_EDITORS[settings];
-    return [
-      {
-        id,
-        label,
-        icon: "create",
-        group: "navigate",
-        enabled: editor.available(),
-        intent: { kind: "page-editor", page: settings },
-      },
-    ];
+    const command: GlobalCommand = {
+      id,
+      label,
+      icon: "create",
+      group: "navigate",
+      enabled: editor.available(),
+      intent: { kind: "page-editor", page: settings },
+    };
+    return [command].filter(offers.command);
   }
   const row = (id: GlobalCommandId, c: ProjectCommand): GlobalCommand => ({
     id,
@@ -161,17 +169,24 @@ export function pageCommands(
     intent: c.intent,
   });
   const view = state.view;
-  if (view.kind === "projects") return [row("new-project", newProjectCommand(state))];
+  if (view.kind === "projects") {
+    const create = newProjectCommand(state, {}, offers);
+    return create ? [row("new-project", create)] : [];
+  }
   const project = view.kind === "project" ? findProject(state, view.projectId) : undefined;
   if (!project) return [];
-  const menu = projectMenu(projectCommands(state, project));
+  const menu = projectMenu(projectCommands(state, project, offers));
   return [...menu.manage, ...menu.destructive].map((c) => row(PROJECT_MENU_IDS[c.id], c));
 }
 
-export function globalCommands(state: AppState, ctx: GlobalCommandContext): GlobalCommand[] {
-  const trust = trustCommand(state, focusedDirectory(state)?.cwd);
+export function globalCommands(
+  state: AppState,
+  ctx: GlobalCommandContext,
+  offers: Offers,
+): GlobalCommand[] {
+  const trust = trustCommand(state, focusedDirectory(state)?.cwd, offers);
   const theme = ctx.theme;
-  return [
+  const commands: GlobalCommand[] = [
     ctx.settings
       ? {
           id: "home",
@@ -214,7 +229,7 @@ export function globalCommands(state: AppState, ctx: GlobalCommandContext): Glob
       enabled: true,
       intent: { kind: "projects" },
     },
-    ...pageCommands(state, ctx.settings),
+    ...pageCommands(state, ctx.settings, offers),
     ...(trust ? [trust] : []),
     {
       id: "toggle-sidebar",
@@ -267,4 +282,5 @@ export function globalCommands(state: AppState, ctx: GlobalCommandContext): Glob
       intent: { kind: "view", change: { folderAndBranch: !ctx.view.folderAndBranch } },
     },
   ];
+  return commands.filter(offers.command);
 }
