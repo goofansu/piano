@@ -357,6 +357,8 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         );
         const physical = (yield* physicalPath(path)) ?? path;
         const data = yield* registry.get;
+        const open = yield* registeredAs(data.folders, physical);
+        if (open) return open;
         const worktree = yield* registeredAs(
           data.worktrees.map((w) => w.path),
           physical,
