@@ -92,8 +92,9 @@ function picker() {
       server({
         _tag: "worktrees",
         folder,
-        requestId: sent.filter((m) => m._tag === "worktrees").findLast((m) => m.folder === folder)
-          ?.requestId,
+        requestId:
+          sent.filter((m) => m._tag === "worktrees").findLast((m) => m.folder === folder)
+            ?.requestId ?? "unrequested",
         discovery,
       }),
     receipt: (

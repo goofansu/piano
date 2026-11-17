@@ -91,11 +91,7 @@ export function createModelCatalogs({
   const settle = (message: ServerMessage) => {
     if (message._tag !== "models" && message._tag !== "models_failed") return;
     const cwd = message._tag === "models" ? message.catalog.cwd : message.cwd;
-    if (message.requestId === undefined) {
-      if (message._tag === "models_failed") notify(message.message, "error");
-      return;
-    }
-    if (state.refreshing[cwd] !== message.requestId) return;
+    if (message.requestId === undefined || state.refreshing[cwd] !== message.requestId) return;
     const refreshing = { ...state.refreshing };
     delete refreshing[cwd];
     set({ ...state, refreshing });
