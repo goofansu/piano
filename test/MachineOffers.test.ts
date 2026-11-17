@@ -54,6 +54,8 @@ test("Data controls is the seventh Settings destination, offered only on Local",
   const commands = globalCommands(
     state,
     {
+      machine: LOCAL,
+      machines: [LOCAL],
       settings: null,
       view: { groupBy: "date", sortBy: "recent", folderAndBranch: false },
       theme: "dark",

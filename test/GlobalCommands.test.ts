@@ -42,6 +42,8 @@ const onNewPage: AppState = {
   trusts: { "/repo": protectedDir, "/plain": { required: false, trusted: false } },
 };
 const ctx: GlobalCommandContext = {
+  machine: LOCAL,
+  machines: [LOCAL],
   settings: null,
   view: { groupBy: "date", sortBy: "recent", folderAndBranch: false },
 };
@@ -124,6 +126,39 @@ test("exactly the current grouping and sort are checked", () => {
   } as const;
   assert.deepEqual(checked("group-by", other), ["Group by project"]);
   assert.deepEqual(checked("sort-by", other), ["Sort by name"]);
+});
+
+test("Switch to rows name each configured machine once there is more than one, the current one checked", () => {
+  const switches = (c: GlobalCommandContext, offers = local) =>
+    globalCommands(onNewPage, c, offers)
+      .filter((command) => command.intent.kind === "machine")
+      .map(({ id, label, icon, group, enabled, checked, intent }) => ({
+        id,
+        label,
+        icon,
+        group,
+        enabled,
+        checked,
+        intent,
+      }));
+  assert.deepEqual(switches(ctx), [], "a lone machine has nothing to switch to");
+  const eng = { id: "eng-1", name: "eng-1" };
+  const machines = [LOCAL, eng];
+  const row = (machine: typeof eng, current: boolean) => ({
+    id: `machine-${machine.id}`,
+    label: `Switch to ${machine.name}`,
+    icon: "machine",
+    group: "navigate",
+    enabled: !current,
+    checked: current,
+    intent: { kind: "machine", id: machine.id },
+  });
+  assert.deepEqual(switches({ ...ctx, machines }), [row(LOCAL, true), row(eng, false)]);
+  assert.deepEqual(
+    switches({ ...ctx, machine: eng, machines }, machineOffers(eng)),
+    [row(LOCAL, false), row(eng, true)],
+    "a remote offers switching back",
+  );
 });
 
 test("on a remote machine the View options, New session and Projects stay, and nothing else that manages the remote does", () => {

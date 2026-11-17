@@ -117,6 +117,8 @@ test("enabled commands reach the effect their intent names", () => {
         globalCommands(
           online,
           {
+            machine: LOCAL,
+            machines: [LOCAL],
             settings: null,
             view: { groupBy: "date", sortBy: "recent", folderAndBranch: false },
           },
@@ -136,7 +138,12 @@ test("enabled commands reach the effect their intent names", () => {
       byId(
         globalCommands(
           { ...online, view: { kind: "project", projectId: "p1" } },
-          { settings: null, view: { groupBy: "date", sortBy: "recent", folderAndBranch: false } },
+          {
+            machine: LOCAL,
+            machines: [LOCAL],
+            settings: null,
+            view: { groupBy: "date", sortBy: "recent", folderAndBranch: false },
+          },
           local,
         ),
         "project-settings",
