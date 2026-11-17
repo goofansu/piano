@@ -115,6 +115,19 @@ export const inOpenFolder = (data: RegistryData, cwd: string): boolean =>
   data.folders.includes(cwd) ||
   data.worktrees.some((w) => w.path === cwd && data.folders.includes(w.folder));
 
+export type SessionById =
+  | { readonly _tag: "unique"; readonly entry: SessionEntry }
+  | { readonly _tag: "unlisted" }
+  | { readonly _tag: "ambiguous"; readonly cwds: ReadonlyArray<string> };
+
+export const sessionById = (data: RegistryData, sessionId: string): SessionById => {
+  const matches = data.sessions.filter((s) => s.sessionId === sessionId);
+  if (matches.length === 1) return { _tag: "unique", entry: matches[0]! };
+  return matches.length
+    ? { _tag: "ambiguous", cwds: matches.map((s) => s.cwd) }
+    : { _tag: "unlisted" };
+};
+
 export const DEFAULT_DB_PATH = resolve(
   join(process.env.XDG_DATA_HOME || join(homedir(), ".local", "share"), "piano", "piano.db"),
 );

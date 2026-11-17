@@ -193,7 +193,7 @@ approved Worktrunk hooks. Without `--worktree`, no worktree is created.
 Exit codes: `0` means a JSON result was reported, **not** that work succeeded; inspect `creation`
 and `submission`. `1` is an unexpected failure (including Piano not answering, or refusing a read
 when its capacity is full), `2` invalid input or configuration (including a session or project
-Piano answers that it does not list) and `3` an existing output file. Errors go to stderr. A
+Piano answers that it does not list, or a session ID it lists more than once) and `3` an existing output file. Errors go to stderr. A
 start result includes the full dispatch handle, the session `link` when known, the directory Piano
 placed the session in as `cwd` and the created `worktree` (`{ "path", "branch" }`, or `null`). It
 does not wait for the agent to finish. The handle can be passed unchanged to the existing `piano_wait_sessions` tool.
@@ -420,7 +420,8 @@ Reading never starts Pi, resumes work or resends input, and stores nothing.
 | `link` | Opens the session in Piano. |
 
 An unknown session or project is an error (exit code `2` from the script, a failed tool call in a
-session). A read Piano does not answer in 30 seconds or refuses for capacity exits `1`: it says
+session). So is a session ID Piano lists under more than one directory: Piano names them and
+refuses rather than guessing, as it does for a parent session. A read Piano does not answer in 30 seconds or refuses for capacity exits `1`: it says
 nothing about whether Piano lists the session. After a restart a session reads `unknown`, or `settled` when its saved history ends with
 a finished reply; it never reads `running` from history.
 
@@ -454,7 +455,8 @@ without Pi's verdict, or no answer within 30 seconds). The script never sends a 
 `uncertain`, read the session's [status](#status-by-session-id) and its transcript before deciding
 to send again. Accepted is not done; read the status for what the session did with it.
 
-An unknown session or a blank prompt file is invalid input (exit code `2`), and nothing is sent.
+An unknown or ambiguous session or a blank prompt file is invalid input (exit code `2`), and
+nothing is sent.
 
 ## Connection failures
 
