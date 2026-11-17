@@ -84,8 +84,11 @@ private authenticated access (INV-11).
 
 ## Branches
 
-- Investigate before dispatching implementation; give the child the observed problem, scope and
-  acceptance check. Explicitly delegated research may start directly in a child.
+- For a new implementation task, investigate here first, then use `piano_start_session` to dispatch
+  into a dedicated worktree when available. Give the child the observed problem, scope and acceptance
+  check. Explicitly delegated research may start directly in a child.
+- Implement directly only when this session already owns the task in its dedicated worktree, the
+  user requests it, or dispatch is unavailable.
 - Use a dedicated branch and worktree; reuse the one already assigned to the task. Run subsequent
   commands from that worktree.
 - Before creating a worktree, fetch `origin` and base it on `origin/main` unless the task explicitly
