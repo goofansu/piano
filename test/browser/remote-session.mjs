@@ -3,7 +3,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { run } from "./harness.mjs";
-import { voiceInputs } from "./voice-input.mjs";
+import { machine, png, remoteFixture, sessionId } from "./remote-fixture.mjs";
+import { prepareDictation } from "./voice-input.mjs";
 
 // Headless Chrome on macOS ignores agent-browser's Meta+A; run this journey on Linux.
 if (process.platform === "darwin") {
@@ -13,15 +14,9 @@ if (process.platform === "darwin") {
   process.exit(0);
 }
 
-const sessionId = "same-session";
-const workspaceId = "same-workspace";
+const fixture = remoteFixture();
 const echo = "REMOTE-ECHO-ONCE";
 const created = "REMOTE-NEW-ONCE";
-let cwd;
-const png =
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aGZkAAAAASUVORK5CYII=";
-const imagesFor = (machine) =>
-  Buffer.concat([Buffer.from(png, "base64"), Buffer.from(machine)]).toString("base64");
 const imageEvent = async (page, kind, name = "pasted.png") => {
   await page.evaluate(`(() => {
     const bytes = Uint8Array.from(atob(${JSON.stringify(png)}), c => c.charCodeAt(0));
@@ -36,56 +31,6 @@ const imageShown = (page, machine) =>
   page.until(
     `[...document.querySelectorAll('[data-slot="transcript"] img[alt="Attachment preview"]')].some(i => i.getAttribute('src').startsWith('/peer/${machine}/api/peer/image-preview?') && i.complete && i.naturalWidth > 0)`,
   );
-const seed = (machine, { root, history }) => {
-  mkdirSync(join(root, "prompts"));
-  writeFileSync(join(root, "prompts", `${machine}-only.md`), `Only ${machine}'s catalog.\n`);
-  const titles =
-    machine === "local"
-      ? [
-          [sessionId, "Local collision session"],
-          ["local-only", "Local-only session"],
-        ]
-      : machine === "remote"
-        ? [
-            [sessionId, "Remote collision session"],
-            ["remote-only", "Remote host-only session"],
-          ]
-        : [
-            [sessionId, "Second collision session"],
-            ["second-only", "Second host-only session"],
-          ];
-  const now = new Date().toISOString();
-  return {
-    folders: [cwd],
-    workspaces: [{ id: workspaceId, path: cwd, folder: cwd }],
-    sessions: titles.map(([id, title]) => {
-      history({
-        sessionId: id,
-        cwd,
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: `${title} saved history` },
-              { type: "image", mimeType: "image/png", data: imagesFor(machine) },
-            ],
-            timestamp: Date.now(),
-          },
-          ...(id === "remote-only"
-            ? [
-                {
-                  role: "assistant",
-                  content: [{ type: "text", text: "See [peer notes](peer-notes.md)." }],
-                  timestamp: Date.now(),
-                },
-              ]
-            : []),
-        ],
-      });
-      return { sessionId: id, cwd, title, createdAt: now, updatedAt: now };
-    }),
-  };
-};
 
 const waitFor = async (claim, observe) => {
   const deadline = Date.now() + 15_000;
@@ -104,21 +49,7 @@ const send = async (page, text) => {
   await page.until(`document.querySelector('[aria-label="Send"]')?.disabled === false`);
   await page.click("button", "Send");
 };
-const machine = async (page, name, capture) => {
-  await page.click("button", "Machine");
-  await page.until(
-    `[...document.querySelectorAll('[role="menu"], [role="listbox"]')].some(e => e.getAnimations({subtree:true}).every(a => a.playState !== 'running'))`,
-  );
-  const role = await page.evaluate(`(() => {
-    const option = [...document.querySelectorAll('[role="menuitem"], [role="menuitemradio"], [role="option"]')]
-      .find(e => (e.getAttribute('aria-label') ?? e.textContent.trim()) === ${JSON.stringify(name)});
-    return option?.getAttribute('role');
-  })()`);
-  assert.ok(role, `Machine picker offers ${name}`);
-  if (capture) await page.capture(capture);
-  await page.click(role, name);
-  await page.until(`!document.querySelector('[role="menu"], [role="listbox"]')`);
-};
+
 const catalog = async (page, own, other, restore, capture) => {
   await page.ab("fill", composer, "/");
   await page.see(`/${own}-only`);
@@ -172,55 +103,14 @@ const remoteNewPage = async (page) => {
 
 await run(
   "remote-session",
-  (fixture) => {
-    cwd = fixture.repository("repo");
-    return seed("local", fixture);
-  },
+  fixture.setup,
   async (page) => {
+    const cwd = fixture.cwd;
     const imageFile = join(page.evidence, "picker.png");
     const invalidFile = join(page.evidence, "invalid.txt");
     writeFileSync(imageFile, Buffer.from(png, "base64"));
     writeFileSync(invalidFile, "not an image");
     await page.open("/");
-    await page.see("Local collision session");
-    await page.click("button", "Hide sidebar");
-    for (const section of [
-      "providers",
-      "mcp",
-      "skills",
-      "prompts",
-      "webhooks",
-      "preferences",
-      "data-controls",
-    ]) {
-      await page.open(`/settings/${section}`);
-      await page.until(`!!document.querySelector('[aria-label="Settings"] header h1')`);
-      assert.equal(
-        await page.evaluate(
-          `!!document.querySelector('[aria-label="Settings"] header [aria-label="Machine"]')`,
-        ),
-        false,
-        `${section} header has no machine picker`,
-      );
-      await page.until(
-        `!!document.querySelector('[aria-label="Settings"] header [aria-label="Show sidebar"]')`,
-      );
-    }
-    await page.capture("0-settings-without-machine-picker");
-    await page.open("/m/eng-1/settings/data-controls");
-    await page.until(`location.pathname === '/m/eng-1/new'`);
-    await page.see("What should we work on?");
-    assert.equal(await page.evaluate(`document.title`), "New session - Piano");
-    assert.equal(
-      await page.evaluate(`!!document.querySelector('[aria-label="Settings"]')`),
-      false,
-      "a remote's Settings address opens a page, not Settings",
-    );
-    await page.capture("0a-remote-settings-address");
-    await page.open("/settings/data-controls");
-    await page.until(`!!document.querySelector('[aria-label="Settings"] header h1')`);
-    await page.click("button", "Show sidebar");
-    await page.click("button", "Home");
     await page.see("Local collision session");
     await page.click("button", "Local collision session");
     await page.see("Local collision session saved history");
@@ -287,7 +177,13 @@ await run(
           }
         });
         await call("Network.enable");
-        const dictate = await voiceInputs(page, call, onEvent, async (name) => {
+        onRemote = true;
+        await machine(page, "eng-2");
+        await page.see("Second host-only session");
+        await page.click("button", "Second collision session");
+        await page.see("Second collision session saved history");
+        await ready(page);
+        const dictate = await prepareDictation(page, call, onEvent, async (name) => {
           onRemote = name !== null && name !== "Local";
           if (name !== null) await machine(page, name);
         });
@@ -1240,10 +1136,5 @@ await run(
       );
     }
   },
-  {
-    peers: [
-      { id: "eng-1", setup: (fixture) => seed("remote", fixture) },
-      { id: "eng-2", setup: (fixture) => seed("second", fixture) },
-    ],
-  },
+  { peers: fixture.peers },
 );

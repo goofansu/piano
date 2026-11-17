@@ -315,8 +315,8 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
   Preview remains on the peer's own Piano.
   The committed `test/browser/remote-session.mjs` covers those boundaries with main plus two
   independent peers under the [narrow run-limit exception](../SKILL.md#run-limits); run it alone
-  and wait for owned cleanup. Its imported `voice-input.mjs` helper also needs those peers. The
-  default manual launch has none: record that prerequisite instead of running the helper alone
+  and wait for owned cleanup. Settings and voice ownership checks run separately in
+  `remote-inputs.mjs`, with the same isolated topology. The default manual launch has no peers: record that prerequisite instead of running the helper alone
   or borrowing the owner's Piano. An exe.dev peer additionally needs
   an authorized peer integration or VM-scoped token, as described in
   [Remote Pianos](../../../../docs/remote-piano.md#setup); direct exe.dev UI/link access needs a

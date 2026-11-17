@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export async function voiceInputs(page, call, onEvent, switchMachine) {
+async function voiceFixture(page, call, onEvent) {
   const requests = [];
   const pending = [];
   onEvent(({ method, params }) => {
@@ -73,18 +73,64 @@ export async function voiceInputs(page, call, onEvent, switchMachine) {
       if (status !== 499) throw error;
     });
   };
-  const visibility = [];
-  const preferences = async () => {
-    await switchMachine("Local");
-    await page.click("button", "Settings");
-    await page.click("button", "Preferences");
-    await page.until(`location.pathname === '/settings/preferences'`);
-    await page.until(`document.querySelector('[role="switch"]')?.disabled === false`);
-    if (await page.evaluate(`!!document.querySelector('[data-sonner-toast]')`)) {
-      await page.click("button", "Close toast");
-      await page.until(`!document.querySelector('[data-sonner-toast]')`);
+  const dictate = async (text) => {
+    await call("Fetch.enable", {
+      patterns: [{ urlPattern: "*/api/voice/transcribe", requestStage: "Request" }],
+    });
+    try {
+      await clear();
+      await begin();
+      await stop();
+      await answer(text);
+      await page.until(`document.querySelector('${field}')?.value === ${JSON.stringify(text)}`);
+      await page.capture("voice-7-reviewed-text-with-image");
+    } finally {
+      await call("Fetch.disable");
     }
   };
+  return { requests, field, value, clear, ready, begin, stop, requested, answer, dictate };
+}
+
+const preferences = async (page, switchMachine) => {
+  await switchMachine("Local");
+  await page.click("button", "Settings");
+  await page.click("button", "Preferences");
+  await page.until(`location.pathname === '/settings/preferences'`);
+  await page.until(`document.querySelector('[role="switch"]')?.disabled === false`);
+  if (await page.evaluate(`!!document.querySelector('[data-sonner-toast]')`)) {
+    await page.click("button", "Close toast");
+    await page.until(`!document.querySelector('[data-sonner-toast]')`);
+  }
+};
+
+const enableVoice = async (page) => {
+  await page.click("switch", "Voice input");
+  await page.see(
+    "Voice input for every machine sends recordings and session context through this Piano to OpenAI.",
+  );
+  await page.ab("fill", 'input[type="password"]', "sk-fixture-no-provider-call");
+  await page.click("button", "Save");
+  await page.see("Voice input turned on");
+};
+
+export async function prepareDictation(page, call, onEvent, switchMachine) {
+  const { dictate } = await voiceFixture(page, call, onEvent);
+  try {
+    await preferences(page, switchMachine);
+    await enableVoice(page);
+    await page.click("button", "Home");
+    await page.click("button", "Local collision session");
+    await page.see("Local collision session saved history");
+    return dictate;
+  } finally {
+    await call("Fetch.disable");
+  }
+}
+
+export async function voiceInputs(page, call, onEvent, switchMachine) {
+  const { requests, field, value, clear, ready, begin, stop, requested, answer } =
+    await voiceFixture(page, call, onEvent);
+  const visibility = [];
   const checkComposers = async (machine, title, enabled, step) => {
     await switchMachine(machine);
     await page.see(title);
@@ -106,26 +152,20 @@ export async function voiceInputs(page, call, onEvent, switchMachine) {
     }
   };
   try {
-    await preferences();
+    await preferences(page, switchMachine);
     await page.until(
       `document.querySelector('[role="switch"]')?.getAttribute('aria-checked') === 'false'`,
     );
     await page.click("button", "Home");
     await checkComposers("Local", "Local collision session", false, "initial-off");
-    await preferences();
-    await page.click("switch", "Voice input");
-    await page.see(
-      "Voice input for every machine sends recordings and session context through this Piano to OpenAI.",
-    );
-    await page.ab("fill", 'input[type="password"]', "sk-fixture-no-provider-call");
-    await page.click("button", "Save");
-    await page.see("Voice input turned on");
+    await preferences(page, switchMachine);
+    await enableVoice(page);
     await page.click("button", "Home");
     await checkComposers("eng-2", "Second collision session", true, "on");
     await begin();
     await stop();
     await requested();
-    await preferences();
+    await preferences(page, switchMachine);
     await page.click("switch", "Voice input");
     await page.see("Voice input turned off");
     await page.click("button", "Home");
@@ -137,7 +177,7 @@ export async function voiceInputs(page, call, onEvent, switchMachine) {
     await page.until(`!document.querySelector('[aria-label="Cancel transcription"]')`);
     assert.equal(await value(), "");
     await checkComposers("eng-2", "Second collision session", false, "off-again");
-    await preferences();
+    await preferences(page, switchMachine);
     await page.click("switch", "Voice input");
     await page.until(
       `document.querySelector('[role="switch"]')?.getAttribute('aria-checked') === 'true'`,
@@ -225,21 +265,6 @@ export async function voiceInputs(page, call, onEvent, switchMachine) {
         2,
       ),
     );
-    return async (text) => {
-      await call("Fetch.enable", {
-        patterns: [{ urlPattern: "*/api/voice/transcribe", requestStage: "Request" }],
-      });
-      try {
-        await clear();
-        await begin();
-        await stop();
-        await answer(text);
-        await page.until(`document.querySelector('${field}')?.value === ${JSON.stringify(text)}`);
-        await page.capture("voice-7-reviewed-text-with-image");
-      } finally {
-        await call("Fetch.disable");
-      }
-    };
   } finally {
     await call("Fetch.disable");
   }

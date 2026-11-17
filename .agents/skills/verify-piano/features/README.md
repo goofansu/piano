@@ -131,9 +131,9 @@ Keep these prerequisites visible when using the default launch:
 - Remote sessions, projects, session actions, Changes/files/rail, directory trust, machine-memory
   isolation, image preparation/preview isolation and peer voice checks need configured, reachable
   peers. The default launch has none; use the explicit prerequisite routes in the feature files and
-  [Open a session](./open-session.md). The committed remote journey owns three isolated instances
-  under the [narrow run-limit exception](../SKILL.md#run-limits), serially with other checks. Its
-  voice helper is not independently runnable.
+  [Open a session](./open-session.md). The committed `remote-session.mjs` and `remote-inputs.mjs`
+  portions each own three isolated instances under the [narrow run-limit exception](../SKILL.md#run-limits),
+  serially with other checks. Their voice helper is not independently runnable.
 - Managed Preview (external tabs, rail actions and the same-sheet Preview pane) needs the isolated real-Pi/native
   supervisor journey in [`docs/testing.md`](../../../../docs/testing.md#managed-preview-host-journey),
   `node test/browser/preview.mjs <evidence-directory>`. The default fake's Changes/rail checks
