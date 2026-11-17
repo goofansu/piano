@@ -160,7 +160,7 @@ await run(
         timeout: 100_000,
       }),
     );
-    assert.equal(dispatched.creation, "created");
+    assert.equal(dispatched.creation, "created", JSON.stringify(dispatched));
     assert.equal(dispatched.submission, "started");
     assert.equal(dispatched.worktree.branch, "json-dispatch");
     assert.equal(dispatched.cwd, dispatched.worktree.path);
@@ -181,6 +181,7 @@ await run(
     await page.capture("4-structured-dispatch");
   },
   {
+    requiresWorktrunk: true,
     // Headless Chromium can expose no pointer; force a mouse for this journey.
     browserArgs:
       "--blink-settings=primaryPointerType=4,availablePointerTypes=4,primaryHoverType=2,availableHoverTypes=2",
