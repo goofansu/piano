@@ -46,8 +46,99 @@ creation and submission establish a handoff, not completion of the task (INV-03)
 ## From a terminal (Linux and macOS)
 
 With Node.js 24, dependencies installed (`npm ci`) and Piano running **on the same machine**, run
-the bundled script from any Piano checkout. It uses Node built-ins and Piano's existing dispatch
-modules; there is no global CLI or extra dependency to install.
+the bundled script from any Piano checkout. It uses the checkout's dependencies and existing
+dispatch modules; there is no global CLI or extra dependency to install.
+
+### Structured input for bots
+
+Use the fixed command `node scripts/dispatch-session.ts --json` and send one UTF-8 JSON object
+through the process's **stdin**, then close stdin. Serialize the object with your caller's JSON
+encoder; pass the resulting bytes as the process/SSH/connector input, not inside its command
+string. Prompt content never belongs in shell source, a heredoc, `echo`, or an interpolated
+`node -e` program. If a connector cannot supply stdin, use its data/file-upload API to write the
+serialized request, then use the fixed command with `< request.json`; do not generate shell
+source to create that file.
+
+Example request (JSON data, not a shell snippet):
+
+```json
+{
+  "prompt": "Keep `backticks`, $HOME, $(commands), quotes and Unicode 🎹 literal.\nReply with exactly: READY\n",
+  "cwd": "/path/to/my-worktree",
+  "outFile": "/path/to/work/task.start.json",
+  "wsUrl": "ws://127.0.0.1:7070/ws",
+  "origin": "http://127.0.0.1:7070"
+}
+```
+
+All five fields are required nonblank strings. `cwd` must name an existing directory on the
+server's machine; `outFile` must be a fresh writable path with an existing parent directory.
+Relative paths resolve against the script process's current directory. Connection fields have
+the same loopback and origin restrictions as the terminal flags below; JSON mode does not fall
+back to environment values. Optional fields:
+
+| Field | Meaning |
+| --- | --- |
+| `worktree: { "branch": "task-a", "hooks": false }` | Ask Piano to create a new worktree; omit when `cwd` already is the chosen worktree. `hooks` is optional, default off. |
+| `parentSession: "session-id"` | Record the parent and inherit its current Piano project. |
+| `inheritProject: false` | Opt out of project inheritance while retaining the parent backlink. |
+
+JSON mode is start-only and cannot be combined with positional arguments or other flags.
+Malformed JSON, missing fields, wrong types, blank required values, unknown fields (including
+model/effort overrides), invalid connection configuration or an unavailable local directory
+exit `2` before reserving output or connecting. The server still performs ordinary admission
+checks, such as whether the worktree branch or parent is available; inspect its result.
+`prompt` is validated as nonblank but is **not trimmed or otherwise rewritten**. The first
+prompt, including leading/trailing whitespace, reaches Pi unchanged, as follow-ups do.
+
+The same start implementation supplies the result, handle, session link, worktree targeting and
+uncertain-dispatch reconciliation. JSON mode requires `outFile` so bots always have the exclusive
+output-file guard described below: an existing file exits `3` before connection. Keep empty or
+uncertain result files and inspect Piano before any retry. A result reports admission, not task
+completion; no command here waits for the agent to finish.
+
+#### Migrating the shared `use-piano` / `using-piano` workflow on exe.dev
+
+Keep VM selection, worktree creation and bot PR/commit identity rules. Replace the prompt-file
+construction and positional dispatch steps with this data-only transport:
+
+1. Re-list the connector's engineering VMs for each dispatch, without a tag filter. Prefer a
+   running VM with suitable resources and the lowest load; stop if none are listed. Record its
+   returned `vm_name`, never a hard-coded host. Check the live checkout read-only.
+2. Fetch `origin`, then create the task worktree with `wt switch -c <branch> --base origin/main
+   --no-cd --format json -y` from `/home/exedev/piano`. Take the returned `path` as `cwd` and unset
+   its upstream. For an existing branch, take `items[].worktree.path` from `wt list --format json`.
+   Do not dispatch into the live checkout or disturb existing work.
+3. Build the JSON object in the caller, with the literal brief as `prompt`, the returned worktree
+   path as `cwd`, a fresh absolute `outFile` outside the worktree,
+   `wsUrl: "ws://127.0.0.1:8001/ws"` and `origin: "https://<vm_name>.exe.xyz"` (substitute the selected
+   name; no trailing slash). Omit `worktree` because step 2 created it. Include the goal, edit
+   scope, checks, expected PR/report and bot identity requirements in the brief: bot-authored
+   commits with no co-author trailer, and engineering PRs through the GitHub integration bot.
+4. Run this fixed command **on that VM**, supplying the serialized JSON via the connector's stdin
+   field or SSH stdin, not by interpolating it into the command:
+
+   ```sh
+   export PATH=/home/exedev/.local/bin:/home/exedev/node/bin:$PATH
+   cd /home/exedev/piano
+   exec node scripts/dispatch-session.ts --json
+   ```
+
+5. Require `creation: "created"` and `submission: "started"`, `"queued"` or `"handled"` for accepted
+   dispatch. Report `link`, VM, returned `cwd` and branch. A rejected/not-sent submission with a
+   created session must be handled at its link, not by creating another session. For uncertainty
+   or transport failure, inspect Piano before retrying; never delete the guard file and resend
+   blindly. Follow progress at the session/PR and verify the reported checks before calling work done.
+
+Benchmarks, browser harnesses and performance baselines still run inside an ordinary dispatched
+Piano session, not a raw remote test command. Project skills remain under `.agents/skills/`.
+Leave Pi session files and the live Piano untouched; deployment still requires the owner's yes.
+This section supplies the caller migration; externally stored Grok skills must be updated by
+their owner once the entry point is available on the selected VM.
+
+### File-based terminal commands
+
+The existing prompt-file interface remains supported:
 
 ```bash
 # From your Piano checkout; both bash and zsh work.
@@ -378,5 +469,8 @@ current state; a transport error does not prove the child failed or stopped.
 - **Smallest check:** `node --test --import ./test/setup.ts test/SessionDispatch.test.ts` for the
   extension, `test/DispatchScript.test.ts` for the script; then the
   [dispatch recipe](../.agents/skills/verify-piano/features/session-dispatch.md) on scratch Piano.
+  `test/ClientSessions.test.ts` checks first-prompt preservation through the server boundary.
+  `node test/browser/start-session.mjs <evidence-directory>` includes a JSON-stdin dispatch into
+  a new worktree, its session link in the UI, and exact prompt comparison at the fake-Pi boundary.
 - **Not proved:** fake Pi makes no tool calls, so the extension's waits, the parent's tool rows and
   child backlinks in the UI need a real Pi or scripted model.

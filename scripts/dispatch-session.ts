@@ -2,12 +2,15 @@
 import { closeSync, openSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { z } from "zod";
 import {
   dispatchConfiguration,
+  type DispatchConfiguration,
   nodeSocketEnvironment,
 } from "../extensions/piano-dispatch/NodeSocket.ts";
 import {
   readStatus,
+  type StartRequest,
   type StatusReply,
   type StatusTarget,
   sendFollowUp,
@@ -16,12 +19,17 @@ import {
 } from "../extensions/piano-dispatch/SessionDispatch.ts";
 import { sessionLink } from "../shared/sessionLink.ts";
 
-const usage = `Usage: node scripts/dispatch-session.ts <prompt-file> <cwd> [out-file] [options]
+const usage = `Usage: node scripts/dispatch-session.ts --json < request.json
+       node scripts/dispatch-session.ts <prompt-file> <cwd> [out-file] [options]
        node scripts/dispatch-session.ts follow-up <sessionId> <prompt-file> [--steer] [--ws-url URL] [--origin ORIGIN]
        node scripts/dispatch-session.ts status <sessionId> [--ws-url URL] [--origin ORIGIN]
        node scripts/dispatch-session.ts list --project <projectId> [--ws-url URL] [--origin ORIGIN]
 
 Options:
+  --json               Start from one JSON object on stdin; no other arguments allowed.
+                        Required: prompt, cwd, outFile, wsUrl, origin (nonblank strings).
+                        Optional: worktree { branch, hooks? }, parentSession, inheritProject.
+                        Unknown fields are rejected; prompt is literal data, not shell source.
   --ws-url URL          Override PIANO_SESSION_WS_URL (loopback ws[s]://host:port/ws)
   --origin ORIGIN       Override PIANO_SESSION_ORIGIN (allowed HTTP(S) origin, no trailing /)
   --worktree BRANCH     Create a new worktree on new branch BRANCH from <cwd>'s repository and
@@ -63,6 +71,7 @@ function argumentsFromCommandLine() {
       allowPositionals: true,
       options: {
         help: { type: "boolean" },
+        json: { type: "boolean" },
         "ws-url": { type: "string" },
         origin: { type: "string" },
         worktree: { type: "string" },
@@ -88,8 +97,67 @@ function promptFrom(file: string) {
   }
 }
 
+const nonblank = z.string().refine((value) => value.trim().length > 0, "must not be blank");
+const jsonRequest = z.strictObject({
+  prompt: nonblank,
+  cwd: nonblank,
+  outFile: nonblank,
+  wsUrl: nonblank,
+  origin: nonblank,
+  worktree: z
+    .strictObject({
+      branch: nonblank.refine((value) => !value.trim().startsWith("-"), "must name a new branch"),
+      hooks: z.boolean().optional(),
+    })
+    .optional(),
+  parentSession: nonblank.optional(),
+  inheritProject: z.boolean().optional(),
+});
+
+function requestFromStdin() {
+  let input: unknown;
+  try {
+    input = JSON.parse(readFileSync(0, "utf8"));
+  } catch {
+    throw new CliError(2, "Invalid JSON on stdin: expected one dispatch request object.");
+  }
+  const parsed = jsonRequest.safeParse(input);
+  if (!parsed.success)
+    throw new CliError(
+      2,
+      parsed.error.issues
+        .map((issue) => `${issue.path.join(".") || "request"}: ${issue.message}`)
+        .join("\n"),
+    );
+  return parsed.data;
+}
+
 async function main() {
   const { values, positionals } = argumentsFromCommandLine();
+  if (values.json) {
+    if (positionals.length || Object.keys(values).length !== 1)
+      throw new CliError(
+        2,
+        "--json takes no other arguments; supply all dispatch fields on stdin.",
+      );
+    const { prompt, cwd, outFile, wsUrl, origin, worktree, parentSession, inheritProject } =
+      requestFromStdin();
+    const config = dispatchConfiguration({
+      PIANO_SESSION_WS_URL: wsUrl,
+      PIANO_SESSION_ORIGIN: origin,
+    });
+    if (!config)
+      throw new CliError(
+        2,
+        "Invalid wsUrl or origin: use a loopback ws[s]://host:port/ws URL and an allowed HTTP(S) origin (no path or trailing slash).",
+      );
+    await dispatch(
+      { prompt, cwd, worktree, dispatchedFrom: parentSession, inheritProject },
+      outFile,
+      config,
+    );
+    return;
+  }
   if (values.help) {
     console.log(usage);
     return;
@@ -160,15 +228,31 @@ async function main() {
   const worktree = values.worktree?.trim();
   if (worktree !== undefined && (!worktree || worktree.startsWith("-")))
     throw new CliError(2, "--worktree must name a new branch");
-  const { origin } = configured();
   const [promptFile, rawCwd, outFile] = positionals;
-  const cwd = resolve(rawCwd);
+  await dispatch(
+    {
+      prompt: promptFrom(promptFile),
+      cwd: rawCwd,
+      dispatchedFrom: parentSession,
+      inheritProject: values["no-inherit-project"] ? false : undefined,
+      ...(worktree ? { worktree: { branch: worktree, hooks: values.hooks } } : {}),
+    },
+    outFile,
+    configured(),
+  );
+}
+
+async function dispatch(
+  request: StartRequest,
+  outFile: string | undefined,
+  config: DispatchConfiguration,
+) {
+  const cwd = resolve(request.cwd);
   try {
     if (!statSync(cwd).isDirectory()) throw new Error("cwd must be a directory");
   } catch (error) {
     throw new CliError(2, (error as Error).message);
   }
-  const prompt = promptFrom(promptFile);
   let output: number | undefined;
   if (outFile !== undefined) {
     try {
@@ -183,17 +267,8 @@ async function main() {
     }
   }
   try {
-    const result = await startSession(
-      {
-        prompt,
-        cwd,
-        dispatchedFrom: parentSession,
-        inheritProject: values["no-inherit-project"] ? false : undefined,
-        ...(worktree ? { worktree: { branch: worktree, hooks: values.hooks } } : {}),
-      },
-      nodeSocketEnvironment(configured()),
-    );
-    const link = result.handle ? sessionLink(origin, result.handle.sessionId) : null;
+    const result = await startSession({ ...request, cwd }, nodeSocketEnvironment(config));
+    const link = result.handle ? sessionLink(config.origin, result.handle.sessionId) : null;
     const json = JSON.stringify({ ...result, link }, null, 2);
     if (output !== undefined) writeFileSync(output, `${json}\n`);
     console.log(json);

@@ -29,9 +29,9 @@ function fixture(t: TestContext) {
   return { dir, cwd, prompt };
 }
 
-function run(args: string[], url: string, env: NodeJS.ProcessEnv = {}) {
+function run(args: string[], url: string, env: NodeJS.ProcessEnv = {}, input?: string) {
   return new Promise<{ code: number; stdout: string; stderr: string }>((resolve) => {
-    execFile(
+    const child = execFile(
       process.execPath,
       [script, ...args],
       {
@@ -41,6 +41,7 @@ function run(args: string[], url: string, env: NodeJS.ProcessEnv = {}) {
       (error, stdout, stderr) =>
         resolve({ code: error ? Number(error.code ?? 1) : 0, stdout, stderr }),
     );
+    child.stdin!.end(input);
   });
 }
 
@@ -222,6 +223,97 @@ test("CLI dispatches the prompt file to the resolved directory with Piano's defa
   assert.deepEqual(creates[0].options, {});
   assert.equal(creates[0].text, "Reply with exactly: PORTABLE");
   assert.deepEqual(p.origins, [origin]);
+});
+
+test("JSON stdin preserves literal prompt data and dispatch targeting, with an exclusive output guard", async (t) => {
+  const f = fixture(t);
+  const p = await peer(t);
+  const marker = join(f.dir, "shell-executed");
+  const prompt = [
+    "  \tLiteral prompt — 中文 🎹",
+    `\`touch '${marker}'\` $(touch '${marker}')`,
+    "$HOME ${USER} $((1+2)) 'single' \"double\" \\backslash",
+    "EOF\nEND_PROMPT\r\n'\"; exit 99; #",
+    "last line  \n\n",
+  ].join("\n");
+  const outFile = join(f.dir, "start.json");
+  const input = JSON.stringify({
+    prompt,
+    cwd: f.cwd,
+    outFile,
+    wsUrl: p.url,
+    origin,
+    worktree: { branch: "literal-data", hooks: false },
+    parentSession: "parent-session",
+    inheritProject: false,
+  });
+  const result = await run(["--json"], "invalid", { PIANO_SESSION_ORIGIN: "invalid" }, input);
+  assert.equal(result.code, 0, result.stderr);
+  const json = JSON.parse(result.stdout);
+  assert.equal(json.creation, "created");
+  assert.equal(json.submission, "started");
+  assert.equal(json.cwd, f.cwd);
+  assert.equal(json.link, `${origin}/s/portable-session`);
+  assert.deepEqual(JSON.parse(readFileSync(outFile, "utf8")), json);
+  const creates = p.requests.filter((m) => m._tag === "create_session");
+  assert.equal(creates.length, 1);
+  assert.equal(creates[0].text, prompt);
+  assert.equal(creates[0].cwd, f.cwd);
+  assert.deepEqual(creates[0].worktree, { branch: "literal-data", hooks: false });
+  assert.deepEqual(creates[0].options, { dispatchedFrom: "parent-session" });
+  assert.equal(creates[0].inheritProject, false);
+  assert.equal(existsSync(marker), false, "prompt content was never executed by a shell");
+  assert.deepEqual(p.origins, [origin]);
+  const again = await run(["--json"], p.url, {}, input);
+  assert.equal(again.code, 3, again.stderr);
+  assert.deepEqual(p.origins, [origin], "duplicate output prevents even a connection");
+});
+
+test("JSON stdin validates the whole request before reserving output or connecting", async (t) => {
+  const f = fixture(t);
+  const p = await peer(t);
+  const outFile = join(f.dir, "never.json");
+  const valid = { prompt: "hello", cwd: f.cwd, outFile, wsUrl: p.url, origin };
+  const invalid: unknown[] = [null, [], "prompt", 42];
+  for (const key of Object.keys(valid)) {
+    const missing: Record<string, unknown> = { ...valid };
+    delete missing[key];
+    invalid.push(missing, { ...valid, [key]: null }, { ...valid, [key]: " \n" });
+  }
+  invalid.push(
+    { ...valid, cwd: join(f.dir, "missing") },
+    { ...valid, cwd: f.prompt },
+    { ...valid, wsUrl: "ws://public.example/ws" },
+    { ...valid, origin: `${origin}/` },
+    { ...valid, worktree: { branch: "" } },
+    { ...valid, worktree: { branch: "-bad" } },
+    { ...valid, worktree: { branch: "new", hooks: "false" } },
+    { ...valid, worktree: { branch: "new", typo: true } },
+    { ...valid, parentSession: "" },
+    { ...valid, inheritProject: "false" },
+    { ...valid, model: "provider/model" },
+    { ...valid, promtp: "typo" },
+  );
+  for (const input of [
+    "",
+    "{",
+    `${JSON.stringify(valid)}\n{}`,
+    ...invalid.map((v) => JSON.stringify(v)),
+  ]) {
+    const result = await run(["--json"], p.url, {}, input);
+    assert.equal(result.code, 2, `${input}: ${result.stderr}`);
+    assert.ok(result.stderr.length > 0);
+    assert.equal(existsSync(outFile), false);
+  }
+  for (const args of [
+    ["--json", f.prompt, f.cwd],
+    ["--json", "--origin", origin],
+  ]) {
+    const result = await run(args, p.url, {}, JSON.stringify(valid));
+    assert.equal(result.code, 2, result.stderr);
+  }
+  assert.deepEqual(p.origins, [], "invalid input must not open a socket");
+  assert.deepEqual(p.requests, []);
 });
 
 test("explicit flags override env and save full JSON exclusively", async (t) => {

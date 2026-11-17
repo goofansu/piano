@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { run } from "./harness.mjs";
 
 await run(
@@ -131,6 +134,51 @@ await run(
     assert.equal(said, 1, "the first message shows once after a reload");
     assert.deepEqual(page.prompts(), ["Plan the launch"], "a reload never sends the message again");
     await page.capture("3-after-reload");
+
+    const origin = await page.evaluate("location.origin");
+    const marker = join(start.cwd, "shell-executed");
+    const prompt = [
+      "  \tPIN-153 literal prompt — 中文 🎹",
+      `\`touch '${marker}'\` $(touch '${marker}')`,
+      "$HOME ${USER} $((1+2)) 'single' \"double\" \\backslash",
+      "EOF\nEND_PROMPT\r\n'\"; exit 99; #",
+      "last line  \n\n",
+    ].join("\n");
+    const outFile = join(page.evidence, "structured-start.json");
+    const dispatched = JSON.parse(
+      execFileSync(process.execPath, ["scripts/dispatch-session.ts", "--json"], {
+        cwd: new URL("../../", import.meta.url),
+        input: JSON.stringify({
+          prompt,
+          cwd: start.cwd,
+          worktree: { branch: "json-dispatch" },
+          outFile,
+          wsUrl: origin.replace("http:", "ws:") + "/ws",
+          origin,
+        }),
+        encoding: "utf8",
+        timeout: 100_000,
+      }),
+    );
+    assert.equal(dispatched.creation, "created");
+    assert.equal(dispatched.submission, "started");
+    assert.equal(dispatched.worktree.branch, "json-dispatch");
+    assert.equal(dispatched.cwd, dispatched.worktree.path);
+    assert.equal(dispatched.link, `${origin}/s/${dispatched.handle.sessionId}`);
+    assert.deepEqual(JSON.parse(readFileSync(outFile, "utf8")), dispatched);
+    await page.ab("open", dispatched.link);
+    await page.see("echo:");
+    assert.equal(
+      page.prompts().at(-1),
+      prompt,
+      "JSON stdin reaches Pi unchanged, including whitespace",
+    );
+    assert.equal(existsSync(marker), false, "shell-sensitive prompt text is never executed");
+    const dispatchedStart = page
+      .received()
+      .find((r) => r.command === "start" && r.sessionId === dispatched.handle.sessionId);
+    assert.equal(dispatchedStart.cwd, dispatched.cwd);
+    await page.capture("4-structured-dispatch");
   },
   {
     // Headless Chromium can expose no pointer; force a mouse for this journey.
