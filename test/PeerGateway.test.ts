@@ -1002,13 +1002,22 @@ test(
     await t.test(
       "HTTP redirects, failure, bytes and response deadlines are bounded without retry",
       async () => {
-        for (const mode of ["http-redirect", "http-dead", "http-large", "http-hang"]) {
+        for (const mode of ["http-redirect", "http-dead", "http-large"]) {
           f.state.mode = mode;
           const before = f.state.requests.length;
           const response = await fetch(`${f.base}${commandPath}`);
           assert.equal(response.status, 502, mode);
           assert.equal(f.state.requests.length, before + 1, "one commands read, no redirect/retry");
         }
+        f.state.mode = "http-hang";
+        const before = f.state.requests.length;
+        const hung = await fetch(`${f.base}/peer/eng-1/api/settings/defaults`, {
+          method: "PUT",
+          headers: { Origin: f.base, "content-type": "application/json" },
+          body: JSON.stringify({ thinkingLevel: "high" }),
+        });
+        assert.equal(hung.status, 502, "http-hang");
+        assert.equal(f.state.requests.length, before + 1, "one defaults save, no retry");
         f.state.mode = "ready";
       },
     );
