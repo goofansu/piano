@@ -172,8 +172,9 @@ test("messages-only never flashes a completed intermediate message while the age
 
 test("error summaries render as text, never markup", () => {
   const unsafe = 'provider API error (400): {"message":"<script>alert(1)</script>"}';
-  assert.match(render([failure(unsafe)]), /&lt;script&gt;/);
-  assert.doesNotMatch(render([failure(unsafe)]), /<script>/);
+  const html = render([failure(unsafe)]);
+  assert.ok(html.includes("&lt;script&gt;"), "the summary's markup is escaped");
+  assert.ok(!html.toLowerCase().includes("<script"), "no script element is rendered");
 });
 
 const fold = (html: string, label: string) => {
