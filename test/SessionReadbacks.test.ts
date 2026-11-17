@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Deferred, type Duration, Effect, Fiber, Queue, type Scope } from "effect";
 import { type PiReadback, type PiRecord, piReadbacks } from "../server/PiRecords.ts";
-import { PiSessionError } from "../server/PiTransport.ts";
+import { PiSessionError } from "../server/PiSessions.ts";
 import { makeSessionPublication } from "../server/SessionPublication.ts";
 import { makeSessionReadbacks } from "../server/SessionReadbacks.ts";
 import { makeSessionRecordProgress } from "../server/SessionRecordProgress.ts";

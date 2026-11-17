@@ -35,11 +35,11 @@ node "$ROOT/scripts/dispatch-session.ts" "$RUN/prompt.txt" "$REPO" --worktree is
   > "$out/dispatch.json" 2> "$out/dispatch.stderr"
 node --input-type=module - "$out/dispatch.json" "$REPO" <<'JS'
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 const result = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 assert.equal(result.creation, 'created');
 assert.equal(result.submission, 'started');
-assert.equal(result.worktree.path, `${process.argv[3]}.isolation-check`);
+assert.equal(realpathSync(result.worktree.path), realpathSync(`${process.argv[3]}.isolation-check`));
 assert.equal(result.cwd, result.worktree.path);
 console.log('PASS launch ignores inherited Worktrunk placement');
 JS
