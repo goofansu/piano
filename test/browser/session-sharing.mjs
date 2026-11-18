@@ -19,15 +19,18 @@ export async function openShare(page, palette = false) {
   await page.see("The artifact is created with Private visibility.");
 }
 
+const TOASTS_AT_REST =
+  "[...document.querySelectorAll('[data-sonner-toast]')].every(e => e.dataset.mounted === 'true' && e.getAnimations({ subtree: true }).every(a => a.playState !== 'running'))";
+
+async function toastButton(page, name) {
+  await page.until(TOASTS_AT_REST);
+  await page.click("button", name);
+}
+
 async function closeToast(page) {
-  const count = "document.querySelectorAll('[data-sonner-toast]:not([data-removed=true])').length";
-  for (let left = await page.evaluate(count); left > 0; left = await page.evaluate(count)) {
-    await page.ab(
-      "click",
-      "[data-sonner-toast][data-front=true]:not([data-removed=true]) [data-close-button]",
-    );
-    await page.until(`${count} < ${left}`);
-  }
+  await page.until(TOASTS_AT_REST);
+  await page.ab("click", "[data-sonner-toast][data-front=true] [data-close-button]");
+  await page.ab("hover", '[aria-label="Message"]');
   await page.until("!document.querySelector('[data-sonner-toast]')");
 }
 
@@ -43,7 +46,7 @@ export async function shareSignIn(page, machine, local = false) {
   if (local) {
     await page.see("Sign in to Radius");
     await page.capture("share-local-sign-in");
-    await page.click("button", "Open Providers");
+    await toastButton(page, "Open Providers");
     await page.see("Providers");
     await page.until("location.pathname.includes('providers')");
   } else {
@@ -113,7 +116,7 @@ export async function shareResultView(page, call, onEvent) {
           origin: new URL(held.request.url).origin,
           permissions: ["clipboardReadWrite", "clipboardSanitizedWrite"],
         });
-        await page.click("button", "Copy link");
+        await toastButton(page, "Copy link");
         await page.see("Link copied");
         assert.equal(await page.evaluate("navigator.clipboard.readText()"), share.url);
         assert.deepEqual(
@@ -127,7 +130,7 @@ export async function shareResultView(page, call, onEvent) {
           "window.sharedOpens = []; window.open = (url) => { window.sharedOpens.push(url); return null; }",
         );
         await page.capture(`share-peer-${status}`);
-        await page.click("button", "Open link");
+        await toastButton(page, "Open link");
         assert.deepEqual(await page.evaluate("window.sharedOpens"), [share.url]);
         assert.equal(
           await page.evaluate("!!document.querySelector('[data-sonner-toast]')"),
