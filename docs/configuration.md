@@ -15,9 +15,11 @@ installation, before the session arguments, so a repository cannot supply or sha
 `@earendil-works/pi-claude-code` is pinned in `package.json` to a commit of the
 [goofansu/pi-claude-code](https://github.com/goofansu/pi-claude-code) fork. The fork keeps every
 request within Anthropic's limit of four cache breakpoints
-([upstream issue #40](https://github.com/earendil-works/pi-claude-code/issues/40)) and waits for
+([upstream issue #40](https://github.com/earendil-works/pi-claude-code/issues/40)), waits for
 captured Claude CLI output to close
-([fork PR #2](https://github.com/goofansu/pi-claude-code/pull/2)).
+([fork PR #2](https://github.com/goofansu/pi-claude-code/pull/2)), and coalesces concurrent Claude
+auth status checks without caching completed results
+([fork PR #3](https://github.com/goofansu/pi-claude-code/pull/3)).
 
 **Avoid duplicate installations.** If the same plugin is also installed in user or project Pi
 settings, Pi can load both copies: paths are deduplicated, not package identity across separate
