@@ -169,8 +169,8 @@ function MachineApp() {
               <Toaster
                 position="top-right"
                 className="toaster group !absolute !z-[55]"
-                offset={{ top: 88, right: 24 }}
-                mobileOffset={{ top: 68, left: 16, right: 16 }}
+                offset={24}
+                mobileOffset={16}
                 visibleToasts={4}
                 duration={4000}
                 closeButton
