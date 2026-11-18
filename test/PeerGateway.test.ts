@@ -427,12 +427,12 @@ test(
     const original = await readRegistry("unused", f.database);
 
     await t.test(
-      "machines never disclose endpoints; unsupported paths and Host/Origin fail before dialing",
+      "machines list each peer's own origin, never its endpoint; unsupported paths and Host/Origin fail before dialing",
       async () => {
         assert.deepEqual(await (await fetch(`${f.base}/api/machines`)).json(), {
           machines: [
             { id: "local", name: "Local" },
-            { id: "eng-1", name: "Engineering" },
+            { id: "eng-1", name: "Engineering", url: "https://eng-1.exe.xyz:3000" },
           ],
         });
         const count = f.state.requests.length;

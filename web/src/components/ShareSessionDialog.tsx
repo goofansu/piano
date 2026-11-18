@@ -17,6 +17,7 @@ import { openLink } from "@/lib/openLink";
 export interface ShareTarget {
   machineId: string;
   machineName: string;
+  machineUrl?: string;
   workspaceId: string;
   sessionId: string;
   title: string;
@@ -69,17 +70,7 @@ async function share(target: ShareTarget, openProviders: () => void) {
       signal: AbortSignal.timeout(SESSION_SHARE_TIMEOUT_MS + 15_000),
     });
     if (result.status === "shared") shared(result.share, settled, false);
-    else if (isLocalId(target.machineId))
-      toast.warning("Sign in to Radius", {
-        ...settled,
-        description: "Then share again. Nothing was uploaded.",
-        action: { label: "Open Providers", onClick: openProviders },
-      });
-    else
-      toast.warning(`Sign in to Radius on ${target.machineName}`, {
-        ...settled,
-        description: `Open ${target.machineName}’s own Piano and sign in under Settings → Providers, then share again from here. The main Piano’s sign-in is not used. Nothing was uploaded.`,
-      });
+    else signInRequired(target, settled, openProviders);
   } catch (error) {
     toast.error(
       error instanceof ApiError && error.status > 0 && error.status < 500
@@ -88,6 +79,27 @@ async function share(target: ShareTarget, openProviders: () => void) {
       { ...settled, description: undefined },
     );
   }
+}
+
+function signInRequired(
+  target: ShareTarget,
+  settled: { id: string | number; duration: number },
+  openProviders: () => void,
+) {
+  const local = isLocalId(target.machineId);
+  const peerUrl = target.machineUrl;
+  const providers = local
+    ? openProviders
+    : peerUrl
+      ? () => openLink(new URL("/settings/providers", peerUrl).href)
+      : undefined;
+  toast.warning("Cannot share", {
+    ...settled,
+    description: local
+      ? "Radius isn’t signed in. Sign in under Settings → Providers, then share again."
+      : `Radius isn’t signed in on ${target.machineName}. Sign in under its Settings → Providers, then share again.`,
+    action: providers ? { label: "Open Providers", onClick: providers } : undefined,
+  });
 }
 
 function shared(

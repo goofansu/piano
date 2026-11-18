@@ -105,7 +105,7 @@ test(
     assert.deepEqual(await (await fetch(f.base + "/api/machines")).json(), {
       machines: [
         { id: "local", name: "Local" },
-        { id: "eng-1", name: "Engineering" },
+        { id: "eng-1", name: "Engineering", url: "https://eng-1.exe.xyz:3000" },
       ],
     });
     const connection = await f.open(headers);
