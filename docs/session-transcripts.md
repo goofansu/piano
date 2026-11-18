@@ -20,15 +20,18 @@ skill bodies, keeps standard soft-break behavior. HTML and unsafe links remain i
   `server/DisplayProjection.ts`, which strips control sequences only, including any that one strip
   reassembles. That module's `projectSnapshot()`, `projectSessionEvent()` and
   `projectServerMessage()` apply only `stripControls()` to queued messages and `queue_restored`
-  results, and `compileRedaction()` to everything else they carry. `server/PiSessions.ts` returns
-  action results unredacted; they are redacted where they leave the server.
+  results, and `compileRedaction()` to everything else they carry. Its `SAVED_BACK_FIELDS` names
+  the text the UI saves back (project names and instructions, session titles and names), which
+  gets the same control stripping without redaction. `server/PiSessions.ts` returns action results
+  unredacted; they are redacted where they leave the server.
 - `web/src/components/MessageList.tsx` opts into `Markdown.tsx`'s `preserveLineBreaks` rendering;
   `remark-breaks` converts soft breaks in the parsed tree, never in the source string.
 - `test/SessionProjection.test.ts` checks original text in live, partial and reloaded messages and
   redaction of statuses, widgets, notices, dialogs, errors and exits. `SessionDelivery.test.ts`,
   `SessionHistory.test.ts`, `PiProjector.test.ts` and `PiIdentity.test.ts` cover streaming,
   reattachment, saved history and tool content. `DisplayProjection.test.ts` and `PiSessions.test.ts`
-  check queued and restored text as typed beside redacted state, results and notices.
+  check queued and restored text and session titles as typed beside redacted state, results and
+  notices.
 - `test/Markdown.test.ts` checks soft and hard breaks, CRLF, Markdown structure and unchanged file
   rendering. The [open-session journey](../.agents/skills/verify-piano/features/open-session.md)
   runs `test/browser/message-fidelity.mjs`: line positions for `a: 1\nb: 2\nc: 3`, original

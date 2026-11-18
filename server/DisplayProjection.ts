@@ -2,7 +2,6 @@ import { stripVTControlCharacters } from "node:util";
 import { readProposal } from "../shared/library.ts";
 import type {
   Dialog,
-  Project,
   ServerMessage,
   SessionActionResult,
   SessionEvent,
@@ -143,9 +142,21 @@ function projectDialog(dialog: Dialog, redaction: DisplayRedaction): Dialog {
   return concealsApproval(dialog, redaction) ? { ...shown, concealed: true } : shown;
 }
 
+const SAVED_BACK_FIELDS = {
+  project: ["name", "instructions"],
+  sessionReference: ["title"],
+  sessionState: ["sessionName"],
+} as const;
+
+function keepSavedBack<T extends object>(item: T, shown: T, fields: readonly (keyof T)[]): T {
+  const kept = { ...shown };
+  for (const key of fields) if (key in item) kept[key] = stripControls(item[key]);
+  return kept;
+}
+
 export function projectState(state: SessionState, redaction = compileRedaction()): SessionState {
   const { queuedMessages, ...rest } = state;
-  const shown = redaction.wire(rest);
+  const shown = keepSavedBack(rest, redaction.wire(rest), SAVED_BACK_FIELDS.sessionState);
   return queuedMessages === undefined
     ? shown
     : { ...shown, queuedMessages: stripControls(queuedMessages) };
@@ -181,19 +192,19 @@ export function projectSessionEvent(event: SessionEvent): SessionEvent {
   return projectDisplay(event);
 }
 
-const AUTHORED_PROJECT_FIELDS = ["name", "instructions"] as const;
-
-const projectProject = (project: Project): Project => {
-  const shown: Record<string, unknown> = { ...projectDisplay(project) };
-  for (const key of AUTHORED_PROJECT_FIELDS) if (key in project) shown[key] = project[key];
-  return shown as Project;
-};
-
 export function projectServerMessage(message: ServerMessage): ServerMessage {
   if (message._tag === "registry") {
-    const { projects, ...rest } = message;
-    const shown = projectDisplay(rest);
-    return projects === undefined ? shown : { ...shown, projects: projects.map(projectProject) };
+    const { projects, sessionReferences, ...rest } = message;
+    const redaction = compileRedaction();
+    const saved = <T extends object>(items: readonly T[], fields: readonly (keyof T)[]) =>
+      items.map((item) => keepSavedBack(item, redaction.wire(item), fields));
+    return {
+      ...redaction.wire(rest),
+      ...(projects && { projects: saved(projects, SAVED_BACK_FIELDS.project) }),
+      ...(sessionReferences && {
+        sessionReferences: saved(sessionReferences, SAVED_BACK_FIELDS.sessionReference),
+      }),
+    };
   }
   if (message._tag === "session") {
     const { event, ...envelope } = message;

@@ -1593,20 +1593,18 @@ test("INV-02: a session's slash commands come from its running child; a stopped 
   );
 });
 
-test("INV-01: renaming goes through Pi, even for a stopped session, and the registry mirrors Pi's name", async () => {
+test("INV-01: renaming goes through Pi, even for a stopped session, and the registry mirrors Pi's name as written", async () => {
   await run(
     Effect.gen(function* () {
       const hosts = yield* SessionHosts,
         registry = yield* Registry;
+      const name = "Rotate token: abc12345";
       const id = (yield* hosts.create({ cwd, options: {} })).spec.sessionId;
       yield* hosts.release(cwd, id);
-      assert.equal(yield* hosts.rename(cwd, id, "Release notes"), "Release notes");
+      assert.equal(yield* hosts.rename(cwd, id, name), name);
       const running = (yield* hosts.get(cwd, id))!;
-      assert.equal((yield* running.state).sessionName, "Release notes", "Pi recorded the name");
-      assert.equal(
-        (yield* registry.get).sessions.find((s) => s.sessionId === id)?.title,
-        "Release notes",
-      );
+      assert.equal((yield* running.state).sessionName, name, "Pi recorded the name");
+      assert.equal((yield* registry.get).sessions.find((s) => s.sessionId === id)?.title, name);
     }),
     { fakePi: "rename" },
   );
