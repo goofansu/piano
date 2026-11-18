@@ -413,11 +413,19 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
       });
     t.after(() => Promise.all([...servers].map(shut)));
 
+    let publishIntent!: () => void;
+    let rejectIntent!: (error: Error) => void;
+    const intent = new Promise<void>((resolve, reject) => {
+      publishIntent = resolve;
+      rejectIntent = reject;
+    });
+    let replacingA = false;
     let shown: SessionPreview | undefined;
     const published: (SessionPreview | undefined)[] = [];
     f.owner.observe((request, outcome) => {
       shown = projectPreview(shown, f.owner.identity.generation, request, outcome);
       published.push(shown);
+      if (replacingA && shown) publishIntent();
     });
 
     const a = await f.call();
@@ -438,6 +446,14 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
     assert.equal(shown?.url, `http://localhost:${port}/`);
     assert.equal(f.stops.length, 0);
 
+    let startListening!: () => void;
+    const listen = new Promise<void>((resolve) => {
+      startListening = resolve;
+    });
+    let startedListening!: (server: Promise<Server>) => void;
+    const listening = new Promise<Server>((resolve) => {
+      startedListening = resolve;
+    });
     let warm = false;
     f.host.onStop = async () => {
       await shut(appA);
@@ -445,42 +461,57 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
     };
     f.host.afterSubmit = async () => {
       f.host.phase = "running";
-      await serve(() => (warm ? 200 : 503), "B");
+      await listen;
+      startedListening(serve(() => (warm ? 200 : 503), "B"));
+      await listening;
     };
     published.length = 0;
+    replacingA = true;
     let settled = false;
     const replacing = f.call(f.owner, { replace: a.instanceId, timeoutSeconds: 20 }).finally(() => {
       settled = true;
     });
-    const deadline = Date.now() + 10000;
-    while (!(shown && shown.instanceId !== a.instanceId) && Date.now() < deadline)
-      await new Promise((resolve) => setTimeout(resolve, 20));
+    const timeout = setTimeout(() => rejectIntent(new Error("B's launch intent timed out")), 10000);
+    try {
+      await intent;
+      clearTimeout(timeout);
 
-    assert.equal(settled, false, "the replacement is still waiting for B's readiness");
-    assert.ok(
-      published.indexOf(undefined) >= 0 &&
-        published.indexOf(undefined) < published.findIndex((p) => p !== undefined),
-      "A is cleared as soon as its stop is confirmed",
-    );
-    assert.ok(shown, "B's launch intent is published");
-    assert.notEqual(shown.instanceId, a.instanceId);
-    assert.equal(shown.state, "starting");
-    assert.equal(shown.ready, false);
-    assert.equal(shown.url, null, "B has no ready URL before its own readiness check");
-    assert.equal(await statusAt(port), 503, "A's old URL now reaches unready B");
+      assert.equal(settled, false, "the replacement is still waiting for B's readiness");
+      assert.ok(
+        published.indexOf(undefined) >= 0 &&
+          published.indexOf(undefined) < published.findIndex((p) => p !== undefined),
+        "A is cleared as soon as its stop is confirmed",
+      );
+      assert.ok(shown, "B's launch intent is published");
+      assert.notEqual(shown.instanceId, a.instanceId);
+      assert.equal(shown.state, "starting");
+      assert.equal(shown.ready, false);
+      assert.equal(shown.url, null, "B has no ready URL before its own readiness check");
+      await assert.rejects(statusAt(port), { code: "ECONNREFUSED" }, "A's listener is stopped");
+      startListening();
+      await listening;
+      assert.equal(await statusAt(port), 503, "A's old URL now reaches unready B");
 
-    warm = true;
-    const b = await replacing;
-    assert.equal(b.ready, true);
-    assert.equal(b.replaced, a.instanceId);
-    assert.equal(shown?.instanceId, b.instanceId);
-    assert.equal(shown?.url, `http://localhost:${port}/`);
+      warm = true;
+      const b = await replacing;
+      assert.equal(b.ready, true);
+      assert.equal(b.replaced, a.instanceId);
+      assert.equal(shown?.instanceId, b.instanceId);
+      assert.equal(shown?.url, `http://localhost:${port}/`);
 
-    assert.equal(
-      (await f.call(f.owner, { action: "stop", instanceId: a.instanceId })).status,
-      "not-current",
-    );
-    assert.equal(shown?.instanceId, b.instanceId);
-    assert.equal(shown?.ready, true);
+      for (const stale of [
+        { replace: a.instanceId },
+        { action: "stop" as const, instanceId: a.instanceId },
+      ]) {
+        assert.equal((await f.call(f.owner, stale)).status, "not-current");
+        assert.equal(shown?.instanceId, b.instanceId);
+        assert.equal(shown?.ready, true);
+      }
+    } finally {
+      clearTimeout(timeout);
+      warm = true;
+      startListening();
+      await replacing;
+    }
   });
 }
