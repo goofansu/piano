@@ -8,7 +8,7 @@ import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
 import { DirectoryFacts, DirectoryFactsLive } from "../server/DirectoryFacts.ts";
 import { PiCli, type PiCliConfig } from "../server/PiCli.ts";
 import { type PiSession, PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
-import type { SessionEvent, SessionState } from "../shared/wire.ts";
+import type { SessionEvent, SessionState, Snapshot } from "../shared/wire.ts";
 
 const cli = {
   node: process.execPath,
@@ -150,9 +150,13 @@ test("readback replies of the wrong shape surface as refresh errors and recover,
   );
 });
 
-test("faithful live/reload output retains tools and extension state without inventing transcript or usage", async () => {
+test("live/reload output shows transcript text as Pi wrote it, redacts other content and invents no transcript or usage", async () => {
   const secret = "P3SecretCanary-123456789";
   process.env.PIANO_TEST_SECRET = secret;
+  const transcriptEvents = new Set(["message_update", "message_end", "tool_update", "context"]);
+  const outsideTranscript = (events: ReadonlyArray<SessionEvent>) =>
+    events.filter((e) => !transcriptEvents.has(e._tag));
+  const outsideMessages = ({ messages: _m, pending: _p, tools: _t, ...rest }: Snapshot) => rest;
   try {
     await run(
       Effect.gen(function* () {
@@ -164,16 +168,21 @@ test("faithful live/reload output retains tools and extension state without inve
         const partial = yield* observe(session, "/secret");
         assert.ok(
           JSON.stringify(partial).includes(secret.slice(0, 12)),
-          "preserve partial text across chunks",
+          "streaming text keeps a secret-like prefix across chunks",
         );
         assert.ok(
-          JSON.stringify(yield* snapshot(session)).includes(secret.slice(0, 12)),
-          "partial reload retains the same original content",
+          (yield* snapshot(session)).pending?.text.includes(secret.slice(0, 12)),
+          "partial reload shows the same text",
         );
         const events = yield* observe(session, "/finish");
         assert.ok(JSON.stringify(events).includes(secret));
+        assert.ok(!JSON.stringify(outsideTranscript(events)).includes(secret));
         const snap = yield* snapshot(session);
-        assert.ok(JSON.stringify(snap).includes(secret));
+        assert.ok(JSON.stringify(snap.messages).includes(secret));
+        assert.ok(
+          !JSON.stringify(outsideMessages(snap)).includes(secret),
+          "statuses, widgets, editor text and notices stay redacted",
+        );
         assert.equal(snap.state.model, "router/auto");
         const reply = snap.messages.find((m) => m.role === "assistant")!;
         assert.equal(reply.model, "physical/answer");
@@ -253,7 +262,7 @@ test("faithful live/reload output retains tools and extension state without inve
         );
         yield* observe(session, "/select-secret");
         const dialog = (yield* snapshot(session)).dialogs[0];
-        assert.deepEqual(dialog.options, [secret]);
+        assert.deepEqual(dialog.options, ["[REDACTED]"]);
         const optionReady = yield* Deferred.make<void>();
         const optionReceived = yield* session.events.pipe(
           Stream.tap((e) =>
@@ -268,11 +277,11 @@ test("faithful live/reload output retains tools and extension state without inve
           _tag: "answer",
           id: dialog.id,
           generation: dialog.generation,
-          value: secret,
+          value: "[REDACTED]",
         });
         yield* Fiber.join(optionReceived);
         const error = yield* session.act({ _tag: "prompt", text: "/error" }).pipe(Effect.flip);
-        assert.equal(error.detail, `Rejected ${secret}`);
+        assert.equal(error.detail, "Rejected [REDACTED]");
         const ready = yield* Deferred.make<void>();
         const closed = yield* session.events.pipe(
           Stream.tap((e) =>
@@ -284,8 +293,8 @@ test("faithful live/reload output retains tools and extension state without inve
         yield* Deferred.await(ready);
         yield* session.act({ _tag: "prompt", text: "/crash" }).pipe(Effect.ignore);
         assert.ok(
-          JSON.stringify(yield* Fiber.join(closed)).includes(secret),
-          "exit and stderr preserve original content too",
+          !JSON.stringify(yield* Fiber.join(closed)).includes(secret),
+          "exit and stderr are projected too",
         );
       }).pipe(Effect.timeout("5 seconds"), Effect.scoped),
     );

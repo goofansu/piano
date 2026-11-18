@@ -32,8 +32,8 @@ checkout. The workspace ID supplies the session context, not a filesystem sandbo
 remain behind private authenticated access (INV-11). Git's Changes and written-file tracking
 remain scoped to the workspace; opening an external file does not add it to those lists.
 
-**File content is not secret-redacted, including text.** Review sensitive content before sharing;
-see [ADR 0005](adr/0005-faithful-display-content.md).
+**Arbitrary image, audio, video and PDF bytes are not secret-redacted.** Existing text redaction
+is heuristic, not containment.
 
 When upgrading React-PDF, verify `npm ls react-pdf pdfjs-dist`, the emitted worker and asset
 versions, and a scratch-browser PDF render.

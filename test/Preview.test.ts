@@ -621,13 +621,16 @@ for (const [platform, name] of supervisors) {
   });
 
   contract(
-    "environment is explicit and observations preserve output with bounded logs",
+    "environment is explicit and observations redact values with bounded logs",
     async (t) => {
       const f = await fixture(t);
       f.host.journal = `${"x".repeat(20000)}\napp argv: APP_TOKEN=secret`;
       const result = observation(await f.call({ env: { APP_TOKEN: "secret" } }));
       assert.deepEqual(result.spec.env, ["APP_TOKEN"]);
-      assert.equal(result.logs, f.host.journal.slice(-6000));
+      assert.ok(!result.logs.includes("secret"));
+      assert.match(result.logs, /\[redacted\]/);
+      assert.ok(result.logs.length <= 6000);
+      assert.ok(!JSON.stringify(result).includes("secret"));
       const launch = f.launched[0];
       assert.ok(launch.includes("APP_TOKEN=secret"));
       assert.ok(

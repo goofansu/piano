@@ -9,7 +9,7 @@ import * as NodeWS from "@effect/platform-node/NodeWS";
 import { freePort } from "./fixtures/ports.ts";
 
 test(
-  "INV-11: socket egress preserves messages, titles and directory identities",
+  "INV-11: a message Pi did not produce is redacted at socket egress; the directories it names are not",
   {
     timeout: 30_000,
   },
@@ -65,7 +65,8 @@ test(
       );
       const error = JSON.parse(await failed);
       assert.equal(error._tag, "selection_rejected");
-      assert.equal(error.message, `Not a directory: ${missing}`);
+      assert.equal(error.message, `Not a directory: ${join(root, "[REDACTED]")}`);
+      assert.ok(!received.join("\n").includes(canary), "no message carries the secret");
 
       const dir = join(root, "sk-demo");
       mkdirSync(dir);
@@ -101,7 +102,7 @@ test(
         [dir],
       );
       assert.equal(reference()?.cwd, dir);
-      assert.equal(reference()?.title, "Release sk-abcdef123");
+      assert.equal(reference()?.title, "Release [REDACTED]");
       const selected = messages("selected")[0];
       assert.equal(selected.cwd, dir);
       assert.equal(selected.cursor?.cwd ?? dir, dir);

@@ -3,6 +3,7 @@ import { Effect, Fiber, Ref, Semaphore, Stream } from "effect";
 import { applySessionEvent, isWorking } from "../shared/sessionProjection.ts";
 import type { Dialog, SessionEvent, SessionFrame, SessionState, Snapshot } from "../shared/wire.ts";
 import { type DeliveryOverflow, makeDelivery } from "./BoundedDelivery.ts";
+import { projectSessionEvent, projectSnapshot } from "./DisplayProjection.ts";
 
 export interface SessionPublicationOptions {
   readonly cwd: string;
@@ -64,7 +65,7 @@ export const makeSessionPublication = Effect.fn("SessionPublication.make")(funct
 
   const deliver = Effect.fnUntraced(function* (event: SessionEvent) {
     sequence++;
-    const frame: SessionFrame = { ...event, cursor: cursor() };
+    const frame: SessionFrame = { ...projectSessionEvent(event), cursor: cursor() };
     for (const subscriber of subscribers) yield* subscriber.offer(frame);
   });
 
@@ -156,7 +157,7 @@ export const makeSessionPublication = Effect.fn("SessionPublication.make")(funct
             const snapshot: Snapshot = { ...retained, state: present(retained) };
             return Stream.make<[SessionFrame]>({
               _tag: "snapshot",
-              snapshot,
+              snapshot: projectSnapshot(snapshot),
               cursor: cursor(),
             }).pipe(
               Stream.concat(snapshot.state.closure ? Stream.empty : sub.stream),

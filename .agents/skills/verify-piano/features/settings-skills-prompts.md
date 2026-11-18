@@ -75,8 +75,7 @@ Preconditions: a seeded launch. Mod+K is `Control+k` on Linux, `Meta+k` on macOS
   separately from Settings CRUD; clear the draft rather than claiming a model used either file.
 - Agent-authored saves are a separate user path: ask a session to create or update a Piano skill
   or prompt; its proposal shows the new file or update diff, with Create skill / Create prompt for a new
-  file, Save skill / Save prompt for an update, and Cancel. Token-like text stays visible in the
-proposal and does not disable approval. Manual Settings CRUD does not
+  file, Save skill / Save prompt for an update, and Cancel. A proposal containing hidden text offers only Cancel. Manual Settings CRUD does not
   prove this approval path. The default browser fake only echoes `propose visible`; the dialogs
   fake can render a proposal but does not save the file. End-to-end proof requires an isolated
   real-Pi session with a scripted model calling `piano_save_skill` / `piano_save_prompt`, then

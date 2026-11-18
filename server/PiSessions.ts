@@ -25,6 +25,7 @@ import type {
   Snapshot,
 } from "../shared/wire.ts";
 import type { DeliveryOverflow } from "./BoundedDelivery.ts";
+import { projectDisplay } from "./DisplayProjection.ts";
 import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
 import { inputBytes } from "./InputBytes.ts";
 import { makePiHistory, type PiHistory } from "./PiHistory.ts";
@@ -216,6 +217,19 @@ export const PreviewOwnerOptions = Context.Reference<{
 }>("piano/PreviewOwnerOptions", { defaultValue: () => ({}) });
 
 const settled = (snapshot: Snapshot) => liveActivityOf(snapshot)._tag === "idle";
+
+const displayed = <A>(effect: Effect.Effect<A, PiSessionError>) =>
+  effect.pipe(
+    Effect.map(projectDisplay),
+    Effect.mapError(
+      (error) =>
+        new PiSessionError({
+          reason: error.reason,
+          detail: projectDisplay(error.detail),
+          ...(error.notSent ? { notSent: true } : {}),
+        }),
+    ),
+  );
 
 const replacedDetail =
   "Pi switched this process to another session, so Piano closed it. Reopen this session to continue; no input was resent.";
@@ -707,11 +721,13 @@ const openSession = (
               Effect.flatMap((fiber) => restore(Fiber.join(fiber))),
             );
           }),
-        ),
-      state: transaction(() => Effect.map(publication.snapshot, present)),
+        ).pipe(displayed),
+      state: transaction(() => Effect.map(publication.snapshot, present)).pipe(
+        Effect.map(projectDisplay),
+      ),
       commands: Effect.suspend(() =>
         announced() ? Effect.fail(exited()) : child.read(piReadbacks.commands),
-      ).pipe(Effect.forkIn(sessionScope), Effect.flatMap(Fiber.join)),
+      ).pipe(Effect.forkIn(sessionScope), Effect.flatMap(Fiber.join), displayed),
     };
     return session;
   });

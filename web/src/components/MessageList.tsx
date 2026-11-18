@@ -725,7 +725,7 @@ function SkillExpansion({ skill }: { skill: NonNullable<RenderMsg["skill"]> }) {
       onClick={(e) => e.stopPropagation()}
     >
       <p className="mb-2 truncate font-mono text-xs text-ink-3">{abbrevHome(skill.location)}</p>
-      <Markdown text={skill.body} preserveLineBreaks className="prose-chat text-ink-2" />
+      <Markdown text={skill.body} className="prose-chat text-ink-2" />
     </FoldRow>
   );
 }

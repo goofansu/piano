@@ -168,7 +168,7 @@ test("webhook preferences survive restart; token is write-only, preserved, repla
   );
 });
 
-test("subscription/active filtering is paired with positive delivery; payloads are bounded, explicit and preserve failure text", async () => {
+test("subscription/active filtering is paired with positive delivery; payloads are bounded, explicit and path-free", async () => {
   const requests: Received[] = [];
   await run(
     "payload",
@@ -231,7 +231,9 @@ test("subscription/active filtering is paired with positive delivery; payloads a
       assert.equal(failure.failure?.reason, "exited");
       assert.equal(failure.failure?.exitCode, 3);
       assert.equal(failure.action, "Open session in Piano: https://piano.example/s/s");
-      assert.equal(failure.failure?.detail, `Failed in ${cwd} /tmp/elsewhere secret-canary`);
+      assert.equal(JSON.stringify(failure).includes(cwd), false);
+      assert.equal(JSON.stringify(failure).includes("/tmp/"), false);
+      assert.equal(JSON.stringify(failure).includes("secret-canary"), false);
       const ping = requests.at(-1)!.body;
       assert.equal(ping.ignore, true);
       assert.equal(ping.workspace, null);
@@ -265,7 +267,7 @@ test("subscription/active filtering is paired with positive delivery; payloads a
   );
 });
 
-test("a payload names the registered folder and preserves paths in failure details", async () => {
+test("a payload names the folder a checkout was later registered under, and redacts its path", async () => {
   const requests: Received[] = [];
   const folder = join(root, "main-folder");
   mkdirSync(folder, { recursive: true });
@@ -282,7 +284,7 @@ test("a payload names the registered folder and preserves paths in failure detai
       yield* wait(() => requests.length === 1);
       const body = requests[0].body;
       assert.equal(body.workspace?.folder, "main-folder");
-      assert.equal(body.failure?.detail, `Failed in ${folder}/sub`);
+      assert.equal(JSON.stringify(body).includes(folder), false);
     }),
     receive(requests),
   );
@@ -355,7 +357,7 @@ test("a snapshot that catches the observer up sends the dialog or failure it mis
   );
 });
 
-test("webhook answers retain token-like text up to the advertised size limit", async () => {
+test("a webhook token is redacted whole before the answer is cut, even across the cut", async () => {
   const requests: Received[] = [];
   const token = "tok0abcdefghijklmnopqrstuvwxyz0123456789";
   assert.equal(token.length, 40);
@@ -364,7 +366,7 @@ test("webhook answers retain token-like text up to the advertised size limit", a
     messages: [{ ...snapshot.messages[0], text }],
   });
   await run(
-    "preserve-before-cut",
+    "redact-before-cut",
     Effect.gen(function* () {
       yield* registered;
       const hooks = yield* Webhooks;
@@ -376,13 +378,15 @@ test("webhook answers retain token-like text up to the advertised size limit", a
       const fromB = () => requests.filter((r) => r.headers.get("x-piano-hook-id") === b.id);
       yield* wait(() => fromB().length === 3);
       const [whole, straddling, exact] = fromB().map((r) => r.body);
-      assert.equal(whole.answer, `${"x".repeat(100)} ${token}`);
+      assert.equal(whole.answer, `${"x".repeat(100)} [redacted]`);
       assert.equal(whole.answerTruncated, false);
       assert.equal(straddling.answerTruncated, true);
       assert.equal(straddling.answer?.length, LAST_ANSWER_CHARS);
       assert.equal(exact.answer?.length, LAST_ANSWER_CHARS);
       assert.equal(exact.answerTruncated, false);
-      assert.equal(straddling.answer, `${"x".repeat(1980)} ${token.slice(0, 19)}`);
+      assert.ok(straddling.answer?.startsWith(`${"x".repeat(1980)} [redacted] y`));
+      for (let i = 0; i + 8 <= token.length; i++)
+        assert.equal(straddling.answer?.includes(token.slice(i, i + 8)), false);
     }),
     receive(requests),
   );

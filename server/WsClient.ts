@@ -9,16 +9,18 @@ import {
 } from "../shared/wire.ts";
 import { makeSocketDelivery } from "./BoundedDelivery.ts";
 import { makeClientDispatch } from "./ClientDispatch.ts";
+import { projectServerMessage } from "./DisplayProjection.ts";
 import { inboundLimits } from "./InboundCapacity.ts";
 
 const makeDisplayFrames = () => {
   let sidebar: string | undefined;
   return (message: ServerMessage): ServerMessage | undefined => {
-    if (message._tag !== "registry") return message;
-    const frame = JSON.stringify(message);
+    const shown = projectServerMessage(message);
+    if (shown._tag !== "registry") return shown;
+    const frame = JSON.stringify(shown);
     if (frame === sidebar) return undefined;
     sidebar = frame;
-    return message;
+    return shown;
   };
 };
 

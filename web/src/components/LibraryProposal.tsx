@@ -50,7 +50,7 @@ export function LibraryProposalCard({
         className="mx-auto flex w-full max-w-3xl flex-col gap-3 rounded-md border border-line bg-surface-1 p-4"
         onSubmit={(event) => {
           event.preventDefault();
-          answer({ confirmed: true });
+          if (!dialog.concealed) answer({ confirmed: true });
         }}
       >
         <h2 id={`${id}-title`} className="min-w-0 truncate text-sm font-medium text-ink">
@@ -59,7 +59,9 @@ export function LibraryProposalCard({
         </h2>
         {previous !== undefined ? (
           sameLines(previous, file) ? (
-            <p className="text-sm text-ink-3">No text changes.</p>
+            dialog.concealed ? null : (
+              <p className="text-sm text-ink-3">No text changes.</p>
+            )
           ) : (
             <div
               ref={setScroller}
@@ -81,12 +83,15 @@ export function LibraryProposalCard({
           <DraftFileText kind={kind} name={name} file={file} className="max-h-[min(20rem,40dvh)]" />
         )}
         <div className="flex items-center justify-end gap-2">
+          {dialog.concealed && <p className="mr-auto text-sm text-ink-2">Contains hidden text</p>}
           <Button type="button" variant="outline" disabled={disabled} onClick={cancel}>
             Cancel
           </Button>
-          <Button type="submit" disabled={disabled}>
-            {change === "create" ? "Create" : "Save"} {kind}
-          </Button>
+          {!dialog.concealed && (
+            <Button type="submit" disabled={disabled}>
+              {change === "create" ? "Create" : "Save"} {kind}
+            </Button>
+          )}
         </div>
         {submitted && (
           <p role="status" className="text-sm text-ink-2">

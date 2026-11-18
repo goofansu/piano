@@ -19,6 +19,7 @@ import { machineList } from "../shared/machine.ts";
 import type { Workspace } from "../shared/wire.ts";
 import { Directories } from "./Directories.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
+import { projectDisplay } from "./DisplayProjection.ts";
 import { getImagePreview } from "./ImagePreviews.ts";
 import { McpSetup } from "./McpSetup.ts";
 import { AllowedOrigins, hostAllowed } from "./OriginPolicy.ts";
@@ -121,8 +122,8 @@ type Input<Q extends IdParam, B extends Json | undefined> = (B extends Json
 const attachment = (name: string) =>
   `attachment; filename="${name.replace(/[^\x20-\x7e]|["\\]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(name)}`;
 
-const respond = (body: unknown, status: number, { noStore = false } = {}) =>
-  HttpServerResponse.text(answerJson(body), {
+const respond = (body: unknown, status: number, { noStore = false, redact = true } = {}) =>
+  HttpServerResponse.text(answerJson(redact ? projectDisplay(body) : body), {
     status,
     contentType: "application/json",
     ...(noStore ? { headers: { "cache-control": "no-store" } } : {}),
@@ -196,7 +197,7 @@ const route =
           );
         }
         if (respondWith) return respondWith(result);
-        return respond(encoded.value, 200, { noStore: endpoint.noStore });
+        return respond(encoded.value, 200, { noStore: endpoint.noStore, redact: endpoint.redact });
       }).pipe(
         (handler) =>
           upload && slots
@@ -291,7 +292,7 @@ export const AppRouter = HttpRouter.use((router) =>
         if (!("bytes" in result)) return respond(result, 200, { noStore: true });
         const { bytes, ...metadata } = result;
         const form = new FormData();
-        form.set("metadata", JSON.stringify(metadata));
+        form.set("metadata", JSON.stringify(projectDisplay(metadata)));
         form.set("file", new Blob([new Uint8Array(bytes)], { type: result.mime }), "file");
         return HttpServerResponse.formData(form, {
           headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },

@@ -60,7 +60,7 @@ export async function checkMessageFidelity(page) {
       "copy retains source newlines and token-like text",
     );
   } else console.log("SKIP copied-content check on macOS (headless Chrome cannot paste)");
-  await page.ab("fill", '[aria-label="Message"]', "stream");
+  await page.ab("fill", '[aria-label="Message"]', "stream-fidelity");
   await page.press("Enter");
   await page.until(
     `document.querySelector('.streaming-caret')?.textContent.includes('demo-not-a-real-credential')`,

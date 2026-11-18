@@ -1,0 +1,17 @@
+# ADR 0005: Faithful transcript messages
+
+- Status: Accepted
+- Related: [INV-01 and INV-11](../development-invariants.md), [transcript contract](../session-transcripts.md)
+
+Transcript messages show what Pi wrote. Heuristic secret redaction changed ordinary examples,
+partial words and tool arguments, so the conversation in the browser disagreed with Pi's
+authoritative history. Messages, streaming replies, tool calls and results, and context rows
+therefore skip secret redaction; terminal control sequences are still stripped.
+
+Everything else keeps the existing redaction: dialogs and library proposals, extension status and
+widgets, notices, errors and session-closed details, HTTP responses, file previews, webhook payloads,
+preview logs and transport diagnostics.
+
+A transcript can now contain real secrets. Users must review it before sharing screenshots or
+copied text. Removing redaction everywhere was rejected because only the conversation needs to match
+Pi's history.

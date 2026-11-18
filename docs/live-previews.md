@@ -9,8 +9,6 @@ frame or proxy the app, forward credentials, or relax `PIANO_ALLOWED_ORIGINS`. S
 downloads and app navigation follow ordinary browser-tab rules, without an additional Piano iframe
 sandbox. Private exe.dev authentication and browser cookie rules still apply. If opening fails,
 check **Preview details** for the app's output or ask the agent; neither path restarts the app.
-Preview logs retain the last 6,000 characters without redacting environment values printed by the
-app. Review them before sharing ([ADR 0005](adr/0005-faithful-display-content.md)).
 
 Local HTTP readiness, actual browser access and HMR are separate checks. The native browser journey
 uses an explicitly loopback-configured scratch origin to observe new-tab interaction without

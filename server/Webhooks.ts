@@ -16,6 +16,7 @@ import {
   WebhookSave,
 } from "../shared/webhooks.ts";
 import { type SessionEvent, type Snapshot, sameSession } from "../shared/wire.ts";
+import { KNOWN_SECRET_MIN, projectDisplay } from "./DisplayProjection.ts";
 import { SessionLinkOrigin } from "./OriginPolicy.ts";
 import { Registry, type StoredWebhook } from "./Registry.ts";
 import {
@@ -252,7 +253,21 @@ export const WebhooksLive = Layer.effect(
         if (!workspace || !entry) return;
         const url = origin ? sessionLink(origin, sessionId) : null;
         const pr = entry.pullRequest ? pullRequestIdentity(entry.pullRequest.url) : null;
-        const full = lastAnswerOf(snapshot, Infinity);
+        const clean = (value: string | undefined | null): string | null => {
+          if (value == null) return null;
+          let text = projectDisplay(value);
+          for (const h of configured)
+            if (h.token && h.token.length >= KNOWN_SECRET_MIN)
+              text = text.replaceAll(h.token, "[redacted]");
+          return text
+            .replaceAll(cwd, "[folder]")
+            .replaceAll(workspace.folder, "[folder]")
+            .replace(
+              /(^|[\s`"'(])(?:\/[\w.-]+(?:\/[^\s`"'<>)]*)?|[A-Za-z]:\\[^\s`"'<>)]*)/g,
+              "$1[path]",
+            );
+        };
+        const full = clean(lastAnswerOf(snapshot, Infinity));
         const answer = full == null ? null : cutText(full, LAST_ANSWER_CHARS);
         const { dialog } = dispositionOf(snapshot, true);
         const closure = snapshot.state.closure;
@@ -262,9 +277,9 @@ export const WebhooksLive = Layer.effect(
             workspace: { id: workspace.id, folder: basename(workspace.folder) },
             session: {
               id: sessionId,
-              title: entry.title ?? null,
+              title: clean(entry.title),
               url,
-              model: snapshot.state.model ?? null,
+              model: clean(snapshot.state.model),
             },
             pullRequest: pr ? { number: pr.number, url: pr.url, state: null } : null,
             ...(event === "session.completed"
@@ -278,9 +293,9 @@ export const WebhooksLive = Layer.effect(
                   action: url ? `Answer in Piano: ${url}` : "Answer in Piano.",
                   question: {
                     kind: dialog.method,
-                    title: dialog.title ?? null,
-                    message: dialog.message ?? null,
-                    options: dialog.options ?? null,
+                    title: clean(dialog.title),
+                    message: clean(dialog.message),
+                    options: dialog.options?.map((s) => clean(s)!) ?? null,
                   },
                 }
               : {}),
@@ -289,7 +304,7 @@ export const WebhooksLive = Layer.effect(
                   action: url ? `Open session in Piano: ${url}` : "Open session in Piano.",
                   failure: {
                     reason: closure._tag,
-                    detail: closure.detail ?? null,
+                    detail: clean(closure.detail),
                     exitCode: closure._tag === "exited" ? closure.code : null,
                   },
                   answer,
@@ -311,7 +326,8 @@ export const WebhooksLive = Layer.effect(
           if (read.refusal !== undefined) return yield* refused(read.refusal, "token");
           token = read.value;
         }
-        if (token && token.length < 8) return yield* refused("Use at least 8 characters.", "token");
+        if (token && token.length < KNOWN_SECRET_MIN)
+          return yield* refused(`Use at least ${KNOWN_SECRET_MIN} characters.`, "token");
         return yield* Semaphore.withPermits(
           lock,
           1,

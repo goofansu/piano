@@ -232,16 +232,17 @@ function handle(cmd) {
           title: "Which checks?",
           options: ["Quick checks", "Full suite"],
         });
-      } else if (cmd.message === "stream") {
+      } else if (cmd.message === "stream" || cmd.message === "stream-fidelity") {
         out({ type: "message_start", message: { role: "assistant", content: [] } });
-        out({
-          type: "message_update",
-          assistantMessageEvent: {
-            type: "text_delta",
-            contentIndex: 0,
-            delta: `${fidelityText}\n\n`,
-          },
-        });
+        if (cmd.message === "stream-fidelity")
+          out({
+            type: "message_update",
+            assistantMessageEvent: {
+              type: "text_delta",
+              contentIndex: 0,
+              delta: `${fidelityText}\n\n`,
+            },
+          });
         let line = 0;
         streamTimer = setInterval(() => {
           line += 1;
