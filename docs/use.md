@@ -1,7 +1,7 @@
 # Using Piano
 
 For local installation and startup, see [Use](../README.md#use).
-For ports, storage, backups and the access model, see [configuration](configuration.md).
+For storage, backups and browser origins, see [configuration](configuration.md).
 
 ## Sign in to a model provider
 
@@ -24,20 +24,20 @@ field focused so you can type a project name.
 A session's **Archive** action stops its Pi and hides it, keeping the transcript.
 In **Settings → Data controls**, use **Unarchive** to restore its listing without starting Pi;
 a closed folder stays closed. **Archive all** keeps pinned sessions and every running or starting
-Pi, including idle sessions and app owners. It never stops work. See [Data controls](data-controls.md).
+Pi, including idle sessions and app owners. It never stops work.
 
 ## Preview local files
 
 Click a local file link in a session to read it beside the conversation. Markdown offers
 **Preview / Source**; code, images, audio, video and PDFs use type-aware viewers. **Download**
 saves the file as it is on disk. Click the link again to reread. See
-[supported formats, limits and privacy](file-previews.md).
+[ownership and privacy](file-previews.md#ownership-and-privacy).
 
 ## Publish an artifact
 
 With Radius signed in, ask **“Create an artifact containing this report.”** The agent publishes it
 privately to Radius and returns a confirmed viewing link. Ask to update or view the same artifact
-on later turns. See [setup, supported formats and failure handling](radius-artifacts.md).
+on later turns. See [confirmation and failure handling](radius-artifacts.md#confirmation-and-uncertainty).
 
 ## Run an app preview
 
@@ -60,4 +60,4 @@ or run `node scripts/dispatch-session.ts --help` for the bundled terminal script
 
 Open **Settings → Webhooks**, click **New webhook**, enter your receiver URL and optional Bearer
 token, and choose the events to send. Use **Test** in the webhook's menu to check delivery. See
-[payloads, delivery limits and privacy](webhooks.md).
+[receiver requirements](webhooks.md).

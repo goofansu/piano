@@ -72,7 +72,6 @@ the [feature verification mapping policy](../../../../docs/testing.md#feature-ve
   Docs: [Provider sign-in](../../../../docs/provider-sign-in.md),
   [Radius setup](../../../../docs/radius-setup.md), [Webhooks](../../../../docs/webhooks.md).
 - [Settings › Data controls](./data-controls.md).
-  Docs: [Data controls](../../../../docs/data-controls.md).
 - [Settings › MCP](./settings-mcp.md).
   Docs: [MCP setup](../../../../docs/mcp-setup.md).
 

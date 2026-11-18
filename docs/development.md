@@ -38,6 +38,5 @@ them: the owner canceled it (PIN-17). Before you merge, check that **Quality gat
 ## Dependency security
 
 Dependency security relies on reviewing Dependabot alerts and security-update pull requests, not on
-a CI audit gate. An owner must turn on **Dependabot alerts** and **Dependabot security updates**
-under **Settings → Security → Advanced Security**. The exe.dev integration cannot read or change
-those settings (it gets HTTP 403), so whether they are on is unverified.
+a CI audit gate. Both are turned on for the repository. The exe.dev integration cannot read those
+settings (it gets HTTP 403).

@@ -36,7 +36,8 @@ operations or a prescribed development methodology. Use the [glossary](../glossa
    Pi remains authoritative for session semantics and history.
 3. **Use Worktrunk as the initial worktree lifecycle backend.** Keep a narrow adapter, validate
    supported versions/schemas and translate results into Piano's domain types. Delegate checkout
-   creation, discovery and removal; Piano owns workspace identity, processes and integration policy.
+   creation to it; discover worktrees with Git (INV-06). Piano does not remove worktrees. Piano
+   owns workspace identity, processes and integration policy.
    Direct Git operations for snapshots, revision identity and precise validation are complementary.
    Do not build a second backend now; reconsider only for a concrete limitation. Herdr remains an
    optional sibling interface.

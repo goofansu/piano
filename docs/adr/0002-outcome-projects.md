@@ -1,15 +1,15 @@
 # ADR 0002: Separate outcome projects from execution locations
 
-- Status: Accepted for Step 1 by the user's implementation request. Grouping is implemented;
-  shared context/instructions remain deferred.
-- Related: [staged plan](../outcome-projects.md), [glossary](../glossary.md#projects),
+- Status: Accepted. Grouping and project instructions are implemented; shared context remains
+  deferred.
+- Related: [projects](../outcome-projects.md), [glossary](../glossary.md#projects),
   [ADR 0001](0001-pi-rpc-workspace-workbench.md).
 - Naming: code now calls added directories folders and outcome projects simply projects.
 
 Piano currently calls an added directory a project, but a bounded initiative can span repositories,
 and one repository can support several initiatives. Add an optional outcome-project grouping above
-session references while keeping each session's workspace as its execution context. Ship grouping
-first; shared context and instructions are a separate later step.
+session references while keeping each session's workspace as its execution context. Grouping
+shipped first, then project instructions; shared context is a separate later step.
 
 ## Boundary and trade-off
 
@@ -32,8 +32,9 @@ instruction selection unambiguous; repositories remain reusable across projects.
   (INV-01). Existing directory/workspace/session references survive a backed-up, validated migration.
 - Membership and archive actions do not change cwd, host ownership, trust, session history, checkout
   lifecycle or verification/approval state (INV-02–11). Archive is organization, not acceptance.
-- Later shared context/instructions need explicit delivery, version and application-boundary semantics
-  that preserve normal Pi configuration and trust; no second loader or required skill set (INV-12–13).
-- Terminology, UI labels, storage and verification gates are detailed in the
-  [staged plan](../outcome-projects.md). Automatic orchestration and cross-repository integration are
-  not consequences of introducing this grouping.
+- Project instructions reach a member session through the `piano-project` extension, preserving
+  normal Pi configuration and trust; see [projects](../outcome-projects.md#project-instructions).
+  Later shared context needs the same explicit delivery, version and application-boundary
+  semantics; no second loader or required skill set (INV-12–13).
+- Terminology is in the [glossary](../glossary.md#projects). Automatic orchestration and
+  cross-repository integration are not consequences of introducing this grouping.
