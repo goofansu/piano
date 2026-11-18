@@ -8,6 +8,7 @@ export interface MachineScope extends MachineStores {
   machine: Machine;
   machines: readonly Machine[];
   switchMachine: (id: string) => void;
+  openMachine: (id: string, path: string) => void;
 }
 export const MachineContext = createContext<MachineScope | null>(null);
 

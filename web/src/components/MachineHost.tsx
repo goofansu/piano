@@ -11,6 +11,13 @@ import { toastNotify } from "@/lib/toastNotify";
 import { MachineContext } from "@/lib/useMachine";
 import { useSidebarLayout } from "@/lib/useSidebarLayout";
 
+// history.pushState fires no popstate, and machine mounts follow the address only through
+// popstate, so announce the push as Back and Forward would.
+const openMachine = (id: string, path: string) => {
+  history.pushState(null, "", machinePath(id, path));
+  dispatchEvent(new PopStateEvent("popstate"));
+};
+
 export function MachineHost({ children }: { children: React.ReactNode }) {
   const [id, setId] = useState(() => machineLocation(location.pathname).id);
   const [machines, setMachines] = useState<Machine[]>([LOCAL]);
@@ -79,7 +86,10 @@ export function MachineHost({ children }: { children: React.ReactNode }) {
       </Empty>
     );
   return (
-    <MachineContext key={id} value={{ machine, machines, switchMachine, ...storesFor(id) }}>
+    <MachineContext
+      key={id}
+      value={{ machine, machines, switchMachine, openMachine, ...storesFor(id) }}
+    >
       {children}
     </MachineContext>
   );

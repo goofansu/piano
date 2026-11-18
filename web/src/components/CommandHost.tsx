@@ -288,9 +288,7 @@ export function CommandHost({
       }
       returnFocus.current = focusReturn(SESSION_MENU);
       setSharing({
-        machineId: machineScope.machine.id,
-        machineName: machineScope.machine.name,
-        machineUrl: machineScope.machine.url,
+        machine: machineScope.machine,
         workspaceId: workspace.id,
         sessionId: target.sessionId,
         title: target.title || "Untitled session",
@@ -329,7 +327,7 @@ export function CommandHost({
         <ShareSessionDialog
           target={sharing}
           close={() => setSharing(null)}
-          openProviders={() => openSettings("providers")}
+          openMachine={machineScope.openMachine}
           onCloseAutoFocus={returnFocus.current}
         />
       )}

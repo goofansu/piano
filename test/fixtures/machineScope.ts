@@ -6,5 +6,6 @@ export const localMachineScope = (): MachineScope => ({
   machine: LOCAL,
   machines: [LOCAL],
   switchMachine: () => {},
+  openMachine: () => {},
   ...createMachineStores(() => {})(LOCAL.id),
 });

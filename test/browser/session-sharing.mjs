@@ -37,7 +37,11 @@ async function closeToast(page) {
   await page.until("!document.querySelector('[data-sonner-toast]')");
 }
 
-export async function shareSignIn(page, machine, local = false) {
+const LOCAL_PROVIDERS =
+  "location.pathname === '/settings/providers' && !!document.getElementById('settings-providers-title')";
+
+export async function shareSignIn(page, machine, { away, reopen } = {}) {
+  const local = machine === "Local";
   await openShare(page);
   await page.capture(`share-${machine}-confirm`);
   await page.click("button", "Cancel");
@@ -51,8 +55,22 @@ export async function shareSignIn(page, machine, local = false) {
     await page.see("Sign in Radius to share.");
     await page.capture("share-local-sign-in");
     await toastButton(page, "Providers");
-    await page.see("Providers");
-    await page.until("location.pathname.includes('providers')");
+    await page.until(LOCAL_PROVIDERS);
+    await reopen();
+    await openShare(page, true);
+    await page.click("button", "Share");
+    await page.until("!document.querySelector('[role=dialog]')");
+    await page.see("Sign in Radius to share.");
+    await page.until(TOAST_AT_REST);
+    await away();
+    await page.see("Sign in Radius to share.");
+    await toastButton(page, "Providers");
+    await page.until(LOCAL_PROVIDERS);
+    await page.capture("share-local-providers-from-peer");
+    await page.click("button", "Home");
+    await page.until(
+      "document.querySelector('[aria-label=\"Machine\"]')?.getAttribute('aria-description') === 'Local'",
+    );
   } else {
     await page.see(`Sign in Radius on ${machine} to share.`);
     await page.capture(`share-${machine}-sign-in`);
