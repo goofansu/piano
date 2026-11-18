@@ -141,7 +141,18 @@ test("Share uploads the registered saved file once, with owner auth and private 
   await t.test(
     "untrusted viewing URLs, redirects and oversized replies are not confirmation",
     async () => {
-      for (const mode of ["url", "redirect", "oversize", "scratch", "timeout"]) {
+      const untrusted: Record<string, string> = {
+        url: `https://attacker.example/${radiusCanary}`,
+        root: "https://radius.pi.dev/",
+        lookalike: "https://radius.pi.dev.evil.example/x",
+      };
+      for (const mode of [
+        ...Object.keys(untrusted),
+        "redirect",
+        "oversize",
+        "scratch",
+        "timeout",
+      ]) {
         let creates = 0;
         globalThis.fetch = async (input, init) => {
           const reply = await http.fetch(input, init);
@@ -158,8 +169,7 @@ test("Share uploads the registered saved file once, with owner auth and private 
           const json = await reply.json();
           if (mode === "oversize") json.result.padding = "x".repeat(4 * 1024 * 1024);
           else if (mode === "scratch") json.result.structuredContent.artifact.latest_version = 0;
-          else
-            json.result.structuredContent.artifact.canonical_url = `https://attacker.example/${radiusCanary}`;
+          else json.result.structuredContent.artifact.canonical_url = untrusted[mode];
           return Response.json(json);
         };
         const response = await share();

@@ -335,13 +335,51 @@ test("rejected writes, malformed replies, wrong identity and unsafe URLs never m
     h.http.wrongIdentity = true;
     assert.equal((await h.call("view", { artifactId: created.artifactId })).status, "error");
     h.http.wrongIdentity = false;
-    h.http.unsafeUrl = true;
+    h.http.unsafeUrl = `https://attacker.example/${radiusCanary}`;
     assert.equal((await h.call("view", { artifactId: created.artifactId })).status, "error");
-    h.http.unsafeUrl = false;
+    h.http.unsafeUrl = undefined;
     h.http.denied = true;
     const denied = await h.call("view", { artifactId: created.artifactId });
     assert.equal(denied.status, "error");
     assert.match(String(denied.message), /authentication|permission/);
+  } finally {
+    h.cleanup();
+  }
+});
+
+test("view trusts only Radius viewing links and download URLs that pass the one Radius URL rule", async () => {
+  const h = await harness();
+  try {
+    const created = await h.call("create", document);
+    const transfers: string[] = [];
+    globalThis.fetch = async (input, init) => {
+      if (new URL(String(input)).pathname !== "/mcp") transfers.push(String(input));
+      return h.http.fetch(input, init);
+    };
+    for (const url of [
+      "https://radius.pi.dev/",
+      "https://radius.pi.dev.evil.example/x",
+      "https://radius.pi.dev/x?next=1",
+      "https://radius.pi.dev/x#fragment",
+    ]) {
+      h.http.unsafeUrl = url;
+      assert.equal((await h.call("view", { artifactId: created.artifactId })).status, "error", url);
+    }
+    h.http.unsafeUrl = undefined;
+    assert.equal(transfers.length, 0, "an untrusted viewing link stops before any download");
+    const signed = `https://radius.pi.dev/transfer?id=${created.artifactId}&revision=1&secret=${radiusCanary}`;
+    for (const url of [
+      `https://radius.pi.dev/?id=${created.artifactId}&revision=1`,
+      `https://radius.pi.dev.evil.example/transfer?id=${created.artifactId}&revision=1`,
+      `${signed}#fragment`,
+    ]) {
+      h.http.unsafeDownload = url;
+      assert.equal((await h.call("view", { artifactId: created.artifactId })).status, "error", url);
+    }
+    h.http.unsafeDownload = undefined;
+    assert.deepEqual(transfers, [], "an untrusted download URL is never fetched");
+    assert.equal((await h.call("view", { artifactId: created.artifactId })).status, "confirmed");
+    assert.deepEqual(transfers, [signed], "a signed download URL keeps its query");
   } finally {
     h.cleanup();
   }
