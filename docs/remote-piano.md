@@ -77,8 +77,10 @@ laptop origin. Omit `vmTokenFile` for a peer integration; set it only for direct
 ## Machine shortcuts
 
 In the installed macOS PWA (standalone display mode), Cmd+1 through Cmd+9 select machines in
-picker order: Local first, then peers. Cmd+9 means the ninth item, not the last. Missing items do
-nothing. Ordinary browser tabs retain their native number shortcuts; Ctrl is not an alternative.
+picker order: Local first, then peers. Cmd+9 means the ninth item, not the last; Cmd+0 selects
+the last item, even beyond nine or when it is offline. With only Local, Cmd+0 selects Local.
+Missing items do nothing. Ordinary browser tabs retain their native number shortcuts, including
+Cmd+0 zoom reset; Ctrl is not an alternative.
 
 Switching uses the picker's remembered route and machine-specific drafts, including from either
 composer. Dialogs, menus and other text-editing controls keep their keys. Extra modifiers, held-key
@@ -110,6 +112,7 @@ two isolated peers. Follow [browser-test scope](testing.md#browser-tests) and th
 [three-instance run-limit exception](../.agents/skills/verify-piano/SKILL.md#run-limits).
 Fake Pi and fake voice devices do not establish authenticated exe.dev access, real Pi/provider
 behavior or real-device recording. `remote-session.mjs` also checks numeric switching, history,
-draft restoration and shortcut guards with macOS platform and standalone display mode emulated.
-Native macOS Chrome PWA shortcut delivery still needs a manual check: Cmd+1 selects Local, Cmd+2
-selects the first peer, and normal Chrome tabs keep their tab-switching shortcuts.
+draft restoration (including Cmd+0 for the last machine) and shortcut guards with macOS platform
+and standalone display mode emulated. Native macOS Chrome PWA shortcut delivery still needs a
+manual check: Cmd+1 selects Local, Cmd+2 selects the first peer, Cmd+0 selects the last machine,
+and normal Chrome tabs keep their tab-switching and Cmd+0 zoom-reset shortcuts.

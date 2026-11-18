@@ -358,6 +358,7 @@ await run(
           "ordinary browser mode is not standalone",
         );
         assert.equal(await numericKeyConsumed("1"), false, "browser tab chord is not consumed");
+        assert.equal(await numericKeyConsumed("0"), false, "browser zoom reset is not consumed");
         assert.equal(await page.evaluate("location.pathname"), firstPeerRoute);
         // Chromium CDP ignores display-mode in setEmulatedMedia; emulate only this query.
         await page.evaluate(`(() => {
@@ -375,7 +376,8 @@ await run(
           "standalone display mode is emulated, not a native installed macOS PWA",
         );
         await call("Emulation.setNavigatorOverrides", { platform: "Linux x86_64" });
-        assert.equal(await numericKeyConsumed("1"), false, "non-Mac PWA leaves chord alone");
+        for (const key of ["1", "0"])
+          assert.equal(await numericKeyConsumed(key), false, "non-Mac PWA leaves chord alone");
         await call("Emulation.setNavigatorOverrides", { platform: "MacIntel" });
         assert.equal(
           await numericKeyConsumed("9"),
@@ -384,7 +386,8 @@ await run(
         );
         await page.press("Mod+k");
         await page.until("!!document.querySelector('[cmdk-input]')");
-        assert.equal(await numericKeyConsumed("1"), false, "palette owns its editing context");
+        for (const key of ["1", "0"])
+          assert.equal(await numericKeyConsumed(key), false, "palette owns its editing context");
         assert.equal(await page.evaluate("location.pathname"), firstPeerRoute);
         await page.press("Escape");
         await page.until("!document.querySelector('[cmdk-input]')");
@@ -404,6 +407,19 @@ await run(
         assert.equal(await draft(page), "SECOND-DRAFT", "shortcut uses picker history semantics");
         await page.ab("forward");
         await page.until(`location.pathname === '${firstPeerRoute}'`);
+        await page.ab("focus", composer);
+        await page.press("Meta+0");
+        await page.until(`location.pathname === '/m/eng-2/s/${sessionId}'`);
+        await ready(page);
+        assert.equal(await draft(page), "SECOND-DRAFT", "Cmd+0 restores the last machine's draft");
+        await page.capture("3c-last-machine-shortcut");
+        const lastMachineHistoryLength = await page.evaluate("history.length");
+        await page.press("Meta+0");
+        assert.equal(await page.evaluate("history.length"), lastMachineHistoryLength);
+        await page.ab("back");
+        await page.until(`location.pathname === '${firstPeerRoute}'`);
+        await ready(page);
+        assert.equal(await draft(page), "REMOTE-DRAFT", "Cmd+0 does not duplicate current history");
         onRemote = false;
         await page.press("Meta+1");
         await page.until(`location.pathname === '/s/${sessionId}'`);
@@ -426,6 +442,14 @@ await run(
           "new-session composer also retains its draft and remembered route",
         );
         onRemote = true;
+        await page.press("Meta+0");
+        await page.until(`location.pathname === '/m/eng-2/s/${sessionId}'`);
+        await ready(page);
+        assert.equal(
+          await draft(page),
+          "SECOND-DRAFT",
+          "Cmd+0 works from the new-session composer",
+        );
         await page.press("Meta+2");
         await page.until(`location.pathname === '${firstPeerRoute}'`);
         await ready(page);
@@ -434,7 +458,12 @@ await run(
         await page.evaluate(
           "window.matchMedia = window.originalMatchMedia; delete window.originalMatchMedia",
         );
-        assert.equal(await numericKeyConsumed("1"), false, "leaving standalone disables shortcut");
+        for (const key of ["1", "0"])
+          assert.equal(
+            await numericKeyConsumed(key),
+            false,
+            "leaving standalone disables shortcut",
+          );
         assert.equal(await page.evaluate("location.pathname"), firstPeerRoute);
         await call("Emulation.setNavigatorOverrides", { platform });
 
