@@ -132,6 +132,13 @@ supervisor check, on ports 9480–9519 with the same prerequisites. Report the p
 run; simulated launchd output is not native macOS evidence. See
 [managed previews](live-previews.md).
 
+## Alignment
+
+A transcript row's gutter glyph centres on its content's first text line, so content must not pad
+its first line: a folding row (`disclosureRow`) keeps its padding outside the flow with negative
+margins. `test/browser/transcript-rows.mjs` measures it; add a new row kind to its `messages` and
+`expected` lists.
+
 ## Evidence directories
 
 Keep local verification evidence in one root, `~/piano-evidence/`, shared across Piano worktrees.
