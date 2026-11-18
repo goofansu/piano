@@ -3,14 +3,12 @@ import { readProposal } from "../shared/library.ts";
 import type { Dialog, Project, ServerMessage, SessionEvent, Snapshot } from "../shared/wire.ts";
 
 const marker = "[REDACTED]";
-const prefixes = ["sk-", "ghp_", "github_pat_", "xoxb-", "xoxp-"];
 
 export const isSecretName = (key: string) =>
   /(?:TOKEN|SECRET|PASSWORD|API_?KEY|CREDENTIAL)/i.test(key);
 
 export interface DisplayRedaction {
-  readonly text: (text: string, streaming?: boolean) => string;
-  readonly value: <T>(value: T) => T;
+  readonly text: (text: string) => string;
   readonly wire: <T>(value: T) => T;
 }
 
@@ -38,19 +36,40 @@ const namesPath = (item: Record<string, unknown>) =>
   typeof item.path === "string" &&
   item.name === (item.path.split("/").filter(Boolean).pop() ?? item.path);
 
+const deep = (text: (input: string) => string) => {
+  const wire = <T>(item: T): T => {
+    if (typeof item === "string") return text(item) as T;
+    if (Array.isArray(item)) return item.map(wire) as T;
+    if (item && typeof item === "object") {
+      const record = item as Record<string, unknown>;
+      const named = namesPath(record);
+      return Object.fromEntries(
+        Object.entries(record).map(([key, field]) => [
+          key,
+          (IDENTITY_FIELDS.has(key) && isIdentity(field)) || (named && key === "name")
+            ? field
+            : wire(field),
+        ]),
+      ) as T;
+    }
+    return item;
+  };
+  return wire;
+};
+
+export const stripControls = deep(function strip(input: string): string {
+  const next = stripVTControlCharacters(input);
+  return next === input ? input : strip(next);
+});
+
 export const KNOWN_SECRET_MIN = 8;
 
-export function compileRedaction({ secrets: redactSecrets = true } = {}): DisplayRedaction {
-  const secrets = redactSecrets
-    ? Object.entries(process.env)
-        .filter(([key, value]) => isSecretName(key) && value && value.length >= KNOWN_SECRET_MIN)
-        .map(([, value]) => value!)
-        .sort((a, b) => b.length - a.length)
-    : [];
-  const known = new Set(secrets);
-  const partials = [...secrets, ...prefixes, "Bearer ", "-----BEGIN "];
-  const text = (input: string, streaming = false): string => {
-    if (!redactSecrets) return stripVTControlCharacters(input);
+export function compileRedaction(): DisplayRedaction {
+  const secrets = Object.entries(process.env)
+    .filter(([key, value]) => isSecretName(key) && value && value.length >= KNOWN_SECRET_MIN)
+    .map(([, value]) => value!)
+    .sort((a, b) => b.length - a.length);
+  const text = (input: string): string => {
     let safe = structured(stripVTControlCharacters(input));
     for (const secret of secrets) safe = safe.split(secret).join(marker);
     safe = safe
@@ -64,17 +83,6 @@ export function compileRedaction({ secrets: redactSecrets = true } = {}): Displa
         /-----BEGIN [^-]*PRIVATE KEY-----[\s\S]*?(?:-----END [^-]*PRIVATE KEY-----|$)/g,
         marker,
       );
-    if (streaming) {
-      for (const secret of partials) {
-        const minimum = known.has(secret) ? 1 : 3;
-        for (let n = Math.min(safe.length, secret.length - 1); n >= minimum; n--) {
-          if (safe.endsWith(secret.slice(0, n))) {
-            safe = safe.slice(0, -n) + marker;
-            break;
-          }
-        }
-      }
-    }
     return safe;
   };
   const structured = (input: string): string => {
@@ -102,36 +110,8 @@ export function compileRedaction({ secrets: redactSecrets = true } = {}): Displa
       );
     return item;
   };
-  const value = <T>(item: T): T => {
-    if (typeof item === "string") return text(item) as T;
-    if (Array.isArray(item)) return item.map(value) as T;
-    if (item && typeof item === "object")
-      return Object.fromEntries(
-        Object.entries(item).map(([key, field]) => [key, value(field)]),
-      ) as T;
-    return item;
-  };
-  const wire = <T>(item: T): T => {
-    if (typeof item === "string") return text(item) as T;
-    if (Array.isArray(item)) return item.map(wire) as T;
-    if (item && typeof item === "object") {
-      const record = item as Record<string, unknown>;
-      const named = namesPath(record);
-      return Object.fromEntries(
-        Object.entries(record).map(([key, field]) => [
-          key,
-          (IDENTITY_FIELDS.has(key) && isIdentity(field)) || (named && key === "name")
-            ? field
-            : wire(field),
-        ]),
-      ) as T;
-    }
-    return item;
-  };
-  return { text, value, wire };
+  return { text, wire: deep(text) };
 }
-
-export const compileTranscriptDisplay = () => compileRedaction({ secrets: false });
 
 export function projectDisplay<T>(value: T): T {
   return compileRedaction().wire(value);

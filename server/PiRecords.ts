@@ -33,12 +33,7 @@ import type {
   Usage,
 } from "../shared/wire.ts";
 import { Attachments, ContextUsage, SessionStats, SlashCommand } from "../shared/wire.ts";
-import {
-  compileRedaction,
-  compileTranscriptDisplay,
-  concealsApproval,
-  type DisplayRedaction,
-} from "./DisplayProjection.ts";
+import { compileRedaction, concealsApproval, stripControls } from "./DisplayProjection.ts";
 import { imagePreview } from "./ImagePreviews.ts";
 
 interface RawContent {
@@ -182,11 +177,7 @@ function writtenPath(name: string | undefined, args: unknown): string | undefine
   return typeof path === "string" && path.trim() ? path : undefined;
 }
 
-export function serializeMessage(
-  id: string,
-  msg: RawMessage,
-  redaction: DisplayRedaction = compileTranscriptDisplay(),
-): RenderMsg | null {
+export function serializeMessage(id: string, msg: RawMessage): RenderMsg | null {
   let result: RenderMsg;
   if (msg.role === "user")
     result = {
@@ -256,13 +247,12 @@ export function serializeMessage(
   else if (msg.role === "bashExecution")
     result = { id, role: "context", label: `Shell: ${msg.command ?? ""}`, text: msg.output ?? "" };
   else return null;
-  return redaction.wire(result);
+  return stripControls(result);
 }
 const messageId = (index: number) => `m${index}`;
 function serializeMessages(msgs: ReadonlyArray<RawMessage>): RenderMsg[] {
-  const redaction = compileTranscriptDisplay();
   return msgs.flatMap((m, i) => {
-    const result = serializeMessage(messageId(i), m, redaction);
+    const result = serializeMessage(messageId(i), m);
     return result ? [result] : [];
   });
 }
@@ -989,8 +979,7 @@ export class PiProjector {
         const old = this.tools.get(id);
         const ended = event.type === "tool_execution_end";
         const result = ended ? event.result : event.partialResult;
-        const redaction = compileTranscriptDisplay();
-        const tool: ToolExecution = redaction.wire({
+        const tool: ToolExecution = stripControls({
           id,
           parentId: event.parentToolCallId ?? old?.parentId,
           name: event.toolName ?? old?.name ?? "",
@@ -998,11 +987,8 @@ export class PiProjector {
             event.args === undefined
               ? old?.writtenPath
               : writtenPath(event.toolName ?? old?.name, event.args),
-          args:
-            event.args === undefined
-              ? (old?.args ?? "")
-              : redaction.text(argsOf(event.args), !ended),
-          text: result ? redaction.text(textOf(result.content), !ended) : (old?.text ?? ""),
+          args: event.args === undefined ? (old?.args ?? "") : argsOf(event.args),
+          text: result ? textOf(result.content) : (old?.text ?? ""),
           status: ended ? (event.isError ? "error" : "success") : "running",
           outputKind: ended ? "final" : "latest-update",
         });
@@ -1037,17 +1023,16 @@ export class PiProjector {
   private update(): SessionEvent[] {
     if (!this.partial) return [];
     const blocks = [...this.blocks.entries()].sort(([a], [b]) => a - b).map(([, b]) => b);
-    const redaction = compileTranscriptDisplay();
-    this.partial = redaction.wire({
+    this.partial = stripControls({
       ...this.partial,
-      text: redaction.text(assistantText(blocks), true),
+      text: assistantText(blocks),
       toolCalls: blocks.flatMap((b) =>
         b.type === "tool"
           ? [
               {
                 id: b.id,
                 name: b.name,
-                args: redaction.text(b.args, true),
+                args: b.args,
                 writtenPath: b.writtenPath,
               },
             ]
