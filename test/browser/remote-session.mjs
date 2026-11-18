@@ -120,7 +120,16 @@ await run(
     await page.see("Local collision session saved history");
     await ready(page);
     await folderRow(page, "Local", "1-local-folder-row");
-    await shareSignIn(page, "Local", true);
+    await shareSignIn(page, "Local", {
+      away: async () => {
+        await machine(page, "eng-1");
+        await page.until(`location.pathname.startsWith('/m/eng-1/')`);
+      },
+      reopen: async () => {
+        await page.open(`/s/${sessionId}`);
+        await ready(page);
+      },
+    });
     await page.open(`/s/${sessionId}`);
     await ready(page);
     await catalog(page, "local", "remote", "LOCAL-DRAFT");

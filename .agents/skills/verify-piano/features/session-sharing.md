@@ -10,7 +10,8 @@ its three isolated instances and clears inherited Radius API keys.
   and `find role menuitem click --name "Share"`. The dialog is titled "Share to Radius". Cancel sends
   nothing. Mod+K → Share opens the same confirmation.
 - **Local sign-in:** confirm with `find role button click --name "Share"`; wait for the "Cannot
-  share" toast. **Providers** reaches Local's Providers settings.
+  share" toast. **Providers** reaches Local's Providers settings, also after switching to eng-1
+  with the toast still open.
 - **Peer sign-in from main:** repeat on eng-1's saved session. The "Cannot share" toast names
   eng-1; its **Providers** opens the peer's own origin at `/settings/providers` in a new tab,
   never Local's Providers. The main browser issues only the peer-qualified Share request.
