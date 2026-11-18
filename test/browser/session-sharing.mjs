@@ -19,6 +19,11 @@ export async function openShare(page, palette = false) {
   await page.see("which may be public");
 }
 
+async function closeToast(page) {
+  await page.click("button", "Close toast");
+  await page.until("!document.querySelector('[data-sonner-toast]')");
+}
+
 export async function shareSignIn(page, machine, local = false) {
   await openShare(page);
   await page.capture(`share-${machine}-confirm`);
@@ -26,9 +31,10 @@ export async function shareSignIn(page, machine, local = false) {
   await page.until("!document.querySelector('[role=dialog]')");
   await openShare(page, true);
   await page.click("button", "Share");
+  await page.until("!document.querySelector('[role=dialog]')");
   await page.see("Nothing was uploaded.");
   if (local) {
-    await page.see("Sign in under Settings → Providers");
+    await page.see("Sign in to Radius");
     await page.capture("share-local-sign-in");
     await page.click("button", "Open Providers");
     await page.see("Providers");
@@ -38,13 +44,12 @@ export async function shareSignIn(page, machine, local = false) {
     await page.see("The main Piano’s sign-in is not used.");
     assert.equal(
       await page.evaluate(
-        "[...document.querySelectorAll('[role=dialog] button')].some(e => e.textContent.includes('Open Providers'))",
+        "[...document.querySelectorAll('[data-sonner-toast] button')].some(e => e.textContent.includes('Open Providers'))",
       ),
       false,
     );
     await page.capture(`share-${machine}-sign-in`);
-    await page.click("button", "Done");
-    await page.until("!document.querySelector('[role=dialog]')");
+    await closeToast(page);
   }
 }
 
@@ -65,13 +70,17 @@ export async function shareResultView(page, call, onEvent) {
       held = undefined;
       await openShare(page);
       await page.click("button", "Share");
-      await page.until("document.querySelector('[role=dialog] button:disabled') !== null");
+      await page.until("!document.querySelector('[role=dialog]')");
+      await page.see("Sharing session");
       assert.ok(held, "one explicit confirmation issues a request");
+      await page.press("Mod+k");
+      await page.until("!!document.querySelector('[cmdk-input]')");
       await page.press("Escape");
+      await page.until("!document.querySelector('[cmdk-input]')");
       assert.equal(
-        await page.evaluate("!!document.querySelector('[role=dialog]')"),
-        true,
-        "pending upload cannot be dismissed",
+        await page.evaluate("document.querySelector('[data-sonner-toast]')?.dataset.type"),
+        "loading",
+        "the upload continues behind other work",
       );
       await page.capture(`share-peer-${status}-pending`);
       assert.match(held.request.url, /\/peer\/eng-1\/api\/session\/share\?/);
@@ -93,35 +102,34 @@ export async function shareResultView(page, call, onEvent) {
       });
       if (status === "shared") {
         await page.see("Session shared");
-        await page.see("Public · Expires");
+        await page.see("Public");
+        await page.see("Expires");
         await call("Browser.grantPermissions", {
           origin: new URL(held.request.url).origin,
           permissions: ["clipboardReadWrite", "clipboardSanitizedWrite"],
         });
         await page.click("button", "Copy link");
-        await page.until(
-          `!!document.querySelector('[role=dialog] button[aria-label="Link copied"]')`,
-        );
+        await page.see("Link copied");
         assert.equal(await page.evaluate("navigator.clipboard.readText()"), share.url);
-        assert.equal(
-          await page.evaluate(
-            "[...document.querySelectorAll('[role=dialog] a')].find(e => e.textContent.includes('Open link')).href",
-          ),
-          share.url,
+        await page.evaluate(
+          "window.sharedOpens = []; window.open = (url) => { window.sharedOpens.push(url); return null; }",
         );
+        await page.capture(`share-peer-${status}`);
+        await page.click("button", "Open link");
+        assert.deepEqual(await page.evaluate("window.sharedOpens"), [share.url]);
       } else {
         await page.see("Radius may have created an artifact");
         assert.equal(
           await page.evaluate(
-            "[...document.querySelectorAll('[role=dialog] button')].some(e => e.textContent.trim() === 'Share')",
+            "[...document.querySelectorAll('[data-sonner-toast] button')].some(e => e.textContent.trim() !== '')",
           ),
           false,
           "uncertainty offers no immediate retry",
         );
+        await page.capture(`share-peer-${status}`);
+        await closeToast(page);
       }
-      await page.capture(`share-peer-${status}`);
-      await page.click("button", "Done");
-      await page.until("!document.querySelector('[role=dialog]')");
+      await page.until("!document.querySelector('[data-sonner-toast]')");
     }
     assert.equal(requests.length, 2, "one request per confirmation, no retry");
   } finally {

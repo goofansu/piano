@@ -4,8 +4,9 @@
 It is visible regardless of main's Radius sign-in. Confirmation names the session and owning
 machine, discloses that everything saved is uploaded without redaction, and warns that the
 organization's default visibility may be public. Only saved data is included; in-flight unsaved
-messages are not. One dialog carries confirmation, the pending upload and the result in place; the
-result shows Radius's actual audience and expiration, the link with its copy control, and Open link.
+messages are not. Confirming closes the dialog and the upload runs behind other work, answered by
+one toast: Sharing session, then Session shared with Radius's actual audience and expiration, Copy
+link and Open link. A result toast stays until dismissed.
 
 Missing or rejected Radius authentication offers **Open Providers** on Local. For a peer it directs
 the user to that machine's own Piano → Settings → Providers, then back to main to share again.
@@ -14,8 +15,9 @@ Pi's `ModelRuntime`, independent of the selected model, a model turn or configur
 
 Each explicit confirmation creates a new artifact through the fixed Radius MCP endpoint. Visibility
 is omitted. No stable link, database association, version update, automatic retry or background sync
-exists. A failed or interrupted upload may have committed; the dialog provides no retry button and
-asks the user to check Radius before starting another share. Reload loses the displayed link;
+exists. A failed or interrupted upload may have committed; its toast provides no retry button and
+asks the user to check Radius before starting another share. Dismissing the toast or reloading loses
+the displayed link;
 Radius remains its owner. See [the decision](adr/0005-confirmed-raw-session-sharing.md).
 
 ## Owners and checks
@@ -35,14 +37,15 @@ Radius remains its owner. See [the decision](adr/0005-confirmed-raw-session-shar
   no transcript or Radius token sent through main/browser. Raw content itself can contain paths
   or secrets; the exact-file export is intentional, not a containment boundary.
 - `web/src/components/ShareSessionDialog.tsx`, `CommandHost` and `sessionCommands`: explicit
-  confirmation, pending lock, sign-in guidance, uncertainty, confirmed audience and link.
+  confirmation, background upload, sign-in guidance, uncertainty, confirmed audience and link.
 - `test/SessionSharing.test.ts`: synthetic JSONL through the real HTTP handler and fake Radius
   transport, exact bytes/default audience/one mutation, auth, invalid files, unsafe replies and
   overlapping submissions. `test/PeerGateway.test.ts` protects machine routing and no replay;
   `test/SessionCommands.test.ts` covers action availability and menu/palette placement.
 - `test/browser/remote-session.mjs` imports `session-sharing.mjs`: Local and peer confirmation,
   actual signed-out owner responses, Local Providers shortcut, main-to-peer guidance. Browser
-  response interception covers pending, Copy/Open controls and uncertain results without uploading.
+  response interception covers the background upload, Copy/Open controls and uncertain results
+  without uploading.
   It does not prove live Radius rendering or authenticated viewing access.
 
 [Verification recipe](../.agents/skills/verify-piano/features/session-sharing.md).
