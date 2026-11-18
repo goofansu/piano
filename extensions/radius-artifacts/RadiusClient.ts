@@ -1,9 +1,8 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { z } from "zod";
-import { isRadiusUrl } from "../../shared/radiusUrl.ts";
+import { isRadiusUrl, RADIUS_MCP_URL } from "../../shared/radiusUrl.ts";
 
-const endpoint = "https://radius.pi.dev/mcp";
 export class RadiusError extends Error {}
 export class RadiusAuthenticationError extends RadiusError {}
 const invalid = () => new RadiusError("Radius returned an invalid artifact response.");
@@ -38,7 +37,7 @@ export class RadiusClient {
 
   constructor(token: string, signal?: AbortSignal) {
     this.signal = AbortSignal.any([AbortSignal.timeout(60_000), ...(signal ? [signal] : [])]);
-    this.transport = new StreamableHTTPClientTransport(new URL(endpoint), {
+    this.transport = new StreamableHTTPClientTransport(new URL(RADIUS_MCP_URL), {
       requestInit: { headers: { authorization: `Bearer ${token}` }, redirect: "error" },
       reconnectionOptions: {
         maxRetries: 0,

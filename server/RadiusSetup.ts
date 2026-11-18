@@ -9,6 +9,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Context, Data, Effect, Layer } from "effect";
 import type { RadiusSetupRequest, RadiusSetupState, RadiusSetupStep } from "../shared/radius.ts";
+import { RADIUS_MCP_URL } from "../shared/radiusUrl.ts";
 import { childEnvironment } from "./ChildEnvironment.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 import {
@@ -23,7 +24,7 @@ import { runAsync, SubprocessError } from "./Subprocess.ts";
 const RADIUS_MCP: McpCatalogEntry = {
   id: "radius",
   name: "Radius",
-  url: "https://radius.pi.dev/mcp",
+  url: RADIUS_MCP_URL,
 };
 const PACKAGE = "npm:@earendil-works/pi-radius-web-search";
 const isWebSearch = (source: string) => source === PACKAGE || source.startsWith(`${PACKAGE}@`);
