@@ -4,7 +4,6 @@ import { copyText } from "@/components/CopyButton";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -37,22 +36,11 @@ export function ShareSessionDialog({
         className="sm:max-w-md"
         showCloseButton={false}
         onInteractOutside={(event) => event.preventDefault()}
+        aria-describedby={undefined}
       >
         <DialogHeader>
-          <DialogTitle>Share session?</DialogTitle>
-          <DialogDescription className="truncate" title={target.title}>
-            {target.title}
-          </DialogDescription>
+          <DialogTitle>Share to Radius</DialogTitle>
         </DialogHeader>
-        <dl className="flex flex-col gap-2 text-sm">
-          <Fact label="Uploads">
-            Everything saved, unredacted: branches, instructions, tool output, attachments and any
-            secrets in them
-          </Fact>
-          <Fact label="Visible to">
-            {target.machineName}’s Radius organization default, which may be public
-          </Fact>
-        </dl>
         <DialogFooter>
           <Button variant="outline" onClick={close}>
             Cancel
@@ -68,15 +56,6 @@ export function ShareSessionDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function Fact({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-2">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 break-words">{children}</dd>
-    </div>
   );
 }
 

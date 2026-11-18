@@ -15,8 +15,7 @@ export async function openShare(page, palette = false) {
     );
     await page.click("menuitem", "Share");
   }
-  await page.see("Everything saved, unredacted");
-  await page.see("which may be public");
+  await page.see("Share to Radius");
 }
 
 async function closeToast(page) {

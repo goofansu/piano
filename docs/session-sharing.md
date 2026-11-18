@@ -1,10 +1,10 @@
 # Session sharing
 
 **Share** is in the session menu, sidebar row menu and command palette on Local and peers.
-It is visible regardless of main's Radius sign-in. Confirmation names the session and owning
-machine, discloses that everything saved is uploaded without redaction, and warns that the
-organization's default visibility may be public. Only saved data is included; in-flight unsaved
-messages are not. Confirming closes the dialog and the upload runs behind other work, answered by
+It is visible regardless of main's Radius sign-in. Confirmation is a "Share to Radius" dialog with
+Cancel and Share and no further text: it does not restate that the whole saved file goes up
+unredacted or that the organization's default visibility may be public. Only saved data is
+included; in-flight unsaved messages are not. Confirming closes the dialog and the upload runs behind other work, answered by
 one toast: Sharing session, then Session shared with Radius's actual audience and expiration, Copy
 link and Open link. A result toast stays until dismissed.
 

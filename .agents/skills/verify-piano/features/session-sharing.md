@@ -7,8 +7,7 @@ Preconditions: synthetic saved sessions only; signed-out scratch Local and peers
 its three isolated instances and clears inherited Radius API keys.
 
 - **Confirm:** open a saved session, then `find role button click --name "Session information and actions"`
-  and `find role menuitem click --name "Share"`. The dialog names its session and machine,
-  everything saved without redaction, and an organization default that may be public. Cancel sends
+  and `find role menuitem click --name "Share"`. The dialog is titled "Share to Radius" and offers only Cancel and Share. Cancel sends
   nothing. Mod+K → Share opens the same confirmation.
 - **Local sign-in:** confirm with `find role button click --name "Share"`; the dialog closes and a
   toast answers. Wait for `Nothing was uploaded.`. **Open Providers** reaches Local's Providers settings.
