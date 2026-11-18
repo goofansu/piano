@@ -70,9 +70,9 @@ test narration; what they cannot say follows [Docs](#docs). Leave upstream/vendo
 
 ## Docs
 
-Put a rule a static check can enforce in that check: a type, a lint rule, a test. Write docs for
-what code cannot explain: a decision and its reason, a contract others rely on, a gotcha. When
-behavior changes, correct or delete the doc lines it made false.
+If a type, lint rule or test can enforce a rule, enforce it there instead of documenting it. Write
+docs only for what code cannot explain: a decision and its reason, a contract others rely on, a
+gotcha. When behavior changes, correct or delete the doc lines it made false.
 
 ## Safeguards
 
