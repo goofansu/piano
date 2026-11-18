@@ -2,9 +2,9 @@
 
 **Share** is in the session menu, sidebar row menu and command palette on Local and peers.
 It is visible regardless of main's Radius sign-in. Confirmation is a "Share to Radius" dialog with
-Cancel and Share and no further text: it does not restate that the whole saved file goes up
-unredacted or that the organization's default visibility may be public. Only saved data is
-included; in-flight unsaved messages are not. Confirming closes the dialog and the upload runs behind other work, answered by
+Cancel, Share and one line: the artifact is created with Private visibility. It does not restate
+that the whole saved file goes up unredacted, and it makes no claim about who can view a private
+artifact. Only saved data is included; in-flight unsaved messages are not. Confirming closes the dialog and the upload runs behind other work, answered by
 one toast: Sharing session, then Session shared with Radius's actual audience and expiration, Copy
 link and Open link. A result toast stays until dismissed.
 
@@ -14,7 +14,7 @@ Main's sign-in is never used as a fallback. Provider authentication resolves and
 Pi's `ModelRuntime`, independent of the selected model, a model turn or configured MCP servers.
 
 Each explicit confirmation creates a new artifact through the fixed Radius MCP endpoint. Visibility
-is omitted. No stable link, database association, version update, automatic retry or background sync
+is always `private`. No stable link, database association, version update, automatic retry or background sync
 exists. A failed or interrupted upload may have committed; its toast provides no retry button and
 asks the user to check Radius before starting another share. Dismissing the toast or reloading loses
 the displayed link;
@@ -39,7 +39,7 @@ Radius remains its owner. See [the decision](adr/0005-confirmed-raw-session-shar
 - `web/src/components/ShareSessionDialog.tsx`, `CommandHost` and `sessionCommands`: explicit
   confirmation, background upload, sign-in guidance, uncertainty, confirmed audience and link.
 - `test/SessionSharing.test.ts`: synthetic JSONL through the real HTTP handler and fake Radius
-  transport, exact bytes/default audience/one mutation, auth, invalid files, unsafe replies and
+  transport, exact bytes/private visibility/one mutation, auth, invalid files, unsafe replies and
   overlapping submissions. `test/PeerGateway.test.ts` protects machine routing and no replay;
   `test/SessionCommands.test.ts` covers action availability and menu/palette placement.
 - `test/browser/remote-session.mjs` imports `session-sharing.mjs`: Local and peer confirmation,

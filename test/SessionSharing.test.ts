@@ -9,7 +9,7 @@ import { SESSION_SHARE_MAX_BYTES, SHARE_UNCONFIRMED } from "../shared/share.ts";
 import { RadiusHttp, radiusCanary } from "./fixtures/RadiusHttp.ts";
 import { startRouter } from "./fixtures/router.ts";
 
-test("Share uploads the registered saved file once, with owner auth and Radius default visibility", async (t) => {
+test("Share uploads the registered saved file once, with owner auth and private visibility", async (t) => {
   let credential: string | undefined = radiusCanary;
   let authReads = 0;
   const server = await startRouter(
@@ -65,7 +65,7 @@ test("Share uploads the registered saved file once, with owner auth and Radius d
     },
   );
   await t.test(
-    "exact full JSONL, inherited public audience, fresh artifact for each explicit share",
+    "exact full JSONL, private visibility requested, fresh artifact for each explicit share",
     async () => {
       for (const n of [1, 2]) {
         const response = await share();
@@ -75,7 +75,7 @@ test("Share uploads the registered saved file once, with owner auth and Radius d
           status: "shared",
           share: {
             url: `https://radius.pi.dev/artifacts/artifact-${n}`,
-            visibility: "public",
+            visibility: "private",
             expiresAt: "2027-01-01T00:00:00Z",
           },
         });
@@ -86,6 +86,7 @@ test("Share uploads the registered saved file once, with owner auth and Radius d
             title: "Saved session",
             content,
             content_type: "application/x-ndjson",
+            visibility: "private",
             fresh: 1,
           },
         });

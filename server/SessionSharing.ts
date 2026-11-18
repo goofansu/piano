@@ -100,6 +100,7 @@ export const SessionSharingLive = Layer.effect(
                     title: session.title || "Piano session",
                     content,
                     content_type: "application/x-ndjson",
+                    visibility: "private",
                     fresh: 1,
                   }),
                 );

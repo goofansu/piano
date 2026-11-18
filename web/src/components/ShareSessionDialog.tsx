@@ -4,6 +4,7 @@ import { copyText } from "@/components/CopyButton";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -36,10 +37,10 @@ export function ShareSessionDialog({
         className="sm:max-w-md"
         showCloseButton={false}
         onInteractOutside={(event) => event.preventDefault()}
-        aria-describedby={undefined}
       >
         <DialogHeader>
           <DialogTitle>Share to Radius</DialogTitle>
+          <DialogDescription>The artifact is created with Private visibility.</DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" onClick={close}>

@@ -16,6 +16,7 @@ export async function openShare(page, palette = false) {
     await page.click("menuitem", "Share");
   }
   await page.see("Share to Radius");
+  await page.see("The artifact is created with Private visibility.");
 }
 
 async function closeToast(page) {
@@ -93,7 +94,7 @@ export async function shareResultView(page, call, onEvent) {
       assert.deepEqual(JSON.parse(held.request.postData), { confirmed: true });
       const share = {
         url: "https://radius.pi.dev/artifacts/synthetic-share",
-        visibility: "public",
+        visibility: "private",
         expiresAt: "2027-01-01T00:00:00Z",
       };
       await call("Fetch.fulfillRequest", {
@@ -108,7 +109,7 @@ export async function shareResultView(page, call, onEvent) {
       });
       if (status === "shared") {
         await page.see("Session shared");
-        await page.see("Public");
+        await page.see("Private");
         await page.see("Expires");
         await call("Browser.grantPermissions", {
           origin: new URL(held.request.url).origin,

@@ -7,7 +7,8 @@ Preconditions: synthetic saved sessions only; signed-out scratch Local and peers
 its three isolated instances and clears inherited Radius API keys.
 
 - **Confirm:** open a saved session, then `find role button click --name "Session information and actions"`
-  and `find role menuitem click --name "Share"`. The dialog is titled "Share to Radius" and offers only Cancel and Share. Cancel sends
+  and `find role menuitem click --name "Share"`. The dialog is titled "Share to Radius", says the artifact is created with Private visibility,
+  and offers only Cancel and Share. Cancel sends
   nothing. Mod+K → Share opens the same confirmation.
 - **Local sign-in:** confirm with `find role button click --name "Share"`; the dialog closes and a
   toast answers. Wait for `Nothing was uploaded.`. **Open Providers** reaches Local's Providers settings.
@@ -15,7 +16,7 @@ its three isolated instances and clears inherited Radius API keys.
   sign-in in that machine's own Piano, and says main's sign-in is not used. No Local Providers
   shortcut appears. The main browser issues only the peer-qualified Share request.
 - **Result states:** the journey's response adapter holds a synthetic reply to observe the Sharing
-  session toast while the app stays usable, then answers a confirmed public link. Copy link turns to Link copied and the clipboard
+  session toast while the app stays usable, then answers a confirmed private link. Copy link turns to Link copied and the clipboard
   matches; Open link targets the same URL. A synthetic uncertain reply warns to check Radius and
   offers no retry. Result toasts stay until closed with "Close toast". Keep those captures with the run.
 
