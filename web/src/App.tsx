@@ -166,12 +166,7 @@ function MachineApp() {
                 </>
               }
             >
-              <Toaster
-                position="top-right"
-                visibleToasts={4}
-                duration={4000}
-                closeButton
-              />
+              <Toaster position="top-right" visibleToasts={4} duration={4000} closeButton />
               <CommandPalette state={state} />
               <DialogHost pending={pendingDialogs(state)} send={send} />
             </AppLayout>
