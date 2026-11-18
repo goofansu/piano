@@ -8,6 +8,7 @@ import {
 import {
   SessionShare,
   type SessionShareResult,
+  SHARE_NOT_SENT,
   SHARE_UNCONFIRMED,
   SESSION_SHARE_TIMEOUT_MS,
 } from "../shared/share.ts";
@@ -67,6 +68,9 @@ export const SessionSharingLive = Layer.effect(
             detail: "Another session share is in progress on this machine. Wait for it to finish.",
           });
         busy = true;
+        let sent = false;
+        const failure = () =>
+          new SessionShareError({ detail: sent ? SHARE_UNCONFIRMED : SHARE_NOT_SENT });
         return yield* Effect.gen(function* () {
           const location = yield* references.resolve(session.cwd, session.sessionId).pipe(
             Effect.mapError(
@@ -94,6 +98,8 @@ export const SessionSharingLive = Layer.effect(
               const client = new RadiusClient(token, signal);
               try {
                 await client.connect();
+                client.operation("artifacts_create");
+                sent = true;
                 const { artifact } = Schema.decodeUnknownSync(Reply)(
                   await client.call("artifacts_create", {
                     title: session.title || "Piano session",
@@ -117,12 +123,12 @@ export const SessionSharingLive = Layer.effect(
                 await client.close();
               }
             },
-            catch: () => new SessionShareError({ detail: SHARE_UNCONFIRMED }),
+            catch: failure,
           });
         }).pipe(
           Effect.timeoutOrElse({
             duration: SESSION_SHARE_TIMEOUT_MS,
-            orElse: () => Effect.fail(new SessionShareError({ detail: SHARE_UNCONFIRMED })),
+            orElse: () => Effect.fail(failure()),
           }),
           Effect.ensuring(
             Effect.sync(() => {

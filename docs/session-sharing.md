@@ -16,8 +16,10 @@ Each explicit confirmation creates a new artifact through the fixed Radius MCP e
 requests `private` visibility. Only a reply that confirms `private` is reported as shared; if Radius
 answers `organization` or `public`, the toast says the share is not Private, names the visibility,
 and offers the link so the user can change it in Radius. The reply's expiry is not read. No stable link, database association, version update, automatic retry or background sync
-exists. A failed or interrupted upload may have committed; its toast provides no retry button and
-asks the user to check Radius before starting another share. Dismissing the toast or reloading
+exists. A failure before the create request is sent (Radius unreachable while connecting, or not
+offering artifact creation) says nothing was uploaded. A failed or interrupted upload after it is
+sent may have committed; its toast provides no retry button and asks the user to check Radius
+before starting another share. Dismissing the toast or reloading
 loses the link;
 Radius remains its owner. See [the decision](adr/0006-confirmed-raw-session-sharing.md).
 
@@ -42,7 +44,7 @@ Radius remains its owner. See [the decision](adr/0006-confirmed-raw-session-shar
   confirmation, background upload, sign-in guidance, uncertainty and the confirmed link.
 - `test/SessionSharing.test.ts`: synthetic JSONL through the real HTTP handler and fake Radius
   transport, exact bytes/private visibility/one mutation, a non-private reply, auth, invalid files,
-  unsafe replies and overlapping submissions. `test/PeerGateway.test.ts` protects machine routing and no replay;
+  failures before the create request, unsafe replies and overlapping submissions. `test/PeerGateway.test.ts` protects machine routing and no replay;
   `test/SessionCommands.test.ts` covers action availability and menu/palette placement.
 - `test/browser/remote-session.mjs` imports `session-sharing.mjs`: Local and peer confirmation,
   actual signed-out owner responses, Local Providers shortcut, the peer's Providers link. Browser
