@@ -43,6 +43,7 @@ const waitFor = async (claim, observe) => {
   }
 };
 const composer = '[aria-label="Message"]';
+const queuedText = "queued image, password: hunter22";
 const draft = (page) => page.evaluate(`document.querySelector('${composer}')?.value`);
 const ready = (page) =>
   page.until(`document.querySelector('[aria-label^="Model:"]')?.disabled === false`);
@@ -651,12 +652,19 @@ await run(
         await page.see("Streaming line");
         await page.until(`!!document.querySelector('button[aria-label="Stop"]')`);
         await imageEvent(page, "paste", "queued.png");
-        await page.ab("fill", composer, "queued image");
+        await page.ab("fill", composer, queuedText);
         await page.press("Enter");
         await page.see("Queued messages (1)");
+        assert.equal(
+          await page.evaluate(
+            `document.querySelector('[aria-label="Queued messages"] ol li > span:last-child').textContent`,
+          ),
+          queuedText,
+          "the queue shows the user's text as typed",
+        );
         await page.click("button", "Edit queued message");
         await page.until(
-          `document.querySelector('${composer}')?.value === 'queued image' && !document.querySelector('[aria-label="Queued messages"]')`,
+          `document.querySelector('${composer}')?.value === ${JSON.stringify(queuedText)} && !document.querySelector('[aria-label="Queued messages"]')`,
         );
         assert.equal(
           await page.evaluate(`!!document.querySelector('[aria-label="Remove queued.png"]')`),
@@ -681,7 +689,7 @@ await run(
         const imageInputs = page.remote
           .received()
           .filter((e) => e.command === "prompt" && e.images);
-        assert.equal(imageInputs.find((e) => e.text === "queued image").streamingBehavior, "steer");
+        assert.equal(imageInputs.find((e) => e.text === queuedText).streamingBehavior, "steer");
         assert.equal(imageInputs.find((e) => e.text === "").streamingBehavior, "followUp");
         const beforeOutage = page.remote
           .received()
@@ -814,7 +822,7 @@ await run(
         assert.equal(page.received().filter((entry) => entry.command === "abort").length, 0);
         assert.deepEqual(
           page.remote.prompts(),
-          [echo, "question", "stream", "queued image", ""],
+          [echo, "question", "stream", queuedText, ""],
           "each input reaches the peer once, never resent",
         );
         assert.deepEqual(page.prompts(), [], "no local prompt from remote UI");
@@ -882,7 +890,7 @@ await run(
         assert.equal(creations[0].message.projectId, undefined, "no project chosen");
         assert.deepEqual(
           page.remote.prompts(),
-          [echo, "question", "stream", "queued image", "", created],
+          [echo, "question", "stream", queuedText, "", created],
           "the new session's first message reaches the peer once",
         );
         assert.ok(
