@@ -12,7 +12,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { ApiError, shareSession } from "@/lib/api";
 import { isLocalId } from "@/lib/machine";
-import { openLink } from "@/lib/openLink";
 
 export interface ShareTarget {
   machineId: string;
@@ -60,9 +59,6 @@ export function ShareSessionDialog({
   );
 }
 
-const AUDIENCE = { private: "Private", organization: "Organization", public: "Public" };
-const DAY = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
-
 async function share(target: ShareTarget, openProviders: () => void) {
   const id = toast.loading("Sharing session", { description: target.title });
   const settled = { id, duration: Number.POSITIVE_INFINITY };
@@ -100,19 +96,12 @@ function shared(
 ) {
   toast.success("Session shared", {
     ...settled,
-    description: (
-      <>
-        {AUDIENCE[result.visibility]}
-        <br />
-        Expires {DAY.format(new Date(result.expiresAt))}
-      </>
-    ),
-    cancel: { label: "Open link", onClick: () => openLink(result.url) },
+    description: undefined,
     action: {
       label: copied ? "Link copied" : "Copy link",
       onClick: (event) => {
         event.preventDefault();
-        void copyText(result.url, "Could not copy the link. Open it and copy its address.").then(
+        void copyText(result.url, "Could not copy the link.").then(
           (ok) => ok && shared(result, settled, true),
         );
       },

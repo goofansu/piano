@@ -5,8 +5,8 @@ It is visible regardless of main's Radius sign-in. Confirmation is a "Share to R
 Cancel, Share and one line: the artifact is created with Private visibility. It does not restate
 that the whole saved file goes up unredacted, and it makes no claim about who can view a private
 artifact. Only saved data is included; in-flight unsaved messages are not. Confirming closes the dialog and the upload runs behind other work, answered by
-one toast: Sharing session, then Session shared with Radius's actual audience and expiration, Copy
-link and Open link. A result toast stays until dismissed.
+one toast: Sharing session, then Session shared with Copy link as its one action. A result toast
+stays until dismissed.
 
 Missing or rejected Radius authentication offers **Open Providers** on Local. For a peer it directs
 the user to that machine's own Piano → Settings → Providers, then back to main to share again.
@@ -37,14 +37,14 @@ Radius remains its owner. See [the decision](adr/0005-confirmed-raw-session-shar
   no transcript or Radius token sent through main/browser. Raw content itself can contain paths
   or secrets; the exact-file export is intentional, not a containment boundary.
 - `web/src/components/ShareSessionDialog.tsx`, `CommandHost` and `sessionCommands`: explicit
-  confirmation, background upload, sign-in guidance, uncertainty, confirmed audience and link.
+  confirmation, background upload, sign-in guidance, uncertainty and the confirmed link.
 - `test/SessionSharing.test.ts`: synthetic JSONL through the real HTTP handler and fake Radius
   transport, exact bytes/private visibility/one mutation, auth, invalid files, unsafe replies and
   overlapping submissions. `test/PeerGateway.test.ts` protects machine routing and no replay;
   `test/SessionCommands.test.ts` covers action availability and menu/palette placement.
 - `test/browser/remote-session.mjs` imports `session-sharing.mjs`: Local and peer confirmation,
   actual signed-out owner responses, Local Providers shortcut, main-to-peer guidance. Browser
-  response interception covers the background upload, Copy/Open controls and uncertain results
+  response interception covers the background upload, Copy link and uncertain results
   without uploading.
   It does not prove live Radius rendering or authenticated viewing access.
 

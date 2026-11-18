@@ -109,8 +109,6 @@ export async function shareResultView(page, call, onEvent) {
       });
       if (status === "shared") {
         await page.see("Session shared");
-        await page.see("Private");
-        await page.see("Expires");
         await call("Browser.grantPermissions", {
           origin: new URL(held.request.url).origin,
           permissions: ["clipboardReadWrite", "clipboardSanitizedWrite"],
@@ -118,12 +116,15 @@ export async function shareResultView(page, call, onEvent) {
         await page.click("button", "Copy link");
         await page.see("Link copied");
         assert.equal(await page.evaluate("navigator.clipboard.readText()"), share.url);
-        await page.evaluate(
-          "window.sharedOpens = []; window.open = (url) => { window.sharedOpens.push(url); return null; }",
+        assert.deepEqual(
+          await page.evaluate(
+            "[...document.querySelectorAll('[data-sonner-toast] button')].map(e => e.textContent.trim()).filter(Boolean)",
+          ),
+          ["Link copied"],
+          "the result offers one action",
         );
         await page.capture(`share-peer-${status}`);
-        await page.click("button", "Open link");
-        assert.deepEqual(await page.evaluate("window.sharedOpens"), [share.url]);
+        await closeToast(page);
       } else {
         await page.see("Radius may have created an artifact");
         assert.equal(
