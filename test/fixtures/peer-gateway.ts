@@ -173,14 +173,13 @@ async function peerServer(t: TestContext, spec: PeerSpec) {
         JSON.stringify(
           state.mode === "share-signed-out"
             ? { status: "sign-in-required" }
-            : {
-                status: "shared",
-                share: {
-                  url: `https://radius.pi.dev/artifacts/${spec.id}`,
+            : state.mode === "share-not-private"
+              ? {
+                  status: "not-private",
                   visibility: "organization",
-                  expiresAt: "2027-01-01T00:00:00Z",
-                },
-              },
+                  share: { url: `https://radius.pi.dev/artifacts/${spec.id}` },
+                }
+              : { status: "shared", share: { url: `https://radius.pi.dev/artifacts/${spec.id}` } },
         ),
       );
       return;

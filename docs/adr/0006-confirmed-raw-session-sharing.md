@@ -6,7 +6,8 @@ export-redaction guardrail for this explicit action only: preserving the native 
 including saved branches and tool output, is the requested contract rather than a sanitized
 transcript projection. Confirmation states the destination and the `private` visibility
 Piano requests; it makes no claim about who can view a private artifact and promises no secret
-detection.
+detection. The owning machine holds Radius to that promise: a reply with any other visibility is
+reported as not Private, with its link, never as shared.
 
 Each confirmed action creates a new artifact. No registry association, version synchronization or
 automatic mutation retry is introduced (INV-01/02). On peers, main relays only the registered

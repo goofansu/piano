@@ -709,11 +709,7 @@ test(
         assert.equal(f.state.requests.length, before);
         assert.deepEqual(await (await ask()).json(), {
           status: "shared",
-          share: {
-            url: "https://radius.pi.dev/artifacts/eng-1",
-            visibility: "organization",
-            expiresAt: "2027-01-01T00:00:00Z",
-          },
+          share: { url: "https://radius.pi.dev/artifacts/eng-1" },
         });
         const sent = f.state.requests.at(-1)!;
         assert.equal(
@@ -723,6 +719,12 @@ test(
         assert.equal(sent.headers.authorization, undefined);
         assert.equal(sent.headers.cookie, undefined);
         assert.deepEqual(JSON.parse(sent.body!), { confirmed: true });
+        f.state.mode = "share-not-private";
+        assert.deepEqual(await (await ask()).json(), {
+          status: "not-private",
+          visibility: "organization",
+          share: { url: "https://radius.pi.dev/artifacts/eng-1" },
+        });
         f.state.mode = "share-signed-out";
         assert.deepEqual(await (await ask()).json(), { status: "sign-in-required" });
         f.state.mode = "http-dead";
