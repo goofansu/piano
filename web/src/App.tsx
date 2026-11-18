@@ -166,15 +166,7 @@ function MachineApp() {
                 </>
               }
             >
-              <Toaster
-                position="top-right"
-                className="toaster group !absolute !z-[55]"
-                offset={{ top: 88, right: 24 }}
-                mobileOffset={{ top: 68, left: 16, right: 16 }}
-                visibleToasts={4}
-                duration={4000}
-                closeButton
-              />
+              <Toaster position="top-right" visibleToasts={4} duration={4000} closeButton />
               <CommandPalette state={state} />
               <DialogHost pending={pendingDialogs(state)} send={send} />
             </AppLayout>
