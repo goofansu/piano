@@ -108,6 +108,7 @@ await run(
     await page.ab("fill", '[aria-label="First message"]', "Plan the launch");
     await page.click("button", "Send");
     await page.see("echo: Plan the launch");
+    await page.until("!!document.querySelector('[aria-label=\"Send\"]')");
     assert.equal(
       await page.evaluate(
         `document.querySelector('[aria-label="Voice input"]').nextElementSibling === document.querySelector('[aria-label="Send"]')`,
