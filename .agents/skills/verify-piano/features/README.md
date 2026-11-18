@@ -47,7 +47,6 @@ the [feature verification mapping policy](../../../../docs/testing.md#feature-ve
 - [Start a session](./start-session.md).
   Docs: [Session creation and recovery](../../../../docs/runtime-ownership.md#developer-navigation-session-creation-and-recovery),
   [Image attachments](../../../../docs/image-attachments.md),
-  [Input limits](../../../../docs/runtime-input-limits.md),
   [Remote Pianos](../../../../docs/remote-piano.md#developer-navigation).
 - [Open and continue a session](./open-session.md).
   Docs: [Session navigation](../../../../docs/sidebar-session-navigation.md#developer-navigation),

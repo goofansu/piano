@@ -9,6 +9,8 @@ boundary with one owner.
 `PiHistoryFile` imports Pi's non-public `core/session-manager.js` so `PiHistoryWorker` skips the SDK
 root's interactive modules; this is an explicit upgrade cost (INV-12). Only a missing module or a
 missing parser/`inMemory` export may fall back to the public SDK; other load/parse errors must not.
+Keep reading history by parsing bytes into `SessionManager.inMemory`: Pi's `SessionManager.open`
+writes to the session file it opens (it appends a missing final newline).
 
 On each Pi upgrade, check the root's re-exports and package layout, prefer a public history subpath
 if one exists, run `HistorySdkCompatibility.test.ts`, `SessionHistory.test.ts` and the scratch

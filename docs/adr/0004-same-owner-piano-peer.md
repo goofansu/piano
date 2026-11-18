@@ -8,7 +8,7 @@ Piano version:
 through exe.dev's scoped HTTP-proxy peer integration from an attached VM, or directly through
 exe.dev's HTTPS proxy with a VM-scoped token from the developer's laptop. Pi RPC remains local to
 each owning backend. This supersedes the system-OpenSSH recommendation in the
-[practical runner research](../research/2026-10-14-practical-remote-runners.md) for this slice:
+practical runner research (2026-10-14, in Git history) for this slice:
 existing private integration access avoids a second tunnel/authentication lifecycle and does not
 turn Piano into a fleet manager.
 
@@ -202,7 +202,7 @@ base64 uploads on slow links. Keep that cap at 1 MiB and use a separate bounded 
    to 100 MiB of original bytes; unclaimed references expire after ten minutes. This replaces
    the proposed temporary-file staging with a smaller bounded lifecycle: restart/teardown forgets
    preparations, without disk cleanup or another durable image store. See the exact
-   [resource budgets](../runtime-input-limits.md#remote-image-http-lane).
+   resource budgets in `shared/remoteImages.ts`.
 3. Normal `act`/`create_session` carries a small `preparedImages` reference. PeerScope still
    refuses inline remote images. ClientDispatch rejects mixed inline/reference input, verifies
    that the reference was prepared for this session (or, before a session exists, for this
@@ -237,9 +237,9 @@ reported empty image-only queue entries.
 ## Voice input: main-origin assistance, machine-owned drafts
 
 This amendment accepts the main-owned option in the
-[remote-composer research](../research/2026-11-09-remote-composer-inputs.md). It deliberately does
+remote-composer research (2026-11-09, in Git history). It deliberately does
 **not** accept peer enrollment, machine CRUD or credential management proposed by the
-[configuration research](../research/2026-11-09-peer-configuration-ui.md).
+configuration research (2026-11-09, in Git history).
 
 - Both composers use the browser's microphone and the main Piano's dedicated voice key and
   preference. Main can itself be a VM. Only main-origin `GET /api/settings/voice-input` and
@@ -269,7 +269,7 @@ This amendment accepts the main-owned option in the
   operation. Cancellation cannot promise provider work or charges were prevented. No automatic
   retries. Constructor/start/recorder/track failures discard audio and preserve the draft.
 - Actual recording bytes, main HTTP ingestion before JSON parsing, concurrent work, provider
-  response bytes/text and deadlines are bounded; see [voice budgets](../runtime-input-limits.md#voice-input).
+  response bytes/text and deadlines are bounded; see the voice budgets in `shared/voiceInput.ts`.
   These are resource limits, not a guarantee about browser heap on delayed mobile chunks or a
   transcription provider's entitlement/quality. Fake devices/providers establish Piano ownership
   and failure handling; real microphone, codecs, mobile background/lock and paid-provider behavior

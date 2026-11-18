@@ -1,7 +1,7 @@
 # Development invariants
 
 These are Piano's target contracts, governed by [ADR 0001](adr/0001-pi-rpc-workspace-workbench.md).
-They guide implementation and review; several require work identified in the [roadmap](roadmap.md).
+They guide implementation and review; several are not yet implemented.
 Do not infer compliance from the existence of this document.
 
 Use stable IDs in PR descriptions, tests and follow-up issues. When a change touches a contract,
@@ -72,7 +72,7 @@ write. Extension UI responses have no RPC acknowledgement. A question raised by 
 `ask_user` tool call has no answer deadline: Pi's native end record for that call closes it, and only
 the result Pi stored for the call may label a submitted answer accepted. An answer the result does
 not hold for its question, or one arriving after closure, is kept as rejected and never resent (see
-[runtime ownership](runtime-ownership.md#questions-owned-by-a-tool-call)).
+`server/SessionDialogs.ts`).
 
 ## INV-05 — Reconnect creates a consistent view
 

@@ -54,8 +54,7 @@ The app opens in its own browser tab; see [external app access](live-previews.md
 Ask **“Dispatch this work in a new session.”** The agent starts a fresh, visible session with a
 self-contained brief, returns an **Open session** link, and can wait for its answer. Use separate
 prepared worktrees for concurrent writing tasks. See [session dispatch](session-dispatch.md)
-for setup, checkout semantics and bounded observation, or use the bundled
-[terminal dispatch script](session-dispatch.md#from-a-terminal-linux-and-macos).
+or run `node scripts/dispatch-session.ts --help` for the bundled terminal script.
 
 ## Send session events to a webhook
 

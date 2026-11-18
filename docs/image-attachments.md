@@ -7,8 +7,7 @@ work around this; the fix belongs upstream in Pi.
 ## Pi owns model preparation
 
 Piano passes accepted images through PiSessions; Pi's preprocessing fits them for the model. Do
-not duplicate those policies or modify the user's Pi settings to meet Piano's upload policy. See
-the [version-pinned research and sources](research/2026-10-06-pi-image-restrictions.md).
+not duplicate those policies or modify the user's Pi settings to meet Piano's upload policy.
 
 ## Future changes
 
