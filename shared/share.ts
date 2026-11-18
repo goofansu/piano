@@ -3,6 +3,8 @@ import { isRadiusUrl } from "./radiusUrl.ts";
 
 export const SESSION_SHARE_TIMEOUT_MS = 60_000;
 export const SESSION_SHARE_MAX_BYTES = 10 * 1024 * 1024;
+export const SHARE_NOT_SENT =
+  "Could not start sharing with Radius. Nothing was uploaded; share again.";
 export const SHARE_UNCONFIRMED =
   "Could not confirm sharing. Radius may have created an artifact. Check Radius before sharing again; Piano has not retried.";
 

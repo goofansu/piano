@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { Effect, Layer } from "effect";
 import { Registry } from "../server/Registry.ts";
 import { SessionShareAuth } from "../server/SessionSharing.ts";
-import { SESSION_SHARE_MAX_BYTES, SHARE_UNCONFIRMED } from "../shared/share.ts";
+import { SESSION_SHARE_MAX_BYTES, SHARE_NOT_SENT, SHARE_UNCONFIRMED } from "../shared/share.ts";
 import { RadiusHttp, radiusCanary } from "./fixtures/RadiusHttp.ts";
 import { startRouter } from "./fixtures/router.ts";
 
@@ -132,6 +132,31 @@ test("Share uploads the registered saved file once, with owner auth and private 
         assert.equal(http.writes.length, before + 1);
       }
       http.fail = "none";
+    },
+  );
+  await t.test(
+    "failures before the create request is sent are a definite refusal, not uncertainty",
+    async () => {
+      const before = http.writes.length;
+      const methods: string[] = [];
+      globalThis.fetch = async (input, init) => {
+        const request = typeof init?.body === "string" ? JSON.parse(init.body) : {};
+        if (request.method) methods.push(request.method);
+        if (request.method === "initialize") return new Response(null, { status: 503 });
+        return http.fetch(input, init);
+      };
+      const unreachable = await share();
+      globalThis.fetch = http.fetch;
+      assert.equal(unreachable.status, 409);
+      assert.deepEqual(await unreachable.json(), { error: SHARE_NOT_SENT });
+      assert.ok(!methods.includes("tools/call"));
+
+      http.unadvertised.add("artifacts.create");
+      const unadvertised = await share();
+      http.unadvertised.delete("artifacts.create");
+      assert.equal(unadvertised.status, 409);
+      assert.deepEqual(await unadvertised.json(), { error: SHARE_NOT_SENT });
+      assert.equal(http.writes.length, before);
     },
   );
   await t.test(
