@@ -81,18 +81,11 @@ Rebuild, restart or deploy the user's running Piano only when asked; coding, com
 do not authorize it. Piano has no application authentication: on exe.dev keep it on loopback behind
 private authenticated access (INV-11).
 
-## Research
-
-Do not commit research notes, proposals or plans. Put findings in the issue or PR that uses them.
-When research settles something lasting, record only the outcome, where it is owned: a decision
-in an ADR, a constraint in the owning doc, a dependency workaround as a source comment.
-
 ## Branches
 
 - For a new implementation task, investigate here first, then use `piano_start_session` to dispatch
   into a dedicated worktree when available. Give the child the observed problem, scope and acceptance
-  check. Explicitly delegated research may start directly in a child; it commits nothing, so it
-  needs no worktree or branch.
+  check. Explicitly delegated research may start directly in a child.
 - Implement directly only when this session already owns the task in its dedicated worktree, the
   user requests it, or dispatch is unavailable.
 - Use a dedicated branch and worktree; reuse the one already assigned to the task. Run subsequent
