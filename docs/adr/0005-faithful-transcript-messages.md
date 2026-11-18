@@ -11,11 +11,14 @@ and those Stop restores to the composer, are the user's own text on its way into
 they are faithful too: a redacted restore would resend altered text to Pi. Session titles, like
 project names and instructions, are the user's own text that the UI saves back: Rename starts from
 the shown title, and the registry mirrors Pi's name from session state. They leave as written,
-controls stripped; a redacted title would be stored with `[REDACTED]` in it.
+controls stripped; a redacted title would be stored with `[REDACTED]` in it. The same holds for
+text the UI hands back as a starting draft: an editor dialog's prefill, which the reply starts from
+and returns to Pi, the editor text an extension offers to append to the composer, and a voice
+transcript placed in the composer.
 
-Everything else keeps the existing redaction: dialogs and library proposals, extension status and
-widgets, notices, errors and session-closed details, HTTP responses, file previews, webhook payloads,
-preview logs and transport diagnostics.
+Everything else keeps the existing redaction: dialog titles, messages and options, library
+proposals, extension status and widgets, notices, errors and session-closed details, other HTTP
+responses, file previews, webhook payloads, preview logs and transport diagnostics.
 
 A transcript can now contain real secrets. Users must review it before sharing screenshots or
 copied text. Removing redaction everywhere was rejected because only the conversation needs to match

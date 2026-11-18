@@ -199,8 +199,9 @@ access, origin checks, session expiry and preview-to-control separation.
 
 **Guardrail:** never infer that a hostname, TLS, a private VM or a reverse proxy alone protects the
 application. Render transcripts/tool output as untrusted content. Redact known secrets consistently
-before browser delivery and exported artifacts, except transcript and queued messages and session
-titles, which show the text as Pi holds it ([ADR 0005](adr/0005-faithful-transcript-messages.md)); document that heuristic redaction is not
+before browser delivery and exported artifacts, except transcript and queued messages and the text
+the UI saves back (session titles, editor dialog prefills, extension editor text, voice transcripts),
+which show the text as written ([ADR 0005](adr/0005-faithful-transcript-messages.md)); document that heuristic redaction is not
 containment.
 The explicit raw Session Share action is the narrow exception defined in
 [ADR 0006](adr/0006-confirmed-raw-session-sharing.md): one explicit "Share to Radius" confirmation

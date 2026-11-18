@@ -495,6 +495,7 @@ export const Endpoints = {
     invalid: "The recording could not be sent. Record a shorter message.",
     response: Transcription,
     noStore: true,
+    redact: false,
     refused: 502,
     fallback: "Could not transcribe the recording.",
     upload: {
