@@ -5,9 +5,11 @@ It is visible regardless of main's Radius sign-in. Confirmation states the Priva
 saved data is included; in-flight unsaved messages are not. The upload runs in the background and a
 toast carries the result and its link.
 
-Missing or rejected Radius authentication offers **Open Providers** on Local. For a peer it directs
-the user to that machine's own Piano → Settings → Providers, then back to main to share again.
-Main's sign-in is never used as a fallback. Provider authentication resolves and refreshes through
+Missing or rejected Radius authentication shows a "Cannot share" toast with **Open Providers**. On
+Local it opens Settings → Providers; for a peer it opens that peer's own Piano at
+`/settings/providers` in a new tab, using the peer's configured `origin`, which the machine list
+sends as `url`. The user signs in there and shares again from main. Main's sign-in is never used as
+a fallback. Provider authentication resolves and refreshes through
 Pi's `ModelRuntime`, independent of the selected model, a model turn or configured MCP servers.
 
 Each explicit confirmation creates a new artifact through the fixed Radius MCP endpoint. Visibility
@@ -40,7 +42,7 @@ Radius remains its owner. See [the decision](adr/0006-confirmed-raw-session-shar
   overlapping submissions. `test/PeerGateway.test.ts` protects machine routing and no replay;
   `test/SessionCommands.test.ts` covers action availability and menu/palette placement.
 - `test/browser/remote-session.mjs` imports `session-sharing.mjs`: Local and peer confirmation,
-  actual signed-out owner responses, Local Providers shortcut, main-to-peer guidance. Browser
+  actual signed-out owner responses, Local Providers shortcut, the peer's Providers link. Browser
   response interception covers the background upload, Copy/Open controls and uncertain results
   without uploading.
   It does not prove live Radius rendering or authenticated viewing access.

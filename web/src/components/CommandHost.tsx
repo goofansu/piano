@@ -294,6 +294,7 @@ export function CommandHost({
       setSharing({
         machineId: machineScope.machine.id,
         machineName: machineScope.machine.name,
+        machineUrl: machineScope.machine.url,
         workspaceId: workspace.id,
         sessionId: target.sessionId,
         title: target.title || "Untitled session",

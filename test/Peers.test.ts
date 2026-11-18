@@ -18,8 +18,8 @@ test(
     assert.deepEqual(await (await fetch(f.base + "/api/machines")).json(), {
       machines: [
         { id: "local", name: "Local" },
-        { id: "eng-1", name: "eng-1" },
-        { id: "eng-2", name: "eng-2" },
+        { id: "eng-1", name: "eng-1", url: "https://eng-1.exe.xyz:3000" },
+        { id: "eng-2", name: "eng-2", url: "https://eng-2.exe.xyz:3000" },
       ],
     });
     const [a, b] = await Promise.all([f.open({}, true, "eng-1"), f.open({}, true, "eng-2")]);

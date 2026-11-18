@@ -72,7 +72,8 @@ VM, with a distinct key label and private file: an eng-1 token does not authoriz
 `id` identifies routes and browser state: keep it bound to one backend, and use a different ID
 for another Piano rather than repointing it. `endpoint` is the integration's or target VM's
 HTTPS origin. `origin` is the target Piano's allowed Origin, not the integration hostname or
-laptop origin. Omit `vmTokenFile` for a peer integration; set it only for direct VM access.
+laptop origin; the machine list sends it to the browser, which links there for the peer's own
+settings. Omit `vmTokenFile` for a peer integration; set it only for direct VM access.
 
 ## Machine shortcuts
 
