@@ -74,6 +74,16 @@ for another Piano rather than repointing it. `endpoint` is the integration's or 
 HTTPS origin. `origin` is the target Piano's allowed Origin, not the integration hostname or
 laptop origin. Omit `vmTokenFile` for a peer integration; set it only for direct VM access.
 
+## Machine shortcuts
+
+In the installed macOS PWA (standalone display mode), Cmd+1 through Cmd+9 select machines in
+picker order: Local first, then peers. Cmd+9 means the ninth item, not the last. Missing items do
+nothing. Ordinary browser tabs retain their native number shortcuts; Ctrl is not an alternative.
+
+Switching uses the picker's remembered route and machine-specific drafts, including from either
+composer. Dialogs, menus and other text-editing controls keep their keys. Extra modifiers, held-key
+repeats and IME input do not switch machines. An unavailable peer never falls back to Local.
+
 ## Deliberate limits
 
 See [ADR 0004](adr/0004-same-owner-piano-peer.md) for ownership and trust decisions.
@@ -85,7 +95,9 @@ configured peer, and the peer owns its sessions and decides which operations it 
 Unavailability never substitutes Local.
 
 Start at `server/PeerScope.ts` (admission), `server/PeerGateway.ts` (relay), `shared/machine.ts`
-and `web/src/lib/machine.ts`.
+and `web/src/lib/machine.ts`. `web/src/components/MachineHost.tsx` owns picker and shortcut
+navigation through `switchMachine`; `web/src/lib/keys.ts` recognizes eligible numeric chords
+(`test/Keys.test.ts`).
 
 ### Verification
 
@@ -97,4 +109,7 @@ and `node test/browser/remote-inputs.mjs <evidence-directory>` separately; each 
 two isolated peers. Follow [browser-test scope](testing.md#browser-tests) and the
 [three-instance run-limit exception](../.agents/skills/verify-piano/SKILL.md#run-limits).
 Fake Pi and fake voice devices do not establish authenticated exe.dev access, real Pi/provider
-behavior or real-device recording.
+behavior or real-device recording. `remote-session.mjs` also checks numeric switching, history,
+draft restoration and shortcut guards with macOS platform and standalone display mode emulated.
+Native macOS Chrome PWA shortcut delivery still needs a manual check: Cmd+1 selects Local, Cmd+2
+selects the first peer, and normal Chrome tabs keep their tab-switching shortcuts.
