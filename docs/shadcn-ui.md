@@ -18,7 +18,7 @@ directories. Preserve upstream formatting as well as behavior.
 in generated files. Piano is still a client-side Vite app: this CLI option does not enable React
 Server Components, and those directives do not change its runtime behavior. Keep the directives
 as generated rather than stripping them. This also avoids the order-dependent stripping observed
-with shadcn CLI 4.21.4's `rsc: false` transformer.
+with the shadcn CLI's `rsc: false` transformer.
 
 ## Where customizations belong
 

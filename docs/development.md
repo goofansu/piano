@@ -2,14 +2,14 @@
 
 ## Setup
 
-Use Node.js 24, npm and Git, with [Worktrunk](https://worktrunk.dev) (`wt`) 0.80.0 or later on
-`PATH`. Browser checks also need `agent-browser` on `PATH` and its Chromium:
+Use Node.js 24, npm and Git, with [Worktrunk](https://worktrunk.dev) (`wt`) on `PATH`; the
+oldest supported version is `MINIMUM_WORKTRUNK_VERSION` in `server/Worktrees.ts`. Browser checks also need `agent-browser` on `PATH` and its Chromium:
 `agent-browser install`.
 
 ## Node.js version
 
-Use the latest Node 24 patch: the locked dependencies need at least 24.15.0, which the `>=24`
-range in `package.json` does not enforce.
+Use the latest Node 24 patch: the locked dependencies need a later patch than the `>=24` range in
+`package.json` enforces.
 
 ## Formatting and lint
 

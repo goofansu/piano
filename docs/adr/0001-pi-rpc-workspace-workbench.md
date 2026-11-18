@@ -2,7 +2,6 @@
 
 - Date: 2026-10-04
 - Status: Accepted
-- Runtime reference: Pi Coding Agent 1.0.2
 - Related: [invariants](../development-invariants.md)
 
 Organizational extension: [ADR 0002](0002-outcome-projects.md) separates outcome-project organization from
@@ -98,21 +97,6 @@ Piano's actions; do not claim universal policy enforcement without execution res
 Piano must now own reliable synchronization, lifecycle races, process visibility, evidence invalidation
 and guarded integration. A worktree is a checkout, not a security sandbox. Preserving local Pi behavior
 also preserves the trusted-developer execution model until a separate remote design changes it.
-
-## Pi 1.0.2 checkpoint
-
-The tagged [Coding Agent changelog](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/CHANGELOG.md)
-records per-thinking-level sampling overrides in 1.0.2. The intervening 1.0.1 release adds project MCP
-overrides and fixes, among other changes. These support letting Pi own configuration; they do not
-provide a reason to change Piano's runtime boundary.
-
-The tagged [RPC documentation](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/rpc.md)
-still describes long-lived subprocesses, strict JSONL, prompt dispositions and `agent_settled`.
-These sources establish the documented direction, not a Piano compatibility test.
-
-At this PR's base revision, package.json permits `^1.0.0` and package-lock.json resolves Pi 1.0.0.
-This documentation PR does not upgrade dependencies or claim a verified 1.0.2 runtime. Upgrade and
-test the lockfile deliberately as the first runtime milestone.
 
 ## Acceptance and reconsideration
 
