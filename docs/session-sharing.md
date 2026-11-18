@@ -1,10 +1,11 @@
 # Session sharing
 
-**Share session** is in the session menu, sidebar row menu and command palette on Local and peers.
+**Share** is in the session menu, sidebar row menu and command palette on Local and peers.
 It is visible regardless of main's Radius sign-in. Confirmation names the session and owning
-machine, discloses the entire saved JSONL without redaction, and warns that the organization's
-default visibility may be public. Only saved data is included; in-flight unsaved messages are not.
-The result shows Radius's actual audience, expiration and Copy/Open link controls.
+machine, discloses that everything saved is uploaded without redaction, and warns that the
+organization's default visibility may be public. Only saved data is included; in-flight unsaved
+messages are not. One dialog carries confirmation, the pending upload and the result in place; the
+result shows Radius's actual audience and expiration, the link with its copy control, and Open link.
 
 Missing or rejected Radius authentication offers **Open Providers** on Local. For a peer it directs
 the user to that machine's own Piano → Settings → Providers, then back to main to share again.

@@ -1048,7 +1048,7 @@ await run(
           `[...document.querySelectorAll('[role="menu"] [role^="menuitem"]')].map(e => e.getAttribute('aria-label') ?? e.textContent.trim())`,
         );
         assert.ok(actions.includes("Move to project"), JSON.stringify(actions));
-        for (const label of ["Rename", "Pin", "Share session", "Archive", "Delete"])
+        for (const label of ["Rename", "Pin", "Share", "Archive", "Delete"])
           assert.ok(actions.includes(label), `remote session menu offers ${label}`);
         await page.capture("9h-remote-session-menu");
         await page.click("menuitem", "Rename");

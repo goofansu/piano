@@ -344,7 +344,7 @@ export function sessionCommands(
     commands.push(
       {
         id: "share",
-        label: "Share session",
+        label: "Share",
         icon: "share",
         enabled: !!subject && sessionReferenceChangeable(state, subject),
         intent: { kind: "share", target: subject },

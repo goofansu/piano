@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 export async function openShare(page, palette = false) {
   if (palette) {
     await page.press("Mod+k");
-    await page.ab("fill", "[cmdk-input]", "Share session");
+    await page.ab("fill", "[cmdk-input]", "Share");
     await page.until(
       "document.querySelector('[cmdk-list]')?.getAttribute('aria-busy') === 'false'",
     );
@@ -13,9 +13,9 @@ export async function openShare(page, palette = false) {
     await page.until(
       "[...document.querySelectorAll('[role=menu]')].some(e => e.getAnimations({subtree:true}).every(a => a.playState !== 'running'))",
     );
-    await page.click("menuitem", "Share session");
+    await page.click("menuitem", "Share");
   }
-  await page.see("Upload the full saved JSONL");
+  await page.see("Everything saved, unredacted");
   await page.see("which may be public");
 }
 
@@ -25,10 +25,10 @@ export async function shareSignIn(page, machine, local = false) {
   await page.click("button", "Cancel");
   await page.until("!document.querySelector('[role=dialog]')");
   await openShare(page, true);
-  await page.click("button", "Share session");
+  await page.click("button", "Share");
   await page.see("Nothing was uploaded.");
   if (local) {
-    await page.see("Sign in to Radius in Settings");
+    await page.see("Sign in under Settings → Providers");
     await page.capture("share-local-sign-in");
     await page.click("button", "Open Providers");
     await page.see("Providers");
@@ -64,7 +64,7 @@ export async function shareResultView(page, call, onEvent) {
     for (const status of ["shared", "uncertain"]) {
       held = undefined;
       await openShare(page);
-      await page.click("button", "Share session");
+      await page.click("button", "Share");
       await page.until("document.querySelector('[role=dialog] button:disabled') !== null");
       assert.ok(held, "one explicit confirmation issues a request");
       await page.press("Escape");
@@ -99,7 +99,9 @@ export async function shareResultView(page, call, onEvent) {
           permissions: ["clipboardReadWrite", "clipboardSanitizedWrite"],
         });
         await page.click("button", "Copy link");
-        await page.see("Copied");
+        await page.until(
+          `!!document.querySelector('[role=dialog] button[aria-label="Link copied"]')`,
+        );
         assert.equal(await page.evaluate("navigator.clipboard.readText()"), share.url);
         assert.equal(
           await page.evaluate(
@@ -111,7 +113,7 @@ export async function shareResultView(page, call, onEvent) {
         await page.see("Radius may have created an artifact");
         assert.equal(
           await page.evaluate(
-            "[...document.querySelectorAll('[role=dialog] button')].some(e => e.textContent.trim() === 'Share session')",
+            "[...document.querySelectorAll('[role=dialog] button')].some(e => e.textContent.trim() === 'Share')",
           ),
           false,
           "uncertainty offers no immediate retry",

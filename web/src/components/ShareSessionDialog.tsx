@@ -2,18 +2,24 @@ import { SHARE_UNCONFIRMED, SESSION_SHARE_TIMEOUT_MS, type SessionShare } from "
 import { CheckIcon, CopyIcon, ExternalLinkIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { useCopy } from "@/components/CopyButton";
-import { FormDialog } from "@/components/FormDialog";
 import {
+  Dialog,
+  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/PianoDialog";
-import { RemovalDialog } from "@/components/RemovalDialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group";
+import { Spinner } from "@/components/ui/spinner";
 import { ApiError, shareSession } from "@/lib/api";
 import { isLocalId } from "@/lib/machine";
 
@@ -68,93 +74,146 @@ export function ShareSessionDialog({
       });
     }
   };
-  if (phase.kind === "confirm" || busy)
-    return (
-      <RemovalDialog
-        open
-        title="Share session?"
-        description={`Upload the full saved JSONL for “${target.title}” on ${target.machineName} to Radius, including all saved branches, instructions, tool output and attachments, without redaction. It may contain secrets. Uses ${target.machineName}’s Radius sign-in and that organization’s default visibility, which may be public. Each share creates a new artifact.`}
-        action="Share session"
-        busy={busy}
-        destructive={false}
-        cancel={close}
-        confirm={() => void submit()}
-      />
-    );
+  const asking = phase.kind === "confirm" || busy;
+  const local = isLocalId(target.machineId);
+  const description =
+    phase.kind === "shared"
+      ? `${AUDIENCE[phase.result.visibility]} · Expires ${DAY.format(new Date(phase.result.expiresAt))}`
+      : phase.kind === "sign-in-required"
+        ? local
+          ? "Sign in under Settings → Providers, then share again. Nothing was uploaded."
+          : `Open ${target.machineName}’s own Piano and sign in under Settings → Providers, then share again from here. The main Piano’s sign-in is not used. Nothing was uploaded.`
+        : phase.kind === "failed"
+          ? undefined
+          : target.title;
   return (
-    <FormDialog close={close} className="sm:max-w-md">
-      <DialogHeader>
-        <DialogTitle>{phase.kind === "shared" ? "Session shared" : "Share session"}</DialogTitle>
-        <DialogDescription>
-          {target.title} · {target.machineName}
-        </DialogDescription>
-      </DialogHeader>
-      {phase.kind === "shared" && <ShareLink result={phase.result} />}
-      {phase.kind === "failed" && (
-        <Alert variant="destructive">
-          <AlertDescription>{phase.error}</AlertDescription>
-        </Alert>
-      )}
-      {phase.kind === "sign-in-required" && (
-        <Alert>
-          <AlertDescription>
-            {isLocalId(target.machineId)
-              ? "Sign in to Radius in Settings → Providers, then share again. Nothing was uploaded."
-              : `Sign in to Radius on ${target.machineName}: open that machine’s Piano directly and go to Settings → Providers. Then return here and share again. The main Piano’s sign-in is not used. Nothing was uploaded.`}
-          </AlertDescription>
-        </Alert>
-      )}
-      <DialogFooter>
-        <Button variant="outline" onClick={close}>
-          Done
-        </Button>
-        {phase.kind === "sign-in-required" && isLocalId(target.machineId) && (
-          <Button
-            onClick={() => {
-              close();
-              openProviders();
-            }}
-          >
-            Open Providers
-          </Button>
+    <Dialog
+      open
+      onOpenChange={(next) => {
+        if (!next && !busy) close();
+      }}
+    >
+      <DialogContent
+        className="sm:max-w-md"
+        showCloseButton={!asking}
+        onInteractOutside={(event) => event.preventDefault()}
+        {...(description ? {} : { "aria-describedby": undefined })}
+      >
+        <DialogHeader>
+          <DialogTitle>
+            {asking
+              ? "Share session?"
+              : phase.kind === "shared"
+                ? "Session shared"
+                : phase.kind === "sign-in-required"
+                  ? local
+                    ? "Sign in to Radius"
+                    : `Sign in to Radius on ${target.machineName}`
+                  : "Share session"}
+          </DialogTitle>
+          {description && (
+            <DialogDescription
+              className={asking ? "truncate" : undefined}
+              title={asking ? target.title : undefined}
+            >
+              {description}
+            </DialogDescription>
+          )}
+        </DialogHeader>
+        {asking && (
+          <dl className="flex flex-col gap-2 text-sm">
+            <Fact label="Uploads">
+              Everything saved, unredacted: branches, instructions, tool output, attachments and any
+              secrets in them
+            </Fact>
+            <Fact label="Visible to">
+              {target.machineName}’s Radius organization default, which may be public
+            </Fact>
+          </dl>
         )}
-      </DialogFooter>
-    </FormDialog>
+        {phase.kind === "shared" && <ShareLink url={phase.result.url} />}
+        {phase.kind === "failed" && (
+          <Alert variant="destructive">
+            <AlertDescription>{phase.error}</AlertDescription>
+          </Alert>
+        )}
+        <DialogFooter>
+          {asking ? (
+            <>
+              <Button variant="outline" disabled={busy} onClick={close}>
+                Cancel
+              </Button>
+              <Button disabled={busy} onClick={() => void submit()}>
+                {busy && <Spinner data-icon="inline-start" />}
+                Share
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="outline" autoFocus={phase.kind !== "shared"} onClick={close}>
+                Done
+              </Button>
+              {phase.kind === "sign-in-required" && local && (
+                <Button
+                  onClick={() => {
+                    close();
+                    openProviders();
+                  }}
+                >
+                  Open Providers
+                </Button>
+              )}
+              {phase.kind === "shared" && (
+                <Button asChild>
+                  <a href={phase.result.url} target="_blank" rel="noopener noreferrer">
+                    Open link
+                    <ExternalLinkIcon data-icon="inline-end" aria-hidden />
+                  </a>
+                </Button>
+              )}
+            </>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
-function ShareLink({ result }: { result: SessionShare }) {
-  const { copied, copy } = useCopy(
-    result.url,
-    "Could not copy the link. Select and copy it below.",
-  );
-  const audience = { private: "Private", organization: "Organization", public: "Public" }[
-    result.visibility
-  ];
+const AUDIENCE = { private: "Private", organization: "Organization", public: "Public" };
+const DAY = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
+
+function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <Field>
-      <FieldLabel htmlFor="session-share-link">Share link</FieldLabel>
-      <Input
-        id="session-share-link"
-        value={result.url}
+    <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-2">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 break-words">{children}</dd>
+    </div>
+  );
+}
+
+function ShareLink({ url }: { url: string }) {
+  const { copied, copy } = useCopy(url, "Could not copy the link. Select it to copy it.");
+  const label = copied ? "Link copied" : "Copy link";
+  return (
+    <InputGroup>
+      <InputGroupInput
+        aria-label="Share link"
+        className="font-mono md:text-xs"
+        value={url}
         readOnly
+        spellCheck={false}
         onFocus={(event) => event.target.select()}
       />
-      <FieldDescription>
-        {audience} · Expires {new Date(result.expiresAt).toLocaleDateString()}
-      </FieldDescription>
-      <div className="flex gap-2">
-        <Button variant="outline" onClick={() => void copy()}>
-          {copied ? <CheckIcon data-icon="inline-start" /> : <CopyIcon data-icon="inline-start" />}
-          {copied ? "Copied" : "Copy link"}
-        </Button>
-        <Button variant="outline" asChild>
-          <a href={result.url} target="_blank" rel="noopener noreferrer">
-            Open link
-            <ExternalLinkIcon data-icon="inline-end" />
-          </a>
-        </Button>
-      </div>
-    </Field>
+      <InputGroupAddon align="inline-end">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <InputGroupButton size="icon-sm" aria-label={label} autoFocus onClick={copy}>
+              {copied ? <CheckIcon /> : <CopyIcon />}
+            </InputGroupButton>
+          </TooltipTrigger>
+          <TooltipContent>{label}</TooltipContent>
+        </Tooltip>
+      </InputGroupAddon>
+    </InputGroup>
   );
 }
