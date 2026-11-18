@@ -1,12 +1,9 @@
 # Session sharing
 
 **Share** is in the session menu, sidebar row menu and command palette on Local and peers.
-It is visible regardless of main's Radius sign-in. Confirmation is a "Share to Radius" dialog with
-Cancel, Share and one line: the artifact is created with Private visibility. It does not restate
-that the whole saved file goes up unredacted, and it makes no claim about who can view a private
-artifact. Only saved data is included; in-flight unsaved messages are not. Confirming closes the dialog and the upload runs behind other work, answered by
-one toast: Sharing session, then Session shared with Open link and Copy link, Copy link primary. A
-result toast stays until dismissed.
+It is visible regardless of main's Radius sign-in. Confirmation states the Private visibility. Only
+saved data is included; in-flight unsaved messages are not. The upload runs in the background and a
+toast carries the result and its link.
 
 Missing or rejected Radius authentication offers **Open Providers** on Local. For a peer it directs
 the user to that machine's own Piano → Settings → Providers, then back to main to share again.
@@ -16,8 +13,8 @@ Pi's `ModelRuntime`, independent of the selected model, a model turn or configur
 Each explicit confirmation creates a new artifact through the fixed Radius MCP endpoint. Visibility
 is always `private`. No stable link, database association, version update, automatic retry or background sync
 exists. A failed or interrupted upload may have committed; its toast provides no retry button and
-asks the user to check Radius before starting another share. Dismissing the toast or reloading loses
-the displayed link;
+asks the user to check Radius before starting another share. Dismissing the toast or reloading
+loses the link;
 Radius remains its owner. See [the decision](adr/0005-confirmed-raw-session-sharing.md).
 
 ## Owners and checks

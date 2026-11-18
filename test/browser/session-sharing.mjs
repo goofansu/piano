@@ -129,6 +129,12 @@ export async function shareResultView(page, call, onEvent) {
         await page.capture(`share-peer-${status}`);
         await page.click("button", "Open link");
         assert.deepEqual(await page.evaluate("window.sharedOpens"), [share.url]);
+        assert.equal(
+          await page.evaluate("!!document.querySelector('[data-sonner-toast]')"),
+          true,
+          "the link stays available after opening it",
+        );
+        await closeToast(page);
       } else {
         await page.see("Radius may have created an artifact");
         assert.equal(

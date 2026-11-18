@@ -4,9 +4,9 @@ Session Share uploads the full saved Pi JSONL, unredacted, using the owning mach
 provider sign-in and an explicit `private` visibility. This deliberately supersedes INV-11's
 export-redaction guardrail for this explicit action only: preserving the native session file,
 including saved branches and tool output, is the requested contract rather than a sanitized
-transcript projection. Confirmation names the destination ("Share to Radius") and the Private visibility; by the owner's
-decision it does not restate that the content is unredacted. Piano requests `private` on every share
-and makes no claim about who can view a private artifact in Radius, nor promises secret detection.
+transcript projection. Confirmation states the destination and the `private` visibility
+Piano requests; it makes no claim about who can view a private artifact and promises no secret
+detection.
 
 Each confirmed action creates a new artifact. No registry association, version synchronization or
 automatic mutation retry is introduced (INV-01/02). On peers, main relays only the registered

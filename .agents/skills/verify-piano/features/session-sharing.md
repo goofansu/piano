@@ -7,11 +7,9 @@ Preconditions: synthetic saved sessions only; signed-out scratch Local and peers
 its three isolated instances and clears inherited Radius API keys.
 
 - **Confirm:** open a saved session, then `find role button click --name "Session information and actions"`
-  and `find role menuitem click --name "Share"`. The dialog is titled "Share to Radius", says the artifact is created with Private visibility,
-  and offers only Cancel and Share. Cancel sends
+  and `find role menuitem click --name "Share"`. The dialog is titled "Share to Radius". Cancel sends
   nothing. Mod+K → Share opens the same confirmation.
-- **Local sign-in:** confirm with `find role button click --name "Share"`; the dialog closes and a
-  toast answers. Wait for `Nothing was uploaded.`. **Open Providers** reaches Local's Providers settings.
+- **Local sign-in:** confirm with `find role button click --name "Share"`; wait for the toast's `Nothing was uploaded.`. **Open Providers** reaches Local's Providers settings.
 - **Peer sign-in from main:** repeat on eng-1's saved session. The notice names eng-1, directs
   sign-in in that machine's own Piano, and says main's sign-in is not used. No Local Providers
   shortcut appears. The main browser issues only the peer-qualified Share request.

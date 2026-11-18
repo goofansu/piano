@@ -98,7 +98,11 @@ function shared(
   toast.success("Session shared", {
     ...settled,
     description: undefined,
-    cancel: { label: "Open link", onClick: () => openLink(result.url) },
+    cancel: (
+      <button type="button" data-button data-cancel onClick={() => openLink(result.url)}>
+        Open link
+      </button>
+    ),
     action: {
       label: copied ? "Link copied" : "Copy link",
       onClick: (event) => {
