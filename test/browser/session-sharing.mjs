@@ -19,16 +19,19 @@ export async function openShare(page, palette = false) {
   await page.see("The artifact is created with Private visibility.");
 }
 
-const TOASTS_AT_REST =
-  "[...document.querySelectorAll('[data-sonner-toast]')].every(e => e.dataset.mounted === 'true' && e.getAnimations({ subtree: true }).every(a => a.playState !== 'running'))";
+const TOAST_AT_REST = `(() => {
+  const toast = document.querySelector('[data-sonner-toast][data-front=true]');
+  return !!toast && toast.dataset.mounted === 'true' && toast.dataset.removed === 'false'
+    && toast.getAnimations({ subtree: true }).every(a => a.playState !== 'running');
+})()`;
 
 async function toastButton(page, name) {
-  await page.until(TOASTS_AT_REST);
+  await page.until(TOAST_AT_REST);
   await page.click("button", name);
 }
 
 async function closeToast(page) {
-  await page.until(TOASTS_AT_REST);
+  await page.until(TOAST_AT_REST);
   await page.ab("click", "[data-sonner-toast][data-front=true] [data-close-button]");
   await page.ab("hover", '[aria-label="Message"]');
   await page.until("!document.querySelector('[data-sonner-toast]')");
@@ -43,7 +46,7 @@ export async function shareSignIn(page, machine, local = false) {
   await page.click("button", "Share");
   await page.until("!document.querySelector('[role=dialog]')");
   await page.see("Cannot share");
-  await page.until(TOASTS_AT_REST);
+  await page.until(TOAST_AT_REST);
   if (local) {
     await page.see("Sign in Radius to share.");
     await page.capture("share-local-sign-in");
@@ -64,8 +67,8 @@ export async function shareSignIn(page, machine, local = false) {
       "Providers opens the peer's own Providers settings",
     );
     assert.equal(await page.evaluate("location.pathname"), path, "main stays where it was");
-    await closeToast(page);
   }
+  await page.until("!document.querySelector('[data-sonner-toast]')");
 }
 
 export async function shareResultView(page, call, onEvent) {
@@ -138,7 +141,9 @@ export async function shareResultView(page, call, onEvent) {
         await toastButton(page, "Open link");
         assert.deepEqual(await page.evaluate("window.sharedOpens"), [share.url]);
         assert.equal(
-          await page.evaluate("!!document.querySelector('[data-sonner-toast]')"),
+          await page.evaluate(
+            "!!document.querySelector('[data-sonner-toast][data-removed=false]')",
+          ),
           true,
           "the link stays available after opening it",
         );
