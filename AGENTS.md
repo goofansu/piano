@@ -68,6 +68,12 @@ Preserve required legal notices and functional tooling directives. Give lint/typ
 truthful, concise reason. Keep module overviews, API explanations and test narration in the owning
 docs rather than source comments. Leave upstream/vendor comments intact.
 
+## Docs
+
+Docs record what the code cannot say: a decision and its reason, a contract others rely on, a
+gotcha. The code is the source of truth for how it works. When behavior changes, correct or delete
+the doc lines it made false; leave implementation and UI detail to the code.
+
 ## Safeguards
 
 Keep Pi protocol details behind `server/PiSessions.ts`. Extend its public contract through
