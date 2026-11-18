@@ -234,15 +234,37 @@ export function ProjectDialogView({
 }) {
   const id = useId();
   const nameInput = useRef<HTMLInputElement>(null);
+  const returnFocus = useRef<HTMLElement | null>(null);
+  const cancelled = useRef(false);
+  const cancel = () => {
+    cancelled.current = true;
+    close();
+  };
   return (
     <FormDialog
       open={open}
-      close={close}
+      close={cancel}
       className="sm:max-w-xl"
       aria-describedby={undefined}
       onOpenAutoFocus={(event) => {
         event.preventDefault();
+        cancelled.current = false;
+        returnFocus.current =
+          document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+            ? document.activeElement
+            : null;
         nameInput.current?.focus();
+      }}
+      onCloseAutoFocus={(event) => {
+        if (!cancelled.current) return;
+        // Radix has no DialogTrigger here; a dismissed palette also loses its invoking row.
+        event.preventDefault();
+        const source = returnFocus.current;
+        const target =
+          source?.isConnected && source.checkVisibility()
+            ? source
+            : document.querySelector<HTMLElement>('[data-command="new-project"]');
+        target?.focus({ preventScroll: true });
       }}
     >
       <form
@@ -257,7 +279,7 @@ export function ProjectDialogView({
         </DialogHeader>
         <ProjectFields id={id} draft={draft} setDraft={setDraft} nameRef={nameInput} />
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={close}>
+          <Button type="button" variant="outline" onClick={cancel}>
             Cancel
           </Button>
           <Button type="submit" disabled={!allowed}>
