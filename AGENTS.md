@@ -83,6 +83,9 @@ Name server modules in PascalCase after their export; `main.ts` is the sole entr
 Use workspace/session IDs in URLs, never filesystem paths. Send arbitrary paths in POST JSON bodies
 to keep them out of URL logs.
 
+Bound every reply the server reads from outside itself (a peer, a provider, an MCP endpoint) with a
+byte limit and a deadline. Size the limit against the largest real reply, with room to grow.
+
 Rebuild, restart or deploy the user's running Piano only when asked; coding, committing and pushing
 do not authorize it. Piano has no application authentication: on exe.dev keep it on loopback behind
 private authenticated access (INV-11).
