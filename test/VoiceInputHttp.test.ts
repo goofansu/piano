@@ -133,3 +133,31 @@ test(
     }
   },
 );
+
+test(
+  "a transcript leaves the voice endpoint as heard, unredacted",
+  { timeout: 15_000 },
+  async () => {
+    const heard = "password: hunter22 and sk-abc12345";
+    const provider = (async () => Response.json({ text: heard })) as typeof fetch;
+    const router = await startRouter(
+      "piano-voice-verbatim-",
+      Layer.succeed(TranscriptionFetch, provider),
+    );
+    try {
+      const saved = await router.handle("/api/settings/voice-input", {
+        method: "PUT",
+        body: JSON.stringify({ enabled: true, key: "sk-test-no-real-provider" }),
+      });
+      assert.equal(saved.status, 200);
+      const answer = await router.handle("/api/voice/transcribe", {
+        method: "POST",
+        body: JSON.stringify({ audio: "YQ==", mimeType: "audio/webm", hints: {} }),
+      });
+      assert.equal(answer.status, 200);
+      assert.deepEqual(await answer.json(), { text: heard });
+    } finally {
+      await router.dispose();
+    }
+  },
+);

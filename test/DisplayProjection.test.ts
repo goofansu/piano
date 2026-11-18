@@ -130,3 +130,42 @@ test("queued and restored messages and the session name leave as typed with cont
   assert.equal(notice._tag, "toast");
   if (notice._tag === "toast") assert.doesNotMatch(notice.message, /hunter22/);
 });
+
+test("an editor dialog's prefill and an extension's editor text leave as written with controls stripped; the dialog title and message stay redacted", () => {
+  const written = "OPENAI_API_KEY=sk-abc12345\nfoo";
+  const dialog = {
+    id: "d1",
+    generation: "g1",
+    receivedAt: 0,
+    deadlineAt: null,
+    deadlineKind: "pi-timeout",
+    method: "editor",
+    title: "Edit token: abc12345",
+    message: "Paste sk-abc12345 here",
+    prefill: `${written}\u001b[31m`,
+  } as const;
+  const asked = projectSessionEvent({ _tag: "dialog", dialog });
+  assert.equal(asked._tag, "dialog");
+  if (asked._tag !== "dialog") return;
+  assert.equal(asked.dialog.prefill, written);
+  assert.doesNotMatch(`${asked.dialog.title} ${asked.dialog.message}`, /abc12345/);
+
+  const state = {
+    model: "token: abc12345",
+    extension: {
+      statuses: [{ key: "k", text: "token: abc12345" }],
+      widgets: [],
+      editorRequest: { id: "g1:e1", text: `${written}\u001b[0m` },
+    },
+  } as unknown as SessionState;
+  const snapshot = projectSnapshot({
+    state,
+    messages: [],
+    dialogs: [dialog],
+  } as unknown as Snapshot);
+  assert.equal(snapshot.dialogs[0]?.prefill, written);
+  assert.doesNotMatch(snapshot.dialogs[0]?.title ?? "", /abc12345/);
+  assert.deepEqual(snapshot.state.extension?.editorRequest, { id: "g1:e1", text: written });
+  assert.doesNotMatch(snapshot.state.extension?.statuses[0]?.text ?? "", /abc12345/);
+  assert.doesNotMatch(snapshot.state.model ?? "", /abc12345/);
+});

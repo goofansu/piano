@@ -137,15 +137,12 @@ export function concealsApproval(dialog: Dialog, redaction = compileRedaction())
   return changed(dialog.title) || changed(dialog.message);
 }
 
-function projectDialog(dialog: Dialog, redaction: DisplayRedaction): Dialog {
-  const shown = redaction.wire(dialog);
-  return concealsApproval(dialog, redaction) ? { ...shown, concealed: true } : shown;
-}
-
 const SAVED_BACK_FIELDS = {
   project: ["name", "instructions"],
   sessionReference: ["title"],
   sessionState: ["sessionName"],
+  dialog: ["prefill"],
+  editorRequest: ["text"],
 } as const;
 
 function keepSavedBack<T extends object>(item: T, shown: T, fields: readonly (keyof T)[]): T {
@@ -154,9 +151,29 @@ function keepSavedBack<T extends object>(item: T, shown: T, fields: readonly (ke
   return kept;
 }
 
+function projectDialog(dialog: Dialog, redaction: DisplayRedaction): Dialog {
+  const shown = keepSavedBack(dialog, redaction.wire(dialog), SAVED_BACK_FIELDS.dialog);
+  return concealsApproval(dialog, redaction) ? { ...shown, concealed: true } : shown;
+}
+
 export function projectState(state: SessionState, redaction = compileRedaction()): SessionState {
   const { queuedMessages, ...rest } = state;
-  const shown = keepSavedBack(rest, redaction.wire(rest), SAVED_BACK_FIELDS.sessionState);
+  const kept = keepSavedBack(rest, redaction.wire(rest), SAVED_BACK_FIELDS.sessionState);
+  const request = rest.extension?.editorRequest;
+  const shown =
+    request && kept.extension?.editorRequest
+      ? {
+          ...kept,
+          extension: {
+            ...kept.extension,
+            editorRequest: keepSavedBack(
+              request,
+              kept.extension.editorRequest,
+              SAVED_BACK_FIELDS.editorRequest,
+            ),
+          },
+        }
+      : kept;
   return queuedMessages === undefined
     ? shown
     : { ...shown, queuedMessages: stripControls(queuedMessages) };
