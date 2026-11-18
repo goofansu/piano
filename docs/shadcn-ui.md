@@ -25,70 +25,35 @@ with shadcn CLI 4.21.4's `rsc: false` transformer.
 Wrappers merge only Piano's changes, not copies of upstream class lists. Custom button/badge/alert
 variants pass `variant={null}` to avoid inheriting an unrelated upstream variant's hover/dark rules.
 Motion is opt-in: the reset at the end of `index.css` stops upstream motion except on elements a
-`Piano*` wrapper marks `data-motion`, whose rules retune the upstream classes (see
-[Motion](design-moonstone.md#motion)). The dialog and popover content wrappers also own the closing
-face: they exit on a copy of the last open face (`useExitFace`).
-The tooltip arrow stays inside the content's stacking context, so it needs no separate z-index patch.
+`Piano*` wrapper marks `data-motion`, whose rules retune the upstream classes.
 
 ### Responsive ownership
 
 Use [one-area-at-a-time and side-by-side](glossary.md) for session layouts, not device names.
 Three independent signals retain distinct owners:
 
-- `panelLayout.ts` owns capacity: the actual areas-container width after sidebar/insets, observed
-  by `SessionView`, crosses at 849 CSS px (448 + 400 + 1). Zero means unmeasured/hidden and keeps
-  the previous mode. `navigation.ts` alone projects visible areas, rail and tabs; preferred Surface
-  width does not choose the mode.
+- `panelLayout.ts` owns capacity: the actual areas-container width after sidebar/insets.
 - `viewportLayout.ts` owns the application's presentation query, `min-width: 48rem`, matching
-  CSS `md`. Its shared read/subscription serves sidebar column/reveal and `useNarrowViewport.ts`;
-  narrow is the logical complement, with no fractional-width gap or rounded `innerWidth` read.
-  Media-query rem uses the browser's default font baseline (768px at 16px, 960px at 20px), not
-  the page's root font-size. The header retains its initial false value until its effect reads
-  the query. Its subscription stays independent of sidebar state, which may not change on a crossing.
+  CSS `md`; `useNarrowViewport.ts` is its logical complement.
 - Pointer capability owns touch sizing and input behavior, not either layout decision.
 
-The header uses a sheet/context line for one-area-at-a-time **or** a narrow viewport, retaining
-its startup/hidden fallback. Trigger placement follows viewport; the project breadcrumb follows
-CSS `md`; rail eligibility comes from navigation/commands. Wide one-area-at-a-time keeps both the
-breadcrumb and beside-title sheet trigger. See [Quiet UI](quiet-ui.md#shared-structure).
-
-The stock provider and Settings tooltip still use upstream `hooks/use-mobile.ts`
-(`innerWidth < 768`, `max-width: 767px` events). Their `isMobile` can therefore disagree with CSS
-and the application at fractional widths or a non-default browser font baseline. This remains
-an exception for Settings sidebar tooltip suppression and stock sidebar consumers, not Piano's
-⌘B routing: `AppLayout` disables the stock listener. The sidebar layout also refuses direct
-desktop-preference changes while narrow, independently of shortcut routing. Stock `openMobile`
-remains disconnected from Piano's reveal, as below. Neither upstream consumer owns session capacity.
+The stock provider and Settings tooltip still use upstream `hooks/use-mobile.ts`, whose
+`isMobile` can disagree with CSS and the application at fractional widths or a non-default
+browser font baseline. Neither upstream consumer owns session capacity.
 
 ### Stock sidebar shortcut
 
 `ui/sidebar.tsx` carries one intentional patch in `ui/`, marked `Piano patch` in its source: an
 optional `keyboardShortcut` provider prop (default `true`) that disables the stock listener
-entirely. The stock listener's key condition stays upstream's; Piano never enables it.
+entirely. `AppLayout` passes `keyboardShortcut={false}`; Piano's one listener lives in
+`useSidebarLayoutController`. It toggles on ⌘B alone: upstream also takes Ctrl+B, which on macOS
+moves the caret back a character in text fields and elsewhere is the browser's or a field's own,
+and takes ⌘ chords with Shift or Alt, which belong to the browser
+([shadcn-ui/ui#11418](https://github.com/shadcn-ui/ui/pull/11418)). Stock `openMobile` is not
+connected to Piano's reveal.
 
-Piano passes `keyboardShortcut={false}` from `AppLayout`. Its one global listener lives with the
-page-lifetime controller in `useSidebarLayoutController`, alongside the separate Mod+K palette
-listener. It toggles on ⌘B alone: upstream also takes Ctrl+B, which on macOS moves the caret back a character
-in text fields and elsewhere is the browser's or a field's own, and takes ⌘ chords with Shift or
-Alt, which belong to the browser ([shadcn-ui/ui#11418](https://github.com/shadcn-ui/ui/pull/11418)).
-Other platforms toggle the sidebar from the palette or its button. It toggles once per matching keydown,
-including held-key repeats; it does not filter editing targets or Settings. It calls `layout.toggle()`
-just like Piano's controls use that controller, so the CSS-aligned 48rem query chooses between
-collapsing/expanding the column and opening/closing the modal reveal. Two presses restore the
-original state. Narrow toggles do not change the saved desktop collapse or width preference; reveal
-focus capture, dismissal and breakpoint cleanup stay with the existing controller/modal lifecycle.
-The provider's controlled `open` still projects the desktop preference for its menu primitives,
-not keyboard routing; stock `openMobile` is not connected to Piano's reveal.
-
-The reveal composes the same Radix modal primitive as Sheet, but exposes stationary navigation
-under a translated live page rather than moving a sheet over it. The sidebar occupies 75% of the narrow viewport; only a claimed
-horizontal drag anywhere on the main content overrides touch scrolling, with browser edges,
-editing controls and horizontal scrollers excluded. Drag motion tracks the finger 1:1; on release
-the sheet comes to rest open or closed at once. The moving surfaces have compositor
-hints (the live page only below the viewport breakpoint). During a drag, `useSidebarSwipe` batches surface-only style
-writes into animation frames; React owns mounting and the settled endpoint.
-Do not update inherited motion variables per frame: that invalidates styles across the transcript
-and navigation. Cancellation discards pending frames and returns the surfaces to CSS settling.
+During a sidebar drag, do not update inherited motion variables per frame: that invalidates
+styles across the transcript and navigation.
 
 ## Upgrade procedure
 

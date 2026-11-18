@@ -1,16 +1,11 @@
 # Project home
 
-- `settings`: "Project settings" (the header menu, the sidebar's project menu, Mod+K on the home) opens a
-  dialog in place: Name and Instructions fields with a live count under Instructions ("0 / 20,000"
-  on the seed, red past the limit with Save off), Save off until a field changes; saving closes it
-  and toasts "Project saved". Scope selectors to `[role=dialog]`: the page's composer is a
-  `textarea` too. What reaches Pi needs the real Pi: fake Pi ignores the extension, so check the
-  model's request with a scripted loopback model. `test/fixtures/RealPiDispatch.ts` is an
-  infrastructure example, not an existing project-instruction assertion.
+- Project instructions reaching Pi need real Pi with a scripted loopback model: fake Pi ignores
+  the extension. `test/fixtures/RealPiDispatch.ts` is an infrastructure example, not an existing
+  assertion.
 ## Driving it with agent-browser
 
-Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`), `. "$RUN/run.env"`, doctor passed;
-`ab() { .agents/skills/verify-piano/scripts/ab.sh "$RUN" "$@"; }`.
+Preconditions: a seeded launch.
 
 - `open-from-header`
   - Action: open the member session and click its project button.

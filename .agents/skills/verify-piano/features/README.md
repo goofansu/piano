@@ -33,11 +33,10 @@ The [proof standards](../SKILL.md#evidence) apply to every recipe. In addition:
 
 ## Feature entry contract
 
-Each feature file starts with an H1 and one paragraph on the user-visible behavior, then exactly
-four H2 sections in this order: `Sub-features` (short IDs, one line each), `How to get to it (user
-POV)` (every entry point), `Driving it with agent-browser` (starts with `Preconditions:`, then
-labeled bullets pairing each action with an exact command and the observable result), `Gotchas`.
-Keep implementation details out; name user paths, handles, required state, commands and proof.
+Each feature file is an H1, then `Driving it with agent-browser` (starts with `Preconditions:`,
+then labeled bullets pairing each action with an exact command and the observable result) and
+`Gotchas`. Keep implementation details out; name user paths, handles, required state, commands and
+proof.
 
 In the Features list below, give each feature with an existing `docs/` page one short link to that
 page; keep file maps there, not in the feature files. New or substantially changed features follow

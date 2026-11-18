@@ -2,9 +2,8 @@
 
 ## Driving it with agent-browser
 
-Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
-`ab() { .agents/skills/verify-piano/scripts/ab.sh "$RUN" "$@"; }`. Only the optional Connect
-step reaches a public endpoint; the command fixture and refused URLs below stay local.
+Preconditions: a seeded launch. Only the optional Connect step reaches a public endpoint; the
+command fixture and refused URLs below stay local.
 
 - `mcp-empty` and `add-form` refusal
   - Action: `ab open "$WEB_URL/settings/mcp"; ab wait --text "Available"`; capture `01-empty`.

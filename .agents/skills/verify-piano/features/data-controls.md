@@ -2,10 +2,9 @@
 
 ## Driving it with agent-browser
 
-Preconditions: a fresh seeded default-fake launch, `. "$RUN/run.env"`, doctor passed;
-`ab() { .agents/skills/verify-piano/scripts/ab.sh "$RUN" "$@"; }`. Keep the loose seed stopped
-and unpinned, and the project seed available for Pin. Run the closed-folder check last; other
-recipes need the folder open. Capture with `capture.sh` as in the skill body.
+Preconditions: a fresh seeded default-fake launch. Keep the loose seed stopped and unpinned, and
+the project seed available for Pin. Run the closed-folder check last; other recipes need the folder
+open.
 
 - `archived-rows` and `unarchive`
   - Action: `ab open "$WEB_URL/s/verify-loose"; ab wait --text 'Answer 4.'`;

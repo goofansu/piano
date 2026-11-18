@@ -2,9 +2,7 @@
 
 ## Driving it with agent-browser
 
-Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
-`ab() { .agents/skills/verify-piano/scripts/ab.sh "$RUN" "$@"; }`. Mod+K is `Control+k` on Linux,
-`Meta+k` on macOS.
+Preconditions: a seeded launch. Mod+K is `Control+k` on Linux, `Meta+k` on macOS.
 
 - `open-settings`
   - Action: `ab set viewport 1280 800; ab open "$WEB_URL/"; ab wait --text "Loose session";

@@ -2,17 +2,12 @@
 
 ## Driving it with agent-browser
 
-Preconditions: a fresh seeded launch with the default browser fake, `. "$RUN/run.env"`, doctor passed;
-`ab() { .agents/skills/verify-piano/scripts/ab.sh "$RUN" "$@"; }`. Run the harness journey first; it covers model, effort,
-project and reload on its own scratch instance, with its own folders and models (not the seed's).
+Preconditions: a fresh seeded launch with the default browser fake. Run
+`node test/browser/start-session.mjs <evidence-directory>` first; it uses its own folders and
+models, not the seed's.
 
-- `choose-folder`
-  - Action: `ab set viewport 1280 800; ab open "$WEB_URL/new"; ab wait --text "What should we work on?";
-    ab find role combobox click --name "Directory" --exact`
-  - Result: the combobox already reads `repo`; listbox "Suggestions" with options `repo`
-    (selected), `Browse…`, `Worktrees`. `ab find role option click --name "repo" --exact`.
-    Capture `01-new`, then wait for the directory picker to close before using another control:
-    `ab wait --fn "!document.querySelector('[aria-label=\"Choose a directory\"]')"`.
+- `choose-folder`: after picking in combobox "Directory", wait for the picker to close before using
+  another control: `ab wait --fn "!document.querySelector('[aria-label=\"Choose a directory\"]')"`.
 - `directory-trust` (scratch resources only)
   - Preconditions: put a harmless skill at `$REPO/.agents/skills/demo/SKILL.md` before opening
     New: front matter `name: demo`, `description: Verification fixture.`, body `Reply briefly.`.

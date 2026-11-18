@@ -25,7 +25,7 @@ ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$ssh_dest" \
   "bash -s -- remote '$target'" < "$script"
 ```
 
-Retain each command's stdout/stderr in a separate local log. Independent machines may run in parallel. The script requires a clean checkout on `main`, fast-forwards to the target, checks the resulting revision, and runs `npm ci` and `npm run build`. Remote mode uses `/home/exedev/piano`, the hosted PATH and exe.dev's HTTPS GitHub integration, leaving `origin` unchanged. Local mode derives the repository root from the script location; `--help` documents an optional local root override.
+Retain each command's stdout/stderr in a separate local log. Independent machines may run in parallel. The script's `--help` documents its modes.
 
 A failed command is blocked, not ready. Continue the other machines and preserve blocked checkouts' local changes and history. This is deployment, not implementation: use the existing verification evidence rather than repeating the development suite.
 

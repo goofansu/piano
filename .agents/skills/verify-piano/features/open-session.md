@@ -2,8 +2,8 @@
 
 ## Driving it with agent-browser
 
-Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
-`ab() { .agents/skills/verify-piano/scripts/ab.sh "$RUN" "$@"; }`. Run the harness journey first.
+Preconditions: a seeded launch. Run `node test/browser/open-session.mjs <evidence-directory>`
+first.
 
 - `phone-menu`
   - Action: `ab open "$WEB_URL/s/verify-plan"; ab wait --text "Answer 4.";
@@ -57,17 +57,11 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
   - Result: "Response 1 / 2" is selected; Response cost remains `$0.0063`, Session cost `$0.0126`
     (both fake responses have the same usage). Capture `02b-response-history`, then
     `ab find role radio click --name "Show tokens history" --exact; ab press Escape`.
-- `inline-question` (after response history)
-  - Action: `ab fill '[aria-label="Message"]' "question"; ab press Enter;
-    ab wait --text "Which checks?"`; capture `02c-question`.
-    `ab find role radio click --name "Full suite" --exact;
-    ab find role button click --name "Send answer" --exact; ab wait --text "Answer: Full suite"`.
-  - Result: the question closes and the answer appears. Capture `02d-answered`.
-  - Phone: before answering, `ab set viewport 390 844`; capture `02e-phone-question` and record
-    `ab eval "({width:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth})"`.
-    Both are 390; Full suite and Send answer remain reachable. Answer as above, capture the
-    result, then widen to 1280×800. This short question does not prove long Markdown/options
-    scrolling or a real phone's keyboard behavior.
+- `inline-question` phone (the desktop path is in `test/browser/open-session.mjs`): send `question`
+  through Message, `ab wait --text "Which checks?"`, `ab set viewport 390 844`, and record
+  `ab eval "({width:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth})"`:
+  both are 390; Full suite and Send answer remain reachable. Widen to 1280×800 afterwards. This short
+  question does not prove long Markdown/options scrolling or a real phone's keyboard behavior.
 - `queue-edit` (default browser fake, on a disposable session with an empty draft)
   - Action: `ab fill '[aria-label="Message"]' hold; ab press Enter;
     ab wait '[aria-label="Stop"]'; ab fill '[aria-label="Message"]' 'queue review';
@@ -147,15 +141,9 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
 
 ## Gotchas
 
-- Remote conversation, projects, session actions, Changes/files/rail, folder-trust and browser-memory
-  isolation, and prepared image upload/refusal/cancellation require another Piano with its own
-  database/history and a configured peer connection. Image previews are supported; managed app
-  Preview remains on the peer's own Piano.
-  The committed `test/browser/remote-session.mjs` covers those boundaries with main plus two
-  independent peers under the [narrow run-limit exception](../SKILL.md#run-limits); run it alone
-  and wait for owned cleanup. Settings and voice ownership checks run separately in
-  `remote-inputs.mjs`, with the same isolated topology. The default manual launch has no peers: record that prerequisite instead of running the helper alone
-  or borrowing the owner's Piano. An exe.dev peer additionally needs
-  an authorized peer integration or VM-scoped token, as described in
-  [Remote Pianos](../../../../docs/remote-piano.md#setup); direct exe.dev UI/link access needs a
-  signed-in browser. Record the actual route attempted and the unmet prerequisite.
+- Peer checks need another Piano with its own database/history and a configured peer connection:
+  run `test/browser/remote-session.mjs`, then `remote-inputs.mjs`, alone under the
+  [narrow run-limit exception](../SKILL.md#run-limits). An exe.dev peer additionally needs an
+  authorized peer integration or VM-scoped token ([Remote Pianos](../../../../docs/remote-piano.md#setup));
+  direct exe.dev UI/link access needs a signed-in browser. Record the route attempted and the unmet
+  prerequisite.

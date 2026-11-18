@@ -2,8 +2,7 @@
 
 ## Driving it with agent-browser
 
-Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`), `. "$RUN/run.env"`, doctor passed;
-`ab() { .agents/skills/verify-piano/scripts/ab.sh "$RUN" "$@"; }`. Mod+K is `Control+k` on Linux and `Meta+k` on macOS.
+Preconditions: a seeded launch. Mod+K is `Control+k` on Linux and `Meta+k` on macOS.
 
 - `rows` and `context`
   - Action: `ab set viewport 1280 800; ab open "$WEB_URL/projects"; ab wait --text "Verify Project";

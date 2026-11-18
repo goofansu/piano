@@ -7,11 +7,11 @@ SQLite, UI and documentation. Some describe the target model in
 | Term | Meaning |
 | --- | --- |
 | Project | A named, bounded initiative grouping sessions from any folders toward one outcome; see [Projects](#projects). |
-| Folder | An added root directory together with the worktrees created from it. Sessions in a worktree are listed under their folder with the branch beside them. A non-Git directory is listed the same way, without a branch label. |
-| Directory | A filesystem path a session runs in: a repository root, one of its worktrees, or any other folder. The New page picks a directory; the sidebar groups by date, folder or project. |
-| Checkout | The directory on disk a session runs in: a folder root, one of its worktrees, or another directory. A session whose checkout is gone keeps its history but cannot continue until the directory is restored at the same path. |
+| Folder | An added root directory together with the worktrees created from it. |
+| Directory | A filesystem path a session runs in: a repository root, one of its worktrees, or any other folder. |
+| Checkout | The directory on disk a session runs in: a folder root, one of its worktrees, or another directory. |
 | Machine | A Piano backend this browser is connected to: **Local**, or a configured remote Piano owned by the same user ([Remote Pianos](remote-piano.md)). It owns its sessions, files, history and database. |
-| Offers (machine) | What a machine offers in this browser, decided in one place (`machineOffers`): Local offers everything; a remote offers the conversation slice of [ADR 0004](adr/0004-same-owner-piano-peer.md), its projects included. Where a session may start is one offer that also says why not: the checkout is missing, or (on a remote) its folder is closed there. Name an offer by what the UI shows ("files", "worktrees"), not by "remote". |
+| Offers (machine) | What a machine offers in this browser, decided only in `machineOffers`. Name an offer by what the UI shows ("files", "worktrees"), not by "remote". |
 | Workspace | Piano's context around a folder root or worktree, attaching sessions, revision, processes, evidence and integration state. Each has a registry ID, which URLs carry in place of its path. |
 | Session | The Pi session, with Pi-owned history and identity. Use "session" for the entity and its lifecycle, never "thread". |
 | Running session | A session whose Pi is running or starting, including while idle, waiting for input or owning an app. Not merely the session selected on screen, and not only one that is Working. |
@@ -38,23 +38,14 @@ SQLite, UI and documentation. Some describe the target model in
 | Skill | Agent instructions for a method or discipline, loaded by Pi; skill use does not by itself constitute evidence. |
 ## Projects
 
-The [project plan](outcome-projects.md) and [ADR 0002](adr/0002-outcome-projects.md) separate
-organization from execution. Grouping is implemented; shared context/instructions remain planned.
-Earlier documents call a project an "outcome project".
-
 | Term | Meaning |
 | --- | --- |
 | Project membership | An explicit association between a session and a project, independent of the session's execution location. |
-| Done (project) | The user's reversible mark that a project's outcome is finished: the index lists it under Done and the sidebar groups it last. It changes nothing about its sessions, which keep their own state and their Pi; a session started in it reopens it. Not verification, approval or archive. |
-| Shared project context | Background and reference material supplied to member sessions to support the project's outcome; a later capability. |
-| Shared project instructions | Project-scoped guidance supplied to member sessions, distinct from background material and subject to explicit application rules; a later capability. |
+| Done (project) | The user's reversible mark that a project's outcome is finished. It changes nothing about its sessions; a session started in it reopens it. Not verification, approval or archive. |
 
-A repository can support multiple projects, and a project can span repositories.
-A task is a narrower intended outcome that may contribute to a project; neither tasks nor a task
-hierarchy are required for grouping sessions. Workspaces still identify where execution happens.
-The sidebar groups sessions by date, folder or project. Code, wire and SQLite use the same
-names: `folders` for added directories and `projects` for groupings. Pi's own "project trust" keeps
-Pi's name; it is unrelated to Piano projects.
+A repository can support multiple projects, and a project can span repositories. Neither tasks
+nor a task hierarchy are required for grouping sessions. Pi's own "project trust" keeps Pi's name;
+it is unrelated to Piano projects.
 
 An agent can be settled while a task is unfinished. Tests can pass while an acceptance criterion
 remains unverified. A verified candidate still needs whatever integration approval project policy

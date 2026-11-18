@@ -5,11 +5,8 @@
 The structured-input (`--json`) path is covered by
 `node test/browser/start-session.mjs <evidence-directory>`.
 
-For the remaining manual checks:
-
-Preconditions: a seeded launch, `. "$RUN/run.env"` (exports `PIANO_SESSION_WS_URL=ws://127.0.0.1:$PORT/ws`,
-the backend, and `PIANO_SESSION_ORIGIN=$WEB_URL`), doctor passed; `echo "dispatch hello" > "$RUN/prompt.txt"`;
-`mkdir -p "$EVIDENCE/session-dispatch"`; `ab() { .agents/skills/verify-piano/scripts/ab.sh "$RUN" "$@"; }`.
+Preconditions for the manual checks: a seeded launch; `echo "dispatch hello" > "$RUN/prompt.txt"`;
+`mkdir -p "$EVIDENCE/session-dispatch"`.
 
 - `start`
   - Command: `node scripts/dispatch-session.ts "$RUN/prompt.txt" "$REPO" > "$EVIDENCE/session-dispatch/start.json"; echo $?`

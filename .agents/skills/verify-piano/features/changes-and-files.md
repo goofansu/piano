@@ -2,10 +2,8 @@
 
 ## Driving it with agent-browser
 
-Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
-`ab() { .agents/skills/verify-piano/scripts/ab.sh "$RUN" "$@"; }`. Make the workspace dirty through the files, as Pi would:
+Preconditions: a seeded launch. Make the workspace dirty through the files, as Pi would:
 `echo 'export const answer = 5;' > "$REPO/src/answer.ts"; echo note > "$REPO/new.txt"`.
-The seeded "Plan the verification" history contains one successful Pi `write` of `src/answer.ts`.
 
 - `changes-open` and `changes-list`
   - Action: `ab set viewport 1280 800; ab open "$WEB_URL/s/verify-plan"; ab wait --text "Answer 4.";

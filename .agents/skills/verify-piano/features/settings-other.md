@@ -2,8 +2,7 @@
 
 ## Driving it with agent-browser
 
-Preconditions: seeded launch, `. "$RUN/run.env"`, doctor passed;
-`ab() { .agents/skills/verify-piano/scripts/ab.sh "$RUN" "$@"; }`. No credentials or receiver are needed.
+Preconditions: a seeded launch. No credentials or receiver are needed.
 
 - `providers`
   - Action: `ab open "$WEB_URL/settings/providers"; ab wait '[aria-label="Sign in to Radius"]'`.

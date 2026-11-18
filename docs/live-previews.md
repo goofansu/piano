@@ -52,25 +52,10 @@ local HTTP readiness does not prove authenticated external access.
 
 ## Ports and state
 
-An optional `ports` array narrows the pool; otherwise it is 3000–9999. An explicit loopback origin
-accepts configured ports 1024–65535. Ports 5173, 7070, 8000 and 8001 are always reserved;
-`reservedPorts` excludes additional listeners. Allocation probes `127.0.0.1` and the IPv4/IPv6
-wildcards separately (important on macOS). An external process can still win a bind race; the app
-must use a strict port, and readiness checks actual owned listeners around HTTP.
-
-All production Piano instances for the account share `~/.local/state/piano/previews/` (0700).
-`PIANO_PREVIEW_STATE` is an isolated-scratch override. Preserve the directory across upgrades; never
-place it in a worktree or Pi history, or delete intents to force a retry. The exclusive SQLite
-transaction in `lock.sqlite` serializes allocation, launch, replacement and exact cleanup across
-processes, and is released by the kernel on SIGKILL. Records are atomically replaced and fsynced.
-This is execution intent, not another conversation store.
-
-Records retain `serviceId` (canonical-workspace hash), random `instanceId` (unique unit/label),
-`invocation` (systemd invocation ID or launchd run count), workspace, launch spec, port and timestamp.
-New records also retain `owner`: session ID, random Pi generation, canonical workspace and that
-process generation's private socket endpoint. Neither a saved session ID nor a reusable PID is an
-owner. An unexpected supervisor invocation refuses adoption/stop. Retained identity permits cleanup
-after checkout deletion, without `realpath` of the missing directory.
+Port pools and reservations are in `scripts/PreviewAdapter.ts`. All production Piano instances
+for the account share `~/.local/state/piano/previews/` (0700); `PIANO_PREVIEW_STATE` is an
+isolated-scratch override. Preserve the directory across upgrades; never place it in a worktree
+or Pi history, or delete intents to force a retry.
 
 ## Ownership and death cleanup
 

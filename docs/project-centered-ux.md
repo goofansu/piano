@@ -1,4 +1,4 @@
 # Project-centered UX
 
-- **Data:** everything comes from what the browser already holds: `projects` and the session
-  catalog. No request, no Git, no Pi (PIN-83, as the home today).
+The index and a project's home draw only from what the browser holds (`projects`, the session
+catalog): no request, no Git, no Pi (PIN-83).
