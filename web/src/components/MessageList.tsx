@@ -344,6 +344,7 @@ const TranscriptRowView = memo(function TranscriptRowView({
             >
               <span className="sr-only select-none">Pi said</span>
               <Markdown
+                preserveLineBreaks
                 images={images}
                 text={text}
                 streaming={streaming}
@@ -560,7 +561,7 @@ function ContextCard({ msg }: { msg: RenderMsg }) {
       data={{ "data-slot": "context-card", "data-context": facts.kind }}
     >
       {facts.markdown ? (
-        <Markdown text={msg.text} className="prose-chat" />
+        <Markdown text={msg.text} preserveLineBreaks className="prose-chat" />
       ) : (
         <pre className="whitespace-pre-wrap break-words text-xs">{msg.text}</pre>
       )}
@@ -684,7 +685,7 @@ function UserMessage({
             )}
             style={open ? undefined : { maxHeight: `${USER_LINES * 1.55}em` }}
           >
-            <Markdown text={text} mode="static" className="prose-chat" />
+            <Markdown text={text} mode="static" preserveLineBreaks className="prose-chat" />
           </div>
         )}
         {long && (
@@ -768,7 +769,7 @@ function DispatchRow({
           </pre>
         </div>
       )}
-      {answer && <Markdown text={clamp(answer, 20000)} className="prose-chat" />}
+      {answer && <Markdown text={clamp(answer, 20000)} preserveLineBreaks className="prose-chat" />}
     </FoldRow>
   );
 }

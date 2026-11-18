@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
+import { fidelityText } from "./message-fidelity.mjs";
 
 const args = process.argv.slice(2);
 const arg = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
@@ -231,8 +232,17 @@ function handle(cmd) {
           title: "Which checks?",
           options: ["Quick checks", "Full suite"],
         });
-      } else if (cmd.message === "stream") {
+      } else if (cmd.message === "stream" || cmd.message === "stream-fidelity") {
         out({ type: "message_start", message: { role: "assistant", content: [] } });
+        if (cmd.message === "stream-fidelity")
+          out({
+            type: "message_update",
+            assistantMessageEvent: {
+              type: "text_delta",
+              contentIndex: 0,
+              delta: `${fidelityText}\n\n`,
+            },
+          });
         let line = 0;
         streamTimer = setInterval(() => {
           line += 1;

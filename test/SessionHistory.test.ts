@@ -227,7 +227,7 @@ test("a projection worker exit reports unreadable history and a later read recov
   assert.equal(recovered.messages[0].text, "worker recovery");
 });
 
-test("saved projection refreshes mutations and preserves process-local fingerprints, images and redaction", async () => {
+test("saved projection refreshes mutations and preserves process-local fingerprints, images and message text", async () => {
   const file = seed(cwd, "changing-peek", "before");
   const first = await run(history.peek("changing-peek", file));
   assert.equal(first.messages[0].inputFingerprint, inputFingerprint("before"));
@@ -261,7 +261,7 @@ test("saved projection refreshes mutations and preserves process-local fingerpri
       })}\n`,
     );
     const snapshot = await run(history.peek("changing-peek", file));
-    assert.ok(!JSON.stringify(snapshot).includes(process.env.PIANO_HISTORY_TEST_SECRET));
+    assert.equal(snapshot.messages[1].text, process.env.PIANO_HISTORY_TEST_SECRET);
     const id = snapshot.messages[1].attachments?.[0].url.split("/").at(-1);
     assert.ok(id);
     assert.deepEqual(getImagePreview(id)?.bytes, Buffer.from(png, "base64"));
@@ -562,7 +562,7 @@ test("INV-01: peeking uses Pi context edits, compaction and active branch withou
     assert.equal(snap.state.thinkingLevel, "low");
     assert.deepEqual(
       snap.messages.map((m) => m.text),
-      ["summary", "edited [REDACTED]"],
+      ["summary", `edited ${secret}`],
     );
     assert.equal(snap.messages[1].model, "physical/answer");
     assert.equal(
@@ -574,7 +574,7 @@ test("INV-01: peeking uses Pi context edits, compaction and active branch withou
       undefined,
       "a file peek must not invent full-session accounting from context",
     );
-    assert.equal(readFileSync(file, "utf8"), original, "redaction never rewrites Pi history");
+    assert.equal(readFileSync(file, "utf8"), original, "projection never rewrites Pi history");
     assert.ok(original.includes(secret));
   } finally {
     rmSync(dir, { recursive: true, force: true });

@@ -3,6 +3,28 @@ import { test } from "node:test";
 import { markdownImages } from "../web/src/lib/markdown.ts";
 import { renderMarkdown } from "./fixtures/markdown.ts";
 
+test("transcript soft breaks are visible without changing document Markdown or existing hard breaks", () => {
+  for (const streaming of [false, true]) {
+    for (const newline of ["\n", "\r\n"]) {
+      const source = ["a: 1", "b: 2", "c: 3"].join(newline);
+      const html = renderMarkdown(source, false, streaming, true);
+      assert.match(html, /<p>a: 1<br\s*\/>\s*b: 2<br\s*\/>\s*c: 3<\/p>/);
+      assert.ok(!renderMarkdown(source, false, streaming).includes("<br"));
+    }
+    const html = renderMarkdown(
+      "**bold**\nnext  \nhard\\\nbreak\n\n- one\n  continuation\n- two\n\n```text\nx\ny\n```\n\n| A | B |\n| - | - |\n| 1 | 2 |",
+      false,
+      streaming,
+      true,
+    );
+    assert.equal((html.match(/<br/g) ?? []).length, 4, "soft and hard breaks occur once");
+    assert.ok(html.includes("<strong>bold</strong>"));
+    assert.match(html, /<li>one<br\s*\/>\s*continuation<\/li>\s*<li>two<\/li>/);
+    assert.ok(html.includes("<pre><code>x\ny</code></pre>"));
+    assert.ok(html.includes("<td>1</td>"));
+  }
+});
+
 test("tab-indented fenced commands stay inside their numbered step", () => {
   const source =
     "1. Install dependencies:\n\n\t```bash\n\tnpm install\n\tnpm run build\n\tnpm start\n\t```\n\n2. Open the app.";

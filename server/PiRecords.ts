@@ -33,7 +33,12 @@ import type {
   Usage,
 } from "../shared/wire.ts";
 import { Attachments, ContextUsage, SessionStats, SlashCommand } from "../shared/wire.ts";
-import { compileRedaction, concealsApproval, type DisplayRedaction } from "./DisplayProjection.ts";
+import {
+  compileRedaction,
+  compileTranscriptDisplay,
+  concealsApproval,
+  type DisplayRedaction,
+} from "./DisplayProjection.ts";
 import { imagePreview } from "./ImagePreviews.ts";
 
 interface RawContent {
@@ -180,7 +185,7 @@ function writtenPath(name: string | undefined, args: unknown): string | undefine
 export function serializeMessage(
   id: string,
   msg: RawMessage,
-  redaction: DisplayRedaction = compileRedaction(),
+  redaction: DisplayRedaction = compileTranscriptDisplay(),
 ): RenderMsg | null {
   let result: RenderMsg;
   if (msg.role === "user")
@@ -255,7 +260,7 @@ export function serializeMessage(
 }
 const messageId = (index: number) => `m${index}`;
 function serializeMessages(msgs: ReadonlyArray<RawMessage>): RenderMsg[] {
-  const redaction = compileRedaction();
+  const redaction = compileTranscriptDisplay();
   return msgs.flatMap((m, i) => {
     const result = serializeMessage(messageId(i), m, redaction);
     return result ? [result] : [];
@@ -984,7 +989,7 @@ export class PiProjector {
         const old = this.tools.get(id);
         const ended = event.type === "tool_execution_end";
         const result = ended ? event.result : event.partialResult;
-        const redaction = compileRedaction();
+        const redaction = compileTranscriptDisplay();
         const tool: ToolExecution = redaction.wire({
           id,
           parentId: event.parentToolCallId ?? old?.parentId,
@@ -1032,7 +1037,7 @@ export class PiProjector {
   private update(): SessionEvent[] {
     if (!this.partial) return [];
     const blocks = [...this.blocks.entries()].sort(([a], [b]) => a - b).map(([, b]) => b);
-    const redaction = compileRedaction();
+    const redaction = compileTranscriptDisplay();
     this.partial = redaction.wire({
       ...this.partial,
       text: redaction.text(assistantText(blocks), true),

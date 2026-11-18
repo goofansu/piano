@@ -8,7 +8,7 @@ import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
 import { DirectoryFacts, DirectoryFactsLive } from "../server/DirectoryFacts.ts";
 import { PiCli, type PiCliConfig } from "../server/PiCli.ts";
 import { type PiSession, PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
-import type { SessionEvent, SessionState } from "../shared/wire.ts";
+import type { SessionEvent, SessionState, Snapshot } from "../shared/wire.ts";
 
 const cli = {
   node: process.execPath,
@@ -150,9 +150,13 @@ test("readback replies of the wrong shape surface as refresh errors and recover,
   );
 });
 
-test("safe live/reload output retains tools and extension state without inventing transcript or usage", async () => {
+test("live/reload output shows transcript text as Pi wrote it, redacts other content and invents no transcript or usage", async () => {
   const secret = "P3SecretCanary-123456789";
   process.env.PIANO_TEST_SECRET = secret;
+  const transcriptEvents = new Set(["message_update", "message_end", "tool_update", "context"]);
+  const outsideTranscript = (events: ReadonlyArray<SessionEvent>) =>
+    events.filter((e) => !transcriptEvents.has(e._tag));
+  const outsideMessages = ({ messages: _m, pending: _p, tools: _t, ...rest }: Snapshot) => rest;
   try {
     await run(
       Effect.gen(function* () {
@@ -163,22 +167,30 @@ test("safe live/reload output retains tools and extension state without inventin
         yield* observe(session, "/partial");
         const partial = yield* observe(session, "/secret");
         assert.ok(
-          !JSON.stringify(partial).includes(secret.slice(0, 12)),
-          "hold a known-secret prefix across chunks",
+          JSON.stringify(partial).includes(secret.slice(0, 12)),
+          "streaming text keeps a secret-like prefix across chunks",
         );
         assert.ok(
-          !JSON.stringify(yield* snapshot(session)).includes(secret.slice(0, 12)),
-          "partial reload uses the same protection",
+          (yield* snapshot(session)).pending?.text.includes(secret.slice(0, 12)),
+          "partial reload shows the same text",
         );
         const events = yield* observe(session, "/finish");
-        assert.ok(!JSON.stringify(events).includes(secret));
+        assert.ok(JSON.stringify(events).includes(secret));
+        assert.ok(!JSON.stringify(outsideTranscript(events)).includes(secret));
         const snap = yield* snapshot(session);
-        assert.ok(!JSON.stringify(snap).includes(secret));
+        assert.ok(JSON.stringify(snap.messages).includes(secret));
+        assert.ok(
+          !JSON.stringify(outsideMessages(snap)).includes(secret),
+          "statuses, widgets, editor text and notices stay redacted",
+        );
         assert.equal(snap.state.model, "router/auto");
         const reply = snap.messages.find((m) => m.role === "assistant")!;
         assert.equal(reply.model, "physical/answer");
         assert.equal(reply.thinkingLevel, "high");
-        assert.match(reply.text, /^FINAL corrected \[REDACTED\]/);
+        assert.equal(
+          reply.text,
+          `FINAL corrected ${secret} <img src=x onerror="window.pwned=1"> [bad](javascript:alert(1))`,
+        );
         assert.equal(reply.usage?.totalTokens, 15);
         assert.equal(
           snap.messages.filter((m) => m.role === "tool_result").length,
@@ -200,7 +212,7 @@ test("safe live/reload output retains tools and extension state without inventin
           "latest preview",
           "partialResult is latest update, not unconditional append",
         );
-        assert.equal(nested.at(-1)?.tool.text, "nested final [REDACTED]");
+        assert.equal(nested.at(-1)?.tool.text, `nested final ${secret}`);
         assert.equal(nested.at(-1)?.tool.parentId, "parent");
         assert.deepEqual(
           snap.tools?.map((tool) => tool.id).sort(),
@@ -227,12 +239,12 @@ test("safe live/reload output retains tools and extension state without inventin
           "/compact",
           (e) =>
             e._tag === "context" &&
-            e.messages[0]?.text === "Authoritative compacted context [REDACTED]",
+            e.messages[0]?.text === `Authoritative compacted context ${secret}`,
         );
         const compacted = yield* snapshot(session);
         assert.deepEqual(
           compacted.messages.map((m) => m.text),
-          ["Authoritative compacted context [REDACTED]"],
+          [`Authoritative compacted context ${secret}`],
         );
         assert.deepEqual(
           compacted.tools,

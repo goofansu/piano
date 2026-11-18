@@ -40,14 +40,17 @@ const namesPath = (item: Record<string, unknown>) =>
 
 export const KNOWN_SECRET_MIN = 8;
 
-export function compileRedaction(): DisplayRedaction {
-  const secrets = Object.entries(process.env)
-    .filter(([key, value]) => isSecretName(key) && value && value.length >= KNOWN_SECRET_MIN)
-    .map(([, value]) => value!)
-    .sort((a, b) => b.length - a.length);
+export function compileRedaction({ secrets: redactSecrets = true } = {}): DisplayRedaction {
+  const secrets = redactSecrets
+    ? Object.entries(process.env)
+        .filter(([key, value]) => isSecretName(key) && value && value.length >= KNOWN_SECRET_MIN)
+        .map(([, value]) => value!)
+        .sort((a, b) => b.length - a.length)
+    : [];
   const known = new Set(secrets);
   const partials = [...secrets, ...prefixes, "Bearer ", "-----BEGIN "];
   const text = (input: string, streaming = false): string => {
+    if (!redactSecrets) return stripVTControlCharacters(input);
     let safe = structured(stripVTControlCharacters(input));
     for (const secret of secrets) safe = safe.split(secret).join(marker);
     safe = safe
@@ -127,6 +130,8 @@ export function compileRedaction(): DisplayRedaction {
   };
   return { text, value, wire };
 }
+
+export const compileTranscriptDisplay = () => compileRedaction({ secrets: false });
 
 export function projectDisplay<T>(value: T): T {
   return compileRedaction().wire(value);

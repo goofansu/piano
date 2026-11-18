@@ -199,7 +199,9 @@ access, origin checks, session expiry and preview-to-control separation.
 
 **Guardrail:** never infer that a hostname, TLS, a private VM or a reverse proxy alone protects the
 application. Render transcripts/tool output as untrusted content. Redact known secrets consistently
-before browser delivery and exported artifacts; document that heuristic redaction is not containment.
+before browser delivery and exported artifacts, except transcript messages, which show Pi's text
+([ADR 0005](adr/0005-faithful-transcript-messages.md)); document that heuristic redaction is not
+containment.
 Do not forward the whole developer credential environment into an untrusted preview.
 
 ## INV-12 — Pi compatibility is tested, not inferred

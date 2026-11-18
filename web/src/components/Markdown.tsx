@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import remarkBreaks from "remark-breaks";
 import { type Components, type ExtraProps, Streamdown, useIsCodeFenceIncomplete } from "streamdown";
 import { CopyButton } from "@/components/CopyButton";
 import { MarkdownWebLink } from "@/components/MarkdownWebLink";
@@ -38,6 +39,7 @@ type MarkdownProps = {
   diagrams?: boolean;
   mode?: "static" | "streaming";
   streaming?: boolean;
+  preserveLineBreaks?: boolean;
 };
 
 class MarkdownBoundary extends Component<MarkdownProps & { children: ReactNode }> {
@@ -239,6 +241,7 @@ const components: Components = {
   th: "th",
   td: "td",
 };
+const messagePlugins = [...markdownPlugins, remarkBreaks];
 const rehypePlugins: [] = [];
 const urlTransform = (url: string) => url;
 
@@ -249,6 +252,7 @@ function MarkdownContent({
   diagrams = true,
   mode = "streaming",
   streaming = false,
+  preserveLineBreaks = false,
 }: MarkdownProps) {
   if (!markdownWithinBudget(text))
     return (
@@ -267,7 +271,7 @@ function MarkdownContent({
           isAnimating={streaming}
           parseIncompleteMarkdown={mode === "streaming" && streaming}
           components={components}
-          remarkPlugins={markdownPlugins}
+          remarkPlugins={preserveLineBreaks ? messagePlugins : markdownPlugins}
           rehypePlugins={rehypePlugins}
           skipHtml
           urlTransform={urlTransform}

@@ -85,13 +85,20 @@ test("INV-01/11/12: live writes and nested edits retain file identity across eve
       const tools = events.flatMap((event) => (event._tag === "tool_update" ? [event.tool] : []));
       assert.equal(tools.at(-1)?.writtenPath, "keys/ghp_nested123456789.ts");
       assert.equal(tools.at(-1)?.status, "success");
-      assert.ok(!JSON.stringify(events).includes(secret));
+      assert.equal(
+        JSON.parse(live.find((m) => m.toolCalls?.length)!.toolCalls![0].args).content,
+        secret,
+      );
       yield* session.act({ _tag: "prompt", text: "handled input" });
       const [snapshot] = yield* session.events.pipe(Stream.take(1), Stream.runCollect);
       assert.equal(snapshot._tag, "snapshot");
       if (snapshot._tag !== "snapshot") return;
       assert.deepEqual(sessionFiles(snapshot.snapshot.messages), expected);
-      assert.ok(!JSON.stringify(snapshot).includes(secret));
+      assert.equal(
+        JSON.parse(snapshot.snapshot.messages.find((m) => m.toolCalls?.length)!.toolCalls![0].args)
+          .content,
+        secret,
+      );
     }).pipe(
       Effect.timeout("5 seconds"),
       Effect.scoped,
@@ -101,7 +108,7 @@ test("INV-01/11/12: live writes and nested edits retain file identity across eve
   );
 });
 
-test("INV-01/11/12: saved supported writes retain file identity, not secret display arguments", async () => {
+test("INV-01/11/12: saved supported writes retain file identity and original arguments", async () => {
   const root = mkdtempSync(join(tmpdir(), "piano-identity-"));
   const file = join(root, "saved.jsonl");
   writeFileSync(
@@ -134,8 +141,7 @@ test("INV-01/11/12: saved supported writes retain file identity, not secret disp
           { path, messageId: "m0" },
           { path: "keys/ghp_nested123456789.ts", messageId: "m1" },
         ]);
-        assert.ok(snapshot.messages[0].toolCalls![0].args.includes("[REDACTED]"));
-        assert.ok(!JSON.stringify(snapshot).includes(secret));
+        assert.ok(snapshot.messages[0].toolCalls![0].args.includes(secret));
       }).pipe(Effect.provide(layer)),
     );
   } finally {

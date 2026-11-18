@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { setTimeout } from "node:timers/promises";
 import { run } from "./harness.mjs";
+import { checkMessageFidelity } from "./message-fidelity.mjs";
 import {
   checkTranscriptResizeReadiness,
   measuredTranscriptAtBottom,
@@ -887,5 +888,8 @@ await run(
     await page.until("!document.querySelector('[aria-label=Question]')");
     await page.capture("15-inline-answered");
     await checkTranscriptResizeReadiness(page);
+    await page.open("/s/login-bug");
+    await page.see("echo: Add a regression test");
+    await checkMessageFidelity(page);
   },
 );
