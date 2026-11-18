@@ -152,6 +152,7 @@ command group, named as its button is, including a toggle, whose row reads its s
 sidebar" while the sidebar is shown, "Show sidebar" while it is hidden). An icon button's label,
 its tooltip and the palette's name for the same surface are one string.
 Global shortcuts are Mod+K (palette), Sidebar's ⌘B (not Ctrl+B), and Alt+↑ / Alt+↓ (previous /
-next session). In the installed macOS PWA only, Cmd+1–9 selects machines in picker order (see
-[Machine shortcuts](remote-piano.md#machine-shortcuts)). The composer alone binds Mod+/ to its
-model picker. Other actions are reached through the palette or their control.
+next session). In the installed macOS PWA only, Cmd+1–9 selects machines in picker order and
+Cmd+0 selects the last machine (see [Machine shortcuts](remote-piano.md#machine-shortcuts)).
+The composer alone binds Mod+/ to its model picker. Other actions are reached through the palette
+or their control.

@@ -50,11 +50,11 @@ export function machineNavigationIndex(
     e.ctrlKey ||
     e.altKey ||
     e.shiftKey ||
-    !/^[1-9]$/.test(e.key)
+    !/^[0-9]$/.test(e.key)
   )
     return undefined;
-  const index = Number(e.key) - 1;
-  return index < machineCount ? index : undefined;
+  const index = e.key === "0" ? machineCount - 1 : Number(e.key) - 1;
+  return index >= 0 && index < machineCount ? index : undefined;
 }
 
 export const keys = (...parts: string[]) => parts.map((p) => (p === "mod" ? mod : p));
