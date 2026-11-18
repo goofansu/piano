@@ -51,6 +51,7 @@ import type { SessionLayout } from "@/lib/navigation";
 import { openLink } from "@/lib/openLink";
 import { openPageEditor, pageAvailability } from "@/lib/pageEditor";
 import { sessionProjectMenu } from "@/lib/projectCommands";
+import { sessionLabel } from "@/lib/sessionCatalog";
 import {
   type SessionCommand,
   type SessionCommandIcon,
@@ -291,7 +292,7 @@ export function CommandHost({
         machine: machineScope.machine,
         workspaceId: workspace.id,
         sessionId: target.sessionId,
-        title: target.title || "Untitled session",
+        title: sessionLabel(target.title),
       });
     },
     openUrl: openLink,
