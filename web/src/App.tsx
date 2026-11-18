@@ -168,7 +168,6 @@ function MachineApp() {
             >
               <Toaster
                 position="top-right"
-                className="!z-[55]"
                 visibleToasts={4}
                 duration={4000}
                 closeButton
