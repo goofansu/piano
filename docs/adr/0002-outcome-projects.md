@@ -1,7 +1,7 @@
 # ADR 0002: Separate outcome projects from execution locations
 
 - Status: Accepted. Grouping and project instructions are implemented; shared context remains
-  deferred.
+  deferred. See [evidence](../research/outcome-projects-step1.md).
 - Related: [projects](../outcome-projects.md), [glossary](../glossary.md#projects),
   [ADR 0001](0001-pi-rpc-workspace-workbench.md).
 - Naming: code now calls added directories folders and outcome projects simply projects.

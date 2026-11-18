@@ -8,7 +8,7 @@ Piano version:
 through exe.dev's scoped HTTP-proxy peer integration from an attached VM, or directly through
 exe.dev's HTTPS proxy with a VM-scoped token from the developer's laptop. Pi RPC remains local to
 each owning backend. This supersedes the system-OpenSSH recommendation in the
-practical runner research (2026-10-14, in Git history) for this slice:
+[practical runner research](../research/2026-10-14-practical-remote-runners.md) for this slice:
 existing private integration access avoids a second tunnel/authentication lifecycle and does not
 turn Piano into a fleet manager.
 
@@ -237,9 +237,9 @@ reported empty image-only queue entries.
 ## Voice input: main-origin assistance, machine-owned drafts
 
 This amendment accepts the main-owned option in the
-remote-composer research (2026-11-09, in Git history). It deliberately does
+[remote-composer research](../research/2026-11-09-remote-composer-inputs.md). It deliberately does
 **not** accept peer enrollment, machine CRUD or credential management proposed by the
-configuration research (2026-11-09, in Git history).
+[configuration research](../research/2026-11-09-peer-configuration-ui.md).
 
 - Both composers use the browser's microphone and the main Piano's dedicated voice key and
   preference. Main can itself be a VM. Only main-origin `GET /api/settings/voice-input` and
