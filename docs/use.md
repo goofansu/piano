@@ -57,12 +57,6 @@ prepared worktrees for concurrent writing tasks. See [session dispatch](session-
 for setup, checkout semantics and bounded observation, or use the bundled
 [terminal dispatch script](session-dispatch.md#from-a-terminal-linux-and-macos).
 
-## Reuse a prompt
-
-Open **Settings → Prompts**, click **New prompt**, and give it a name, an optional description and
-argument hint, and the prompt. Type `/<name>` in the composer of a new session to use it. See
-[prompts](prompts.md).
-
 ## Send session events to a webhook
 
 Open **Settings → Webhooks**, click **New webhook**, enter your receiver URL and optional Bearer
