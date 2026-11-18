@@ -53,6 +53,10 @@ turn Piano into a fleet manager.
   partial set. Runtime unavailability is independent: each request/socket captures one peer,
   including its Origin and credential, and never falls back to another. This is a configured
   switcher, not discovery, machine CRUD or cross-machine orchestration (INV-07/11).
+- The machine list sends each peer's configured `origin` to the browser as `url`, so it can link
+  to the peer's own Piano, such as its Providers settings when Session Share needs sign-in. The
+  origin is a hostname behind exe.dev private access, not a credential; the VM token, its file
+  path and the endpoint stay on main, though a direct-access endpoint is often the same URL.
 - Machine IDs qualify navigation and own separate client, draft, question-reply and catalog
   instances (INV-07). Drafts remain page-memory only. What the browser keeps across reloads
   (model catalogs, the New page's last directory, open Surface tabs) is stored per machine under
