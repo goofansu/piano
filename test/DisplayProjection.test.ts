@@ -22,21 +22,22 @@ test("a written file's path and placed name leave verbatim; display text under a
   assert.doesNotMatch(projected.ignored[0]!, /abc12345/);
 });
 
-test("a project's name and instructions leave the registry message as written; the same text elsewhere is redacted", () => {
+test("project names, instructions and session titles leave the registry message as written with controls stripped; the same text elsewhere is redacted", () => {
   const name = "Deploy sk-live-abc";
   const instructions = "Read the token: abc12345 from secretspec. Keys look like sk-live-abc.";
+  const title = "Rotate token: abc12345";
   const shown = projectServerMessage({
     _tag: "registry",
     folders: [],
     projects: [
-      { id: "p1", name, instructions },
+      { id: "p1", name, instructions: `${instructions}\u001b[0m` },
       { id: "p2", name },
     ],
     sessionReferences: [
       {
         cwd: "/repo",
         sessionId: "s1",
-        title: instructions,
+        title: `${title}\u001b[31m`,
         workspaceId: "w1",
         branch: null,
         projectId: "p1",
@@ -51,15 +52,18 @@ test("a project's name and instructions leave the registry message as written; t
     { id: "p1", name, instructions },
     { id: "p2", name },
   ]);
-  const title = shown.sessionReferences?.[0]?.title ?? "";
-  assert.doesNotMatch(title, /abc12345|sk-live-abc/);
+  assert.equal(shown.sessionReferences?.[0]?.title, title);
 
-  const toast = projectServerMessage({ _tag: "toast", level: "info", message: instructions });
+  const toast = projectServerMessage({
+    _tag: "toast",
+    level: "info",
+    message: `${title} ${instructions}`,
+  });
   assert.equal(toast._tag, "toast");
   assert.doesNotMatch(toast.message, /abc12345|sk-live-abc/);
 });
 
-test("queued and restored messages leave as typed with controls stripped; other text beside them is redacted", () => {
+test("queued and restored messages and the session name leave as typed with controls stripped; other text beside them is redacted", () => {
   const typed = "use password: hunter22";
   const queue = [{ kind: "follow-up" as const, text: `${typed}\u001b[31m` }];
   const expected = [{ kind: "follow-up", text: typed }];
@@ -90,7 +94,8 @@ test("queued and restored messages leave as typed with controls stripped; other 
   assert.deepEqual(update, { _tag: "queue_update", messages: expected });
 
   const state = {
-    sessionName: typed,
+    sessionName: `${typed}\u001b[31m`,
+    model: typed,
     isStreaming: true,
     queuedMessages: queue,
     context: null,
@@ -101,7 +106,8 @@ test("queued and restored messages leave as typed with controls stripped; other 
   assert.equal(changed._tag, "state");
   if (changed._tag !== "state") return;
   assert.deepEqual(changed.state.queuedMessages, expected);
-  assert.doesNotMatch(changed.state.sessionName ?? "", /hunter22/);
+  assert.equal(changed.state.sessionName, typed);
+  assert.doesNotMatch(changed.state.model ?? "", /hunter22/);
 
   const snapshot = { state, messages: [], dialogs: [] } as unknown as Snapshot;
   const selected = projectServerMessage({
@@ -116,7 +122,8 @@ test("queued and restored messages leave as typed with controls stripped; other 
   assert.equal(selected._tag, "selected");
   if (selected._tag !== "selected") return;
   assert.deepEqual(selected.snapshot.state.queuedMessages, expected);
-  assert.doesNotMatch(selected.snapshot.state.sessionName ?? "", /hunter22/);
+  assert.equal(selected.snapshot.state.sessionName, typed);
+  assert.doesNotMatch(selected.snapshot.state.model ?? "", /hunter22/);
   assert.deepEqual(projectSnapshot(snapshot).state.queuedMessages, expected);
 
   const notice = projectServerMessage({ _tag: "toast", level: "info", message: typed });
