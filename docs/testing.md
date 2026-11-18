@@ -191,37 +191,6 @@ disconnect. It uses temporary owners/workspaces/state and ports 9480–9519; it 
 supervisor prerequisites. Portable runner tests also cover spawn errors without a supervisor.
 Report the platform actually run; simulated launchd output is not native macOS evidence.
 
-## Alignment
-
-Every transcript row is a gutter glyph beside its content (`Row` in `MessageList.tsx`). The glyph
-box is one line tall and centres on the content's first text line, so content must not pad its
-first line: a folding row (`disclosureRow`) keeps its padding outside the flow with negative
-margins. `node test/browser/transcript-rows.mjs` seeds a session with every row kind and fails
-when any glyph is more than 1px off its line; a new row kind is added to its `messages` and
-`expected` lists. The same measurement, for a scratch instance with the row on screen:
-
-```bash
-agent-browser eval "$(cat <<'JS'
-(() => [...document.querySelectorAll('[data-slot="gutter"]')].map((gutter) => {
-  const glyph = gutter.firstElementChild;
-  const walker = document.createTreeWalker(gutter.nextElementSibling, NodeFilter.SHOW_TEXT, {
-    acceptNode: (n) => n.textContent.trim() && !n.parentElement.closest('.sr-only') ? 1 : 2,
-  });
-  const text = walker.nextNode();
-  if (!glyph || !text) return null;
-  const range = document.createRange();
-  range.selectNodeContents(text);
-  const line = range.getClientRects()[0], box = glyph.getBoundingClientRect();
-  return { text: text.textContent.trim().slice(0, 40), offset: Math.round((box.top + box.bottom - line.top - line.bottom) / 2) };
-}).filter(Boolean))()
-JS
-)"
-```
-
-`offset` is the glyph centre minus the first line's centre, in pixels; every row passes at 0 or
-±1. Keep the output with the screenshot: the screenshot shows the row, the numbers show it is
-aligned.
-
 ## Evidence directories
 
 Keep local verification evidence in one root, `~/piano-evidence/`, shared across Piano worktrees.

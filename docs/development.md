@@ -56,31 +56,6 @@ names or `style` props.
 `npm install` installs a Husky pre-commit hook that runs `npm run lint`. A lint error blocks the
 commit.
 
-## Import boundaries
-
-`npm run lint` enforces `web/src → shared ← server` with the local oxlint rule in
-[`scripts/lint-boundaries.mjs`](../scripts/lint-boundaries.mjs). Browser source may import only its
-own layer and shared via local paths; shared may import only shared. This closes local bridge
-routes through scripts/tests as well as direct cross-layer edges. Server may not import `web/`;
-its intentional `scripts/PreviewOwner.ts` and `PreviewAdapter.ts` imports remain allowed.
-
-Imports, type-only imports (including `import("…")` types), re-exports, literal dynamic imports
-and `require` are checked. Relative paths, current tsconfig aliases and existing symlink targets
-are normalized. Computed imports are rejected; the one resolved Pi SDK URL in
-`server/PiHistoryFile.ts` has a documented inline exemption. The rule reads the two plain-JSON tsconfigs' `paths`; inheritance,
-`baseUrl` or non-terminal alias wildcards require extending the rule rather than silently losing edges. Keep Vite aliases aligned with
-those configs; custom runtime loaders, Vite-only aliases and arbitrary third-party internals are
-not a transitive graph analysis.
-
-Shared external entry points are reviewed, not blanket-banned by vendor: `effect`,
-`@earendil-works/pi-schema` and `zod` are environment-neutral runtime schemas in use today. New
-entry points (including package subpaths) require review in the rule; Node builtins and Node-only
-packages fail even as type imports. `test/lint-boundaries.test.ts` runs allowed and forbidden
-fixtures through the actual oxlint config, including a browser → shared → server bridge and the
-upstream UI config. CI runs the same lint and includes these fixtures in its module shards.
-This guards code review; configuration edits, lint suppressions and unrestricted shell access
-remain trusted, not a security sandbox (INV-01, INV-09).
-
 ## Tests
 
 Module tests (`npm test`) run against a fake Pi and need no model credentials. One test drives a

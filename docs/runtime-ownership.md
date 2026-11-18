@@ -39,10 +39,6 @@ nominally typed, and must be used inline, never retained or passed to forked wor
 has no linear lifetime types: this prevents casual unlocked calls, not deliberate capability
 escape or casts. No new transport, wire or UI behavior is intended.
 
-Existing `DialogLifecycle`, `SessionDelivery` and `SessionReadbacks` tests protect INV-04/05
-claim-before-transport, atomic attachment/sequence and stale-readback contracts. The compile-only
-`test/SessionPublication.types.ts` additionally rejects direct mutation and unguarded dialog opening.
-
 ## Transport failure policy (PIN-10)
 
 Contracts: INV-02/03/04/05/11. Pi RPC record validation is in the

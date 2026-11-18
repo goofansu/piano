@@ -1,19 +1,5 @@
 # Image attachment policy
 
-## Limits
-
-| Constraint | Limit |
-| --- | --- |
-| Original file size | **10 MiB per image** (10,485,760 bytes) |
-| Image count | **10 per message** |
-| Combined original file size | **50 MiB per message** (52,428,800 bytes) |
-| Formats | PNG, JPEG/JPG, WebP, GIF |
-
-All three limits apply together; exact boundaries are accepted. Sizes count the original binary
-files, before base64 encoding or Pi's processing. A recognized raster signature and matching MIME
-are required; arbitrary files and SVG are not supported. GIF acceptance does not guarantee that a
-provider supports animation.
-
 Piano uses the unmodified Pi runtime and takes its queue from Pi's events. Pi 1.2.0 removes a
 delivered queue entry by matching its text, so after it delivers an image-only queued message it
 still reports an empty entry in `queue_update` and `get_state`'s `pendingMessageCount`. Piano shows
@@ -42,14 +28,6 @@ The registry stores no image bytes (INV-01); Pi owns its processed conversation 
 preview URLs keep image bytes out of WebSocket snapshots (INV-05). Validation remains in both the
 browser and server; the service stays behind private access (INV-11). Protocol translation and
 processing remain at the PiSessions seam (INV-12).
-
-**Development environment only.** `npm run dev` runs the backend under `node --watch`, which sets
-`WATCH_REPORT_DEPENDENCIES=1` in the process environment. Pi 1.0.2's image-resize worker treats
-Node's dependency-watch message as its result, so every attached image was reported as
-"could not be resized below the inline image size limit" regardless of size. `PiTransport` strips
-that variable when spawning Pi; `npm start` and the hosted service never set it, so built and
-deployed instances were unaffected. A regression test spawns a child with the variable set in the
-parent and checks the installed Pi accepts an image.
 
 Constants live in `shared/attachments.ts`; the wire schema and browser use them. Future increases
 need concrete user examples plus large-upload checks and a memory/transport review. General file

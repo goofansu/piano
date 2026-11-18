@@ -2,19 +2,6 @@
 
 [ADR 0003](adr/0003-pi-owned-preview-lifetime.md) records why the live Pi process owns the app.
 
-| Event | Outcome |
-| --- | --- |
-| Turn completes; composer Stop/abort | Preview continues; Stop interrupts generation only. |
-| Browser disconnect, tab close, session switching | Preview continues. |
-| Automatic idle retirement | Owning Pi is pinned while its preview is active or uncertain. |
-| Explicit preview stop | App stops; Pi remains available and normal idle retirement resumes. |
-| Archive/delete or explicit Pi release | Owned app stops before successful retention changes. Cleanup failure is an error, not success. |
-| Pi exit/crash; Piano shutdown/crash | App and its supported child-process scope are cleaned up. |
-| Reopen/restart | No automatic relaunch or adoption. A new explicit start has a new owner generation. |
-
-This reverses PIN-94's independent lifetime; see [ADR 0003](adr/0003-pi-owned-preview-lifetime.md)
-and the mandatory [legacy upgrade procedure](#upgrading-from-pin-94).
-
 ## External app access
 
 The normal user-activated link uses `target="_blank"` and `noopener noreferrer`. Piano does not
