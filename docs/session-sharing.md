@@ -28,7 +28,7 @@ Radius remains its owner. See [the decision](adr/0006-confirmed-raw-session-shar
   JSONL parsing and matching session header. Missing, incomplete or changing files are refused,
   never repaired, truncated or retried. This does not lock Pi's writer or flush unsaved state.
 - `extensions/radius-artifacts/RadiusClient.ts`: existing direct authenticated MCP adapter,
-  redirects refused, no auth-provider/reconnection retry, 1 MiB response bound and deadlines.
+  redirects refused, no auth-provider/reconnection retry, 4 MiB response bound and deadlines.
   Session Share does not invoke the standalone artifact extension or its private-default policy.
 - `server/Router.ts`, `PeerGateway` and `RemoteRequests`: owning-machine admission and relay,
   no transcript or Radius token sent through main/browser. Raw content itself can contain paths

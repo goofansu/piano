@@ -155,12 +155,9 @@ test("Share uploads the registered saved file once, with owner auth and private 
               status: 302,
               headers: { location: "https://attacker.example" },
             });
-          if (mode === "oversize")
-            return new Response("x".repeat(1024 * 1024 + 1), {
-              headers: { "content-type": "application/json" },
-            });
           const json = await reply.json();
-          if (mode === "scratch") json.result.structuredContent.artifact.latest_version = 0;
+          if (mode === "oversize") json.result.padding = "x".repeat(4 * 1024 * 1024);
+          else if (mode === "scratch") json.result.structuredContent.artifact.latest_version = 0;
           else
             json.result.structuredContent.artifact.canonical_url = `https://attacker.example/${radiusCanary}`;
           return Response.json(json);

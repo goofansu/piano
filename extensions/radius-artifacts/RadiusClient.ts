@@ -77,7 +77,7 @@ export class RadiusClient {
           new TransformStream<Uint8Array, Uint8Array>({
             transform(chunk, controller) {
               bytes += chunk.byteLength;
-              if (bytes > 1024 * 1024) {
+              if (bytes > 4 * 1024 * 1024) {
                 controller.error(invalid());
                 return;
               }
