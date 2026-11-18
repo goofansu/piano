@@ -150,7 +150,7 @@ test("readback replies of the wrong shape surface as refresh errors and recover,
   );
 });
 
-test("safe live/reload output retains tools and extension state without inventing transcript or usage", async () => {
+test("faithful live/reload output retains tools and extension state without inventing transcript or usage", async () => {
   const secret = "P3SecretCanary-123456789";
   process.env.PIANO_TEST_SECRET = secret;
   try {
@@ -163,22 +163,25 @@ test("safe live/reload output retains tools and extension state without inventin
         yield* observe(session, "/partial");
         const partial = yield* observe(session, "/secret");
         assert.ok(
-          !JSON.stringify(partial).includes(secret.slice(0, 12)),
-          "hold a known-secret prefix across chunks",
+          JSON.stringify(partial).includes(secret.slice(0, 12)),
+          "preserve partial text across chunks",
         );
         assert.ok(
-          !JSON.stringify(yield* snapshot(session)).includes(secret.slice(0, 12)),
-          "partial reload uses the same protection",
+          JSON.stringify(yield* snapshot(session)).includes(secret.slice(0, 12)),
+          "partial reload retains the same original content",
         );
         const events = yield* observe(session, "/finish");
-        assert.ok(!JSON.stringify(events).includes(secret));
+        assert.ok(JSON.stringify(events).includes(secret));
         const snap = yield* snapshot(session);
-        assert.ok(!JSON.stringify(snap).includes(secret));
+        assert.ok(JSON.stringify(snap).includes(secret));
         assert.equal(snap.state.model, "router/auto");
         const reply = snap.messages.find((m) => m.role === "assistant")!;
         assert.equal(reply.model, "physical/answer");
         assert.equal(reply.thinkingLevel, "high");
-        assert.match(reply.text, /^FINAL corrected \[REDACTED\]/);
+        assert.equal(
+          reply.text,
+          `FINAL corrected ${secret} <img src=x onerror="window.pwned=1"> [bad](javascript:alert(1))`,
+        );
         assert.equal(reply.usage?.totalTokens, 15);
         assert.equal(
           snap.messages.filter((m) => m.role === "tool_result").length,
@@ -200,7 +203,7 @@ test("safe live/reload output retains tools and extension state without inventin
           "latest preview",
           "partialResult is latest update, not unconditional append",
         );
-        assert.equal(nested.at(-1)?.tool.text, "nested final [REDACTED]");
+        assert.equal(nested.at(-1)?.tool.text, `nested final ${secret}`);
         assert.equal(nested.at(-1)?.tool.parentId, "parent");
         assert.deepEqual(
           snap.tools?.map((tool) => tool.id).sort(),
@@ -227,12 +230,12 @@ test("safe live/reload output retains tools and extension state without inventin
           "/compact",
           (e) =>
             e._tag === "context" &&
-            e.messages[0]?.text === "Authoritative compacted context [REDACTED]",
+            e.messages[0]?.text === `Authoritative compacted context ${secret}`,
         );
         const compacted = yield* snapshot(session);
         assert.deepEqual(
           compacted.messages.map((m) => m.text),
-          ["Authoritative compacted context [REDACTED]"],
+          [`Authoritative compacted context ${secret}`],
         );
         assert.deepEqual(
           compacted.tools,
@@ -250,7 +253,7 @@ test("safe live/reload output retains tools and extension state without inventin
         );
         yield* observe(session, "/select-secret");
         const dialog = (yield* snapshot(session)).dialogs[0];
-        assert.deepEqual(dialog.options, ["[REDACTED]"]);
+        assert.deepEqual(dialog.options, [secret]);
         const optionReady = yield* Deferred.make<void>();
         const optionReceived = yield* session.events.pipe(
           Stream.tap((e) =>
@@ -265,11 +268,11 @@ test("safe live/reload output retains tools and extension state without inventin
           _tag: "answer",
           id: dialog.id,
           generation: dialog.generation,
-          value: "[REDACTED]",
+          value: secret,
         });
         yield* Fiber.join(optionReceived);
         const error = yield* session.act({ _tag: "prompt", text: "/error" }).pipe(Effect.flip);
-        assert.equal(error.detail, "Rejected [REDACTED]");
+        assert.equal(error.detail, `Rejected ${secret}`);
         const ready = yield* Deferred.make<void>();
         const closed = yield* session.events.pipe(
           Stream.tap((e) =>
@@ -281,8 +284,8 @@ test("safe live/reload output retains tools and extension state without inventin
         yield* Deferred.await(ready);
         yield* session.act({ _tag: "prompt", text: "/crash" }).pipe(Effect.ignore);
         assert.ok(
-          !JSON.stringify(yield* Fiber.join(closed)).includes(secret),
-          "exit and stderr are projected too",
+          JSON.stringify(yield* Fiber.join(closed)).includes(secret),
+          "exit and stderr preserve original content too",
         );
       }).pipe(Effect.timeout("5 seconds"), Effect.scoped),
     );

@@ -14,7 +14,6 @@ import { ChildProcess } from "effect/process";
 import type { LaunchEnv } from "../shared/dispatch.ts";
 import type { SessionClosure } from "../shared/wire.ts";
 import { childEnvironment } from "./ChildEnvironment.ts";
-import { projectDisplay } from "./DisplayProjection.ts";
 import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
 import { inputBytes } from "./InputBytes.ts";
 import { makePendingRecords } from "./PendingRecords.ts";
@@ -77,7 +76,7 @@ export interface PiTransport {
 }
 
 const debug = (...a: unknown[]) => {
-  if (process.env.PIANO_DEBUG) console.error("[PiTransport]", Date.now(), ...projectDisplay(a));
+  if (process.env.PIANO_DEBUG) console.error("[PiTransport]", Date.now(), ...a);
 };
 
 const spawn = Effect.fn("PiTransport.spawn")(function* (

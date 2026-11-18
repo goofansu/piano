@@ -389,7 +389,7 @@ test("the services refuse what Router used to: the filesystem root, an empty dir
   assert.ok(!JSON.stringify(providers).includes("auth.json"));
 });
 
-test("INV-11: a listed directory's path and name round-trip, however token-like; an error's text stays redacted", async (t) => {
+test("INV-11: a listed directory's path, name and error text round-trip, however token-like", async (t) => {
   const { mkdirSync, rmSync } = await import("node:fs");
   const { join } = await import("node:path");
   const secret = "router-identity-secret-42";
@@ -418,5 +418,5 @@ test("INV-11: a listed directory's path and name round-trip, however token-like;
     await post("/api/ls", JSON.stringify({ path: join(parent, "sk-missing") })),
   );
   assert.equal(missing.status, 400);
-  assert.ok(!JSON.stringify(missing.body).includes("sk-missing"), missing.body.error);
+  assert.ok(missing.body.error.includes("sk-missing"), missing.body.error);
 });

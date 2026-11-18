@@ -248,7 +248,7 @@ test("INV-01/12: a saved peek is the Snapshot real Pi opens the same file with",
         );
         assert.deepEqual(
           saved.messages.map((message) => message.text),
-          ["summary", "edited [REDACTED]"],
+          ["summary", `edited ${secret}`],
         );
       }).pipe(
         Effect.timeout("20 seconds"),

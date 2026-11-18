@@ -387,7 +387,7 @@ and the focused probe establish only the claims above. [Testing policy][testing]
 [hosts]: ../../server/SessionHosts.ts
 [trust]: ../../server/ProjectTrust.ts
 [app]: ../../web/src/App.tsx
-[display]: ../../server/DisplayProjection.ts
+[display]: https://github.com/goofansu/piano/blob/cfcbedf0e97d8f2e1be712336c0eb908479f5088/server/DisplayProjection.ts
 [fixture]: ../../test/fixtures/PiCompatibility.ts
 [architecture]: ../adr/0001-pi-rpc-workspace-workbench.md
 [invariants]: ../development-invariants.md

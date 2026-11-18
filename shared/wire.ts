@@ -118,7 +118,6 @@ export const Dialog = Schema.Struct({
   options: Schema.optional(Schema.Array(Schema.String)),
   placeholder: Schema.optional(Schema.String),
   prefill: Schema.optional(Schema.String),
-  concealed: Schema.optional(Schema.Literal(true)),
 });
 export type Dialog = typeof Dialog.Type;
 

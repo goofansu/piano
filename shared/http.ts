@@ -82,7 +82,6 @@ export interface Endpoint<
   readonly response: R;
   readonly noStore: boolean;
   readonly refused: F;
-  readonly redact: boolean;
   readonly fallback: Fallback;
   readonly upload: Upload | undefined;
 }
@@ -105,7 +104,6 @@ const endpoint = <
   response: R;
   noStore?: boolean;
   refused?: F;
-  redact?: boolean;
   fallback: Fallback;
   upload?: M extends "GET" ? undefined : Upload;
 }): Endpoint<Q, B, R, F> => ({
@@ -117,7 +115,6 @@ const endpoint = <
   response: e.response,
   noStore: e.noStore ?? false,
   refused: e.refused as F,
-  redact: e.redact ?? true,
   fallback: e.fallback,
   upload: e.upload,
 });
@@ -132,7 +129,6 @@ const signInEndpoints = <const P extends `/api/${string}`>(path: NoPathParams<P>
     response: Schema.Struct({ state: Schema.NullOr(ProviderLoginState) }),
     noStore: true,
     refused: 409,
-    redact: false,
     fallback: "Could not complete sign-in.",
   } as const;
   return {
@@ -161,7 +157,7 @@ const libraryEndpoints = <E extends Json, C extends Json, U extends Json, P exte
   schemas: { entry: E; create: C; update: U; proposal: P },
 ) => {
   const path: `/api/settings/${LibraryKind}s` = `/api/settings/${kind}s`;
-  const shared = { noStore: true, redact: false } as const;
+  const shared = { noStore: true } as const;
   const save = {
     ...shared,
     invalid: "Enter a name, a description and instructions.",
@@ -218,7 +214,6 @@ export const Endpoints = {
     path: "/api/machines",
     response: Schema.Struct({ machines: Machines }),
     noStore: true,
-    redact: false,
     fallback: "Could not load machines.",
   }),
 
@@ -362,7 +357,6 @@ export const Endpoints = {
     response: Schema.Array(Webhook),
     noStore: true,
     refused: 400,
-    redact: false,
     fallback: "Could not load webhooks.",
   }),
   saveWebhook: endpoint({
@@ -373,7 +367,6 @@ export const Endpoints = {
     response: Webhook,
     noStore: true,
     refused: 400,
-    redact: false,
     fallback: "Could not save webhook.",
   }),
   removeWebhook: endpoint({
@@ -400,7 +393,6 @@ export const Endpoints = {
     response: WebhookDelivery,
     noStore: true,
     refused: 400,
-    redact: false,
     fallback: "Could not test webhook.",
   }),
 
@@ -425,7 +417,6 @@ export const Endpoints = {
     path: "/api/settings/radius",
     response: RadiusReply,
     noStore: true,
-    redact: false,
     fallback: "Could not load Radius setup.",
   }),
   changeRadiusSetup: endpoint({
@@ -436,7 +427,6 @@ export const Endpoints = {
     response: RadiusReply,
     noStore: true,
     refused: 409,
-    redact: false,
     fallback: "Could not load Radius setup.",
   }),
   mcpSetup: endpoint({
@@ -444,7 +434,6 @@ export const Endpoints = {
     path: "/api/settings/mcp",
     response: McpReply,
     noStore: true,
-    redact: false,
     fallback: "Could not load MCP servers.",
   }),
   changeMcpSetup: endpoint({
@@ -455,7 +444,6 @@ export const Endpoints = {
     response: McpSetupChange,
     noStore: true,
     refused: 409,
-    redact: false,
     fallback: "Could not change MCP setup.",
   }),
   voiceInput: endpoint({

@@ -1,3 +1,2 @@
-import { isSecretName } from "../server/DisplayProjection.ts";
-
-for (const key of Object.keys(process.env)) if (isSecretName(key)) delete process.env[key];
+for (const key of Object.keys(process.env))
+  if (/(?:TOKEN|SECRET|PASSWORD|API_?KEY|CREDENTIAL)/i.test(key)) delete process.env[key];

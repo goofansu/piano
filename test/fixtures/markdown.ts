@@ -17,12 +17,14 @@ const { Markdown } = (await vite.ssrLoadModule("/src/components/Markdown.tsx")) 
     images?: ReadonlyMap<string, string>;
     mode?: "static" | "streaming";
     streaming?: boolean;
+    preserveLineBreaks?: boolean;
   }>;
 };
 export const renderMarkdown = (
   text: string,
   images: boolean | ReadonlyMap<string, string> = false,
   streaming = false,
+  preserveLineBreaks = false,
 ) =>
   renderToStaticMarkup(
     createElement(
@@ -33,6 +35,7 @@ export const renderMarkdown = (
         images: typeof images === "boolean" ? (images ? new Map() : undefined) : images,
         mode: streaming ? "streaming" : "static",
         streaming,
+        preserveLineBreaks,
       }),
     ),
   );

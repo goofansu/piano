@@ -59,11 +59,11 @@ test("folder picker: listings decode, and a missing path fails with the server's
   );
 });
 
-test("file previews preserve binary bytes over scoped POST and still redact text", async () => {
+test("file previews preserve binary bytes and original text over scoped POST", async () => {
   await writeFile(join(repo, "secret.txt"), "token=example-secret");
   const text = await workspaceFile(workspaceId, "secret.txt", local);
   assert.ok("content" in text);
-  assert.equal(text.content, "token=[REDACTED]");
+  assert.equal(text.content, "token=example-secret");
   const pdf = Buffer.from("%PDF-1.7\ntoken=example-secret");
   await writeFile(join(repo, "sample.pdf"), pdf);
   const binary = await workspaceFile(workspaceId, "sample.pdf", local);
@@ -84,7 +84,7 @@ test("file previews preserve binary bytes over scoped POST and still redact text
   await writeFile(join(root, "outside.md"), "token=example-secret");
   const externalText = await workspaceFile(workspaceId, join(root, "outside.md"), local);
   assert.ok("content" in externalText);
-  assert.equal(externalText.content, "token=[REDACTED]");
+  assert.equal(externalText.content, "token=example-secret");
 });
 
 test("downloads are the file's exact bytes: text unredacted, binary intact, same path and format rules", async () => {

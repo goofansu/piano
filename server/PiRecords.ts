@@ -33,7 +33,6 @@ import type {
   Usage,
 } from "../shared/wire.ts";
 import { Attachments, ContextUsage, SessionStats, SlashCommand } from "../shared/wire.ts";
-import { compileRedaction, concealsApproval, type DisplayRedaction } from "./DisplayProjection.ts";
 import { imagePreview } from "./ImagePreviews.ts";
 
 interface RawContent {
@@ -177,11 +176,7 @@ function writtenPath(name: string | undefined, args: unknown): string | undefine
   return typeof path === "string" && path.trim() ? path : undefined;
 }
 
-export function serializeMessage(
-  id: string,
-  msg: RawMessage,
-  redaction: DisplayRedaction = compileRedaction(),
-): RenderMsg | null {
+export function serializeMessage(id: string, msg: RawMessage): RenderMsg | null {
   let result: RenderMsg;
   if (msg.role === "user")
     result = {
@@ -251,13 +246,12 @@ export function serializeMessage(
   else if (msg.role === "bashExecution")
     result = { id, role: "context", label: `Shell: ${msg.command ?? ""}`, text: msg.output ?? "" };
   else return null;
-  return redaction.wire(result);
+  return result;
 }
 const messageId = (index: number) => `m${index}`;
 function serializeMessages(msgs: ReadonlyArray<RawMessage>): RenderMsg[] {
-  const redaction = compileRedaction();
   return msgs.flatMap((m, i) => {
-    const result = serializeMessage(messageId(i), m, redaction);
+    const result = serializeMessage(messageId(i), m);
     return result ? [result] : [];
   });
 }
@@ -636,22 +630,9 @@ export const dialogAnswerFor = (
   dialog: Dialog,
 ): { readonly command: PiCommand; readonly answer?: DialogResolution["answer"] } | PiRejection => {
   if (action.cancelled) return { command: dialogCancellation(dialog.id) };
-  if (action.confirmed === true && concealsApproval(dialog))
-    return {
-      rejected:
-        "This proposal contains hidden text, so it cannot be saved here. Cancel it instead.",
-    };
-  let value = action.value ?? "";
-  if (dialog.method === "select") {
-    const redaction = compileRedaction();
-    const options = dialog.options?.filter((option) => redaction.text(option) === value) ?? [];
-    if (options.length !== 1)
-      return {
-        rejected:
-          "This option is unavailable or ambiguous after redaction. Cancel the dialog instead.",
-      };
-    value = options[0];
-  }
+  const value = action.value ?? "";
+  if (dialog.method === "select" && !dialog.options?.includes(value))
+    return { rejected: "This option is unavailable. Cancel the dialog instead." };
   return {
     command: {
       type: "extension_ui_response",
@@ -984,8 +965,7 @@ export class PiProjector {
         const old = this.tools.get(id);
         const ended = event.type === "tool_execution_end";
         const result = ended ? event.result : event.partialResult;
-        const redaction = compileRedaction();
-        const tool: ToolExecution = redaction.wire({
+        const tool: ToolExecution = {
           id,
           parentId: event.parentToolCallId ?? old?.parentId,
           name: event.toolName ?? old?.name ?? "",
@@ -993,14 +973,11 @@ export class PiProjector {
             event.args === undefined
               ? old?.writtenPath
               : writtenPath(event.toolName ?? old?.name, event.args),
-          args:
-            event.args === undefined
-              ? (old?.args ?? "")
-              : redaction.text(argsOf(event.args), !ended),
-          text: result ? redaction.text(textOf(result.content), !ended) : (old?.text ?? ""),
+          args: event.args === undefined ? (old?.args ?? "") : argsOf(event.args),
+          text: result ? textOf(result.content) : (old?.text ?? ""),
           status: ended ? (event.isError ? "error" : "success") : "running",
           outputKind: ended ? "final" : "latest-update",
-        });
+        };
         if (ended) this.tools.delete(id);
         else this.tools.set(id, tool);
         if (ended) this.asking.delete(id);
@@ -1032,23 +1009,22 @@ export class PiProjector {
   private update(): SessionEvent[] {
     if (!this.partial) return [];
     const blocks = [...this.blocks.entries()].sort(([a], [b]) => a - b).map(([, b]) => b);
-    const redaction = compileRedaction();
-    this.partial = redaction.wire({
+    this.partial = {
       ...this.partial,
-      text: redaction.text(assistantText(blocks), true),
+      text: assistantText(blocks),
       toolCalls: blocks.flatMap((b) =>
         b.type === "tool"
           ? [
               {
                 id: b.id,
                 name: b.name,
-                args: redaction.text(b.args, true),
+                args: b.args,
                 writtenPath: b.writtenPath,
               },
             ]
           : [],
       ),
-    });
+    };
     return [{ _tag: "message_update", message: this.partial }];
   }
 }

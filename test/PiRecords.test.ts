@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { projectSessionEvent } from "../server/DisplayProjection.ts";
 import { dialogAnswerFor, modelChoicesOf, piExchangeFor } from "../server/PiRecords.ts";
 import { proposalDialog } from "../shared/library.ts";
 import type { Dialog } from "../shared/wire.ts";
@@ -201,14 +200,14 @@ test("INV-04: a dialog answer reaches Pi as its original value, and cancel as a 
   };
   const answer = (value: string, cancelled?: boolean) =>
     dialogAnswerFor({ _tag: "answer", id: "d1", generation: "g", value, cancelled }, dialog);
-  assert.deepEqual(answer("Use token=[REDACTED]"), {
+  assert.deepEqual(answer("Use token=abc12345"), {
     command: { type: "extension_ui_response", id: "d1", value: "Use token=abc12345" },
     answer: { title: undefined, value: "Use token=abc12345" },
   });
-  assert.deepEqual(answer("Use [REDACTED]"), {
-    rejected: "This option is unavailable or ambiguous after redaction. Cancel the dialog instead.",
+  assert.deepEqual(answer("Not an option"), {
+    rejected: "This option is unavailable. Cancel the dialog instead.",
   });
-  assert.deepEqual(answer("Use [REDACTED]", true), {
+  assert.deepEqual(answer("", true), {
     command: { type: "extension_ui_response", id: "d1", cancelled: true },
   });
   assert.deepEqual(
@@ -223,111 +222,28 @@ test("INV-04: a dialog answer reaches Pi as its original value, and cancel as a 
   );
 });
 
-test("INV-11: a select option shown through the published dialog answers with its original value", () => {
-  process.env.PIANO_ROUNDTRIP_TOKEN = "roundtrip-secret-0123";
-  try {
-    const dialog: Dialog = {
-      id: "d2",
-      generation: "g",
-      receivedAt: 0,
-      deadlineAt: 1,
-      deadlineKind: "host-recovery",
-      method: "select",
-      options: [
-        "Deploy with roundtrip-secret-0123",
-        "Use Bearer abc.def",
-        "Read password: hunter2xyz",
-        "\u001b[1mBold\u001b[0m plain",
-      ],
-    };
-    const published = projectSessionEvent({ _tag: "dialog", dialog });
-    assert.ok(published._tag === "dialog");
-    const labels = published.dialog.options ?? [];
-    assert.deepEqual(labels, [
-      "Deploy with [REDACTED]",
-      "Use Bearer [REDACTED]",
-      "Read password: [REDACTED]",
-      "Bold plain",
-    ]);
-    labels.forEach((value, i) => {
-      const translation = dialogAnswerFor(
-        { _tag: "answer", id: "d2", generation: "g", value },
-        dialog,
-      );
-      assert.deepEqual(translation, {
-        command: { type: "extension_ui_response", id: "d2", value: dialog.options![i] },
-        answer: { title: undefined, value: dialog.options![i] },
-      });
-      assert.ok("answer" in translation);
-      const receipt = projectSessionEvent({
-        _tag: "state",
-        state: {
-          sessionId: "s",
-          isStreaming: false,
-          dialogResolution: {
-            id: "d2",
-            generation: "g",
-            reason: "answered",
-            delivery: "written",
-            detail: "Sent",
-            answer: translation.answer,
-          },
-        },
-      });
-      assert.ok(receipt._tag === "state");
-      assert.equal(
-        receipt.state.dialogResolution?.answer?.value,
-        value,
-        "receipt uses the same safe display label as the question",
-      );
-    });
-  } finally {
-    delete process.env.PIANO_ROUNDTRIP_TOKEN;
-  }
-});
-
-test("INV-04: a save proposal redaction changed is shown as concealed and cannot be approved", () => {
-  const raised = (previous: string, file: string): Dialog => ({
+test("INV-04: an unchanged token-like proposal can be approved or declined explicitly", () => {
+  const dialog: Dialog = {
     id: "p1",
     generation: "g",
     receivedAt: 0,
     deadlineAt: 1,
     deadlineKind: "host-recovery",
     method: "confirm",
-    ...proposalDialog({ kind: "prompt", change: "update", name: "deploy", file, previous }),
-  });
-  const confirm = (dialog: Dialog, confirmed: boolean) =>
-    dialogAnswerFor({ _tag: "answer", id: "p1", generation: "g", confirmed }, dialog);
-
-  const hidden = raised(
-    "Use api_key: staging-111 for $1\n",
-    "Use api_key: production-999 for $1\n",
-  );
-  const published = projectSessionEvent({ _tag: "dialog", dialog: hidden });
-  assert.ok(published._tag === "dialog");
-  assert.equal(published.dialog.concealed, true);
-  assert.doesNotMatch(published.dialog.message ?? "", /production-999/);
-  assert.deepEqual(confirm(hidden, true), {
-    rejected: "This proposal contains hidden text, so it cannot be saved here. Cancel it instead.",
-  });
-  assert.deepEqual(confirm(hidden, false), {
-    command: { type: "extension_ui_response", id: "p1", confirmed: false },
-    answer: { title: "Update prompt: deploy", value: false },
-  });
-
-  const snapshot = projectSessionEvent({
-    _tag: "snapshot",
-    snapshot: { state: { sessionId: "s", isStreaming: false }, messages: [], dialogs: [hidden] },
-  });
-  assert.ok(snapshot._tag === "snapshot");
-  assert.equal(snapshot.snapshot.dialogs[0]?.concealed, true);
-
-  const plain = raised("Use $1\n", "Use $1 twice\n");
-  const shown = projectSessionEvent({ _tag: "dialog", dialog: plain });
-  assert.ok(shown._tag === "dialog");
-  assert.equal(shown.dialog.concealed, undefined);
-  assert.deepEqual(confirm(plain, true), {
-    command: { type: "extension_ui_response", id: "p1", confirmed: true },
-    answer: { title: "Update prompt: deploy", value: true },
-  });
+    ...proposalDialog({
+      kind: "prompt",
+      change: "update",
+      name: "deploy",
+      previous: "Use api_key: staging-111 for $1\n",
+      file: "Use api_key: production-999 for $1\n",
+    }),
+  };
+  for (const confirmed of [true, false])
+    assert.deepEqual(
+      dialogAnswerFor({ _tag: "answer", id: "p1", generation: "g", confirmed }, dialog),
+      {
+        command: { type: "extension_ui_response", id: "p1", confirmed },
+        answer: { title: "Update prompt: deploy", value: confirmed },
+      },
+    );
 });

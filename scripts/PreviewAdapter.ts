@@ -868,17 +868,11 @@ export class PreviewAdapter {
       this.supervisor = new Launchd(run, this.uid, host.groupAlive ?? processGroupAlive);
   }
 
-  private redact(text: string, record: Intent) {
-    for (const value of Object.values(record.spec.env).sort((a, b) => b.length - a.length))
-      if (value) text = text.replaceAll(value, "[redacted]");
-    return text.slice(-6000);
-  }
-
   private async logs(supervisor: Supervisor, record: Intent, root: string) {
     try {
-      return this.redact(await supervisor.logs(record, root), record);
+      return (await supervisor.logs(record, root)).slice(-6000);
     } catch (error) {
-      return this.redact(message(error), record);
+      return message(error).slice(-6000);
     }
   }
 
@@ -1213,7 +1207,7 @@ export class PreviewAdapter {
       } catch (error) {
         return {
           ...(await this.observe(supervisor, record, path, root)),
-          launchError: this.redact(message(error), record),
+          launchError: message(error).slice(-6000),
           reused: false,
           ...(replaced && { replaced }),
         };

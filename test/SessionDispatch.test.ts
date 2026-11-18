@@ -1729,7 +1729,8 @@ for (const { name, brief } of briefs) {
   test(`a brief with ${name} is attributed as the transcript shows it`, bounded, async () => {
     const h = world();
     const { input: shown, proof } = await projectionFor(brief);
-    assert.notEqual(shown.text, brief.trim(), "the transcript does not show the brief verbatim");
+    if (brief.startsWith("/skill:")) assert.ok(shown.skill, "skill expansion stays structured");
+    else assert.equal(shown.text, brief, "ordinary briefs retain the original content");
     const wait = waitSessions([await handleOf([], null, brief)], undefined, h.env);
     h.last().accept();
     h.last().frame(
@@ -1749,14 +1750,14 @@ for (const { name, brief } of briefs) {
 
 for (const prefix of ["do the thing with", "/skill:review"]) {
   test(
-    `distinct raw briefs that display identically cannot share an answer: ${prefix}`,
+    `distinct token-like briefs retain different text and cannot share an answer: ${prefix}`,
     bounded,
     async () => {
       const h = world();
       const brief = `${prefix} token: abcdefghijklmnop`;
       const { input: shown } = await projectionFor(`${prefix} token: otherabcdefghijklmnop`);
       const { input: original, proof } = await projectionFor(brief);
-      assert.equal(shown.text, original.text);
+      assert.notEqual(shown.text, original.text);
       const wait = waitSessions([await handleOf([], null, brief)], undefined, h.env);
       h.last().accept();
       h.last().frame(

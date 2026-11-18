@@ -3,7 +3,6 @@ import { parentPort } from "node:worker_threads";
 import type { SessionManager } from "@earendil-works/pi-coding-agent";
 import { artifactPublications } from "../shared/radiusArtifacts.ts";
 import type { Snapshot, SessionState } from "../shared/wire.ts";
-import { projectSnapshot } from "./DisplayProjection.ts";
 import { getImagePreview, type ImagePreview } from "./ImagePreviews.ts";
 import { savedSession } from "./PiHistoryFile.ts";
 import { dispatchedFromOf, type PiSessionFacts, type RawMessage, snapshotOf } from "./PiRecords.ts";
@@ -55,7 +54,7 @@ parentPort!.on("message", ({ operation, path, sessionId }: HistoryRequest) => {
   try {
     const manager = savedSession(readFileSync(path, "utf8"), sessionId);
     if (operation === "peek") {
-      const value = projectSnapshot(snapshotOf(savedFacts(manager, path, sessionId)));
+      const value = snapshotOf(savedFacts(manager, path, sessionId));
       const ids = new Set(
         value.messages.flatMap((m) => m.attachments?.map((a) => a.url.split("/").at(-1)!) ?? []),
       );

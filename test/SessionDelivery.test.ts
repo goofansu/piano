@@ -265,17 +265,16 @@ test("PIN-47: 128KiB tool arguments through PiSessions stay below 5MiB of partia
         yield* session.act({ _tag: "prompt", text: "secrets" });
         const secretFrames = yield* Fiber.join(secretWatch);
         contiguous(secretFrames);
-        assert.ok(!JSON.stringify(secretFrames).includes("canary-sensitive"));
         const updates = secretFrames.filter((f) => f._tag === "message_update");
-        assert.ok(updates.some((f) => f.message.text === "prefix [REDACTED]"));
+        assert.ok(updates.some((f) => f.message.text === "prefix ca"));
         assert.ok(updates.some((f) => f.message.text === "prefix cat "));
-        assert.ok(updates.some((f) => f.message.toolCalls?.[0]?.args === '{"content":"[REDACTED]'));
+        assert.ok(updates.some((f) => f.message.toolCalls?.[0]?.args === '{"content":"ca'));
         const secretFinal = secretFrames.at(-1)!;
         assert.equal(secretFinal._tag, "message_end");
         if (secretFinal._tag === "message_end") {
-          assert.equal(secretFinal.message.text, "prefix cat [REDACTED] done");
+          assert.equal(secretFinal.message.text, "prefix cat canary-sensitive-123456789 done");
           assert.deepEqual(JSON.parse(secretFinal.message.toolCalls![0].args), {
-            content: "[REDACTED]",
+            content: "canary-sensitive-123456789",
           });
         }
       }).pipe(
@@ -464,7 +463,7 @@ const prompt = (session: PiSession, text: string) =>
     return yield* Fiber.join(watch);
   });
 
-test("INV-05/11: atomic attach identifies partial/tools/dialog/state and all subsequent redacted frames in order", async () => {
+test("INV-05/11: atomic attach preserves transcript content and orders subsequent frames", async () => {
   const canary = "sk-sequence-canary-123456789";
   process.env.PIANO_TEST_SECRET = canary;
   try {
@@ -483,12 +482,14 @@ test("INV-05/11: atomic attach identifies partial/tools/dialog/state and all sub
         }
         yield* prompt(session, "/dialog");
         const attached = yield* snapshot(session);
-        assert.match(attached.snapshot.pending!.text, /Partial ordered \[REDACTED\]/);
+        assert.equal(attached.snapshot.pending!.text, `Partial ordered ${canary}`);
         assert.equal(attached.snapshot.tools?.[0].status, "running");
         assert.equal(attached.snapshot.dialogs[0].generation, attached.cursor.generation);
         assert.equal(attached.snapshot.state.extension?.statuses[0].text, "Status ordered");
         assert.ok(attached.cursor.sequence >= frames.at(-1)!.cursor.sequence);
-        assert.ok(!JSON.stringify([frames, attached]).includes(canary));
+        assert.ok(
+          frames.some((f) => f._tag === "message_update" && f.message.text.includes(canary)),
+        );
         const [observed] = yield* Effect.all(
           [
             session.events.pipe(
