@@ -1,12 +1,5 @@
 # Settings › Data controls
 
-## How to get to it (user POV)
-
-- Sidebar Settings → Data controls.
-- Mod+K → Data controls, including from another Settings section.
-- An archived session's `/s/<sessionId>` address → Data controls.
-- Address bar: `/settings/data-controls`. Settings is local-only, not a peer-session action.
-
 ## Driving it with agent-browser
 
 Preconditions: a fresh seeded default-fake launch, `. "$RUN/run.env"`, doctor passed;
@@ -72,14 +65,6 @@ recipes need the folder open. Capture with `capture.sh` as in the skill body.
     above; `ab wait --text 'Session unarchived · Folder remains closed'`. Capture `09-closed`;
     `curl -s "$API_URL/api/folders"` confirms the folder did not reopen. Do not infer that a
     pinned or project-member session must disappear from every sidebar group.
-- Local-only prerequisite
-  - Action on a default launch: `ab open "$WEB_URL/m/not-configured/s/verify-plan";
-    ab wait --text 'Machine unavailable'`; capture the attempted route.
-  - Result: report peer Settings absence as `verified-unreachable`, not verified by local CRUD.
-    A configured, reachable peer is required. Follow [Open a session](./open-session.md#gotchas)
-    for the isolated remote journey and its run-limit exception; when stricter limits prohibit
-    it, retain that prerequisite rather than starting another instance.
-
 ## Gotchas
 
 - Use `[role=dialog]` for the confirmation, not `alertdialog`. Scope Unarchive to its row when

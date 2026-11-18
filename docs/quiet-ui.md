@@ -52,10 +52,7 @@ passes these checks:
 
 Shared structure, so every pane reads as one app: one header shape on the session, the right
 sidebar and Settings (a title, context beside or beneath it when that adds something, controls at
-the end). The session header adds folder/ref context beneath its title when its menu is a
-sheet (one-area-at-a-time or a narrow viewport). On a wide viewport it keeps the project breadcrumb
-and menu beside the title, even one-area-at-a-time; on a narrow viewport the menu moves to the end
-and replaces the breadcrumb as the route to project actions;
+the end);
 one status glyph, `StatusDot`, for every state (an app preview, a webhook delivery), breathing
 (its `busy` tone) only while something is in progress, and each state shown once: the sidebar row owns a
 session's state, so the header repeats nothing; a refresh control turns its own icon while it

@@ -22,24 +22,6 @@ with shadcn CLI 4.21.4's `rsc: false` transformer.
 
 ## Where customizations belong
 
-| Concern | Owner outside `ui/` |
-| --- | --- |
-| Borderless button variants; icon button sizes by place (`header`, `list`, `row`, `inline`) | `PianoButton` |
-| A row's revealed actions and the room made for them | `RowActions`, and for a list row `ListRow` with its `RowMenu`; motion in `index.css` |
-| Underlined file-view toggles | `PianoViewToggle`, `PianoViewToggleItem` |
-| Status badge and warning alert variants | `StatusBadge`, `PianoAlert` |
-| Status dot (session, preview, delivery state) | `StatusDot` |
-| Settings page frame, groups and hairline lists | `SettingsSectionFrame`, `SettingsGroup`, `SettingsList`, `settingsRow` |
-| Surface area column and a view's toolbar (status and actions) | `SurfaceColumn`, `SurfaceFrame` |
-| Browser-style strip tabs on their band: the Surface area's and, one area at a time, Agent and the open tabs; sideways scrolling | `PianoStripBar`, `PianoStripTabsList`, `PianoStripTab`, `PianoStripTabTrigger` |
-| Overlay surfaces and stacking | `PianoDialog`, `PianoSheet`, `PianoSelect`, `PianoPopover`, `PianoDropdownMenu`, `PianoTooltip`; shared `lib/overlayStyles.ts` |
-| Pointer-close focus; keyboard/hover tooltips | `PianoPopover`, `PianoDropdownMenu`, `PianoTooltip`; shared `lib/pointerClose.ts` |
-| Search/option row heights, including touch and the palette dialog | `PianoCommand` |
-| Settings sidebar tooltip policy | `PianoSidebarMenuButton` |
-| Global ⌘B routing and keyboard policy | `useSidebarLayoutController`; `AppLayout` disables the stock provider listener |
-| Narrow-viewport sidebar reveal and partial scrim | `PianoSidebarReveal`; transient finger tracking in `useSidebarSwipe`, surface styles in `index.css` |
-| Theme tokens and existing selected-sidebar styling | `index.css` |
-
 Wrappers merge only Piano's changes, not copies of upstream class lists. Custom button/badge/alert
 variants pass `variant={null}` to avoid inheriting an unrelated upstream variant's hover/dark rules.
 Motion is opt-in: the reset at the end of `index.css` stops upstream motion except on elements a
@@ -47,12 +29,6 @@ Motion is opt-in: the reset at the end of `index.css` stops upstream motion exce
 [Motion](design-moonstone.md#motion)). The dialog and popover content wrappers also own the closing
 face: they exit on a copy of the last open face (`useExitFace`).
 The tooltip arrow stays inside the content's stacking context, so it needs no separate z-index patch.
-
-Two internal-slot exceptions live in `index.css`: Dialog/Sheet backdrops have no content-level
-styling prop, and Radix ScrollArea's inline `display: table` defeats truncation. Keep these rules
-narrow. The scroll rule deliberately overrides inline display; the motion reset still wins over
-all upstream motion. The sidebar's existing selected-row CSS already owns its color;
-no duplicate class patch is needed.
 
 ### Responsive ownership
 

@@ -5,28 +5,10 @@ Colours derive from the Lefos palette; `web/src/index.css` is authoritative.
 ## Palette
 
 Lightness is set by contrast (WCAG 4.5:1 for text, 3:1 for glyphs and meaningful edges) and
-chroma is capped so status hues stay earthy, following Earendil's theming principle.
-
-| Token | Light | Dark | Role |
-| --- | --- | --- | --- |
-| `--surface-0` canvas | moonstone `oklch(0.93 0.006 60)` ≈ `#EBE7E4` | midnight `oklch(0.215 0.022 257)` ≈ `#131A24` | sidebar and shell |
-| `--conversation` sheet | warm white `oklch(0.962 0.004 75)` ≈ `#F4F2EF` | `oklch(0.25 0.022 257)` ≈ `#1B222C` | the inset conversation sheet |
-| `--surface-1` | `oklch(0.978 0.004 75)` ≈ `#F9F7F5` | `oklch(0.285 0.024 257)` ≈ `#232B36` | composer, inputs, user prompts |
-| `--surface-2` | `oklch(0.985 0.004 75)` ≈ `#FCFAF7` | evening blue `oklch(0.31 0.024 257)` ≈ `#29313D` | menus, popovers, the palette |
-| `--surface-3` | `oklch(0.99 0.003 75)` ≈ `#FDFBFA` | `oklch(0.33 0.024 257)` ≈ `#2E3642` | dialogs and mobile navigation |
-| `--line` / `--line-strong` | driftwood at 14% / 24% | parchment at 10% / 18% | edges |
-| `--fill` / `-hover` / `-active` | driftwood at 6% / 8% / 10% | parchment at 4% / 6% / 8% | quiet fills, selected rows |
-| `--ink` | warm black `oklch(0.2 0.007 60)` ≈ `#181513` | warm-10 `oklch(0.91 0.006 68)` ≈ `#E4E1DD` | text |
-| `--ink-2` | warm-40 `oklch(0.44 0.012 62)` ≈ `#58514C` | `oklch(0.8 0.012 62)` ≈ `#C4BCB6` | secondary text |
-| `--ink-3` | warm-30, darkened: `oklch(0.48 0.012 62)` ≈ `#635C57` | `oklch(0.76 0.014 60)` ≈ `#B8AFA8` | tertiary text, glyphs |
-| `--brand` the one colour | evening blue `oklch(0.36 0.05 257)` ≈ `#2C3E57` | parchment `oklch(0.84 0.04 55)` ≈ `#E0C4B2` | focus ring, send key, live state, selection |
-| `--busy` working | sunkissed `oklch(0.58 0.105 75)` ≈ `#9E7027` | `oklch(0.8 0.1 76)` ≈ `#E3B572` | working session |
-| `--done` | tidal blue `oklch(0.5 0.06 232)` ≈ `#3E6980` | `oklch(0.75 0.06 232)` ≈ `#88B5CE` | finished, unseen |
-| `--ok` idle/success | sage `oklch(0.5 0.07 118)` ≈ `#606939` | `oklch(0.76 0.07 112)` ≈ `#B2B682` | idle, success |
-| `--warn` | ochre `oklch(0.52 0.11 62)` ≈ `#955816` | `oklch(0.78 0.11 62)` ≈ `#EAA76B` | warnings |
-| `--err` | terracotta `oklch(0.48 0.12 33)` ≈ `#953F2E` | `oklch(0.74 0.11 33)` ≈ `#E7907D` | errors, destructive |
-| `--merged` | dusk lilac `oklch(0.5 0.07 320)` ≈ `#75567C` | `oklch(0.76 0.07 320)` ≈ `#C5A3CD` | merged pull requests |
-| `--scrim` | umber at 38% | midnight at 62% | behind dialogs and the phone sheet |
+chroma is capped so status hues stay earthy. Roles: `--surface-0` sidebar and shell,
+`--conversation` the sheet, `--surface-1` composer, inputs and user prompts, `--surface-2` menus
+and popovers, `--surface-3` dialogs and mobile navigation; `--busy` working, `--done` finished
+and unseen, `--ok` idle or success, `--warn`, `--err` errors and destructive, `--merged`.
 
 - **Light.** A moonstone canvas holds a warm-white sheet; layers 1–3 are warm near-whites that
   lighten as they rise, never pure white, so the composer and menus still separate from the
@@ -46,72 +28,14 @@ chroma is capped so status hues stay earthy, following Earendil's theming princi
   `disableTransitionOnChange`. A fade was tried and dropped: inherited text and controls with
   their own colour transitions faded on different clocks, so text washed out and faded twice.
 
-### Contrast
-
-WCAG ratios, computed from the tokens (alpha fills composited in sRGB). "Fill" is the lowest
-ratio over any layer with `--fill-active` beneath the glyph, as in a selected row.
-
-| Light | canvas | sheet | surface-1 | surface-2 | surface-3 | fill |
-| --- | --- | --- | --- | --- | --- | --- |
-| ink | 14.73 | 16.22 | 17.00 | 17.35 | 17.60 | 12.86 |
-| ink-2 | 6.33 | 6.97 | 7.31 | 7.46 | 7.57 | 5.53 |
-| ink-3 | 5.33 | 5.87 | 6.15 | 6.28 | 6.37 | 4.65 |
-| brand | 8.83 | 9.73 | 10.19 | 10.40 | 10.56 | 7.71 |
-| busy | 3.54 | 3.90 | 4.09 | 4.17 | 4.23 | 3.09 |
-| done | 4.80 | 5.29 | 5.55 | 5.66 | 5.74 | 4.19 |
-| ok | 4.79 | 5.28 | 5.53 | 5.64 | 5.73 | 4.18 |
-| warn | 4.62 | 5.09 | 5.33 | 5.44 | 5.52 | 4.04 |
-| err | 5.63 | 6.20 | 6.50 | 6.63 | 6.73 | 4.91 |
-| merged | 5.05 | 5.56 | 5.82 | 5.94 | 6.03 | 4.41 |
-
-| Dark | canvas | sheet | surface-1 | surface-2 | surface-3 | fill |
-| --- | --- | --- | --- | --- | --- | --- |
-| ink | 13.39 | 12.23 | 10.97 | 10.06 | 9.34 | 7.76 |
-| ink-2 | 9.36 | 8.54 | 7.66 | 7.02 | 6.52 | 5.42 |
-| ink-3 | 8.13 | 7.43 | 6.66 | 6.11 | 5.67 | 4.72 |
-| brand | 10.63 | 9.70 | 8.71 | 7.98 | 7.41 | 6.16 |
-| busy | 9.27 | 8.47 | 7.60 | 6.96 | 6.46 | 5.38 |
-| done | 7.98 | 7.28 | 6.53 | 5.99 | 5.56 | 4.62 |
-| ok | 8.26 | 7.54 | 6.77 | 6.20 | 5.76 | 4.79 |
-| warn | 8.55 | 7.80 | 7.00 | 6.42 | 5.96 | 4.95 |
-| err | 7.28 | 6.65 | 5.96 | 5.46 | 5.07 | 4.22 |
-| merged | 7.93 | 7.25 | 6.50 | 5.96 | 5.53 | 4.60 |
-
-Limitation: light-mode status colours drop below 4.5:1 as text over a selected (`--fill-active`) row;
-they stay above 3:1 there, which is what their glyph use needs.
-
-Motion's default curve is `--ease-out` (see Motion).
+Limitation: light-mode status colours drop below 4.5:1 as text over a selected (`--fill-active`)
+row; they stay above 3:1 there, which is what their glyph use needs.
 
 ## Type
 
 Two system faces and no web fonts: Tailwind's default sans stack for the interface and body
 (the transcript, controls, menus, titles), and its default mono stack for anything the machine
 produced verbatim (code, commands, paths, branches, the model chip and the usage meta).
-
-### Links and the selected row
-
-Prose links keep the original style: brand colour with an underline at 35% brand, 0.15em below the
-baseline, full brand on hover. The underline is continuous (`text-decoration-skip-ink: none`); the
-browser's default skipped descenders and left gaps under p and g.
-
-A selected row is no longer a brand tint (evening blue at 12% read as cool grey on the warm
-canvas). `--selected` is parchment: solid `oklch(0.88 0.021 53)` ≈ `#E3D4CB` in light mode and the dark
-brand (parchment) at 14% in dark mode. Selected sidebar sessions and the active Settings section use
-it, with the title at weight 500. Text on it: ink 12.56 / 9.84, ink-2 5.40 / 6.87, ink-3 4.55 /
-5.98, brand 7.53 / 7.81 (light / dark, over the canvas). It separates from the canvas by 1.17 /
-1.36 against the hover fill's 1.11 / 1.14, and by hue: warm parchment beside driftwood grey.
-Limitation: over surface-3 in dark mode, ink-3 on the selection drops to 4.13; the sidebar never sits
-on surface-3, so no shipped pairing uses it.
-
-Body text stays 16px, as does the mobile composer.
-Shared UI labels (`text-sm`) are 16px below the shell's 48rem desktop breakpoint and 14px
-at or above it; captions (`text-xs`)
-are 14px / 12px respectively. This keeps mobile navigation, menus and controls as readable as
-the composer without enlarging desktop chrome. Weights 400/500/600.
-
-Considered and rejected: 15px transcript body. The brief allows it only if the measure stays
-under 75ch. The 48rem column risks exceeding that measure at 15px, depending on the system
-font, and narrowing the column would cramp the composer. The 16px body stays.
 
 ## Linear
 
@@ -134,36 +58,6 @@ What Piano takes from it, in Moonstone's palette:
 - **Self-evident, so fewer words.** A control says what it does and no more ("Details", "New
   webhook", "Save"); the checks every added string passes are [quiet UI](quiet-ui.md#checks).
 - **Confirm what cannot be undone.** Deleting a webhook asks first, as Delete session does.
-
-## Mark
-
-One mark everywhere: the app's logo tile, the small keys in sidebar rows and the transcript, the
-favicon and the home-screen icons. `web/src/components/PianoMark.tsx` draws it in the app.
-
-- **Construction.** Solid bars, like Pi's mark: a fallboard across the top and three keys hanging
-  from it, left to right white, black, white, with the black key shorter. Read together it is a
-  keyboard seen from above and a π with one more leg. A 1-unit gap separates the keys from the
-  fallboard, so a pressed key visibly drops away from it. (It began as pixel blocks with 45%
-  seams; next to Pi's favicon the seams and thinner keys read too light, so the bars are solid.)
-- **Grid.** The logo glyph is 16×16: a 16×4 fallboard, keys 4 wide and 2 apart, white keys 11
-  long, the black key 7. The `Keys` glyph for rows and the transcript gutter is about 3/4 of it: keys 3
-  wide and 2 apart, a 3-unit fallboard, white keys 8, black key 5, a 13×12 glyph in a 14×12 box.
-  (Halving it to 2-wide keys read too thin beside 14px text.) Boxes
-  are rounded up to even sides so a centred glyph never lands on half pixels; the tile sizes the
-  glyph to a whole multiple of 16px (`round(57.15%, 16px)`): 1× in the 24px footer and 28px
-  tiles, 2× in the 48px empty-state tile. `shape-rendering: crispEdges` keeps edges sharp.
-- **Colour.** In the app the mark is one colour from tokens: `currentColor` for the glyph (rows
-  pass `text-brand`), `text-brand-ink` on `bg-brand` for the tile.
-- **Favicon.** `favicon.svg` is the 16×16 glyph alone, edge to edge with
-  no tile, as Pi's and Radius's favicons are bare marks (a padded tile left it about half their
-  size in a tab strip). One colour follows the system theme: `#111`, or `#f6f6f6` under
-  `prefers-color-scheme: dark`. A 16px favicon draws one unit per pixel. It stays the same while a
-  session works; progress shows in the app, not the tab icon.
-- **App icons.** The home-screen icons (`apple-touch-icon.png` 180, `icon-192.png`, `icon-512.png`,
-  `icon-maskable-512.png`) need a background, so the glyph sits on a tile at 16 of 28 units, as in
-  the app, in the favicon's two colours: a `#f6f6f6` glyph on a `#111` tile. The apple-touch
-  and maskable icons are full-bleed squares; the 192 and 512 icons have a 6/28 corner radius.
-- **Animation.** None for the icons; the keys in the app play (see the next section).
 
 ## The one memorable element: the keys play
 
@@ -229,15 +123,6 @@ One timing behaviour is not motion, because it decides when something shows, not
   before appearing, so a quick load never flashes them; they then appear at once.
 
 What the removed motion was is recorded under "What Felt changed and why" below.
-
-## Keyboard flow
-
-| Keys | Action |
-| --- | --- |
-| `⌘K` / `Ctrl+K` | Command palette: switch to any session (search title, project, branch), start a new session in a project, toggle the sidebar, change appearance |
-
-The palette shortcut appears as a `Kbd` hint on the sidebar search button. The current global
-shortcuts are listed in [Quiet UI](quiet-ui.md#command-palette-and-shortcuts).
 
 Considered and rejected:
 

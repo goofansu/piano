@@ -1,11 +1,5 @@
 # Projects index
 
-## How to get to it (user POV)
-
-- Sidebar: the "Projects" row under "New session".
-- Palette: Mod+K, type `projects`, choose "Projects".
-- Address bar: `/projects`, or `/m/<configured-machine>/projects` on a peer.
-
 ## Driving it with agent-browser
 
 Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`), `. "$RUN/run.env"`, doctor passed;
@@ -62,14 +56,6 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
     The range changes and Previous projects appears; choosing it returns to the first page
     without navigation or closing the palette. Capture both pages. The two-project seed cannot
     prove paging; report this branch separately when it is not exercised.
-- `peer-projects` prerequisite (safe on the default launch)
-  - Action: `ab open "$WEB_URL/m/not-configured/projects";
-    ab wait --text 'Machine unavailable'`; capture `11-peer-prerequisite`.
-  - Result: Local recovery, no fallback index. Report `verified-unreachable` with this route
-    and the configured, reachable peer prerequisite. The committed remote journey covers it, run
-    alone under the narrow run-limit exception; see [Open a session](./open-session.md#gotchas).
-    If permitted peers are available, repeat New project on the peer, capture its prefixed home,
-    then switch to Local and confirm that project is absent there.
 - `new-project`
   - Action: on `/projects`, `ab find role button click --name "New project" --exact;
     ab wait "[role=dialog]"; ab find role textbox fill --name "Name" --exact "Launch subscriptions";

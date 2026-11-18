@@ -21,12 +21,3 @@ command in the composer and its description shows in completion. Its instruction
 Every Pi child Piano starts loads the folder with `--prompt-template`, so a change reaches sessions
 started from then on; a running session keeps the templates it started with. A prompt created in
 Piano is not loaded by Pi run outside Piano.
-
-## Boundaries
-
-`server/Prompts.ts` owns the folder (INV-01), and `server/Library.ts` decides what a save or a
-delete does, for prompts and skills alike. Pi parses and expands templates (INV-12): the list
-reads front matter with Pi's `parseFrontmatter` and falls back to the instructions' first line as Pi does.
-The list sends each prompt's file with it, so View opens without another request; prompts are
-text the person wrote in Piano, so they leave without display redaction, as project instructions do.
-No registry records are added.

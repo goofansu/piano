@@ -141,28 +141,6 @@ likely to recur. Install agent-browser and Chromium as
 specified in [development setup](development.md#setup); journeys use the CLI on `PATH`. The committed browser
 tests are only the critical paths, which must keep working on every change and run in CI:
 
-- `test/browser/start-session.mjs`: choose a folder, model, effort and project; send the first
-  message; see the reply; reload without resending.
-- `test/browser/open-session.mjs`: open a session from the sidebar; read its transcript; jump to an
-  earlier message; read the session cost; send a follow-up and see the reply and updated cost;
-  stop a running reply.
-- `test/browser/remote-session.mjs`: a main and two independent scratch peers with colliding
-  workspace/session identities; list existing sessions, continue each, switch/back/forward with
-  isolated drafts/catalogs, answer a dialog, disconnect/reconnect/reload without replay, and Stop
-  on the same remote generation/PID. One unavailable peer cannot stop the other's stream or
-  redirect input. Local receives no remote prompt or HTTP/socket request. A project created on a
-  peer takes a session there, and Local does not list it. A remote session's Changes, a file
-  opened from it and its session rail read the peer, never Local. Trusting a folder on a peer
-  leaves Local's trust for the same path as it was. Each machine's model list and last directory
-  are stored under its own ID, and a machine no longer configured is forgotten on load. The harness's optional
-  `peers` fixtures each own separate database/history/audit; `remote` is the one-peer shorthand.
-- `test/browser/remote-inputs.mjs`: the settings-route and voice-input portion of remote coverage,
-  with its own main and two peers. Settings headers stay local; the main voice preference controls
-  every machine, transcription returns to its source draft, switching cancels recording, and
-  dictation never sends itself. `remote-session.mjs` still checks reviewed voice text sent with an
-  image through the peer. CI runs these independent portions in parallel; local commands run
-  them serially with full cleanup between them.
-
 `npm run test:browser` runs these and the transcript-row alignment check against scratch registries, Pi history and
 `test/browser/fake-pi.mjs`, with no model calls. They drive the UI by role and accessible name and
 assert what a user sees and what Pi receives, not markup. Add a journey only for a new critical
@@ -275,29 +253,6 @@ output on the PR. Review logs before
 publication: source/config **bytes** are not in the fingerprint manifest, but paths, output and
 screenshots can still contain private information.
 
-The version-1 revision capture records HEAD, the index's stages/object IDs/modes, and SHA-256 of
-all tracked and non-ignored untracked file bytes, with paths, working-tree permissions, deletions
-and symlink text. Thus two edits to the same dirty path differ, as do stage/unstage operations.
-Symlinks are identified, not traversed: internal targets must also be in the captured path set;
-external/uncaptured targets, submodules, unreadable inputs and unsupported file kinds make
-provenance **unknown**, not passed. Root and web `.env*` files are included even if ignored;
-production browser mode also hashes the existing `web/dist` tree. It identifies the served build,
-not proof that the build came from the current source: rebuild first.
-
-Exclusions are explicit in each record: other ignored/generated files, installed dependency
-**bytes**, external configuration and services are not snapshotted. The lockfile is captured and
-installed direct dependency versions recorded; use `npm ci`, not hand-edited dependencies. Vite
-regenerates `web/public/pdfjs` from installed `pdfjs-dist`; this derived directory is excluded.
-Node/OS/architecture, npm/Git/Worktrunk and (for browsers) agent-browser/browser versions, cwd,
-argv, safe environment fields, journey name, process commands/isolated state paths and timestamps
-identify the execution. Browser preflight requires Git and agent-browser. A journey that uses
-Worktrunk declares `requiresWorktrunk: true` in its harness options (currently `start-session`);
-missing `wt` then blocks before backend/browser startup. Otherwise npm/Worktrunk versions are
-optional observations, recorded as unavailable when absent. The baseline still requires Worktrunk
-for its lifecycle module test. Journey-supplied backend overrides have a digest and key list, not secret
-values; report external overrides needed for reproduction separately. This is not a full environment
-snapshot, a product evidence engine or implementation of all INV-08/09 target contracts.
-
 The harness persists **running** before setup, and a terminal result only after cleanup. Failed
 assertions are **failed**; missing prerequisites are **blocked**; execution/cleanup problems are
 **error**. SIGINT/SIGTERM are **cancelled** and trigger owned cleanup. SIGKILL/host loss cannot run
@@ -316,20 +271,6 @@ known concurrent edits as inconclusive and rerun. Do not infer an atomic snapsho
 detection, automatic reuse after a commit/rebase, or acceptance of an entire feature from a pass.
 A pass is the bounded observation of executed assertions with the recorded limitations. The PR
 still names the acceptance claim/invariants and any checks not run (INV-07–09, INV-11, INV-13).
-
-Harness failure/cleanup probes, separate from the critical-path suite:
-
-```sh
-node test/fixtures/verification-journey.mjs "$EVIDENCE_RUN/setup-failure" setup
-node test/fixtures/verification-journey.mjs "$EVIDENCE_RUN/journey-failure" failure
-node test/fixtures/verification-journey.mjs "$EVIDENCE_RUN/cancelled" cancel
-```
-
-These deliberately exit nonzero. Inspect `run.json` for the intended error/cancellation, retained
-logs/captures, `cleanup.outcome`, removed scratch path and exited owned PIDs; exit failure alone is
-not evidence that the intended failure was exercised. They use the same scratch harness, never
-live Piano. The module suite covers capture identities, baseline outcomes/cancellation and setup
-failure without requiring a browser installation.
 
 ## Completion evidence
 

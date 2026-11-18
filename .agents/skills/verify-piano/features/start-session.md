@@ -1,25 +1,11 @@
 # Start a session
 
-## How to get to it (user POV)
-
-- The sidebar's "New session" button, or the root URL with no session open.
-- A project home's composer ("First message" above its Sessions), or, with the sidebar grouped by
-  project, the group's "New session in <project>".
-- Address bar: `/new`, `/projects/<id>/new`. The project-name heading belongs to the project
-  home at `/projects/<id>`, not its New page.
-
 ## Driving it with agent-browser
 
 Preconditions: a fresh seeded launch with the default browser fake, `. "$RUN/run.env"`, doctor passed;
 `ab() { .agents/skills/verify-piano/scripts/ab.sh "$RUN" "$@"; }`. Run the harness journey first; it covers model, effort,
 project and reload on its own scratch instance, with its own folders and models (not the seed's).
 
-- Harness
-  - Command: `node test/browser/start-session.mjs "$EVIDENCE/start-session/harness"`
-  - Result: exit 0 and `PASSED start-session (<s>s), evidence in <dir>` with its screenshots.
-    It also measures compact Send/Mic faces inside nonoverlapping 44px touch targets at 390px,
-    414px and wide coarse-pointer layouts, returning to mouse layout without sending the draft.
-    The Mic uses a dummy scratch key; this proves geometry, not recording or transcription.
 - `choose-folder`
   - Action: `ab set viewport 1280 800; ab open "$WEB_URL/new"; ab wait --text "What should we work on?";
     ab find role combobox click --name "Directory" --exact`
@@ -38,11 +24,6 @@ project and reload on its own scratch instance, with its own folders and models 
   - Result: Trusted replaces Untrusted. Capture `15-trusted`; click again and wait for
     `aria-pressed=false` to return to Untrusted. The seed without resources need not show this
     control. Cross-machine trust isolation requires the peer prerequisite below.
-- `remote-new` prerequisite
-  - Action: `ab open "$WEB_URL/m/not-configured/new"; ab wait --text 'Machine unavailable'`;
-    capture `16-peer-prerequisite`. Report `verified-unreachable` with that route and a
-    configured, reachable peer, never a local send as remote proof. See
-    [Open a session](./open-session.md#gotchas) for the multi-instance and authentication limits.
 - `model-defaults` (before sending, with the seed's default browser fake)
   - Action: `ab click '[aria-label^="Model:"]'; ab wait '[aria-label="Model and effort"]';
     ab find role option click --name "fake/gamma" --exact`;
@@ -62,21 +43,6 @@ project and reload on its own scratch instance, with its own folders and models 
     `/s/verify-plan`, Session information and actions → Move to project likewise omits Empty
     Project; capture that menu separately. Reopen Empty Project through its home menu before
     continuing recipes that need it active. Its Done home remains reachable from Projects → Done.
-- `first-message`
-  - Action: `ab fill '[aria-label="First message"]' "hello verify";
-    ab wait --fn "!document.querySelector('[aria-label=Send]').disabled"; ab press Enter;
-    ab wait --text "echo: hello verify"`
-  - Result: the URL becomes `/s/<uuid>`; the visible header title is `hello verify`, with
-    screen-reader `role=status` text `Ready`.
-    Capture `02-reply`.
-  - Side effect: the audit has one `start` for that session ID with `--session-id <uuid>`,
-    `--model fake/alpha`, `--thinking medium`, `"cwd": "$REPO"` (the chosen folder), and the run's
-    `--prompt-template` / `--skill` dirs under `$RUN/db/`, then one
-    `{"command":"prompt","text":"hello verify","sessionId":"<uuid>"}`:
-    `rg '"command":"(start|prompt)"' "$AUDIT" | rg -v '"probe"'`.
-- `reload`
-  - Action: `ab reload; ab wait --text "echo: hello verify"`
-  - Result: same URL and transcript. `rg -c '"command":"prompt"' "$AUDIT"` is still 1.
 - `draft-navigation` (before sending)
   - Action: `ab open "$WEB_URL/new"; ab wait --text 'What should we work on?';
     ab fill '[aria-label="First message"]' 'retained draft';
@@ -144,11 +110,6 @@ project and reload on its own scratch instance, with its own folders and models 
 
 ## Gotchas
 
-- Fake Pi writes no Pi history, so a session started on it is empty after a backend restart.
-- The Directory combobox reads "Directory" when no folder is chosen yet (an `--empty`
-  launch, an empty project's home); on the seed it already reads `repo`.
-- Count only non-`probe` audit entries: Piano starts a `probe` Pi for the composer's model and
-  command lists.
 - The one-folder seed does not prove fallback from a missing remembered root to another folder,
   or a project home's fallback to an older member's usable folder. Those branches need multiple
   registered scratch folders and removal of only a run-owned root. `test/Client.test.ts` covers

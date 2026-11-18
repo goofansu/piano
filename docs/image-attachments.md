@@ -14,13 +14,6 @@ files, before base64 encoding or Pi's processing. A recognized raster signature 
 are required; arbitrary files and SVG are not supported. GIF acceptance does not guarantee that a
 provider supports animation.
 
-Use the attachment button, paste, or drop images into either composer. Previews can be removed
-before sending. Image-only messages work. While Pi is working, images can queue with text or alone
-as steering or follow-up input. Editing queued messages or stopping restores only text, not images,
-matching Pi's queue-restoration API. Unsent image drafts stay in browser memory per session; a full
-reload discards them. Queued images survive browser refresh while Pi stays alive; pending queues
-do not survive a backend/Pi restart. The queue displays only Pi's text, without attachment counts.
-
 Piano uses the unmodified Pi runtime and takes its queue from Pi's events. Pi 1.2.0 removes a
 delivered queue entry by matching its text, so after it delivers an image-only queued message it
 still reports an empty entry in `queue_update` and `get_state`'s `pendingMessageCount`. Piano shows
@@ -31,22 +24,6 @@ Piano does not retire the idle Pi process and, if it closes, reports that Pi was
 Decision: Pi's events are the source of truth for its queue. Piano does not filter, hide or
 reinterpret entries Pi reports, track the queue locally, patch Pi or send operations Pi lacks to
 work around this; the fix belongs upstream in Pi.
-
-## Remote composers
-
-The same policy applies on configured peers, in both existing sessions and New session. Only
-images are enabled; remote voice input and general files remain unavailable. Draft acquisition
-and thumbnails are browser-local and machine-partitioned. Send prepares the images over a separate
-bounded HTTP stream to their owning peer, then submits a one-use reference on the conversation
-socket. **Uploading images…** is not proof of Pi/provider receipt. Upload failure, Cancel or
-navigation before submission retains the original draft and newer typing; uncertain prompt
-delivery must be inspected, never automatically retried.
-
-Transcript image links are machine- and session-qualified, with cache provenance checked on the
-peer. Reopening history repopulates the disposable cache; there is no Local fallback for a missing
-peer image. Pi remains the only durable image/history store. See
-[remote use](remote-piano.md#images), [ADR 0004](adr/0004-same-owner-piano-peer.md) and the
-[HTTP budgets](runtime-input-limits.md#remote-image-http-lane).
 
 ## Pi owns model preparation
 
@@ -83,11 +60,3 @@ aggregate/context budget remain unimplemented; this does not change the image po
 
 Activation requires a UI build, `piano.service` restart for server validation, and browser reload.
 No build, deployment or restart was performed as part of this change; no proxy restart is needed.
-
-## Developer navigation
-
-- **Owners:** `shared/attachments.ts` (limits), `server/ImageTransfer.ts`, `server/PreparedImages.ts`
-  and `server/ImagePreviews.ts`, `web/src/lib/imageSender.ts` and `web/src/lib/useImageSend.ts`.
-- **Smallest check:** `node --test --import ./test/setup.ts test/PreparedImages.test.ts` (or
-  `test/ImagePreviews.test.ts`, `test/ImageSender.test.ts`); then the `images` steps of the
-  [Start a session recipe](../.agents/skills/verify-piano/features/start-session.md).

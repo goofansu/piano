@@ -1,14 +1,5 @@
 # Changes and files
 
-## How to get to it (user POV)
-
-- Session page header → the "Changes" icon; the palette's "Changes" does the same, "Hide changes" and (one area at a time) "Agent" go back.
-- Desktop session page header → "Show session rail" → an Outputs row → a file; the palette's
-  "Show session rail" / "Hide session rail" does the same while the areas fit side by side.
-- The session's diff over HTTP: `POST /api/session/changes?workspaceId=<id>&sessionId=<sessionId>`
-  with an allowed Origin and a JSON body (`{}` for the session's saved comparison, Uncommitted by
-  default).
-
 ## Driving it with agent-browser
 
 Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
@@ -65,15 +56,6 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
     sheet or Outputs picker. Phone viewport evidence is emulation, not a real-device keyboard,
     safe-area or touch-scroll check.
 
-- `peer-surfaces` prerequisite (default launch has no peer)
-  - Action: `ab open "$WEB_URL/m/not-configured/s/verify-plan";
-    ab wait --text 'Machine unavailable'`; capture `06-peer-prerequisite`.
-  - Result: no local Changes/file fallback. Report `verified-unreachable` with this route and
-    the configured, reachable peer prerequisite ([Open a session](./open-session.md#gotchas)).
-    When an allowed peer fixture exists, repeat Changes and open a file from its transcript or
-    Outputs, capturing the prefixed route and `/peer/<machine>/api/session/changes` /
-    `/peer/<machine>/api/workspace/file` requests, never Local's corresponding endpoints.
-
 ## Gotchas
 
 - Peer Changes reads allow the remote's Git timeout plus a transport margin. Oversized lists
@@ -85,7 +67,3 @@ The seeded "Plan the verification" history contains one successful Pi `write` of
   history; report it as such. A real Pi write is not exercised.
 - The Surface area is `[data-slot=surface-area]`; hidden, it stays mounted but `inert` (so its
   scroll survives), so select the shown one with `:not([inert])`.
-- "Changes" is the header's icon, the narrow tabs and the palette; neither the session header's menu nor
-  the sidebar's "Session menu for <title>" has a Changes item.
-- A non-Git folder's header has no "Changes" icon; the palette lists Changes disabled with "Not a
-  Git repository". Other open Surface content can still give a non-Git session narrow tabs.

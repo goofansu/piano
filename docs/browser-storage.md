@@ -40,35 +40,11 @@ a `piano.` name through its options, as `next-themes` is given `piano.theme`.
 
 ## A machine's memory
 
-`web/src/lib/machineMemory.ts` is the single source of truth: `MACHINE_MEMORY` lists each name
-with its store, `machineKey` builds the key, and `machineMemory(machineId, name)` reads, writes and
-removes it in the store the table names. Readers only encode and decode; none picks a store.
-Local is the machine `local`, with the same keys as any other.
-
-| Name | Store | Holds |
-| --- | --- | --- |
-| `catalogs` | `localStorage` | Model catalogs by directory, shown until the machine answers |
-| `lastDir` | `localStorage` | The directory a session last started in |
-| `openGroups` | `localStorage` | The sidebar's folder and project groups left open |
-| `surface` | `sessionStorage` | The Surface area's open tabs |
-| `location` | `sessionStorage` | The page this tab was on, for the next switch back |
-
-To remember something new for a machine, add its name to `MACHINE_MEMORY` and read and write it
-through `machineMemory` (its `preference` gives a `createPreference` value on the same key). The
-sweep then covers it: when the server answers the machine list, `forgetUnconfiguredMachines`
-removes, in each store, every key of a machine no longer configured and every machine key
-`MACHINE_MEMORY` does not place in that store. Moving a name to the other store or retiring it
-therefore needs no separate cleanup.
-
-The ID is the configured one and the browser's only identity for a machine. A renamed ID starts
-with nothing remembered.
+Add the name to `MACHINE_MEMORY` in `web/src/lib/machineMemory.ts` and use `machineMemory`.
 
 ## This browser's preferences
 
 Create one with `createPreference` (`web/src/lib/preference.ts`) under a fixed `piano.<name>` key.
-It reads through a fallback, stays in step with other tabs, and survives blocked storage. Current
-ones cover the theme, the sidebar and its view options, the session rail, panel width, queue mode,
-Messages only and code wrap.
 
 ## Renaming or retiring a key
 

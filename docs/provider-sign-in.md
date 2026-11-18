@@ -13,12 +13,6 @@ When Piano runs on another machine, choose a device-code or copy-code method. A 
 needs a callback that reaches the Piano server. Radius's browser method has that requirement, and
 its device-code method works remotely. See [Radius setup](radius-setup.md) for the Radius section.
 
-## Resume or cancel a sign-in
-
-Closing or reloading the dialog keeps an active sign-in. To resume it, go back to
-**Settings → Providers** and click **Sign in**. To stop it, click **Cancel**. An attempt
-expires after 15 minutes or when Piano stops.
-
 ## API keys
 
 Under **Settings → Providers → API Keys**, choose **Add key** for DeepSeek, Fireworks, Google

@@ -1,11 +1,5 @@
 # Settings › MCP
 
-## How to get to it (user POV)
-
-- Sidebar Settings → MCP.
-- Palette: Mod+K → MCP; on that page, Add MCP server opens the same dialog as the header.
-- Address bar: `/settings/mcp`.
-
 ## Driving it with agent-browser
 
 Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
@@ -82,10 +76,6 @@ step reaches a public endpoint; the command fixture and refused URLs below stay 
   visible text alone is ambiguous. Arguments is named "Arguments One per line"; Working directory is named "Working directory
   Optional". Its longer hint is an accessible description, not part of the name; `#mcp-cwd`
   also selects it.
-- A create/save toast can cover the ⋯ menu. Wait with
-  `ab wait --fn "!document.querySelector('[data-sonner-toast]')"` before opening its menu.
-- Catalog identity follows the endpoint, not the configured name. A command merely named
-  `linear` is still a custom command; a catalog URL has the catalog's management policy.
 - Keep configuration copies only from the scratch run: a real `mcp.json` can contain secrets.
   Authenticated Connect/Reconnect, connected URL editing and Disconnect need a separately
   controlled MCP endpoint/sign-in; command CRUD and refused URLs do not prove those paths.

@@ -1,18 +1,6 @@
 # Session page performance baseline
 
-Run the opt-in diagnostic from the checkout (Node 24, installed dependencies and Chromium for
-agent-browser). It uses the installed `agent-browser` from [development setup](development.md#setup);
-Critical paths CI is unchanged.
-
-```sh
-node test/browser/session-perf.mjs .scratch/browser/session-perf
-# Narrow a suspected cliff (sizes must be positive even integers):
-PERF_SIZES=500,750,1000 PERF_REPEATS=3 node test/browser/session-perf.mjs .scratch/browser/session-perf-cliff
-```
-
-The directory receives `results.json` and first-repetition screenshots. Keep results with PR
-evidence, not in Git. Defaults are 100/500/1000 messages, short and long, three repetitions.
-There are no timing assertions: this is a baseline, not a shared-machine CI performance gate.
+`PERF_SIZES` and `PERF_REPEATS` narrow a run of `test/browser/session-perf.mjs`.
 
 ## Boundary and method
 
@@ -62,29 +50,3 @@ not real-model latency or production/mobile performance.
 A preliminary shared-browser experiment accumulated uncollected heap across navigations and
 one driver click timed out at 1,000 long messages. The harness therefore isolates each sample;
 do not combine shared-browser exploratory numbers with this method's baseline.
-
-## Rendering architecture
-
-- `web/src/components/SessionView.tsx` hands the complete session message array to `MessageList`.
-- `web/src/components/MessageList.tsx` memoizes `transcriptRows(...)`, then mounts the visible
-  window plus three buffer rows on each side through TanStack Virtual. All history stays in memory;
-  there is no pagination. Stable message/tool keys retain disclosure state outside recycled DOM.
-  Prompts are measured together in a layout effect; ResizeObserver remeasures variable-height rows.
-  Saved Markdown uses static parsing; a live reply retains streaming block identities through
-  completion. Fresh windows render concurrently behind height-preserving placeholders during
-  rapid scrolling; explicit jumps render immediately so their targets can be measured.
-- `web/src/lib/transcript.ts` projects history into rows and jump entries; Messages only changes
-  this projection, not the authoritative history.
-- `web/src/components/Markdown.tsx` renders Markdown through Streamdown, including code rendering.
-  The baseline deliberately varies Markdown complexity, not just message count.
-- `web/src/lib/transcriptViewport.ts` owns bottom pinning and reader intent on the real scroller.
-  Capture-phase scroll handling runs before the virtualizer can render and follow; measurement
-  corrections first consume any queued native scroll, then acknowledge the corrected position
-  without treating that correction as a reader gesture. Native browser
-  anchoring is disabled so it cannot compensate twice. `useVirtualTranscript.ts` adapts measured
-  offsets to that seam: an offscreen jump locates the message index, mounts it and refines after
-  measurement. Current-entry lookup uses measured DOM positions where present and estimated
-  offsets elsewhere. Unmounted content is not available to native browser Find or select-all.
-- Messages only exists in session commands. These no-tool fixtures would not meaningfully exercise
-  its filtering cost, so it is not benchmarked. There is no transcript full-text search measured
-  here; the command palette searches sessions/commands, not transcript content.

@@ -1,12 +1,5 @@
 # Settings › Providers, Webhooks and Preferences
 
-## How to get to it (user POV)
-
-- Sidebar Settings → Providers, Webhooks or Preferences.
-- Mod+K → Providers, Webhooks or Preferences; on Webhooks, New webhook opens its editor.
-- Address bar: `/settings/providers`, `/settings/webhooks`, `/settings/preferences`.
-  Radius is within Providers, not a separate Settings section or palette destination.
-
 ## Driving it with agent-browser
 
 Preconditions: seeded launch, `. "$RUN/run.env"`, doctor passed;
@@ -61,11 +54,6 @@ Preconditions: seeded launch, `. "$RUN/run.env"`, doctor passed;
 
 ## Gotchas
 
-- `test/browser/voice-input.mjs` is an exported helper, not a standalone journey. It runs inside
-  `remote-inputs.mjs` with main and two peers: real scratch settings, controlled browser device
-  APIs and a CDP transcription response, no paid call. It checks all-machine visibility, draft
-  insertion, cancellation and source isolation. Run that journey alone, under the narrow run-limit
-  exception; the key-dialog recipe above remains runnable on the default launch.
 - Voice transcription requires an approved OpenAI key, browser microphone permission and a
   recording-capable browser. The Preferences → Voice input → key-dialog route proves the
   missing-key prerequisite, not recording, context transmission or transcription into the draft.

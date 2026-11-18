@@ -1,22 +1,9 @@
 # Session dispatch
 
-## How to get to it (user POV)
-
-- Shell: `node scripts/dispatch-session.ts --help` from the checkout, with
-  `PIANO_SESSION_WS_URL` and `PIANO_SESSION_ORIGIN` set (launch's `run.env` exports both) or
-  `--ws-url` / `--origin`.
-- Pi sessions inside Piano reach the same path through the `piano-dispatch` extension
-  (`extensions/piano-dispatch/index.ts`).
-- The printed `link` opens the session in the web UI.
-
 ## Driving it with agent-browser
 
-For the structured-input path, run `node test/browser/start-session.mjs <evidence-directory>`.
-It owns its scratch instance and browser: run it before manual Launch, not alongside it. Its final
-step sends JSON through process stdin (no shell), dispatches into a new worktree, opens the returned
-session link, compares the shell-sensitive prompt exactly with the fake-Pi audit, and checks that
-command substitutions did not create a marker file. It retains `structured-start.json` and
-`4-structured-dispatch.png`; this proves a real Piano session with fake Pi, not a model response.
+The structured-input (`--json`) path is covered by
+`node test/browser/start-session.mjs <evidence-directory>`.
 
 For the remaining manual checks:
 
@@ -84,10 +71,6 @@ the backend, and `PIANO_SESSION_ORIGIN=$WEB_URL`), doctor passed; `echo "dispatc
   the printed links come from `PIANO_SESSION_ORIGIN`, so they open the UI (`$WEB_URL`).
 - `status`'s `changes.files` counts uncommitted files whatever comparison the Changes pane shows.
 - Run it with the checkout's Node 24 (`node scripts/dispatch-session.ts`), not `npx tsx`.
-- In Pi, `piano_wait_sessions` observes exact returned handles; omission of its timeout waits
-  until completion or attention, while a timeout only bounds observation. There is no CLI wait
-  command. CLI proof does not exercise the extension's tool row, Open session link or child's
-  Dispatched from backlink; those need a real-Pi/scripted-model journey.
 - Start/follow-up report submission, not completion. A status read can still say `running`;
   observe the expected reply in the browser before asserting settled status. Do not resend.
 - `test/fake-pi.mjs` gives each `ask…` dialog the ID `d1`; a second ask in the same session may not

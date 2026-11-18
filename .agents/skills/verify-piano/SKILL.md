@@ -53,50 +53,15 @@ Install the [development prerequisites](../../../README.md#develop), including a
 and Chromium, first. Launch needs `node_modules` (runs `npm ci` when missing). It creates
 `/tmp/verify-piano/<run-id>/` (`VERIFY_SCRATCH` overrides the parent) holding:
 
-- `db/piano.db`: a new database; Piano creates the schema on start. Seeded runs fill it first
-  through `.agents/skills/verify-piano/scripts/seed.ts` (the browser tests' own
-  `test/fixtures/registry.ts`), because only one
-  backend may own a database.
-- `repo/`: a committed throwaway Git repo (`README.md`, `src/answer.ts`, `.gitignore` ignoring
-  `ignored/`). Worktrees Piano creates appear beside it as `repo.<branch>`, still inside the run.
-- `pi-agent/`, `pi-sessions/`, `home/`: `PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR` and
-  `HOME` for the backend, keeping Pi history and home-directory configuration scratch-only.
-- `config/`, `cache/`, `state/`, `data/`: isolated XDG directories. Launch clears inherited
-  `WORKTRUNK_*` overrides and supplies an empty user/system Worktrunk config, so inherited
-  placement or hooks cannot redirect the throwaway worktrees outside this run.
 - `audit.jsonl`: every command the fake Pi received (`PIANO_TEST_AUDIT`). Only the default
   `test/browser/fake-pi.mjs` writes it; on `--fake-pi dialogs` and `ask` there is no audit, so
   prove what Pi received from its replies instead.
-- `logs/`, `pids`, `run.env`.
-
-The backend runs `node server/main.ts` with `HOST=127.0.0.1`, `PIANO_PI_CLI=test/browser/fake-pi.mjs`
-(echoes each prompt as `echo: <text>` with priced usage; a prompt of exactly `hold` runs until Stop;
-no model calls), `PI_OFFLINE=1` and `PIANO_ALLOWED_ORIGINS=<ui>,<api>`. The UI is Vite from `web/`
-with `PIANO_DEV_BACKEND` pointing at that backend. Both ports are free ports picked at launch
-(`VERIFY_PORT` / `VERIFY_WEB_PORT` pin them); 7070, 8000, 8001 and 5173 are refused.
-
-Ready means usable: launch waits until `GET /api/folders` answers, the UI serves its page and the
-UI's `/ws` proxy delivers the registry with the UI's origin, then prints:
-
-```
-READY registry over ws://127.0.0.1:<ui-port>/ws: 1 folder(s)
-api      http://127.0.0.1:<api-port>  (server pid <pid>)
-ui       http://127.0.0.1:<ui-port>  (vite pid <pid>)
-database /tmp/verify-piano/<run-id>/db/piano.db  seeded=1  fake-pi=browser
-evidence <EVIDENCE_RUN>/manual/<run-id>
-RUN=/tmp/verify-piano/<run-id>
-```
-
 Then `. "$RUN/run.env"` gives `RUN`, `EVIDENCE`, `REPO`, `DB`, `AUDIT`, `API_URL`, `WEB_URL`,
 `ORIGIN`, `PORT`, `WEB_PORT`, `EXPECTED_SHA`, `AB_SESSION`, and exports `PIANO_SESSION_WS_URL` /
 `PIANO_SESSION_ORIGIN` for the dispatch CLI. A launch that fails prints the log tail; run Cleanup on
 the printed run dir anyway.
 
-Seed data (seeded runs): folder `repo`; projects `verify` "Verify Project" and `empty` "Empty
-Project"; sessions `verify-plan` "Plan the verification"
-(project `verify`, saved PR link `#222`, last active 1 hour ago) and `verify-loose` "Loose session"
-(no project, 20 minutes ago), each with Pi history `What is 2 + 2? (<title>)` / `Answer 4.`; "Plan the verification" also holds one
-successful Pi `write` of `src/answer.ts` (hand-written, since fake Pi makes no tool calls).
+Seed data: `.agents/skills/verify-piano/scripts/seed.ts`.
 
 ### A deployed instance
 
@@ -123,19 +88,6 @@ Run it first, and again whenever anything looks off. It changes nothing.
 .agents/skills/verify-piano/scripts/doctor.sh "$RUN"            # exit 0 = worth driving
 .agents/skills/verify-piano/scripts/doctor.sh --deployed         # on the VM, read-only
 ```
-
-For a scratch run it checks: both recorded PIDs alive with their recorded start time and
-working directory; each port owned by that PID; no real-Piano port in use; the
-checkout still at `EXPECTED_SHA` (dirty paths noted, since they run too); the server log naming this
-run's database; `GET /api/folders` listing only the throwaway repo (or nothing for `--empty`);
-POST `/api/ls` refused without Origin (403) and allowed with `ORIGIN` (200), which is Piano's only
-access control; the registry arriving over the UI's `/ws`; the fake-Pi command count.
-
-For `--deployed`: `piano.service`, `piano-web.socket` and `piano-web.service` active; 8001 owned by
-`piano.service`'s MainPID and 8000 by piano-web; the checkout SHA and whether it equals
-`origin/main` as last fetched (it never fetches); whether HEAD moved after the service started or
-after `web/dist` was built (then the running backend or UI predates the checkout); GETs on 8001 and
-8000; the allowed origins.
 
 ## Drive
 
@@ -209,19 +161,13 @@ evidence goes to `$EVIDENCE_RUN/manual/<run-id>/`, outside the scratch run dir, 
 After sourcing `run.env`, `$EVIDENCE` names that manual launch directory; `$EVIDENCE_RUN` remains
 the parent for the overall verification run. Keep retained logs and drive scripts there too.
 
-```bash
-.agents/skills/verify-piano/scripts/capture.sh "$RUN" <feature-id> <step>
-# -> $EVIDENCE/<feature-id>/<step>.png, <step>.aria.txt, <step>.state.json
-```
+Capture a step with `.agents/skills/verify-piano/scripts/capture.sh "$RUN" <feature-id> <step>`.
 
 The committed harness additionally records content identities, command/environment/journey and
 outcome in `run.json`; see [capture scope and limitations](../../../docs/testing.md#file-evidence-provenance).
 The manual shell flow below has its existing captures/logs, **not** that content fingerprint. Keep
 its drive script and separately identify the tested changes/environment on the PR; invoking the
 skill alone is not evidence.
-
-`state.json` records the URL, title, session header text and the fake-Pi command count at that
-moment. Cleanup adds `_run/` (server and Vite logs, `fake-pi-audit.jsonl`, `run.env`, `pids`).
 
 Proof standards:
 
@@ -281,9 +227,6 @@ clean up their own instance and browser.
   SHA does not read; launch unsets it so a scratch backend never shares a live socket path.
 - A name that is only an `aria-label` (an icon button's, such as "Close answer.ts") is not page
   text: `wait --text` never sees it; wait on `'[aria-label="..."]'` instead.
-  A stock Mac has no `timeout`, so `ab.sh` and the browser close in `cleanup.sh` run unbounded
-  there; `VERIFY_AB_TIMEOUT` applies only where coreutils is installed.
-
 ## Keeping it current
 
 When a journey fails because the app changed (a renamed button, a moved menu item, a new route),

@@ -1,11 +1,5 @@
 # Settings › Skills and Prompts
 
-## How to get to it (user POV)
-
-- Sidebar: Settings (lands on Providers), then the Settings sections nav → Skills or Prompts.
-- Palette: Mod+K, choose Skills / Prompts / New skill / New prompt.
-- Address bar: `/settings/skills`, `/settings/prompts`.
-
 ## Driving it with agent-browser
 
 Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
@@ -74,12 +68,6 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
 
 ## Gotchas
 
-- Pi's own prompt and skill folders are not listed; only Piano-created ones appear.
-- "Sessions started from now" means no automatic refresh of an already-running session's set;
-  Pi's explicit `/reload` is a separate path, not proved by this CRUD recipe.
-- Name and Description are required; Create stays off while either is empty or over the limit.
-- The create toast covers the row's actions button until it leaves; wait
-  `!document.querySelector('[data-sonner-toast]')` before opening the menu.
 - The browser fake discovers saved prompt/skill names for slash-completion, but does not expand
   templates or invoke skills. For a separate completion check, keep both entries instead of
   deleting the skill first. Choose a fresh scratch directory in `/new` through Directory →

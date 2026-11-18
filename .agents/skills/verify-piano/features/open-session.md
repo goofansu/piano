@@ -1,42 +1,10 @@
 # Open and continue a session
 
-## How to get to it (user POV)
-
-- Sidebar row (grouped by date by default: "Today").
-- A project home card, or Mod+K and the session's title.
-- Alt+Up / Alt+Down, following the open groups in the sidebar's current order.
-- Address bar: `/s/<sessionId>`, or `/m/<configured-machine>/s/<sessionId>` for a peer.
-  The Machine picker requires a configured peer; a default launch lists only Local.
-
 ## Driving it with agent-browser
 
 Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
 `ab() { .agents/skills/verify-piano/scripts/ab.sh "$RUN" "$@"; }`. Run the harness journey first.
 
-- Harness
-  - Command: `node test/browser/open-session.mjs "$EVIDENCE/open-session/harness"`
-  - Result: exit 0 and `PASSED open-session ...` (sidebar, long-history jumps, cost, follow-up,
-    inline questions, stop, streaming scroll anchoring and persistent tool disclosure).
-    The Release notes fixture also proves `long-message` expansion/collapse across resize and
-    `code-copy`: visible at rest at 1280, 390 and 800px, copied feedback, and code-only clipboard
-    content on Linux (the clipboard-content assertion is skipped on macOS).
-    It also checks `session-arrows`: rapid/cold selection, offscreen-row reveal, hidden sidebar,
-    collapsed groups, boundaries, composer draft/focus restoration and menu/palette key ownership.
-    Its 80-row fixture proves offscreen navigation; the two-session seed does not.
-- `open-from-sidebar` and `history`
-  - Action: `ab set viewport 1280 800; ab open "$WEB_URL/"; ab wait --text "Loose session";
-    ab find role button click --name "Loose session" --exact; ab wait --url "**/s/verify-loose";
-    ab wait --text "Answer 4."`
-  - Result: `What is 2 + 2? (Loose session)` and `Answer 4.` visible; the header text reads
-    `Loose session` / `Not running`. Capture `01-opened`.
-- `sidebar-layout` (desktop sidebar initially visible)
-  - Action: `ab press Meta+b; ab wait '[aria-label="Show sidebar"]'`; capture `12-sidebar-hidden`.
-    `ab press Meta+b; ab wait '[aria-label="Hide sidebar"]'` restores the desktop column.
-    `ab set viewport 700 800; ab find role button click --name "Show sidebar" --exact;
-    ab wait '[role=dialog]'`; capture `13-sidebar-sheet`.
-  - Result: Escape dismisses only the sheet. `ab press Escape;
-    ab wait --fn "!document.querySelector('[role=dialog]')"; ab set viewport 1280 800;
-    ab wait '[aria-label="Hide sidebar"]'` restores the visible column. Capture `14-sidebar-restored`.
 - `phone-menu`
   - Action: `ab open "$WEB_URL/s/verify-plan"; ab wait --text "Answer 4.";
     ab set viewport 700 800;
@@ -81,15 +49,6 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
     ab wait --fn "!document.querySelector('[role=menu]')"`
   - Result: `ab eval "document.querySelector('nav[aria-label=Sessions]').innerText"` gives each row
     `Folder:` / `repo` / `Git branch:` / `main` under its title. Capture `05-folder-and-branch`.
-- `cost`
-  - Action: `ab find role button click --name "Context usage" --exact;
-    ab wait '[aria-label="Token and cost breakdown"]'`
-  - Result: `ab eval "document.querySelector('[aria-label=\"Token and cost breakdown\"]').innerText"`
-    shows Input `1,200`, Output `300`, Total tokens `1,500`, Cost `$0.0063` in the Response column.
-    Capture `02-cost`; `ab press Escape`.
-- `follow-up`
-  - Action: `ab fill '[aria-label="Message"]' "second"; ab press Enter; ab wait --text "echo: second"`
-  - Result: the reply renders; the audit has `{"command":"prompt","text":"second","sessionId":"verify-loose"}`.
 - `cost` response history (after `follow-up`)
   - Action: `ab find role button click --name "Context usage" --exact;
     ab wait '[aria-label="Token and cost breakdown"]';
@@ -109,12 +68,6 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
     Both are 390; Full suite and Send answer remain reachable. Answer as above, capture the
     result, then widen to 1280×800. This short question does not prove long Markdown/options
     scrolling or a real phone's keyboard behavior.
-- `stop`
-  - Action: `ab fill '[aria-label="Message"]' "hold"; ab press Enter; ab wait '[aria-label="Stop"]';
-    ab find role button click --name "Stop" --exact`
-  - Result: `ab wait --fn "!document.querySelector('[aria-label=\"Stop\"]')"` passes; the audit has
-    `prompt` `hold` then
-    `{"command":"abort","sessionId":"verify-loose"}`. Capture `03-stopped`.
 - `queue-edit` (default browser fake, on a disposable session with an empty draft)
   - Action: `ab fill '[aria-label="Message"]' hold; ab press Enter;
     ab wait '[aria-label="Stop"]'; ab fill '[aria-label="Message"]' 'queue review';
@@ -161,29 +114,6 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
     Capture `21-unavailable-archived`, Escape and restore the desktop viewport.
   - This changes the scratch history and database. A missing checkout with intact history is
     different: history remains readable, as the open-session harness's Gone worktree covers.
-- `remote` prerequisite (safe on the default launch)
-  - Action: `ab open "$WEB_URL/m/not-configured/s/verify-plan";
-    ab wait --text 'Machine unavailable'`; capture `22-peer-prerequisite`.
-  - Result: Local recovery button, no Message composer and no fallback to the local session.
-    `ab find role button click --name Local --exact` returns to Local. Report the remote
-    conversation, session actions, Changes/files/rail, trust, memory, image and voice paths as
-    `verified-unreachable`, naming this attempted route and the missing configured, reachable
-    peer. An unknown-machine page is not a peer success check.
-  - With that prerequisite available in an allowed run: Machine → peer → a session →
-    Session information and actions offers Rename, Pin, project membership, Archive and Delete;
-    the same peer session offers Changes and the desktop rail. Use that peer's throwaway data,
-    capture before/after, and read back only its audit/files. Peer Projects routes and recipes
-    are in [Projects index](./projects-index.md) and [Project home](./project-home.md).
-- `machine-memory` (configured-peer prerequisite above)
-  - Action: open `/m/<machine>/s/<id>`, switch to Local, reload, then Machine → that peer.
-    Result: its previous session address and history return, not Local's. Repeat after a
-    back/forward arrival on a different peer page; capture the arrival and switch-back.
-    Starting in a peer directory and returning to its New page restores that directory;
-    choosing a model there must not alter Local's choice at the same path.
-  - Read-only evidence: `ab eval "({local:Object.keys(localStorage).filter(k=>k.startsWith('piano.machine.')), tab:Object.keys(sessionStorage).filter(k=>k.startsWith('piano.machine.'))})"`.
-    `catalogs`, `lastDir`, `openGroups` use localStorage; `location`, `surface` use sessionStorage,
-    under `piano.machine.<id>.`. Local's ID is `local`. A storage read is supporting evidence,
-    not a substitute for switching. Never seed storage to make the journey pass.
 - `artifacts` (separate `--fake-pi dialogs` launch, from `/new`)
   - Action: `ab open "$WEB_URL/new"; ab wait --text "What should we work on?";
     ab fill '[aria-label="First message"]' 'artifact verify confirmed Verification report';
@@ -229,10 +159,3 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
   an authorized peer integration or VM-scoped token, as described in
   [Remote Pianos](../../../../docs/remote-piano.md#setup); direct exe.dev UI/link access needs a
   signed-in browser. Record the actual route attempted and the unmet prerequisite.
-- Remote image thumbnails and full-image links use
-  `/peer/<machine>/api/peer/image-preview?workspaceId=<id>&sessionId=<id>&hash=<hash>`;
-  local image success does not prove peer scoping. Neither path carries a filesystem path.
-- Opening a session can start a `probe` Pi for an uncached composer catalog; it is not a resend.
-- "hold" must be the whole prompt for the fake Pi to keep running.
-- Fake Pi supplies Session cost, not Session token totals (those remain `—`). After the seeded
-  loose session's `second` reply, Response cost is `$0.0063` and Session cost `$0.0126`.

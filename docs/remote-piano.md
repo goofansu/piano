@@ -45,10 +45,6 @@ ssh exe.dev ssh-key generate-api-key --vm=eng-1 --label=piano-laptop > "$HOME/.c
 chmod 600 "$HOME/.config/piano/eng-1.token"
 ```
 
-The file must contain only the token (a final newline is fine). It must be an absolute-path,
-regular, non-symlink file, at most 16 KiB. On macOS/Linux it must belong to the backend's user and
-have no group/other permissions (`0600` or `0400`). Keep its directory private too.
-
 Write a separate configuration file such as `$HOME/.config/piano/peer.json`, substituting your
 actual **absolute** home path in `vmTokenFile` (JSON does not expand `$HOME` or `~`):
 
@@ -61,13 +57,6 @@ actual **absolute** home path in `vmTokenFile` (JSON does not expand `$HOME` or 
   "vmTokenFile": "/Users/you/.config/piano/eng-1.token"
 }
 ```
-
-Use the remote Piano's actual private port and configured allowed Origin; `3000` above is the
-scratch target, not production. Token authentication only accepts direct HTTPS VM hosts such as
-`eng-1.exe.xyz`, not integration hosts, arbitrary domains or cleartext destinations. No integration
-attachment or SSH tunnel is needed for this mode. The local backend supplies
-`X-Exedev-Authorization: Bearer …` on HTTP requests and WebSocket upgrades; exe.dev consumes it
-before forwarding to the remote. Browser-supplied authorization is never forwarded.
 
 For a local PR checkout with dependencies installed, use your normal built-UI workflow:
 
@@ -123,19 +112,6 @@ substitute for VM-scoped HTTPS tokens.
 npm run build && PIANO_PEER_CONFIG="$HOME/.config/piano/peers.json" npm start
 ```
 
-The switcher shows **Local**, then the peers in file order. IDs must be unique; display names must
-also be unique, ignoring case. `local`/`Local` are reserved. The file is bounded to 16 KiB and at
-most 32 peers. `{ "peers": [] }` or an unset variable means Local only. Unknown fields, duplicates
-or any invalid entry/token file refuse the entire startup, never a partial or tokenless configuration.
-An offline remote does not prevent startup or use of another peer.
-
-### Shared startup configuration
-
-Start the main backend with `PIANO_PEER_CONFIG=/absolute/path/to/peers.json`, keeping its normal
-`HOST=127.0.0.1` and `PIANO_ALLOWED_ORIGINS` configuration. This is startup configuration: changing
-it requires an explicit restart. No remote is configured by default, and Local retains its
-existing behavior. Do not point this scratch example at a production service for verification.
-
 `id` is a stable lowercase slug, not `local`; it identifies routes and browser state. Keep it bound
 to the same backend identity; use a different ID for another Piano rather than repointing it.
 The browser remembers each machine's model list, last directory and open sidebar groups, and each
@@ -152,24 +128,6 @@ switching to tokenless access. Piano never changes integrations.
 
 ## Deliberate limits
 
-- A new remote session starts only in a folder open on the remote or one of its worktrees, with text
-  and/or raster images, in a project or none: no Browse, worktree creation or name. No sharing
-  of a session, and no worktree or machine management. Add, close and reopen folders on the
-  owning Piano.
-- No remote managed app previews or account/settings controls beyond the model
-  picker's defaults and a registered folder's trust. These requests are not forwarded to Local.
-- The remote enforces these limits on its `/ws/peer` connection and answers a refused request the
-  way it answers any failed one (for example "Unable to open session"); the connection stays open.
-- Only configured peers, the remote's `/ws/peer`, slash-command reads, defaults save, the
-  session's Changes, pull request, Outputs and file reads, and fixed image
-  preparation/cancellation/preview routes are routed. There is
-  no arbitrary URL proxy, redirect following, mutation retry or cross-machine search. The browser never contacts the
-  integration hostname.
-- The configured destination is trusted, not an authenticated instance-ID handshake. A remote
-  without `/ws/peer` fails closed as unavailable; there is no version negotiation. Deploy main and
-  remotes from the same revision and verify the actual pair. Fake-Pi evidence does not certify a real
-  Pi runtime or authenticated external-browser access.
-
 See [ADR 0004](adr/0004-same-owner-piano-peer.md) for ownership and trust decisions.
 
 ## Developer navigation
@@ -181,80 +139,8 @@ it admits. Unavailability never substitutes Local. [ADR 0004](adr/0004-same-owne
 owns the trust and scope decisions; [browser storage](browser-storage.md) and
 [runtime input limits](runtime-input-limits.md) own persistence policy and resource budgets.
 
-### Web ownership and interfaces
-
-- [`MachineHost`](../web/src/components/MachineHost.tsx), mounted by
-  [`App`](../web/src/App.tsx), loads the machine list and keys the provider by machine, remounting
-  its children on a switch while retaining page-lifetime stores.
-  [`useMachine.ts`](../web/src/lib/useMachine.ts) exposes `MachineScope`, `useMachineScope`,
-  `useMachineId` and `useOffers`; a missing provider is an error, not a Local default.
-- [`machine.ts`](../web/src/lib/machine.ts) owns `machineLocation`, `machinePath`,
-  `machineAddress`, `machineSocketUrl` and `peerApiPath`: navigation and requests retain their
-  captured owner; unsupported remote HTTP paths throw.
-  [`createMachineStores`](../web/src/lib/machineStores.ts) partitions drafts, question replies
-  and model catalogs by machine; only Local has preview observation.
-- [`machineMemory.ts`](../web/src/lib/machineMemory.ts) exposes `machineMemory`,
-  `machineLocationMemory` and `forgetUnconfiguredMachines` for per-machine persistence and
-  removal of unconfigured identities. [`machineOffers`](../web/src/lib/machineOffers.ts) decides
-  what the browser offers, not what the server authorizes. Every command builder (session,
-  global, page, project, folder and trust commands) takes the machine's offers as a required
-  argument and returns only what that machine offers, so surfaces draw and run what they receive.
-- [`remoteImages.ts`](../web/src/lib/remoteImages.ts) exposes `prepareImages`, `discardImages`
-  and `remoteImageUrl` for peer image preparation, cancellation and preview addressing.
-  [Voice input](#voice-input) instead uses main-origin utilities and writes the captured machine's
-  draft; it is not a peer-proxied service.
-
-### Shared contracts
-
-- [`machine.ts`](../shared/machine.ts) supplies `MachineId`, `Machine`, `Machines`, `LOCAL`,
-  `machineList` and `machineFrameBytes`: common identity/list schemas and socket limits. The
-  public machine list contains IDs and names, not credentials.
-- [`http.ts`](../shared/http.ts) enumerates the JSON/file relay contracts in `RemoteRequests`
-  (`RemoteRequest`); [`remoteImages.ts`](../shared/remoteImages.ts) defines the fixed image
-  routes, preparation protocol and limits. [`wire.ts`](../shared/wire.ts) remains the session
-  wire vocabulary; peers do not introduce a second conversation protocol.
-
-### Server ownership and interfaces
-
-- [`PeerConfig.ts`](../server/PeerConfig.ts) exposes `loadPeerConfigs`, `PeerConfig` and
-  `ConfiguredPeers`: bounded, validated startup destinations with redacted server-only
-  credentials. [`main.ts`](../server/main.ts) loads and provides them.
-- [`PeerGateway.ts`](../server/PeerGateway.ts)'s `addPeerRoutes(router)` installs the bounded
-  `/peer/*` relay to configured destinations, connecting upstream to `/ws/peer`. It does not
-  own remote sessions or inject/renumber their frames. [`Router.ts`](../server/Router.ts)
-  wires the relay, `/ws/peer` and the public `/api/machines` list.
-- [`PeerScope.ts`](../server/PeerScope.ts)'s `peerVerdict(data, request, selection)`, `registered`
-  and `inputTarget` decide the owning peer's admitted operations and input targets. A new session
-  starts only where [`Registry.ts`](../server/Registry.ts)'s `inOpenFolder(data, cwd)` holds: an
-  open folder or a worktree registered under one, the directories the sidebar lists. Unarchive's
-  closed-folder notice and a session's saved branch use the same rule.
-  [`WsClient.ts`](../server/WsClient.ts) identifies peer connections;
-  [`ClientDispatch.ts`](../server/ClientDispatch.ts) applies the verdict and sends ordinary
-  refusals in the peer's delivery sequence. This is distinct from browser offers.
-- [`PeerImageGateway.ts`](../server/PeerImageGateway.ts)'s `makePeerImageRelay` owns the bounded
-  image relay; [`PeerImages.ts`](../server/PeerImages.ts)'s `addPeerImageRoutes` installs the
-  owning peer's HTTP boundary. [`PreparedImages`](../server/PreparedImages.ts) exposes
-  `prepare`, `claim` and `cancel` for ephemeral, target-bound input, checked through `inputTarget`.
-
-### Tests and verification paths
-
-Module checks are grouped by the contract they protect:
-
-- Configuration and transport: [`PeerGateway.test.ts`](../test/PeerGateway.test.ts) covers
-  fail-closed configuration, configured order, HTTP/WS relay and budgets;
-  [`PeerToken.test.ts`](../test/PeerToken.test.ts) covers private token configuration and
-  authenticated relay failures; [`Peers.test.ts`](../test/Peers.test.ts) covers concurrent peers
-  with colliding identities, isolated credentials and failures.
-- Admission: [`PeerScope.test.ts`](../test/PeerScope.test.ts) exercises `/ws/peer` admissions,
-  sequenced refusals and prepared images; [`RemoteSlice.test.ts`](../test/RemoteSlice.test.ts)
-  checks browser-built remote requests against the peer's policy.
-- Browser ownership: [`Machine.test.ts`](../test/Machine.test.ts) covers owner-captured
-  navigation/HTTP/socket mapping, shared ID rules, same-ID/path store isolation and Local-only
-  previews; [`MachineMemory.test.ts`](../test/MachineMemory.test.ts) and
-  [`MachineOffers.test.ts`](../test/MachineOffers.test.ts) cover persistence and browser offers.
-- Image input: [`PreparedImages.test.ts`](../test/PreparedImages.test.ts) covers target binding,
-  single consumption, expiry and bounded capacity; [`ImageSender.test.ts`](../test/ImageSender.test.ts)
-  covers navigation cancellation and known-unsent versus uncertain delivery.
+Start at `server/PeerScope.ts` (admission), `server/PeerGateway.ts` (relay), `shared/machine.ts`
+and `web/src/lib/machine.ts`.
 
 Use the existing `verify-piano` entries for [Start a session](../.agents/skills/verify-piano/features/start-session.md),
 [Open and continue](../.agents/skills/verify-piano/features/open-session.md),

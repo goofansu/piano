@@ -7,14 +7,6 @@
   `textarea` too. What reaches Pi needs the real Pi: fake Pi ignores the extension, so check the
   model's request with a scripted loopback model. `test/fixtures/RealPiDispatch.ts` is an
   infrastructure example, not an existing project-instruction assertion.
-## How to get to it (user POV)
-
-- Desktop session page: click the header's project name (accessible name `Project: <name>`).
-- Narrow session page: Session information and actions → Move to project → the current project name.
-- Sidebar: View options → Group by → Project, then the group's "New session in <name>" button.
-- Palette: Mod+K on a session that belongs to a project, type `open project`, choose the row.
-- Address bar: `/projects/<id>`, or `/m/<configured-machine>/projects/<id>`.
-
 ## Driving it with agent-browser
 
 Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`), `. "$RUN/run.env"`, doctor passed;
@@ -124,14 +116,6 @@ Preconditions: a seeded launch (`.agents/skills/verify-piano/scripts/launch.sh`)
   - Result: `ab eval "document.querySelector('[role=alert]')?.innerText"` is
     `Project not found` / `This project is not in Piano's database.` / `Projects` (the recovery
     button). Capture `07-missing`.
-- `peer-home` prerequisite (default launch has no peer)
-  - Action: `ab open "$WEB_URL/m/not-configured/projects/verify";
-    ab wait --text 'Machine unavailable'`; capture `11-peer-prerequisite`.
-  - Result: Local recovery, not the local Verify Project. Report `verified-unreachable` with
-    the attempted route and configured, reachable peer prerequisite
-    ([Open a session](./open-session.md#gotchas)). With an allowed peer fixture, use its index
-    to create a project, choose its registered directory on the empty home, send a first message,
-    then use the session's project crumb to return: only that peer gains the member.
 - Side effects: a project home starts no Pi session. Before `new-in-project`, `rg -c '"command":"prompt"' "$AUDIT"` finds
   nothing (prints nothing, exit 1) and `rg -vc '"sessionId":"probe"' "$AUDIT"` likewise: the audit
   holds only `probe` entries for uncached composer catalogs (session pages or populated homes).

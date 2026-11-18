@@ -15,37 +15,6 @@ and verification scripts use it directly. Install Chromium before running browse
 agent-browser install
 ```
 
-Install dependencies and start the backend and UI together:
-
-```bash
-npm install
-npm run dev
-```
-
-Open <http://localhost:5173>. Vite proxies API and WebSocket requests to the backend on 7070.
-Model credentials are needed for real sessions, but not for the fake-Pi tests.
-
-`npm run dev` restarts the backend when server files change, which stops running sessions. To
-restart by hand instead, run `npm run build` and `npm start`. To run the two processes in separate
-terminals, use `npm run dev:server` and `npm run dev:web`.
-
-Before you commit code or dependency changes, allocate an
-[evidence run](testing.md#evidence-directories) under `~/piano-evidence/`, then run:
-
-```bash
-npm run verify -- "$EVIDENCE_RUN/baseline"
-```
-
-`verify` runs the unchanged required gates: `npm run typecheck`, `npm run lint`, then `npm test`.
-It retains each command's output and a `run.json`, reports every result, and exits nonzero for a
-failed, blocked, cancelled, error or inconclusive run. A failed gate does not hide later results;
-cancellation leaves remaining gates `not-run`. Run `npm run verify -- --help` for focused and browser
-entry points. On a fresh worktree run `npm ci` first; missing dependencies or tools are **blocked**,
-not success. The wrapper is for Linux/macOS, like the scratch scripts; it owns no app/database.
-
-A baseline pass does not verify a feature or select its browser evidence: follow
-[the testing policy](testing.md). CI retains its existing independent jobs and shards.
-
 ## Node.js version
 
 Piano declares Node.js `>=24` in the root `package.json`. Use the latest Node 24 patch: the

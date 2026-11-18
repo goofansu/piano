@@ -39,88 +39,9 @@ independent. See [runtime input limits](runtime-input-limits.md).
 
 ## Developer navigation
 
-This is the starting place for desktop session navigation: the Alt+Up / Alt+Down chord, the
-reveal of the selected row, and the bounded reads a selection causes. The feature spans the
-modules below, not one feature module. Preserve `web → shared ← server`: the browser decides which
-row is next and reveals it; `select` is the one wire request that opens a session, the same one a
-row click sends; the server admits selections as latest-value reads and never coalesces mutations.
-[Quiet UI](quiet-ui.md#command-palette-and-shortcuts) owns the shortcut and its exclusions as the
-user sees them, [runtime input limits](runtime-input-limits.md) the admission budgets, and
-[browser storage](browser-storage.md#a-machines-memory) which groups stay open per machine.
-
-Where to begin: which row a chord chooses, `adjacentSidebarSession` in
-[`sidebarList.ts`](../web/src/lib/sidebarList.ts); which keys count, `sessionNavigationKey` in
-[`keys.ts`](../web/src/lib/keys.ts); focus and drafts around a chord,
-[`useSidebarSessionNavigation.ts`](../web/src/lib/useSidebarSessionNavigation.ts); reveal
-geometry, [`useSidebarWindow.ts`](../web/src/lib/useSidebarWindow.ts); what a held key costs the
-server, the `select` policy and selection drain in
-[`ClientDispatch.ts`](../server/ClientDispatch.ts).
-
-### Web ownership and interfaces
-
-- [`keys.ts`](../web/src/lib/keys.ts) exposes `sessionNavigationKey(event)`: `-1`, `1`,
-  `"modifier"` or `undefined`. IME keys, consumed keys and chords with Ctrl, Meta or Shift are
-  not navigation; a modifier pressed alone is `"modifier"`, which the hook ignores without
-  dropping the composer-focus intent of the chord before it.
-- [`sidebarList.ts`](../web/src/lib/sidebarList.ts) exposes `createSidebarList` (the
-  `SidebarList` both sidebars render: grouping, sort, and the open or collapsed state of each
-  section, kept per machine) and `adjacentSidebarSession(list, current, direction)`: the next
-  openable row in displayed order, Pinned when open, then the open sections and Done; no wrap;
-  a collapsed or unlisted selection counts as none. A row is `disabled` where
-  [`sessionCatalog.ts`](../web/src/lib/sessionCatalog.ts) says so (starting, or history
-  unavailable); traversal skips it. [`useSidebarList.ts`](../web/src/lib/useSidebarList.ts)
-  mounts the model over the real clock and storage.
-- [`useSidebarSessionNavigation.ts`](../web/src/lib/useSidebarSessionNavigation.ts) exposes
-  `useSidebarSessionNavigation(list, client, navigation)`, mounted once by
-  [`App.tsx`](../web/src/App.tsx) over the list the sidebar renders. One window `keydown`
-  listener applies the exclusions (Settings, the palette, open dialogs, menus and listboxes,
-  editable controls other than the session composer), reads `client.getState()` at the key so a
-  repeat advances from the latest intent rather than a render closure, calls `navigation.select`,
-  and restores the session composer's focus after loading only for the chord that came from it
-  and only while no other focus or pointer action intervened.
-- [`navigation.ts`](../web/src/lib/navigation.ts) exposes `Navigation.select(cwd, sessionId)`,
-  the path a sidebar row, a project-home row and a palette row use too: it leaves Settings,
-  dismisses the mobile sidebar once and calls `Client.select`.
-- [`client.ts`](../web/src/lib/client.ts) exposes `Client.select`, a no-op for the session
-  already on screen or being fetched; otherwise it mints a `selectionId`, applies `selecting`
-  synchronously (the pane switches before the server answers) and sends `select`. A reconnect
-  re-sends the latest selection once; stale answers are dropped by `selectionId`. The same
-  module keeps at most one automatic `directory` observation in flight per connection, retaining
-  only the latest focus and catalog revision while it runs.
-- [`useSidebarWindow.ts`](../web/src/lib/useSidebarWindow.ts) is internal to
-  [`SidebarSessionList.tsx`](../web/src/components/SidebarSessionList.tsx): fixed-height windowed
-  rows in the sidebar's one scroll viewport; it reveals the selected row by its nearest edge once
-  per row and `selectionId`, including a row not mounted yet, without taking focus; a hidden
-  sidebar keeps that intent until it is shown.
-
-### Shared contracts
-
-[`wire.ts`](../shared/wire.ts) defines `select { selectionId, cwd, sessionId, attemptId? }` and
-its answers `selected`, `selection_rejected` and `selection_failed`, correlated by `selectionId`;
-`act` reuses the current `selectionId` as its claim, so an action aimed at a superseded selection
-is refused as stale. `directory { cwd, requestId }` is the automatic focus observation, answered
-once by `directory` with the catalog and trust, or an error. A `select` carrying `attemptId` is a
-read-only creation read-back, not navigation to a listed session; see
-[failed creation and reconnect](runtime-ownership.md#failed-creation-and-reconnect).
-
-### Server ownership and interfaces
-
-- [`ClientDispatch.ts`](../server/ClientDispatch.ts) exposes `receive(request)`. A `select` is
-  admitted as a claim in receive order, and read-only selections share one drain per connection:
-  at most one read runs and one waits; a newer pending `select` replaces the older, releasing its
-  lease without reading its history; a replacement that cannot fit the byte budget is refused and
-  leaves the prior selection intact. Creation, prompts and other mutations are never coalesced,
-  cancelled or replayed; a refusal is an explicit `selection_rejected` or `error`. `directory`
-  takes one ordinary lease and answers by `requestId` on success, failure or refusal.
-- [`ClientSessions.ts`](../server/ClientSessions.ts) exposes `select(selection)`: it claims the
-  selection at once and returns the work that reads the session (`SessionHosts.read`, which never
-  starts Pi) and sends `selected` only if that selection is still current. The latest claim wins:
-  a newer claim ends the older selection's waits for a creation's outcome or for the session lock
-  a starting Pi holds, so the drain moves on; a history read already holding the lock finishes
-  first, unanswered.
-- [`PeerScope.ts`](../server/PeerScope.ts)'s `peerVerdict` admits a peer's `select` only for a
-  session it lists (or a registered directory for a read-back) and `directory` only for a
-  registered directory; the browser's offers do not decide this.
+Start at `adjacentSidebarSession` in `web/src/lib/sidebarList.ts` and
+`web/src/lib/useSidebarSessionNavigation.ts`; the server side is the `select` drain in
+`server/ClientDispatch.ts`.
 
 ### Tests and verification paths
 
