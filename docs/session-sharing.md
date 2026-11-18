@@ -5,7 +5,7 @@ It is visible regardless of main's Radius sign-in. Confirmation states the Priva
 saved data is included; in-flight unsaved messages are not. The upload runs in the background and a
 toast carries the result and its link.
 
-Missing or rejected Radius authentication shows a "Cannot share" toast with **Open Providers**. On
+Missing or rejected Radius authentication shows a "Cannot share" toast with **Providers**. On
 Local it opens Settings → Providers; for a peer it opens that peer's own Piano at
 `/settings/providers` in a new tab, using the peer's configured `origin`, which the machine list
 sends as `url`. The user signs in there and shares again from main. Main's sign-in is never used as

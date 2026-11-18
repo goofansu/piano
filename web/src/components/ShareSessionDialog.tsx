@@ -96,9 +96,9 @@ function signInRequired(
   toast.warning("Cannot share", {
     ...settled,
     description: local
-      ? "Radius isn’t signed in. Sign in under Settings → Providers, then share again."
-      : `Radius isn’t signed in on ${target.machineName}. Sign in under its Settings → Providers, then share again.`,
-    action: providers ? { label: "Open Providers", onClick: providers } : undefined,
+      ? "Sign in Radius to share."
+      : `Sign in Radius on ${target.machineName} to share.`,
+    action: providers ? { label: "Providers", onClick: providers } : undefined,
   });
 }
 

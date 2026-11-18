@@ -45,25 +45,23 @@ export async function shareSignIn(page, machine, local = false) {
   await page.see("Cannot share");
   await page.until(TOASTS_AT_REST);
   if (local) {
-    await page.see("Radius isn’t signed in. Sign in under Settings → Providers, then share again.");
+    await page.see("Sign in Radius to share.");
     await page.capture("share-local-sign-in");
-    await toastButton(page, "Open Providers");
+    await toastButton(page, "Providers");
     await page.see("Providers");
     await page.until("location.pathname.includes('providers')");
   } else {
-    await page.see(
-      `Radius isn’t signed in on ${machine}. Sign in under its Settings → Providers, then share again.`,
-    );
+    await page.see(`Sign in Radius on ${machine} to share.`);
     await page.capture(`share-${machine}-sign-in`);
     const path = await page.evaluate("location.pathname");
     await page.evaluate(
       "window.sharedOpens = []; window.open = (url) => { window.sharedOpens.push(url); return null; }",
     );
-    await toastButton(page, "Open Providers");
+    await toastButton(page, "Providers");
     assert.deepEqual(
       await page.evaluate("window.sharedOpens"),
       [`${page.remote.origin}/settings/providers`],
-      "Open Providers opens the peer's own Providers settings",
+      "Providers opens the peer's own Providers settings",
     );
     assert.equal(await page.evaluate("location.pathname"), path, "main stays where it was");
     await closeToast(page);
