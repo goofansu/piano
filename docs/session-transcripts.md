@@ -15,9 +15,9 @@ skill bodies, keeps standard soft-break behavior. HTML and unsafe links remain i
 
 ## Owners and checks
 
-- `server/PiRecords.ts` builds transcript rows with `compileTranscriptDisplay()` from
-  `server/DisplayProjection.ts`, which strips control sequences only. Every other projection keeps
-  `compileRedaction()`.
+- `server/PiRecords.ts` builds transcript rows with `stripControls()` from
+  `server/DisplayProjection.ts`, which strips control sequences only, including any that one strip
+  reassembles. Every other projection keeps `compileRedaction()`.
 - `web/src/components/MessageList.tsx` opts into `Markdown.tsx`'s `preserveLineBreaks` rendering;
   `remark-breaks` converts soft breaks in the parsed tree, never in the source string.
 - `test/SessionProjection.test.ts` checks original text in live, partial and reloaded messages and

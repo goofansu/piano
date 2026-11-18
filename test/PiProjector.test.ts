@@ -139,3 +139,46 @@ test("INV-01/11: transcript tool args and JSON results retain their original val
   assert.deepEqual(JSON.parse(call.toolCalls![0].args), args);
   assert.equal(saved.text, result);
 });
+
+test("transcript rows strip terminal control sequences, including ones a strip reassembles", () => {
+  const nested = "\u001b[\u001b[31m31mred\u001b[0m";
+  const pi = projector();
+  const events = [
+    { type: "message_start", message: { role: "assistant", content: [] } },
+    {
+      type: "message_update",
+      assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: `say ${nested}` },
+    },
+    {
+      type: "message_update",
+      assistantMessageEvent: {
+        type: "toolcall_end",
+        contentIndex: 1,
+        toolCall: { id: "t", name: "bash", arguments: { command: `echo ${nested}` } },
+      },
+    },
+    { type: "tool_execution_start", toolCallId: "t", toolName: "bash", args: { command: nested } },
+    {
+      type: "tool_execution_update",
+      toolCallId: "t",
+      partialResult: { content: [{ type: "text", text: `out ${nested}` }] },
+    },
+    {
+      type: "tool_execution_end",
+      toolCallId: "t",
+      result: { content: [{ type: "text", text: `done ${nested}` }] },
+    },
+    {
+      type: "message_end",
+      message: { role: "assistant", content: [{ type: "text", text: `final ${nested}` }] },
+    },
+  ].flatMap((raw) => pi.record(raw, 0).events);
+  const texts: string[] = [];
+  JSON.stringify(events, (_, value) => (typeof value === "string" && texts.push(value), value));
+  assert.deepEqual(
+    texts.filter((text) => text.includes("\u001b")),
+    [],
+  );
+  for (const text of ["say red", "out red", "done red", "final red"])
+    assert.ok(texts.includes(text));
+});
