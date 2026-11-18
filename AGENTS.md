@@ -65,8 +65,14 @@ issue link when known, without inventing one. Judge a comment by necessity and a
 no fixed marker is required, and labeling narration a workaround does not justify it.
 
 Preserve required legal notices and functional tooling directives. Give lint/type suppressions a
-truthful, concise reason. Keep module overviews, API explanations and test narration in the owning
-docs rather than source comments. Leave upstream/vendor comments intact.
+truthful, concise reason. Let names, types and tests carry module overviews, API explanations and
+test narration; what they cannot say follows [Docs](#docs). Leave upstream/vendor comments intact.
+
+## Docs
+
+If a type, lint rule or test can enforce a rule, enforce it there instead of documenting it. Write
+docs only for what code cannot explain: a decision and its reason, a contract others rely on, a
+gotcha. When behavior changes, correct or delete the doc lines it made false.
 
 ## Safeguards
 
@@ -76,6 +82,9 @@ Name server modules in PascalCase after their export; `main.ts` is the sole entr
 
 Use workspace/session IDs in URLs, never filesystem paths. Send arbitrary paths in POST JSON bodies
 to keep them out of URL logs.
+
+Bound every reply the server reads from outside itself (a peer, a provider, an MCP endpoint) with a
+byte limit and a deadline. Size the limit against the largest real reply, with room to grow.
 
 Rebuild, restart or deploy the user's running Piano only when asked; coding, committing and pushing
 do not authorize it. Piano has no application authentication: on exe.dev keep it on loopback behind

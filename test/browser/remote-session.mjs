@@ -6,6 +6,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { WebSocket } from "@effect/platform-node/NodeWS";
 import { run } from "./harness.mjs";
 import { machine, png, remoteFixture, sessionId } from "./remote-fixture.mjs";
+import { shareResultView, shareSignIn } from "./session-sharing.mjs";
 import { prepareDictation } from "./voice-input.mjs";
 
 // Headless Chrome on macOS ignores agent-browser's Meta+A; run this journey on Linux.
@@ -118,6 +119,9 @@ await run(
     await page.see("Local collision session saved history");
     await ready(page);
     await folderRow(page, "Local", "1-local-folder-row");
+    await shareSignIn(page, "Local", true);
+    await page.open(`/s/${sessionId}`);
+    await ready(page);
     await catalog(page, "local", "remote", "LOCAL-DRAFT");
     await page.capture("1-local-draft");
 
@@ -227,6 +231,8 @@ await run(
           ),
           false,
         );
+        await shareSignIn(page, "eng-1");
+        await shareResultView(page, call, onEvent);
         await catalog(page, "remote", "local", "", "2b-remote-saved-session-commands");
         await imageShown(page, "eng-1");
         assert.equal(
@@ -1042,7 +1048,7 @@ await run(
           `[...document.querySelectorAll('[role="menu"] [role^="menuitem"]')].map(e => e.getAttribute('aria-label') ?? e.textContent.trim())`,
         );
         assert.ok(actions.includes("Move to project"), JSON.stringify(actions));
-        for (const label of ["Rename", "Pin", "Archive", "Delete"])
+        for (const label of ["Rename", "Pin", "Share", "Archive", "Delete"])
           assert.ok(actions.includes(label), `remote session menu offers ${label}`);
         await page.capture("9h-remote-session-menu");
         await page.click("menuitem", "Rename");
@@ -1287,5 +1293,8 @@ await run(
       );
     }
   },
-  { peers: fixture.peers },
+  {
+    backendEnv: { RADIUS_API_KEY: "" },
+    peers: fixture.peers.map((peer) => ({ ...peer, backendEnv: { RADIUS_API_KEY: "" } })),
+  },
 );

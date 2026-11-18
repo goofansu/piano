@@ -13,6 +13,7 @@ import {
   PinOffIcon,
   ScrollTextIcon,
   ShapesIcon,
+  Share2Icon,
   SquareIcon,
   SquarePenIcon,
   TextCursorInputIcon,
@@ -37,6 +38,7 @@ import { ProjectDialogView } from "@/components/Projects";
 import { ProjectSettingsDialog } from "@/components/ProjectSettings";
 import { RemovalDialog } from "@/components/RemovalDialog";
 import { PreviewDetailsDialog } from "@/components/SessionPreview";
+import { ShareSessionDialog, type ShareTarget } from "@/components/ShareSessionDialog";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -55,6 +57,7 @@ import {
   type SessionTarget,
   sessionCommands,
 } from "@/lib/sessionCommands";
+import { workspaceFor } from "@/lib/sessionContext";
 import { type PreviewClaim, previewClaim } from "@/lib/sessionPreview";
 import { useCodeWrap } from "@/lib/useCodeWrap";
 import { useCommandForms } from "@/lib/useCommandForms";
@@ -97,6 +100,7 @@ const ICONS: Record<SessionCommandIcon, LucideIcon> = {
   stop: SquareIcon,
   messages: MessageSquareIcon,
   rename: TextCursorInputIcon,
+  share: Share2Icon,
   pin: PinIcon,
   unpin: PinOffIcon,
   archive: ArchiveIcon,
@@ -252,6 +256,7 @@ export function CommandHost({
   const project = form?.kind === "project" ? form.dialog : undefined;
   const projectSettings = form?.kind === "project-settings";
   const [previewDetails, setPreviewDetails] = useState<PreviewClaim | null>(null);
+  const [sharing, setSharing] = useState<ShareTarget | null>(null);
   const detailsFocus = useRef<((event: Event) => void) | undefined>(undefined);
   const stopFocus = useRef<((event: Event) => void) | undefined>(undefined);
 
@@ -279,6 +284,20 @@ export function CommandHost({
       stopFocus.current = form.kind === "stop-preview" ? previewFocusReturn() : undefined;
       forms.open(form);
       if (form.kind === "stop-preview") previews?.refresh();
+    },
+    shareSession: (target) => {
+      const workspace = workspaceFor(state, target.cwd);
+      if (!workspace) {
+        toast.error("Could not find this session’s workspace. Refresh the session list.");
+        return;
+      }
+      setSharing({
+        machineId: machineScope.machine.id,
+        machineName: machineScope.machine.name,
+        workspaceId: workspace.id,
+        sessionId: target.sessionId,
+        title: target.title || "Untitled session",
+      });
     },
     openUrl: openLink,
     openPreviewDetails: () => {
@@ -309,6 +328,13 @@ export function CommandHost({
       }}
     >
       {children}
+      {sharing && (
+        <ShareSessionDialog
+          target={sharing}
+          close={() => setSharing(null)}
+          openProviders={() => openSettings("providers")}
+        />
+      )}
       <FormDialog
         open={!!renaming}
         close={close}

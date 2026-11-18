@@ -56,6 +56,7 @@ const REMOTE_OFFERS: MachineOffers = {
         return SENT_CHANGES.has(command.intent.command._tag);
       case "trust":
         return true;
+      case "share":
       case "rename":
       case "archive":
       case "delete":

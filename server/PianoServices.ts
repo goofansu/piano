@@ -13,6 +13,7 @@ import { RegistryLive } from "./Registry.ts";
 import { SessionChangesLive } from "./SessionChanges.ts";
 import { SessionHostsLive } from "./SessionHosts.ts";
 import { SessionPullRequestsLive } from "./SessionPullRequests.ts";
+import { SessionSharingLive } from "./SessionSharing.ts";
 import { SessionStatusLive } from "./SessionStatus.ts";
 import { SidebarViewLive, type SidebarViewOptions } from "./SidebarView.ts";
 import { UserSkillsLive } from "./UserSkills.ts";
@@ -48,5 +49,6 @@ export const PianoServicesLive = (options: PianoServicesOptions) =>
     SessionStatusLive,
     SessionChangesLive,
     SessionPullRequestsLive,
+    SessionSharingLive,
     ProviderLoginLive,
   ).pipe(Layer.provideMerge(WorkspaceChangesLive), Layer.provideMerge(PianoCoreLive(options)));

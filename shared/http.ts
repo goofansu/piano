@@ -6,6 +6,7 @@ import { McpSetupChange, McpSetupRequest, McpSetupState } from "./mcp.ts";
 import { Prompt, PromptCreate, PromptProposal, PromptUpdate } from "./prompts.ts";
 import { ApiKeyProvider, ProviderApiKeyChange } from "./providerApiKeys.ts";
 import { RadiusSetupRequest, RadiusSetupState } from "./radius.ts";
+import { SessionShareResult, SHARE_UNCONFIRMED, SESSION_SHARE_TIMEOUT_MS } from "./share.ts";
 import { UserSkill, UserSkillCreate, UserSkillProposal, UserSkillUpdate } from "./skills.ts";
 import {
   MAX_VOICE_REQUEST_BYTES,
@@ -307,6 +308,17 @@ export const Endpoints = {
     fallback: (status) => `Files request failed (${status}).`,
   }),
 
+  shareSession: endpoint({
+    method: "POST",
+    path: "/api/session/share",
+    query: ["workspaceId", "sessionId"],
+    body: Schema.Struct({ confirmed: Schema.Literal(true) }),
+    response: SessionShareResult,
+    noStore: true,
+    refused: 409,
+    fallback: SHARE_UNCONFIRMED,
+  }),
+
   sessionPullRequest: endpoint({
     method: "GET",
     path: "/api/session/pull-request",
@@ -589,6 +601,7 @@ export const RemoteRequests: ReadonlyArray<RemoteRequest> = [
     invalid: Endpoints.saveDefaults.invalid,
     passRefusal: true,
   },
+  sessionSurface(Endpoints.shareSession, { requestMs: outlasting(SESSION_SHARE_TIMEOUT_MS) }),
   sessionSurface(Endpoints.sessionChanges, {
     answerBytes: changesAnswerBytes,
     requestMs: checkoutRequestMs,

@@ -109,6 +109,7 @@ test("session command availability: settled, disconnected, resyncing, unavailabl
     "wrap-code": true,
     "pull-request": true,
     "messages-only": true,
+    share: true,
     rename: true,
     pin: true,
     archive: true,
@@ -126,6 +127,7 @@ test("session command availability: settled, disconnected, resyncing, unavailabl
   for (const id of ["rename", "archive", "delete"] as const)
     assert.equal(enabled(resync)[id], false, id);
   assert.deepEqual(enabled(resync, other), {
+    share: true,
     rename: true,
     pin: true,
     archive: true,
@@ -163,7 +165,13 @@ test("session command availability: settled, disconnected, resyncing, unavailabl
       },
       other,
     );
-    assert.deepEqual(missingRow, { rename: false, pin: true, archive: true, delete: true });
+    assert.deepEqual(missingRow, {
+      share: true,
+      rename: false,
+      pin: true,
+      archive: true,
+      delete: true,
+    });
   }
 
   const noWorkspace = enabled({ ...base, workspaces: [] });
@@ -188,7 +196,7 @@ test("session command availability: settled, disconnected, resyncing, unavailabl
 
   assert.deepEqual(
     enabled({ ...base, session: null, selectionId: null, view: { kind: "new" } }, other),
-    { rename: true, pin: true, archive: true, delete: true },
+    { share: true, rename: true, pin: true, archive: true, delete: true },
   );
   assert.deepEqual(
     enabled({ ...base, session: null, selectionId: null, view: { kind: "new" } }),
@@ -320,12 +328,12 @@ test("the palette offers every command the session header and the sidebar row me
 
 test("each session menu places its project section after the manage commands and before Archive and Delete", () => {
   const row = ids(sessionRowMenu(sessionCommands(base, other, { offers: local })).sections);
-  assert.deepEqual(row, [["rename", "pin"], "project", ["archive", "delete"]]);
+  assert.deepEqual(row, [["rename", "pin", "share"], "project", ["archive", "delete"]]);
   const reversed = sessionCommands(base, other, { offers: local }).reverse();
   assert.deepEqual(ids(sessionRowMenu(reversed).sections), row);
   assert.deepEqual(
     ids(sessionHeaderMenu(sessionCommands(base, undefined, { offers: local })).sections),
-    [["rename", "pin"], "project", "display", ["archive", "delete"]],
+    [["rename", "pin", "share"], "project", "display", ["archive", "delete"]],
   );
 });
 
@@ -345,7 +353,7 @@ test("the header menu: copy beside the details, manage, a Messages only switch, 
       ),
     );
     assert.deepEqual(ids(menu.sections), [
-      ["rename", "pin"],
+      ["rename", "pin", "share"],
       "project",
       "display",
       ["archive", "delete"],
@@ -452,7 +460,15 @@ test("on a remote the builder returns only the session commands that machine off
     ids(local).filter((id) => !id.includes("preview")),
     "a remote keeps the conversation's commands and leaves its app to the remote",
   );
-  for (const id of ["rename", "pin", "archive", "delete", "changes", "new-session-here"] as const)
+  for (const id of [
+    "rename",
+    "pin",
+    "share",
+    "archive",
+    "delete",
+    "changes",
+    "new-session-here",
+  ] as const)
     assert.ok(remote.includes(id), id);
 });
 

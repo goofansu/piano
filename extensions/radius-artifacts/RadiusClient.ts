@@ -4,6 +4,7 @@ import { z } from "zod";
 
 const endpoint = "https://radius.pi.dev/mcp";
 export class RadiusError extends Error {}
+export class RadiusAuthenticationError extends RadiusError {}
 const invalid = () => new RadiusError("Radius returned an invalid artifact response.");
 const identifier = z.string().min(1).max(256);
 export const Artifact = z.object({
@@ -66,11 +67,25 @@ export class RadiusClient {
         });
         if (response.status === 401 || response.status === 403) {
           await response.body?.cancel();
-          throw new RadiusError(
+          throw new RadiusAuthenticationError(
             "Radius authentication or permission failed. Sign in to Radius and check access.",
           );
         }
-        return response;
+        if (!response.body) return response;
+        let bytes = 0;
+        const bounded = response.body.pipeThrough(
+          new TransformStream<Uint8Array, Uint8Array>({
+            transform(chunk, controller) {
+              bytes += chunk.byteLength;
+              if (bytes > 4 * 1024 * 1024) {
+                controller.error(invalid());
+                return;
+              }
+              controller.enqueue(chunk);
+            },
+          }),
+        );
+        return new Response(bounded, { status: response.status, headers: response.headers });
       },
     });
   }
