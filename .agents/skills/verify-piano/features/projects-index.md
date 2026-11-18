@@ -55,6 +55,13 @@ Preconditions: a seeded launch. Mod+K is `Control+k` on Linux and `Meta+k` on ma
     The range changes and Previous projects appears; choosing it returns to the first page
     without navigation or closing the palette. Capture both pages. The two-project seed cannot
     prove paging; report this branch separately when it is not exercised.
+- `palette-keyboard` (desktop, unfiltered catalog taller than the palette)
+  - Action: on `/projects`, `ab press Control+k; ab wait '[cmdk-list][aria-busy="false"]'`;
+    capture the list, then `ab press End`.
+  - Result: the last row is selected and fully visible; capture it and record
+    `ab eval "(() => { const row=document.querySelector('[cmdk-item][aria-selected=true]'), list=document.querySelector('[cmdk-list]'); return {selected:row.textContent,row:row.getBoundingClientRect().toJSON(),list:list.getBoundingClientRect().toJSON(),scrollTop:list.scrollTop}; })()"`.
+    The row's top/bottom stay within the list's bounds and `scrollTop` is positive. No action
+    ran; `ab press Escape` closes the palette. A list that fits without scrolling cannot prove this.
 - `new-project`
   - Action: on `/projects`, `ab find role button click --name "New project" --exact;
     ab wait "[role=dialog]"; ab find role textbox fill --name "Name" --exact "Launch subscriptions";

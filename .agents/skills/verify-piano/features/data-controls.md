@@ -24,6 +24,23 @@ open.
     ab wait --text 'Session unarchived'`. Capture `03-unarchived`; open `/s/verify-loose` again
     and wait for Answer 4. The saved history returns, with no non-probe start for `verify-loose`
     in `$AUDIT`. A follow-up would invalidate that no-start check.
+  - Same-address recovery alternative: while the original tab still shows `02b-archived-address`,
+    record its ID with `ab tab list`, then
+    `ab tab new --label recovery "$WEB_URL/settings/data-controls"; ab wait --text 'Archived sessions'`.
+    Unarchive the scoped Loose session row as above, then `ab tab <original-tab-id>;
+    ab wait --text 'Answer 4.'; ab wait '[aria-label="Message"]'`. Capture the unchanged
+    `/s/verify-loose` address with restored history; no reload or navigation in that tab.
+    `ab tab close recovery` closes only the extra tab in this same browser session.
+- `selected-archive` (after Unarchive, before the bulk check)
+  - Action: open `/s/verify-loose`, wait for Answer 4., capture it and record the tab ID with
+    `ab tab list`. Then `ab tab new --label archiver "$WEB_URL/s/verify-loose";
+    ab wait --text 'Answer 4.'`; archive through Session menu for Loose session → Archive.
+    The acting tab goes to `/new`. `ab tab <original-tab-id>;
+    ab wait --text 'Archived · Read-only session'`.
+  - Result: capture the retained history and read-only notice; Message is absent. In the
+    archiver tab, open `/settings/data-controls` and Unarchive the scoped row. Return with
+    `ab tab <original-tab-id>; ab wait '[aria-label="Message"]'`: the composer returns without
+    reload. Capture, then `ab tab close archiver`. These are two tabs, not two browser sessions.
 - `archive-all` (fresh seed after Unarchive)
   - Action: on `/s/verify-plan`, Session information and actions → Pin:
     `ab find role button click --name 'Session information and actions' --exact;
