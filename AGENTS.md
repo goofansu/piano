@@ -70,9 +70,9 @@ test narration; what they cannot say follows [Docs](#docs). Leave upstream/vendo
 
 ## Docs
 
-Docs record what the code cannot say: a decision and its reason, a contract others rely on, a
-gotcha. The code is the source of truth for how it works. When behavior changes, correct or delete
-the doc lines it made false; leave implementation and UI detail to the code.
+Put a rule a static check can enforce in that check: a type, a lint rule, a test. Write docs for
+what code cannot explain: a decision and its reason, a contract others rely on, a gotcha. When
+behavior changes, correct or delete the doc lines it made false.
 
 ## Safeguards
 
