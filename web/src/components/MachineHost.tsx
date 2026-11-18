@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { listMachines } from "@/lib/api";
 import { observeDictationPage } from "@/lib/browserDictation";
-import { machineNavigationIndex, overlayOpen, ownsTextInput } from "@/lib/keys";
+import { machineNavigationIndex, shortcutBlocked } from "@/lib/keys";
 import { LOCAL, type Machine, machineLocation, machinePath } from "@/lib/machine";
 import { forgetUnconfiguredMachines, machineLocationMemory } from "@/lib/machineMemory";
 import { createMachineStores } from "@/lib/machineStores";
@@ -46,11 +46,11 @@ export function MachineHost({ children }: { children: React.ReactNode }) {
       platform: navigator.platform,
       standalone: window.matchMedia("(display-mode: standalone)").matches,
     });
-    if (index === undefined || overlayOpen()) return;
-    const target = event.target;
-    const composer =
-      target instanceof HTMLTextAreaElement && target.closest('[data-slot="draft-editor"]');
-    if (!composer && ownsTextInput(target)) return;
+    if (
+      index === undefined ||
+      shortcutBlocked(event.target, { composer: '[data-slot="draft-editor"]' })
+    )
+      return;
     event.preventDefault();
     switchMachine(machines[index].id);
   });
