@@ -1,6 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { z } from "zod";
+import { isRadiusUrl } from "../../shared/radiusUrl.ts";
 
 const endpoint = "https://radius.pi.dev/mcp";
 export class RadiusError extends Error {}
@@ -9,21 +10,7 @@ const invalid = () => new RadiusError("Radius returned an invalid artifact respo
 const identifier = z.string().min(1).max(256);
 export const Artifact = z.object({
   id: identifier,
-  canonical_url: z
-    .string()
-    .url()
-    .refine((value) => {
-      const url = new URL(value);
-      return (
-        url.protocol === "https:" &&
-        !url.username &&
-        !url.password &&
-        !url.port &&
-        !url.search &&
-        !url.hash &&
-        ["radius.pi.dev", "radius.earendil.com"].includes(url.hostname)
-      );
-    }),
+  canonical_url: z.string().refine((value) => isRadiusUrl(value)),
   latest_version: z.number().int().nonnegative(),
   visibility: z.enum(["private", "organization", "public"]),
   expires_at: z.string().refine((value) => Number.isFinite(Date.parse(value))),
@@ -162,23 +149,14 @@ export class RadiusClient {
     const transfer = z
       .object({
         method: z.literal("GET"),
-        url: z.string().url(),
+        url: z.string().refine((value) => isRadiusUrl(value, { query: true })),
         headers: z.record(z.string(), z.string()),
       })
       .safeParse(
         await this.call("artifacts_files_download", { slug: id, version: String(version), path }),
       );
     if (!transfer.success) throw invalid();
-    const url = new URL(transfer.data.url);
-    if (
-      url.protocol !== "https:" ||
-      url.username ||
-      url.password ||
-      url.port ||
-      !["radius.pi.dev", "radius.earendil.com"].includes(url.hostname)
-    )
-      throw invalid();
-    const response = await fetch(url, {
+    const response = await fetch(transfer.data.url, {
       method: "GET",
       headers: transfer.data.headers,
       redirect: "error",

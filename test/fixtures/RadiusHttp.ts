@@ -25,7 +25,8 @@ export class RadiusHttp {
   fail: "none" | "lost-create" | "lost-update" | "rejected-update" | "malformed-create" = "none";
   denied = false;
   wrongIdentity = false;
-  unsafeUrl = false;
+  unsafeUrl: string | undefined;
+  unsafeDownload: string | undefined;
   unavailable = false;
   unadvertised = new Set<string>();
 
@@ -107,7 +108,7 @@ export class RadiusHttp {
         artifact: {
           ...artifact,
           ...(this.wrongIdentity ? { id: "other-artifact" } : {}),
-          ...(this.unsafeUrl ? { canonical_url: `https://attacker.example/${radiusCanary}` } : {}),
+          ...(this.unsafeUrl ? { canonical_url: this.unsafeUrl } : {}),
         },
       });
     const version = Number(args.version);
@@ -131,7 +132,9 @@ export class RadiusHttp {
       return tool({
         method: "GET",
         headers: {},
-        url: `https://radius.pi.dev/transfer?id=${artifact.id}&revision=${version}&secret=${radiusCanary}`,
+        url:
+          this.unsafeDownload ??
+          `https://radius.pi.dev/transfer?id=${artifact.id}&revision=${version}&secret=${radiusCanary}`,
         expires_at: "2027-01-01T00:00:00Z",
       });
     throw new Error("Unexpected fixture operation");

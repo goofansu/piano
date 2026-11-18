@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { isRadiusUrl } from "./radiusUrl.ts";
 
 export const SESSION_SHARE_TIMEOUT_MS = 60_000;
 export const SESSION_SHARE_MAX_BYTES = 10 * 1024 * 1024;
@@ -8,23 +9,7 @@ export const SHARE_UNCONFIRMED =
 export const SessionShare = Schema.Struct({
   url: Schema.String.check(
     Schema.isMaxLength(2048),
-    Schema.makeFilter((value) => {
-      try {
-        const url = new URL(value);
-        return (
-          url.protocol === "https:" &&
-          !url.username &&
-          !url.password &&
-          !url.port &&
-          !url.search &&
-          !url.hash &&
-          url.pathname !== "/" &&
-          ["radius.pi.dev", "radius.earendil.com"].includes(url.hostname)
-        );
-      } catch {
-        return false;
-      }
-    }),
+    Schema.makeFilter((value) => isRadiusUrl(value)),
   ),
   visibility: Schema.Literals(["private", "organization", "public"]),
   expiresAt: Schema.String.check(Schema.makeFilter((value) => Number.isFinite(Date.parse(value)))),
