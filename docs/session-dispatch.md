@@ -99,45 +99,6 @@ output-file guard described below: an existing file exits `3` before connection.
 uncertain result files and inspect Piano before any retry. A result reports admission, not task
 completion; no command here waits for the agent to finish.
 
-#### Migrating the shared `use-piano` / `using-piano` workflow on exe.dev
-
-Keep VM selection, worktree creation and bot PR/commit identity rules. Replace the prompt-file
-construction and positional dispatch steps with this data-only transport:
-
-1. Re-list the connector's engineering VMs for each dispatch, without a tag filter. Prefer a
-   running VM with suitable resources and the lowest load; stop if none are listed. Record its
-   returned `vm_name`, never a hard-coded host. Check the live checkout read-only.
-2. Fetch `origin`, then create the task worktree with `wt switch -c <branch> --base origin/main
-   --no-cd --format json -y` from `/home/exedev/piano`. Take the returned `path` as `cwd` and unset
-   its upstream. For an existing branch, take `items[].worktree.path` from `wt list --format json`.
-   Do not dispatch into the live checkout or disturb existing work.
-3. Build the JSON object in the caller, with the literal brief as `prompt`, the returned worktree
-   path as `cwd`, a fresh absolute `outFile` outside the worktree,
-   `wsUrl: "ws://127.0.0.1:8001/ws"` and `origin: "https://<vm_name>.exe.xyz"` (substitute the selected
-   name; no trailing slash). Omit `worktree` because step 2 created it. Include the goal, edit
-   scope, checks, expected PR/report and bot identity requirements in the brief: bot-authored
-   commits with no co-author trailer, and engineering PRs through the GitHub integration bot.
-4. Run this fixed command **on that VM**, supplying the serialized JSON via the connector's stdin
-   field or SSH stdin, not by interpolating it into the command:
-
-   ```sh
-   export PATH=/home/exedev/.local/bin:/home/exedev/node/bin:$PATH
-   cd /home/exedev/piano
-   exec node scripts/dispatch-session.ts --json
-   ```
-
-5. Require `creation: "created"` and `submission: "started"`, `"queued"` or `"handled"` for accepted
-   dispatch. Report `link`, VM, returned `cwd` and branch. A rejected/not-sent submission with a
-   created session must be handled at its link, not by creating another session. For uncertainty
-   or transport failure, inspect Piano before retrying; never delete the guard file and resend
-   blindly. Follow progress at the session/PR and verify the reported checks before calling work done.
-
-Benchmarks, browser harnesses and performance baselines still run inside an ordinary dispatched
-Piano session, not a raw remote test command. Project skills remain under `.agents/skills/`.
-Leave Pi session files and the live Piano untouched; deployment still requires the owner's yes.
-This section supplies the caller migration; externally stored Grok skills must be updated by
-their owner once the entry point is available on the selected VM.
-
 ### File-based terminal commands
 
 The existing prompt-file interface remains supported:
@@ -219,20 +180,6 @@ left it empty. An existing or empty output file is **not proof of success**. A f
 `detail`, remove it or use a fresh path to dispatch again. Inspect Piano before retrying an uncertain dispatch, or one whose file is empty; never
 blindly delete that file and resend. Without an output file there is no file-based
 duplicate-dispatch guard.
-
-## Links between sessions
-
-In the parent's transcript, each start, wait or status read shows one row per child: the brief's
-first line, the branch of the child's worktree when the parent knows it, the status the parent last
-observed and an **Open** link. The status is that observation, not the
-child's live state; **Finished** means the child stopped, not that its task succeeded. Expand the
-row for the brief or the answer.
-
-The child's transcript starts with **Dispatched from** and the parent's title, linked back to it.
-When the parent is no longer in the sidebar, the row reads "another session" without a link. The
-link is recorded in the child's own Pi history as a `piano.dispatch` custom entry, which never
-reaches the model. `piano-dispatch` writes it when the child's session first starts, and Pi saves
-it with the first reply, so a child whose first prompt failed before any reply may have no backlink.
 
 ## Project inheritance
 

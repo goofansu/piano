@@ -1,12 +1,5 @@
 # Remote Pianos
 
-The machine picker connects this browser to **Local** or one of the configured Pianos owned by the
-same user. It shows that machine's sessions and projects; it is not machine management. The remote's registered sessions
-appear even when another browser or an agent started them. Terminal Pi history that the remote
-Piano has not registered is not discovered.
-
-For implementation work, start at [Developer navigation](#developer-navigation).
-
 ## Setup
 
 The main Piano can run on your laptop or on an exe.dev VM. All backends stay bound to loopback;
@@ -136,12 +129,6 @@ most 32 peers. `{ "peers": [] }` or an unset variable means Local only. Unknown 
 or any invalid entry/token file refuse the entire startup, never a partial or tokenless configuration.
 An offline remote does not prevent startup or use of another peer.
 
-A request or socket stays bound to its chosen peer's endpoint, Origin and credential. A slow reply
-or unavailable peer cannot redirect input to another peer or Local. Drafts/catalogs and session
-addresses remain machine-owned even when different backends use identical paths and session IDs.
-You may mix token-backed direct VM entries and tokenless peer-integration entries in one list;
-only use integrations attached to the VM running the main backend.
-
 ### Shared startup configuration
 
 Start the main backend with `PIANO_PEER_CONFIG=/absolute/path/to/peers.json`, keeping its normal
@@ -162,121 +149,6 @@ only for isolated tests with dummy credentials, never real tokens.
 Omit `vmTokenFile` for an exe.dev peer integration; the edge supplies authentication. Set it only
 for direct VM access. A configured but unreadable/invalid token fails startup rather than silently
 switching to tokenless access. Piano never changes integrations.
-
-## Use
-
-Choose **eng-1** from **Machine**, open a listed session and send text, images or both. The existing
-model/effort, context, queue, dialog and Stop controls apply to that remote session. In the model
-picker, **Use default** and **Make default** read and save the remote's own defaults for new
-sessions there; Local's defaults are unchanged. Cmd+K searches
-only the selected machine and offers a **Switch to …** command for each configured machine. A remote session's
-address is `/m/eng-1/s/<sessionId>`; reload and back/forward retain that machine.
-
-**New session** (or **New session here** in Cmd+K or on an open folder's sidebar row) starts a
-session on the selected machine. Its directory picker lists only the folders open on that machine,
-and **New session here** is unavailable for a session whose folder is closed there (pinned and
-project sessions stay listed, and Cmd+K shows **Folder closed** beside it). If the folder is
-closed on the remote while its New page is open, the page keeps the directory, disables Send and
-says **Folder closed**. Its first message may contain text, images or both. A remote
-folder's row has no folder menu: Close stays on the owning Piano.
-The session runs and stays on the remote. A worktree for parallel work comes from the remote
-session's own dispatch, which runs on the remote, not from this picker.
-
-Switching to a machine opens the session or page this browser tab last had there, also after a
-reload; in a new tab, or the first time, it opens **New session**. A switch disconnects this browser's attachment, not the run. Returning or reconnecting reads a
-fresh authoritative snapshot; it never resends input. Check the conversation before retrying any
-input whose delivery is uncertain. Disconnection makes the remote unavailable, never Local.
-
-Unsent drafts and question replies are isolated by machine and retained only for this page load.
-Reload discards drafts as in Local. Each machine's model list and last directory are remembered
-in this browser under that machine alone, so the model picker opens at once and **New session**
-starts where you last worked there; neither is ever taken from another machine. Remote files,
-credentials, history and database remain remote.
-
-### Projects
-
-**Projects** lists the selected machine's projects, kept in that machine's database. Create one,
-open its home, change its name and instructions in **Project settings**, mark it done or delete
-it, and start a session in it, as on Local. A session's menu moves it to another project of the
-same machine or removes it from one. Projects do not span machines: a project on eng-1 holds
-eng-1's sessions only, and its address is `/m/eng-1/projects/<id>`.
-
-### Folder trust
-
-Where a remote folder holds project extensions or skills Pi loads only when trusted, the New
-page shows the same **Trust folder** control as Local, and Cmd+K lists it. Trusting it lets that
-folder's extensions run on the remote for sessions started there. Only folders and worktrees the
-remote already registered can be trusted from here. If the connection drops or the remote does not
-answer, Piano says the change may have finished; check the folder's trust before trying again.
-
-### Changes, files and the session rail
-
-A remote session has the same session rail, **Changes** and file tabs as a Local one. Git and
-GitHub are read on the remote, with the remote's GitHub sign-in; linking a pull request saves the
-link there. A file link in the conversation, in Changes or in **Outputs** opens that file from the
-remote, by the same [formats and sizes](file-previews.md#formats-and-limits) as Local, and
-**Download** saves it to this computer. Like Local, a path may point outside the workspace.
-
-The rail's **App** section and **Open preview in new tab** are not shown: a remote's app preview
-stays on its own Piano. Open tabs are remembered per machine for this browser tab. If the remote
-is busy with two files, another read answers "Remote files are busy. Try again."
-See [resource budgets](runtime-input-limits.md#remote-session-surfaces).
-
-### Session menu
-
-A remote session's menu, in the sidebar and in its header, offers **Rename**, **Pin**,
-**Archive** and **Delete** as on Local. Archive and Delete stop the session on the remote, and
-Delete removes its history there. To unarchive a remote session, use **Settings → Data controls**
-on that remote's own Piano. Unarchive and Archive all are not offered or accepted through a peer;
-Settings remains local-only: a remote's `/settings/...` address opens its New page and
-corrects the address.
-
-### Artifacts and pull request
-
-A remote session's header lists the artifacts it published, and on a phone its menu links to its
-saved pull request. Both open in a new browser tab.
-
-### Images
-
-Use **Attach images**, paste or drop in either composer. The same
-[image policy](image-attachments.md) applies as Local: PNG/JPEG/GIF/WebP, ten images, 10 MiB each,
-50 MiB combined. Thumbnails appear immediately; remove them before sending. Image-only input,
-steering and follow-up work too. Pi's queue still shows text only; Edit and Stop restore text,
-not images. Piano preserves Pi's reported empty image-only queue entries.
-
-After Send, **Uploading images…** means preparation on the selected peer, not model receipt.
-You can keep typing and answer dialogs. **Cancel**, changing directory/session/machine, or Stop
-before submission cancels the pending send and keeps its original draft. New typing is preserved.
-If upload fails, the draft comes back for an explicit retry, with the peer's own reason when it
-refused the images; there is no automatic upload retry.
-Once a prompt may have reached Pi, check the authoritative conversation before sending it again.
-
-Transcript thumbnails and **Open attached image** read from that session's peer, never Local.
-The image cache is disposable; if a preview is unavailable, reopen the session to reproject its
-history. This does not resend input. A full browser reload discards unsent image drafts.
-Temporary prepared uploads disappear when the peer restarts or after ten minutes unclaimed;
-a busy peer refuses additional preparations instead of waiting in an unbounded queue. See
-[HTTP resource budgets](runtime-input-limits.md#remote-image-http-lane).
-
-### Voice input
-
-The **Voice input** toggle in **Local → Settings → Preferences** on the **main Piano** controls
-the microphone in existing-session and New-session composers on Local and every peer. Off hides
-the idle microphone everywhere; on shows it everywhere. Active **Stop recording**, **Cancel
-recording** and **Cancel transcription** controls remain available even if the preference is turned
-off. All composers use main's dedicated OpenAI key; main may itself be a VM. Recordings and the
-source session's spelling context go through main to OpenAI, not to the peer. Review the inserted
-text before Send; audio is never an attachment and transcription never sends a message by itself.
-Existing attached images stay intact.
-
-**Stop recording** commits transcription to that machine's draft, even if you switch away before
-it finishes. Switching away before Stop, or hiding/locking the page during recording, discards the
-recording. **Cancel recording** cancels pending permission; **Cancel transcription** aborts a stopped
-recording's request. Closing/reloading the page cancels pending work and discards drafts. Cancellation
-cannot guarantee OpenAI did no work or charged nothing. Errors preserve existing draft text.
-
-Microphone permission and HTTPS or localhost are required. See [voice limits](runtime-input-limits.md#voice-input).
-No peer voice settings or transcription endpoints are proxied, and no peer credential is used.
 
 ## Deliberate limits
 

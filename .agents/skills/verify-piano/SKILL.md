@@ -281,8 +281,6 @@ clean up their own instance and browser.
   SHA does not read; launch unsets it so a scratch backend never shares a live socket path.
 - A name that is only an `aria-label` (an icon button's, such as "Close answer.ts") is not page
   text: `wait --text` never sees it; wait on `'[aria-label="..."]'` instead.
-- Proved on an exe.dev VM (Linux, Node 24, Worktrunk 0.80), on macOS (Node 24) and on a Linux
-  cloud VM (Node 24.22).
   A stock Mac has no `timeout`, so `ab.sh` and the browser close in `cleanup.sh` run unbounded
   there; `VERIFY_AB_TIMEOUT` applies only where coreutils is installed.
 

@@ -200,12 +200,3 @@ renderer loads only for PDFs. Source text and Changes diffs share one renderer, 
 modules so languages/themes remain separate lazy chunks, and one Wrap preference serves both. Generated `web/public/pdfjs/` assets are ignored, copied for development and
 included in builds. When upgrading React-PDF, verify `npm ls react-pdf pdfjs-dist`, the emitted
 worker and asset versions, and a scratch-browser PDF render.
-
-Module checks cover file classification/limits/path resolution, text redaction, binary transport,
-safe Markdown placeholders and HTML sanitization, resource resolution/budgets and cancellation.
-HTML's actual sandbox, trusted user-click handling, fragments, native disclosures, no-network
-behavior, forged-message rejection and stale disposal also require scratch-browser observations;
-a DOM test alone does not prove browser isolation. Browser evidence for PIN-32 covers
-the four format groups, nested links/images, toggle without reread, repeat clicks, late completion, an actual background workspace
-refresh, session/workspace changes, media disposal/codec failure, PDF errors and mobile/keyboard use.
-See [testing policy](testing.md) for evidence scope (INV-09).

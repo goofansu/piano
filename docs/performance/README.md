@@ -19,8 +19,6 @@ from the module suite and browser journeys.
 | Saved-history peeks | `node test/performance-saved-history.mjs <file>.json` | | [Saved history](#saved-history) |
 | Peer gateway attachment | `PIANO_BENCH_SAMPLES=200 node test/performance-peer-gateway.ts <directory>` | Linux `/proc` | `PIANO_BENCH_PROFILE=1` adds CPU and heap profiles |
 
-[Command palette](command-palette.md) is a dated measurement record; its scripts were not committed.
-
 ## Folder and registry
 
 `test/performance-folder-registry.mjs` measures folder-picker and registry latency and event-loop
@@ -94,21 +92,3 @@ browser target), CDP installs instrumentation before application code and measur
   checks that a shrinking window never reads past the new session count.
 - **Memory/DOM:** whole-page CDP JS heap after explicit GC, DOM node/listener counts and sidebar
   element count. Not browser RSS or sidebar-only heap. Screenshots show the actual tested surface.
-
-The implementation path is `web/src/store.ts` (registry snapshot) →
-`web/src/lib/sessionCatalog.ts` (cached against the state it reads) → `sidebarList.ts` /
-`sidebarView.ts` (filter/group/sort, cached against the catalog and the sidebar's view) → `useSidebarList.ts` → `web/src/components/Sidebar.tsx`.
-`SessionRows` uses `useSidebarWindow.ts` to mount visible rows plus five rows of overscan on each
-side, against the shared Radix `ScrollArea` viewport. Group headers stay in normal flow. A CSS ruler
-measures the existing responsive row heights and list gap/padding; each list preserves its full
-scroll height. Stable session keys retain row identity through range updates. Focused rows, their
-neighbours (including the nearest available sessions), open-menu anchors (through Radix focus
-restoration), and each list's keyboard entry/exit rows stay mounted outside the window. Closed groups still unmount their rows. This bounds session
-DOM by visible rows plus a small buffer per expanded group, not by sessions per group. It does not
-virtualize group headers or paginate/filter the catalog.
-
-Compare the raw runs, their environment/revision fields and repeated samples rather than treating
-one machine's times as budgets. Before virtualization, the same instrumentation waited for all N
-rows; use the base revision's harness for that comparison. Production builds, real wheel/touch
-input, many-folder grouping, streaming and session selection are separate experiments. No new UI
-strings, controls or actions are introduced.

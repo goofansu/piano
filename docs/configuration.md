@@ -78,25 +78,6 @@ Piano backend's `PATH`, or set `PI_CLAUDE_CODE_COMMAND` to its absolute path. Fo
 Claude configuration directory, set `PI_CLAUDE_CODE_CONFIG_DIR`; the plugin passes it to Claude
 as `CLAUDE_CONFIG_DIR`. Piano does not copy or manage Claude credentials.
 
-Open a new session and choose a `claude-code/...` model in the model picker
-(upstream provider name: **Claude Code Subscription (Experimental)**).
-The plugin hides these models when the CLI is missing or signed out; other providers remain
-available. `/claude-code-status` checks the executable and login without generating a reply.
-Sign in through the CLI, not Piano's provider sign-in flow. If availability is stale, refresh the
-model list or open a new session.
-
-Pi still owns conversation history and tool execution. The plugin uses `claude -p` for inference
-and a local loopback relay; Claude Code does not execute the tools. It ignores `ANTHROPIC_API_KEY`
-in its Claude children and rejects conflicting auth-token, proxy or cloud-backend overrides rather
-than silently changing authentication or billing.
-
-This provider is experimental and subject to Anthropic's subscription limits and billing-policy
-changes; it does not provide unlimited or guaranteed subscription usage. See the
-[upstream caveats](https://github.com/earendil-works/pi-claude-code#usage-and-billing).
-Model discovery can make Claude catalog/feature-flag and telemetry requests but sends no generation
-request or conversation history. Set `DISABLE_TELEMETRY=1` before starting Piano to opt out of
-that telemetry; this can reduce the discovered model catalog.
-
 ## Piano's prompts and skills
 
 What Settings › Prompts and Settings › Skills create lives in Piano's own folders beside the

@@ -34,14 +34,6 @@ entered here; configure them through Pi. Adding another single-key provider requ
 entry in `shared/providerApiKeys.ts` and a bundled logo, not another settings flow. Rows follow
 the catalog's order, which is kept alphabetical.
 
-## Limits
-
-Start a new session after you sign in. A running session keeps the model list it started with.
-
-This flow uses the providers built into the bundled Pi SDK and your `models.json`. For OAuth
-providers that only an extension adds, and API keys outside the catalog above, use the Pi TUI. A custom
-`PIANO_PI_CLI` must use the same credential format.
-
 ## Developer navigation
 
 - **Owners:** `server/ProviderLogin.ts` and `server/SignInAttempts.ts`, `shared/providerApiKeys.ts`,

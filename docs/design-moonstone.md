@@ -1,9 +1,6 @@
-# Theme "Moonstone": Lefos's warm palette on Felt's motion discipline
+# Theme "Moonstone"
 
-Moonstone makes Piano warm, cozy and friendly in the manner of Earendil's products (earendil.com,
-lefos.com, pi.dev) while keeping the quiet UI. It replaces the earlier "Felt" palette (ivory, warm
-charcoal and a felt-green accent) and keeps Felt's hierarchy and keyboard flow, described
-below. Colours derive from the Lefos palette; `web/src/index.css` is authoritative.
+Colours derive from the Lefos palette; `web/src/index.css` is authoritative.
 
 ## Palette
 
@@ -91,11 +88,6 @@ Two system faces and no web fonts: Tailwind's default sans stack for the interfa
 (the transcript, controls, menus, titles), and its default mono stack for anything the machine
 produced verbatim (code, commands, paths, branches, the model chip and the usage meta).
 
-Moonstone first added two web fonts, after Earendil's pairing of an italic serif with Departure
-Mono: Newsreader for headlines, titles and empty states, and Departure Mono in uppercase for
-small labels. Four typefaces, two of them monospace, read as busy rather than warm, so both were
-removed; the warmth now comes from the palette alone.
-
 ### Links and the selected row
 
 Prose links keep the original style: brand colour with an underline at 35% brand, 0.15em below the
@@ -120,106 +112,6 @@ the composer without enlarging desktop chrome. Weights 400/500/600.
 Considered and rejected: 15px transcript body. The brief allows it only if the measure stays
 under 75ch. The 48rem column risks exceeding that measure at 15px, depending on the system
 font, and narrowing the column would cramp the composer. The 16px body stays.
-
-## Layout
-
-```
-┌──────────┬──────────────────────────────────────────────┐
-│ ▮▮▮ piano│  ┌──────────────────────────────────────────┐ │
-│ + New    │   › prompt card                          │ │
-│          │  │   • reply …                              │ │
-│ ▾ project│  │   ● Ran npm test                         │ │
-│   ▌sess  │  │   ▮▮▮ ▏                 ← pending reply   │ │
-│    sess  │  │                                          │ │
-│ ▸ project│  │   [link pile]                            │ │
-│          │  │  ┌ composer ───────────────── ▲ ┐         │ │
-│          │  │  └───────────────────────────────┘ 4 msgs │ │
-└──────────┴──────────────────────────────────────────────┘
-```
-
-Left-aligned throughout. The transcript column is centred at max 48rem; the composer lines up
-with it. The conversation is an inset sheet with a 1px line and the layer-1 shadow. A parchment
-fill marks the selected session. Rows are 32px with a
-pointer and 44px on touch screens.
-
-A session row is its title alone by default. Where it runs and which project it belongs to live in the session
-header and the sidebar's groupings, not on every row.
-
-The session header is one line, as Amp's is: the project crumb and the title with its menu
-glued to it (`Project / Title ⋯`, a shadcn Breadcrumb), then where the session runs as `folder
-⑂ branch` in the Directory picker's shape (no worktree segment: Worktrunk names a worktree after
-its branch, and the full path is in the menu's details), and at its end its controls: preview,
-pull request. The session's state is the sidebar row's (the keys while it works, a dot
-otherwise); the header only announces it to screen readers, since a state is shown once. The
-facts run at full length while they fit. When space runs out, folder and branch truncate down
-to about 6rem each, then drop out whole from the right, branch first: the row may wrap, but
-only its first line shows. The title group never drops and shrinks last. The crumb is hidden on
-phones, where the sheet's project page covers it. The branch is in the menu's details beside
-the path; the segments carry no tooltips, since they show their own text. The design is in
-[session views](session-views.md).
-
-The Surface area (Changes, open files) sits beside the Agent area under the one session header,
-on the same sheet, split off by a hairline rather than floating as a second card; the Agent area
-has no title. Its views are flat tabs on the sheet, each a small icon, its name and Close, the
-shown one underlined on the strip's rule and the pointed-at one filled, so the header, the strip
-and the view are one surface divided by hairlines (a darker strip with browser-style joined tabs
-was tried: it punched the canvas colour into the sheet and ended at a different height on each
-side of the split); the shown view's toolbar is a row of its own beneath them, what
-it shows on the left and its small-text actions on the right, so naming and closing never mix
-with acting. A new view's tab joins the end, Changes included; opening one already open shows it
-in place. Tabs that no longer fit scroll sideways with no scrollbar, as a browser's tabs do, a tab
-cut off at the edge showing there is more (a native bar takes the list's bottom edge and lifts
-the tabs off the rule; an edge fade fades a lone tab in browsers without scroll-driven
-animations). Reloading the page brings back the session's
-tabs, the one shown and its area; another session, or a new browser tab, starts with only the
-Agent area. Pressing a tab never draws the keyboard ring. At the header's end, once the session
-has published a Radius artifact, Artifacts comes first: its icon and how many, opening a menu of
-their titles, newest first, each opening its artifact in a new tab (the palette's Artifacts row
-opens the same menu). Over where the
-rail shows, the list icon is "Show session rail" or "Hide session rail", and the palette's row
-carries the same name; the Changes icon after it, last in the header, toggles Changes the same
-way, "Changes" or "Hide changes" and filled while Changes shows.
-
-The desktop session rail is like Claude Code's: one switch for every session, remembered by
-the browser, so switching sessions shows the next session's rail in the same place. Beside the
-Agent area it stands at its right, 320px wide and as tall as the transcript and composer
-together, with no hairline or fill of its own (unlike the Surface area, it is part of the session, not a second pane;
-a split column was tried first and read as one). The scroller keeps the area's full width, so its
-scrollbar stays at the pane's right edge past the rail. While the rail fits, the wheel anywhere in
-the Agent area, over the rail too, scrolls the conversation; taller, as Claude Code's does, the
-wheel over it scrolls the rail alone. The transcript, its notices and the composer keep
-clear of the rail (`--rail-inset`), and its first section sits level with the transcript's first
-row. It and the Surface area share the session's right side: whichever came in last shows. Opening a Surface tab hides the rail;
-closing the last one brings it back; turning the rail on while tabs are open hides them until a
-tab is shown again or the rail goes off. The desktop rail has no header or toolbar: its folding sections are
-App, Environment (folder or repository, branch or detached commit, linked pull request) and Outputs,
-the files Pi wrote or edited, once there is one. A Links section once listed the web links the
-conversation mentioned; mostly long bare URLs nobody revisits, it was removed, and links stay
-tappable in the conversation. The composer's usage row once held Outputs as a popover. The
-Surface area's remembered width is a
-preference, not a claim on the Agent area: the Agent area keeps at least 448px and the surface
-shrinks first, down to 400px. Below 849px of session width (measured after the sidebar, not the
-viewport) the areas take turns, each at full width, under tabs that show only while something is
-open beside the Agent area: Agent, then the open tabs ("Agent | README.md"), drawn as the same
-strip tabs without Close (each view closes from its toolbar). With nothing open the bar is left
-out to save its row; Changes opens from the header or palette. Taking turns there is no rail and
-no rail control, in the header or the palette. The header says where the session runs on a second
-line under the title, the same folder and branch line as under a sidebar row (a detached HEAD
-shows its short commit as the branch), in 12px muted text that does nothing on tap. The session
-menu ("…", a bottom sheet whenever the areas take turns) is the desktop menu's details and
-actions and no more, one level deep. It starts with the desktop menu's details row: the session
-ID in selectable mono text with "Copy session path" as a 44px icon button beside it, which closes
-the sheet and answers with its toast. Then the linked pull request opens on GitHub in a new tab
-and ends with the external-link icon.
-Preview, while known, shows its state dot, name and host; tapping it pushes a Preview pane in the
-same sheet with Back, status/hostname, an external link, Preview details and Stop preview. The link
-dismisses the sheet; details and stop hand focus to their dialogs. No app is embedded. An observed
-app URL also has a direct external-link icon in the session header in every layout. Outputs and
-Environment's copy menus stay in the side-by-side layout; links remain tappable
-in the conversation, and Share hands a session to another device. Add to project pushes the project
-picker, with Back to return. Escape or a tap outside returns focus to "…", not the composer. Side
-by side the rail and its switch are unchanged. The transcript, composer draft and attachments
-remain mounted.
 
 ## Linear
 
@@ -347,39 +239,6 @@ What the removed motion was is recorded under "What Felt changed and why" below.
 The palette shortcut appears as a `Kbd` hint on the sidebar search button. The current global
 shortcuts are listed in [Quiet UI](quiet-ui.md#command-palette-and-shortcuts).
 
-## What Felt changed and why
-
-- **Motion tokens** (`--dur-*`, `--ease-enter`, `--ease-exit`) replace scattered durations so
-  every control answers at the same tempo. Popovers, menus, tooltips and dialogs scale from
-  their anchor at 96 → 100 with no slide; the phone sheet slides with its overlay in step.
-- **`PianoMark` plays.** It takes a `playing` prop; a bare `Keys` variant sits in glyph gutters
-  and rows. `data-playing` drives the CSS, so reduced motion holds the pressed state with no JS.
-- **Sidebar.** Skeleton rows in the real row geometry while projects load; a staggered first
-  reveal; one `selection-bar` that slides between rows; the keys replace the yellow dot while a
-  session streams; row heights grow to 44px on touch screens; keyboard hints on the hide, search
-  and New session controls. The header is the one header shape and no heavier: hide at its left on
-  the rows' edge and where each pane's show control appears once the sidebar is collapsed (on desktop
-  the sidebar column keeps the pane's frame, `--pane-frame`, and its header is the pane header's
-  row, `paneHeaderRow`, so every leading glyph sits `--gutter` in), then search, View options
-  and New session as the filled primary action at its end; no mark and no wordmark, so the one
-  accent in the strip is the primary action. The mark sits in the footer beside Settings. Collapsed,
-  the column is gone rather than a rail: the pane takes the width, and its header's show control
-  brings the sidebar back.
-- **Transcript.** A skeleton in the transcript's layout is on screen within a frame of a switch
-  and cross-fades with the real transcript, which is keyed by session so scroll pinning starts
-  fresh. The pending reply row shows the keys and a caret before the first token; the streaming
-  reply keeps the keys as its glyph; the caret sits at the end of the last block. Transcript
-  updates still never animate.
-- **Composer.** It no longer remounts per session, so it never flashes; Send and Stop are one
-  control whose face cross-fades; the key scales down on press.
-- **Toasts.** Positioned by viewport width; a thin line drains over the toast's life and pauses
-  while the stack is hovered.
-- **Keyboard flow.** A command palette (`CommandPalette`) on `⌘K`, with a small `Shortcut` helper that writes keys the way the platform does.
-- **Reconnecting** shows as a quiet pill after a 600ms grace period, so a blink of the socket
-  never flashes it. Session not found says what probably happened.
-- **Tab icon** is now the keys, with a pressed variant while the session on screen works.
-- **Tertiary ink** moved further from secondary ink.
-
 Considered and rejected:
 
 - A real cross-fade between New and Session via the View Transitions API. It snapshots the whole
@@ -392,64 +251,3 @@ Considered and rejected:
 - A spinner anywhere a skeleton could stand in. The spinner remains only inside controls that
   are genuinely waiting on one request: model refresh, image reading, worktree creation, and
   the reconnecting pill.
-
-## Tests
-
-- Known failures unrelated to this theme: three server tests (`RealPiProjection` ×2 and the
-  `INV-07/08` worktree manifest test) fail identically on the base commit 9e0c7b4 in this
-  environment, and `PiSessions` "catalog observations" failed once in a full run on a macOS
-  `/private/var` vs `/var` path comparison and passed on three isolated reruns.
-
-## Moonstone verification
-
-Observed on branch `warm/1-foundation` with a scratch backend/UI on loopback 7191/7192, a scratch
-SQLite registry seeded with a throwaway repository and two fixture sessions, and
-`test/fake-host-pi.mjs` (no model calls; INV-07/09/11 untouched). agent-browser screenshots cover
-a conversation, New session, Settings, the View options menu, the command palette and a sign-in
-dialog, light and dark, at 1440×900 and 390×844. Switching Appearance from
-the menu sampled the body background through intermediate oklab values for about 350ms; with
-reduced motion the switch was immediate. Contrast figures above are computed, not measured from
-pixels.
-
-## Felt-era dark palette verification
-
-This records the previous warm-charcoal dark palette, since replaced by Moonstone.
-
-
-Verified on base `71698de` plus the dark-token changes, with Node 24.21.0 and headless
-Chromium 154 on Linux. Scratch backend/UI: loopback 7171/7172, separate SQLite registry,
-throwaway repository and `test/fake-host-pi.mjs`; no model calls or hosted-instance changes
-(INV-07/09/11). Evidence: `/tmp/piano-dark-theme-GgJtU4/`.
-
-- Agent-browser screenshots cover the transcript, selected sidebar row, model picker, command
-  palette, deletion dialog (cancelled), Changes diff, appearance settings and mobile navigation/New.
-  Checked 1440×1000 and 390×844; System appearance remained dark after reload with dark media.
-- Browser-resolved colours, composited into sRGB, meet 4.5:1 for the ten ink/brand/status tokens
-  across all five base surfaces with each individual neutral/selection/error fill. The lowest
-  tertiary-ink pairing is 4.58:1. Sampled rendered text also passes, including the deletion
-  button's actual translucent background (4.63:1) and selected model/palette metadata (5.17:1).
-- `npm test`: 125 passed; `npm run typecheck` and `npm run lint`: passed. No new unit test for
-  aesthetic token values; browser observation and contrast measurements address the changed risk.
-- Source comparison confirms all non-dark CSS is unchanged, apart from comments. Light appearance
-  was visually rechecked, not redesigned. Its existing contrast limitations remain out of scope.
-
-These are bounded colour checks, not a whole-app accessibility certification. The automatic axe
-scan had incomplete contrast checks, so it is not used as proof. Actual displays, other browser
-engines, diagram-library palettes and every possible stacked transparency were not verified.
-
-## Felt-era evidence
-
-Observed against the scratch fixture on backend 7181 and Vite 7182 with agent-browser session
-`piano-felt`. Everything is kept under the session scratchpad
-`/private/tmp/claude-501/-Users-james--herdr-worktrees-piano-design-felt/2d980632-b31d-417f-a140-55a753c6346e/scratchpad/`:
-
-- `shots/` numbered screenshots: baseline, session light/dark, working state with the keys and
-  Stop, palette light/dark/filtered, session switch with the selection bar, loading skeletons
-  with the reconnecting pill (backend paused), New page with directory and model pickers in both
-  appearances, the collapsed sidebar, phone session/sheet/New/palette, session menu, rename and delete dialogs,
-  creating a session from New.
-- `evidence/ui-polish/` the browser polish run (screenshots, `commands.json`,
-  `observations.json`) and `evidence/final-tests.txt` for typecheck and module tests.
-- `evidence/ui-polish-base/` the same check against the base commit, showing the synthetic
-  paste step fails identically on this host (headless Chromium on macOS does not paste on a
-  synthetic Control+V), so the full run here skipped only that assertion.

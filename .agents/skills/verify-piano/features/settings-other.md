@@ -1,28 +1,5 @@
 # Settings › Providers, Webhooks and Preferences
 
-Providers holds accounts, API keys and Radius setup. Webhooks configures session-event receivers.
-Preferences controls voice input. These pages share Settings navigation and the palette; a
-credential-free scratch run can inspect setup, cancel the voice-key prompt and manage an inactive
-webhook without contacting its receiver. These observations do not prove sign-in or delivery.
-
-## Sub-features
-
-- `headers`: Settings section headers show the section name and its actions, without a Machine
-  picker. Settings belongs to Local; use a peer's own Piano for its settings.
-- `providers`: Providers has Radius, Accounts and API keys groups. Unsigned-in Radius offers
-  Sign in to Radius; Install Radius MCP and Install web search are disabled until setup permits them.
-- `api-key-setup`: the API keys group offers Add key for DeepSeek, Fireworks, Google, OpenCode
-  Go, OpenCode Zen and Vercel AI Gateway. Each opens its named API-key dialog; Cancel saves
-  nothing. A saved key instead offers Replace key / Remove key in the row's actions menu.
-- `preferences`: Voice input is off without a key. Turning it on opens OpenAI API key, explaining
-  that recordings and session context go through this Piano to OpenAI; Cancel leaves it off.
-  This main preference controls the idle microphone in both New and existing-session composers
-  on Local and every peer. Turning it off hides idle microphones, not an active operation's Cancel.
-- `webhook-empty`: Webhooks shows No webhooks yet and New webhook.
-- `webhook-create`: New webhook has URL, Bearer token Optional, Events and Active. A private HTTP
-  URL is refused inline. Creating an inactive public HTTPS entry saves it without a delivery.
-- `webhook-delete`: Webhook actions <host> → Delete asks Delete webhook?, then removes the row.
-
 ## How to get to it (user POV)
 
 - Sidebar Settings → Providers, Webhooks or Preferences.

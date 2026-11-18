@@ -88,14 +88,3 @@ do not combine shared-browser exploratory numbers with this method's baseline.
 - Messages only exists in session commands. These no-tool fixtures would not meaningfully exercise
   its filtering cost, so it is not benchmarked. There is no transcript full-text search measured
   here; the command palette searches sessions/commands, not transcript content.
-
-Use observed cliffs to select further sizes rather than treating 1,000 as a universal threshold.
-A production-build run, actual wheel/touch performance and real image/diagram-heavy sessions remain
-separate experiments. The open-session journey covers streaming follow/unpin, offscreen jumps,
-expansion across unmount/remount and resizing; the row journey checks glyph alignment.
-Before its resize/expand pointer clicks, the open-session journey waits for mounted row edges to
-align with their neighbors and the virtual list's measured end, as well as bottom scroll position.
-Its controlled resize check holds actual transcript ResizeObserver callbacks: the old bottom-only
-condition already passes, but the measurement-aware condition must remain false until callbacks
-are released. The subsequent real pointer click must expand the full prompt. This guards the
-resize/remeasurement race without sleeps, click retries or longer assertion timeouts.

@@ -30,11 +30,3 @@ reads front matter with Pi's `parseFrontmatter` and falls back to the instructio
 The list sends each prompt's file with it, so View opens without another request; prompts are
 text the person wrote in Piano, so they leave without display redaction, as project instructions do.
 No registry records are added.
-
-## Verification
-
-`test/Prompts.test.ts` creates prompts and probes a real, isolated Pi: Pi offers Piano's prompts
-beside a personal one, the list holds only Piano's, refusals name their field, and a deleted prompt
-is no longer offered. The browser journey (create, duplicate refusal, palette row, composer
-completion, delete, phone dialog) ran on a scratch instance with fake Pi, which lists each
-`--prompt-template` folder's files by name.

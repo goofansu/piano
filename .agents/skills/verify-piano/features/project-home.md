@@ -1,39 +1,5 @@
 # Project home
 
-A project's home at `/projects/<id>` lists its member sessions as hairline rows (title, folder,
-branch, PR number, last activity) under a "Sessions" heading that carries their count, newest
-first on entry (rows stay put while the page remains open), and starts a new session filed in the project. Its header is the breadcrumb "Projects /
-<name>". Users reach it from the session header, the sidebar's project groups and the Mod+K
-palette, and the Projects index from its crumb. Deleting a project
-moves its sessions to "No project"; unknown IDs show "Project not found".
-
-## Sub-features
-
-- `open-from-header`: the session header's project button opens the session's project home.
-- `open-from-sidebar`: with sidebar Group by Project, the group's "New session in <name>" button.
-- `project-menu`: the group's "Project menu for <name>" holds "Project settings", "Mark project
-  done" ("Reopen project" once done), then a red "Delete project", as the home's header menu does.
-- `open-from-palette`: Mod+K on a member session offers "Open project: <name>".
-- `member-cards`: one `[data-slot=item]` row inside a `role=listitem` wrapper per non-archived member session in
-  the Sessions group's hairline list; its title button opens `/s/<id>`.
-- `row-actions`: each row's "Session menu for <title>", revealed while pointed at, ends with "Archive"
-  and a red "Delete", the sidebar row's menu ([`open-session.md`](./open-session.md)
-  `archive-delete`). Archive toasts "Session archived" and the row leaves, the count dropping;
-  Delete asks "Delete session?" and toasts "Session deleted". The page stays.
-- `new-in-project`: the composer above the cards ("First message") defaults to the folder-root
-  checkout of the most recently active non-archived member whose folder is open and can start a
-  session. A missing root gives way to the next eligible member's folder; with none it
-  shows "Directory" until a folder is chosen. Sending opens the new session, which joins the project.
-- `header`: the pane header is one breadcrumb line, "Projects / <name>", the name being the `h1`,
-  and ends with "Project menu for <name>" (see `project-menu`). A done project has a Done badge
-  beside its name; its composer and sessions remain available.
-- `done`: Mark project done keeps the home open and its sessions intact. On the project-grouped
-  sidebar its group moves below the Done label; Reopen project restores it among the open groups.
-- `crumb`: the header's "Projects" button opens the Projects index at `/projects`.
-- `sessions-heading`: the `h2` "Sessions" above the rows carries their count ("Sessions 1"); the
-  header shows no count.
-- `empty`: a project with no sessions shows its header, the composer on "Directory", the
-  heading "Sessions" with no count, and the line "No sessions yet".
 - `settings`: "Project settings" (the header menu, the sidebar's project menu, Mod+K on the home) opens a
   dialog in place: Name and Instructions fields with a live count under Instructions ("0 / 20,000"
   on the seed, red past the limit with Save off), Save off until a field changes; saving closes it
@@ -41,15 +7,6 @@ moves its sessions to "No project"; unknown IDs show "Project not found".
   `textarea` too. What reaches Pi needs the real Pi: fake Pi ignores the extension, so check the
   model's request with a scripted loopback model. `test/fixtures/RealPiDispatch.ts` is an
   infrastructure example, not an existing project-instruction assertion.
-- `delete`: "Delete project" (the header menu, the sidebar's project menu, the Projects index's row
-  menu, Mod+K on the home) asks first, saying how many sessions move to "No project"; confirming
-  toasts "Project deleted", and on the project's own home or New page leaves for `/projects`.
-  Anywhere else, the Projects index included, the page stays.
-- `missing`: an unknown ID shows the alert "Project not found".
-- `peer-home`: `/m/<machine>/projects/<id>` offers the same member list, composer, settings,
-  Done / Reopen and Delete on the configured peer's project. New sessions choose only that
-  peer's registered directories and join its project, not Local's.
-
 ## How to get to it (user POV)
 
 - Desktop session page: click the header's project name (accessible name `Project: <name>`).

@@ -1,38 +1,5 @@
 # Session dispatch
 
-`scripts/dispatch-session.ts` lets an orchestrator (a script or another agent) start a Piano session
-from JSON stdin or a prompt file in a folder, optionally in a new worktree, then read its status or list a
-project's active sessions. It talks to Piano's `/ws` with an allowed Origin and prints JSON with a
-link a person can open.
-
-## Sub-features
-
-- `structured-start`: `--json` reads one request object from stdin, preserving literal prompt
-  text. Required fields: `prompt`, `cwd`, `outFile`, `wsUrl`, `origin`; see
-  [the caller contract](../../../../docs/session-dispatch.md#structured-input-for-bots).
-  Invalid input exits 2 before connection; an existing `outFile` exits 3.
-- `start`: `<prompt-file> <cwd>` creates and starts a session; prints `creation`, `submission`,
-  `handle.sessionId`, `link`.
-- `worktree`: `--worktree BRANCH` has Piano create a worktree first and start there; the isolated
-  scratch configuration uses `<repo>.<BRANCH>`. Use the returned `worktree.path`.
-- `inherit-project`: `--parent-session <id>` inherits that parent's current project, even in a
-  new worktree; `--no-inherit-project` starts ungrouped. Moving the parent later does not move
-  existing children. An unlisted or ambiguous parent refuses inheritance before creation.
-- `status`: `status <sessionId>` prints `disposition`, `needs`, `lastAnswer`, `changes`, `link`.
-- `list`: `list --project <id>` prints one JSON line per active member session.
-- `follow-up`: `follow-up <sessionId> <prompt-file> [--steer]` sends one more message to the
-  session and prints `submission` and `link`.
-- `options`: `--hooks` with `--worktree`, and an optional out-file (exit 3 when it exists). The
-  session always starts on Piano's default model and effort; `--model` and `--thinkingLevel` are
-  unknown options (exit 2).
-- `refusals`: a missing cwd fails locally with exit 2; a refused creation prints
-  `"creation":"refused"` and `"submission":"not_sent"`. No session remains and the first input
-  was not sent, but startup extensions or worktree hooks may already have run. Refusal is not
-  a rollback of their effects; inspect `detail` before retrying.
-- `needs-input`: on `--fake-pi dialogs`, a prompt starting `ask` leaves the session waiting on a
-  dialog ("Enter a value") that the web UI answers; `status` meanwhile reports
-  `"disposition": "needs_input"`.
-
 ## How to get to it (user POV)
 
 - Shell: `node scripts/dispatch-session.ts --help` from the checkout, with

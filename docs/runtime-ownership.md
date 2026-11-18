@@ -360,14 +360,3 @@ Contracts: INV-02/03/04/05/11. Pi RPC record validation is in the
 
 No permanent UI warning reports these failures. Failure text appears only when the corresponding
 session or connection fails, and no raw transport cause is copied into a diagnostic.
-
-## Verification (historical PIN-11 refactor)
-
-Based on `82b042c` plus this extraction, Node v24.21.0, installed dependencies unchanged:
-`npm test` passed all 381 tests; `npm run typecheck` and `npm run lint` passed.
-Outputs: `/tmp/piano-yej-evidence/11-{tests,types,lint}.log`.
-Existing public-interface ordering, generation, dialog, cancellation, capacity and
-shutdown tests were retained without rewrites; no new behavior or uncovered risk
-justified an extra test. The preceding PIN-10 scratch browser evidence covers the
-unchanged application journey; no additional browser run or real-model call was
-made for this refactor. No migration or deployment.

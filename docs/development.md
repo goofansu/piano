@@ -46,15 +46,6 @@ not success. The wrapper is for Linux/macOS, like the scratch scripts; it owns n
 A baseline pass does not verify a feature or select its browser evidence: follow
 [the testing policy](testing.md). CI retains its existing independent jobs and shards.
 
-The code lives in `server/` (backend), `web/` (React UI), `shared/` (wire schemas), `extensions/`
-(Pi extensions Piano loads into its sessions), `scripts/` (CLIs and preview tooling) and `test/`.
-Read these next:
-
-- [Development direction](README.md): architecture, invariants and roadmap.
-- [Evidence-based development and testing](testing.md): what to test and how.
-- [Quiet UI](quiet-ui.md): the rules every screen, string and control follows.
-- [AGENTS.md](../AGENTS.md): the rules coding agents follow in this repository.
-
 ## Node.js version
 
 Piano declares Node.js `>=24` in the root `package.json`. Use the latest Node 24 patch: the

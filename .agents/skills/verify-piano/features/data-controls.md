@@ -1,26 +1,5 @@
 # Settings › Data controls
 
-Data controls restores archived session references one at a time and archives stopped, unpinned
-sessions in bulk without deleting their transcripts. Settings → Data controls and the palette open
-`/settings/data-controls` on Local; a remote machine's data controls belong on its own Piano.
-
-## Sub-features
-
-- `archived-rows`: Sessions comes first, Archived sessions last. Each archived row shows its title,
-  small folder name (full path in `title`) and an outline Unarchive button; no Unarchive all.
-- `archived-address`: an archived session's `/s/<sessionId>` address shows Session archived and
-  a Data controls button, not an “Unable to open session.” banner; the button opens its recovery page.
-- `unarchive`: restores the reference and toasts Session unarchived. Reading its saved history
-  does not start a user Pi; an uncached composer catalog can start a probe.
-- `archive-all`: Archive all asks for confirmation with the eligible count and “Running and
-  pinned sessions are kept. Transcripts are kept.” Its action is neutral, not destructive.
-  Cancel/Escape changes nothing; confirmation at zero is disabled. The success count is the
-  number actually archived, not a promise that the earlier count stayed current.
-- `closed-folder`: Unarchive keeps a closed folder closed and says “Session unarchived · Folder
-  remains closed”. A pin or project may still make the session visible.
-- `layout`: one Settings column, matching text actions and readable titles/paths on desktop and
-  narrow viewports; no helper descriptions beneath the groups.
-
 ## How to get to it (user POV)
 
 - Sidebar Settings → Data controls.
@@ -115,6 +94,3 @@ recipes need the folder open. Capture with `capture.sh` as in the skill body.
 - Closing the only seeded folder intentionally invalidates doctor's original one-folder check.
   Finish the closed-folder evidence, then Cleanup; do not treat that changed fixture as a server
   failure or continue unrelated recipes on the closed-folder baseline.
-- Keep the observed count, audit and captures with the tested revision. Fake Pi demonstrates
-  Piano's process handling, not a model. Capture busy labels/spinners separately if that
-  transient behavior is the claim being verified.

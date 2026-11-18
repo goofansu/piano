@@ -264,12 +264,6 @@ comparisons, use new child paths or allocate another run; preserve earlier outpu
 `verify-piano` launches use `VERIFY_EVIDENCE` as their parent and append their own run ID.
 It does not configure the baseline or browser harness: those need the positional path.
 
-This is a contributor convention, not a change to tool defaults: commands without explicit paths
-still use the defaults below; the manual launcher defaults to `${TMPDIR:-/tmp}/verify-piano-evidence`.
-CI may keep its own artifact paths. Disposable scratch state stays separate and is cleaned up by
-its owning harness. Local retention is not PR publication. Leave existing evidence folders and
-historical path references intact; moving or deleting retained evidence is a separate cleanup task.
-
 ## File evidence provenance
 
 `npm run verify -- <evidence-directory>` and `test/browser/harness.mjs` write `run.json`, command

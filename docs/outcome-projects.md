@@ -1,20 +1,7 @@
 # Projects
 
-Status: Step 1 implemented; Step 2 remains deferred. See the
-[implementation evidence](research/outcome-projects-step1.md) for verification and limitations.
 [ADR 0002](adr/0002-outcome-projects.md) records the boundary decision. The
-[glossary](glossary.md#projects) defines the vocabulary. Earlier revisions called these "outcome projects".
-
-## Goal
-
-Organize work around a bounded outcome rather than a directory. A project such as **Launch
-subscriptions** can involve API, web and infrastructure repositories, while the web repository also
-supports **Improve accessibility**. Neither project owns those repositories or their lifetime.
-
-The user wants shared context and instructions eventually, but the first step is organizing related
-work. Ship that useful slice without making instruction delivery, task tracking or orchestration a
-prerequisite. This complements the [daily-use priority](roadmap.md#current-priority-joyful-daily-use);
-it does not resume the deferred evidence/integration phases.
+[glossary](glossary.md#projects) defines the vocabulary.
 
 ## Model and terminology
 
@@ -95,36 +82,6 @@ configuration; Git owns repository facts; Worktrunk remains behind checkout life
 Grouping does not change host acquisition or create another Pi child for an already open session.
 A directory's existing trust decision does not change when its sessions join a project.
 
-### Exit gate
-
-In scratch repositories and a separate registry, observe through the browser:
-
-- One project groups sessions from two repositories; a second project uses another session from one
-  of those same repositories. Switching groups never switches a session's cwd or relabels its diff.
-- An empty project and an ungrouped session are usable; reload/restart preserves memberships.
-- Moving/unlinking a session and deleting a project preserve conversation access and
-  running execution. Unavailable members are explained without silent data loss.
-- Migrating an old registry preserves its existing references, leaves sessions ungrouped, and has a
-  usable backup. A malformed registry is not overwritten.
-
-Use existing coverage where sufficient; add focused regression checks for new association,
-non-destructive lifecycle and migration risks. Follow [the testing policy](testing.md), including
-`npm test`, typecheck and retained scratch-browser output.
-Observed outcomes are recorded in the [Step 1 evidence](research/outcome-projects-step1.md).
-The implementation uses registry v2 with an exact pre-migration backup. Restore that backup only
-with the backend stopped; older Piano versions cannot read v2. Restoring it discards all subsequent
-registry edits, including newly added session references, but does not delete Pi-owned conversations.
-A project is a group in the sidebar beside the repositories, and `/projects/<id>` is its home:
-one card per member session, newest activity first, with its title, folder, branch (the one
-Piano registered once Git no longer lists the worktree or its directory is gone), saved pull request number and last
-activity. The cards draw only from what the browser already holds (PIN-83). Above them, the home
-has the New page's composer: a session started there joins the project, and runs by default in the
-folder of the member session active most recently (at the folder's own checkout), else wherever
-the person picks. `/projects/<id>/new` is its New page, where a session started joins it too. Closed-directory and archived-session references remain reachable
-from the group and from session search. `/projects` is the Projects index above the homes: one row per project with its folders, session
-count and last activity, newest first, reached from the sidebar's Projects row and Mod+K; see
-[the project-centered UX](project-centered-ux.md).
-
 ## Step 2 — Shared context and instructions, later
 
 Make project background and working instructions available consistently to member sessions,
@@ -143,31 +100,6 @@ stay as Pi loads them; Pi's `--append-system-prompt` is not used because it repl
 An edit applies from the session's next Pi start, never to a running Pi; a session moved out of
 the project starts without them. Not yet built from the list below: versioned content, a record of
 which version a session received, and background material distinct from instructions.
-
-Before extending it, resolve and document:
-
-- **Content and ownership:** distinguish background/reference material from instructions; choose a
-  versioned content store and registry references without growing the registry into a document or
-  evidence database. Do not add dormant instruction fields during Step 1.
-- **Delivery and precedence:** inspect the then-supported Pi interfaces and resource-loading behavior.
-  Specify how explicitly supplied project instructions compose with user and checkout instructions;
-  retain Pi's configuration/trust handling rather than building a second loader or silently rewriting
-  repository instruction files.
-- **Application boundary:** define behavior for new, resumed and running sessions, edits to shared
-  material, and sessions moved between projects. Start with explicit application at a defined boundary,
-  not silent retroactive replacement or injection into an active turn. Previously delivered content
-  remains part of Pi-owned history; reassignment cannot promise to erase it.
-- **Provenance and failure:** record the content version actually supplied to a session, make it
-  inspectable on demand, and distinguish saved content from successful delivery. Missing content,
-  conflicting instructions and uncertain delivery must have explicit recovery behavior.
-- **Scope:** sharing text does not grant filesystem access, trust a repository, coordinate agents or
-  authorize integration. If shared material changes acceptance requirements, future verification must
-  reevaluate the affected requirement versions rather than preserving a falsely current conclusion.
-
-The later gate must show two sessions in different workspaces receiving the intended version,
-no leakage to an unrelated project, unchanged checkout configuration/trust, and explicit behavior for
-edits, reassignment, reload and failed delivery. A saved setting alone is not evidence of delivery.
-This plan deliberately does not select a Pi injection mechanism or promise arbitrary hot updates.
 
 ## Guardrails and non-goals
 

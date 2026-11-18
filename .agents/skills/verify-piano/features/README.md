@@ -45,70 +45,37 @@ the [feature verification mapping policy](../../../../docs/testing.md#feature-ve
 
 ## Features
 
-- [Start a session](./start-session.md): the New page, its directory, directory trust, model,
-  effort and active-project choices, missing-root default fallback, the peer-New prerequisite,
-  restoring model defaults, compact touch targets, the first
-  message and reply, reload without resending,
-  navigation-retained drafts, confirmed failed-start recovery, image attachment/refusal/preview,
-  and a kept draft when not sent.
+- [Start a session](./start-session.md).
   Docs: [Session creation and recovery](../../../../docs/runtime-ownership.md#developer-navigation-session-creation-and-recovery),
   [Image attachments](../../../../docs/image-attachments.md),
   [Input limits](../../../../docs/runtime-input-limits.md),
   [Remote Pianos](../../../../docs/remote-piano.md#developer-navigation).
-- [Open and continue a session](./open-session.md): open from the sidebar, palette or project
-  home or Alt+Up/Down; read history and cost; expand long user messages and copy fenced code;
-  answer inline questions on desktop and narrow screens; follow up; edit queued messages without stopping;
-  stop a running reply; archive and delete from the row's
-  menu; responsive sidebar controls and narrow inline View options; the narrow session-menu
-  sheet and its project picker;
-  the published-artifact menu, including codemode receipts; unavailable-history recovery and
-  the configured-peer prerequisite for session actions, trust and machine memory, including
-  peer image/voice coverage limits.
+- [Open and continue a session](./open-session.md).
   Docs: [Session navigation](../../../../docs/sidebar-session-navigation.md#developer-navigation),
   [Transcript performance](../../../../docs/session-performance.md),
   [Radius artifacts](../../../../docs/radius-artifacts.md),
   [Remote Pianos](../../../../docs/remote-piano.md#developer-navigation).
-- [Projects index](./projects-index.md): `/projects` from the sidebar row and the palette; one row
-  per project with folders, count, last activity and the project menu; New project in the header;
-  Done / Reopen and the folded Done group; active-project palette navigation, `!` filter
-  discovery, `!p` project-only search and paging; empty, phone and peer-index prerequisite.
+- [Projects index](./projects-index.md).
   Docs: [Projects UX](../../../../docs/project-centered-ux.md),
   [Remote Pianos](../../../../docs/remote-piano.md#developer-navigation).
-- [Project home](./project-home.md): `/projects/<id>` from the sidebar, palette and session
-  header; member rows and their Archive / Delete, order, PR number, new session in the project,
-  settings, Done badge / Reopen and sidebar grouping; empty, deleted and missing projects;
-  peer-home prerequisite.
+- [Project home](./project-home.md).
   Docs: [Project grouping](../../../../docs/outcome-projects.md),
   [Remote Pianos](../../../../docs/remote-piano.md#developer-navigation).
-- [Session dispatch](./session-dispatch.md): `scripts/dispatch-session.ts` start, `--worktree`,
-  `follow-up`, `status` and `list --project`, project inheritance/opt-out, its refusals,
-  and a dialog that needs input.
+- [Session dispatch](./session-dispatch.md).
   Docs: [Session dispatch](../../../../docs/session-dispatch.md),
   [Session creation and recovery](../../../../docs/runtime-ownership.md#developer-navigation-session-creation-and-recovery).
-- [Changes and files](./changes-and-files.md): the Changes pane for a workspace's diff and its
-  pull request, and the desktop session rail's Environment and Outputs (no Links section or
-  narrow rail); peer-owned surfaces and their prerequisite.
+- [Changes and files](./changes-and-files.md).
   Docs: [File previews](../../../../docs/file-previews.md),
   [Managed live previews](../../../../docs/live-previews.md),
   [Remote Pianos](../../../../docs/remote-piano.md#developer-navigation).
-- [Settings › Skills and Prompts](./settings-skills-prompts.md): `/settings/skills` and
-  `/settings/prompts` from the sidebar and palette; New skill / New prompt; View and Delete;
-  empty states; the separate agent-authored approval path's real-Pi prerequisite.
+- [Settings › Skills and Prompts](./settings-skills-prompts.md).
   Docs: [Prompts](../../../../docs/prompts.md).
-- [Settings › Providers, Webhooks and Preferences](./settings-other.md): local-only section headers
-  without a Machine picker; unsigned-in provider/Radius
-  setup and API-key dialogs (including Fireworks and OpenCode), the main-owned voice-input
-  preference, key prerequisite and cancellation, inactive webhook CRUD and URL refusal;
-  authenticated setup, transcription and webhook delivery remain separate checks.
+- [Settings › Providers, Webhooks and Preferences](./settings-other.md).
   Docs: [Provider sign-in](../../../../docs/provider-sign-in.md),
   [Radius setup](../../../../docs/radius-setup.md), [Webhooks](../../../../docs/webhooks.md).
-- [Settings › Data controls](./data-controls.md): archived rows, Unarchive, closed-folder feedback,
-  neutral Archive all confirmation/count, preserved running/pinned sessions and local-only scope.
+- [Settings › Data controls](./data-controls.md).
   Docs: [Data controls](../../../../docs/data-controls.md).
-- [Settings › MCP](./settings-mcp.md): `/settings/mcp` over the scratch `mcp.json`; Connect,
-  Add MCP server by form and JSON paste (URL/startup refusals and local command success),
-  Manage → Edit / Delete, Connect cancellation, and Pi's MCP switch. Authenticated URL-server
-  management is a separate prerequisite.
+- [Settings › MCP](./settings-mcp.md).
   Docs: [MCP setup](../../../../docs/mcp-setup.md).
 
 ## Coverage boundaries

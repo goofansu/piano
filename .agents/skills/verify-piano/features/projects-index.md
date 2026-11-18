@@ -1,48 +1,5 @@
 # Projects index
 
-`/projects` lists every project as one hairline-divided row: its name, the folders its sessions run
-in with the session count ("repo · 1 session", or "No sessions yet"), and when a member last moved,
-newest activity first with empty projects last by name. Done projects sit in a collapsed "Done"
-group below the open projects, dated with "Done …" by when they were marked done. A row opens the project's home and
-carries the sidebar's project menu, revealed while pointed at; the header's "New project" opens
-the New project dialog. Rows carry no status: session state lives on the home. The page reads
-only what the browser already holds.
-
-## Sub-features
-
-- `rows`: one `[data-slot=item]` row per open project, in order of newest member activity; archived
-  sessions neither count nor date a project; clicking a row opens `/projects/<id>`.
-- `context`: a row's second line is `<folders> · <n> session(s)`, each folder named once, or
-  `No sessions yet`; the time at the row's end is absent for an empty open project.
-- `row-menu`: "Project menu for <name>" over the row's end holds "Project settings", "Mark project
-  done" ("Reopen project" once done), then a red "Delete project", as on the project home ([`project-home.md`](./project-home.md) `settings`,
-  `delete`); deleting from here keeps the index open.
-- `done`: Mark project done moves the row into the folded Done group without archiving its
-  sessions. Expand "Done <n>" to open its home or use Reopen project to return it to the open list.
-- `sidebar-row`: the sidebar's "Projects" row under New session opens the index and reads as the
-  current row (`aria-current=page`) while it is open.
-- `palette-row`: Mod+K (or "Search sessions, projects and commands" in the sidebar) offers
-  "Projects" under Global commands on every screen, Settings included; on `/projects` it also
-  offers the header's "New project", which opens the same dialog.
-- `palette-projects`: a separate Projects group lists active projects by name, including empty
-  ones, opening their homes. Done projects are omitted here, not deleted from the index.
-  The search field is "Search sessions, projects and commands", with an ellipsis in its placeholder.
-- `palette-filter`: type `!` to discover Filters → "Projects only · !p". Choosing it keeps the
-  palette open and replaces the input with `!p `; only Projects remain. A leading standalone
-  lowercase `!p` scopes the remaining query (`!p Verify`); `!P` and `!pizza` are ordinary queries.
-  Groups with more than 50 matches have Next / Previous rows and a displayed range.
-- `peer-projects`: Machine → a configured peer → Projects opens `/m/<machine>/projects`.
-  Its index, New project, menus and Done group act on that peer, not Local.
-- `new-project`: the header's "New project" opens the New project dialog, shaped as Project
-  settings is: Name and Instructions (optional), with a live count under Instructions
-  ("0 / 20,000") that turns red past the limit while Create stays off. "Create project" saves both
-  in one write, toasts "Project created" and lands on the new project's home (`/projects/<id>`),
-  whose composer starts the project's first session with its instructions.
-- `address`: the tab title is `Projects - Piano`; back from a home returns to the index.
-- `empty`: with no projects the page shows one centred empty state, "No projects yet", and New
-  project stays in the header.
-- `phone`: at 390px the header keeps its sidebar button, title and New project; no horizontal scroll.
-
 ## How to get to it (user POV)
 
 - Sidebar: the "Projects" row under "New session".

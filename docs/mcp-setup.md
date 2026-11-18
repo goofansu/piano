@@ -1,22 +1,5 @@
 # MCP setup in Piano
 
-Open **Settings → MCP**, or choose **MCP** from Mod+K. Setup is machine-wide for the OS
-account running Piano, like [Radius setup](radius-setup.md): the page lists Pi's global
-`mcp.json` and changes it through Pi's own helpers.
-
-**Connected** lists every entry of that file, with its endpoint's host or its command.
-A catalog server shows its brand mark; any other server shows the server icon.
-**Available** lists the catalog servers no entry is yet. Both lists are alphabetical by the
-name shown, ignoring case; Pi's configuration order is unchanged. The catalog in `shared/mcp.ts`
-holds hosted servers only:
-
-- **Linear** (`https://mcp.linear.app/mcp`).
-- **Jira** (`https://mcp.atlassian.com/v2/mcp`).
-
-A local command, such as Paper's relay, is added with **Add MCP server**: for Paper, the command
-`~/.paper/bin/paper` (`paper.exe` on Windows) with the argument `mcp`, on the **machine running
-Piano**, with the Paper desktop app running while its tools are used.
-
 ## Saving only what connects
 
 A URL server is written to `mcp.json` only once Pi's own MCP client has connected to it, so the
@@ -33,47 +16,6 @@ The same holds for an edit that leaves a URL server: the edit is saved only once
 server connects. A local command is saved only once Pi's client has started it: Piano runs the
 command once, stops it, and refuses one that does not start with Pi's reason (the tail of the
 command's stderr). The dialog says so while a command is entered, since saving runs it.
-
-## Actions
-
-- **Connect** (in Available) connects a catalog server under its catalog name. An entry already
-  at that endpoint, whatever its name, counts as connected and is kept as configured. A catalog
-  server whose default name another entry holds says so instead.
-- **Add MCP server** (the header, or Mod+K on the page) opens a dialog with two tabs. **Form**
-  takes a name, a URL or a command, and for a URL how Pi authenticates: **Sign in if needed** (Pi's MCP
-  OAuth when the server asks for it) or an **Authorization header**, whose value is sent verbatim
-  (`Bearer …`, `Basic …`, or a `${VAR}` reference Pi resolves on the backend); other headers, or
-  a command's arguments, environment and working directory, follow. The form saves the same
-  fields whether it adds or edits, and the server builds the entry from them; the Authorization
-  header comes only from its own field, so a Headers row named `Authorization` is dropped, as on
-  Edit. **JSON** takes the
-  `mcpServers` object a server's README shows, one server at a time; it is the way to set Pi's
-  keys the form does not show, such as a timeout or a pre-registered OAuth client. Pi validates
-  the entry before anything is written.
-- **Manage** opens a menu on the entry:
-  - **Edit** (servers the user added; a catalog server's endpoint is Piano's) opens the add
-    dialog on the entry: its name, transport, URL or command, headers, arguments, environment and
-    working directory. The saved Authorization header shows as a masked placeholder: blank keeps
-    it, typing replaces it, Remove clears it. An entry Pi authenticates with a `/login`
-    provider's token (`auth.provider`, as Radius's) shows **Provider sign-in** and its provider
-    instead of the choice, and saving keeps it so. Pi's other keys (exposure, timeout, OAuth client
-    settings) stay as configured; a change of transport drops the other transport's keys.
-    Renaming an entry, or changing its endpoint, drops the sign-in stored for the old name and
-    endpoint, since Pi keys tokens by both.
-  - **Disconnect** (a URL server) or **Delete** (a local command), last in the menu, asks first
-    and then removes the entry and its sign-in, only if the entry is unchanged since the page was read. The sign-in stored for the
-    entry's name and endpoint is cleared whatever the entry authenticates with now, so an entry
-    switched to an Authorization header after signing in does not come back signed in. The
-    sign-in is cleared before the entry; if that fails, the entry stays and the removal can be
-    retried. Other servers' sign-ins are kept.
-- **Reconnect** appears beside Manage only when an OAuth server's sign-in is gone (expired,
-  revoked, or removed outside Piano), and signs in again.
-- Sign-in runs Pi's MCP OAuth (discovery, dynamic client registration, PKCE) and saves tokens in
-  Pi's `mcp-auth.json`. Piano usually runs on another machine than the browser, so the redirect
-  to Pi's loopback callback may fail to load; paste that page's address into the dialog. Piano
-  checks the pasted address against the attempt, so a wrong paste asks again.
-
-Start a **new session** after a change; running Pi children are not reloaded.
 
 ## Boundaries
 

@@ -90,11 +90,6 @@ without acquiring ordinary-work capacity, so a pending prompt cannot starve them
   non-delivery and does not authorize retry. A full control lane can still fail an
   answer; existing dialog-resolution uncertainty/recovery semantics remain in force.
 
-The byte accounting describes serialized retained inputs, not a heap-size promise:
-parsed objects/strings, one active record, framing storage, runtime buffers and
-existing session history also consume memory. It does not bound Pi's own context,
-number of browser connections, number of sessions, or HTTP request bodies.
-
 ## Remote session surfaces
 
 The gateway relays a remote session's [Changes, pull request, Outputs and file reads](adr/0004-same-owner-piano-peer.md#session-surfaces-changes-files-and-the-session-rail)

@@ -1,8 +1,5 @@
 # Image attachment policy
 
-Decision: **accepted, 2026-10-06; count raised to ten and total to 50 MiB, 2026-11-07**. Supersedes the
-initial 5 MiB-per-image / 10 MiB-total upload policy. This is a Piano input-safety policy, not a new Pi or provider restriction.
-
 ## Limits
 
 | Constraint | Limit |
@@ -35,9 +32,6 @@ Decision: Pi's events are the source of truth for its queue. Piano does not filt
 reinterpret entries Pi reports, track the queue locally, patch Pi or send operations Pi lacks to
 work around this; the fix belongs upstream in Pi.
 
-Checkouts previously using the queue-metadata patch should run `npm ci` after updating to replace
-their patched `node_modules`. The patch installer and its npm postinstall hook have been removed.
-
 ## Remote composers
 
 The same policy applies on configured peers, in both existing sessions and New session. Only
@@ -53,29 +47,6 @@ peer. Reopening history repopulates the disposable cache; there is no Local fall
 peer image. Pi remains the only durable image/history store. See
 [remote use](remote-piano.md#images), [ADR 0004](adr/0004-same-owner-piano-peer.md) and the
 [HTTP budgets](runtime-input-limits.md#remote-image-http-lane).
-
-The empty image-only queue behavior above was documented on Pi 1.2.0, whose queue removal was
-guarded by `if (messageText)`. Pi 1.5.2's source (`dist/core/agent-session.js`) no longer has that
-guard, so it should remove an image-only entry; this has not been observed with a real Pi. Fake-Pi
-remote checks deliberately report an empty text entry and verify Piano preserves it; they are
-not a new real-provider reproduction of Pi's behavior.
-
-## Why this combination
-
-- **10 MiB each:** accommodates typical screenshots and phone photos with fewer manual compression
-  steps. The earlier 5 MiB limit rejected files that Pi can successfully resize; the
-  [Pi research](research/2026-10-06-pi-image-restrictions.md) demonstrated this with an 8.24 MiB PNG.
-- **Ten images:** four was too few for multi-screen bug reports and step-by-step screenshots.
-- **50 MiB combined:** an iPhone 11 screenshot is about 3 MB, so ten of them need about 30 MB; the
-  former 20 MiB total refused that batch. 50 MiB allows ten images averaging 5 MiB or five at the
-  per-image maximum, and keeps the count from multiplying the per-image limit (100 MiB).
-- **Transport cost:** base64 expands 50 MiB to about **67 MiB**. The WebSocket message, Pi RPC
-  line and queue byte limits derive from the total attachment limit, and Pi's acknowledgement
-  deadline grows with the bytes written ([runtime input limits](runtime-input-limits.md)).
-  JSON parsing, browser previews, process I/O and decoding can hold additional copies; the total
-  upload cap is not a claim that memory consumption is only 50 MiB. Remote network upload uses
-  binary HTTP instead of base64 WebSocket frames; the same Pi stdin costs still apply.
-- **Not 20 MiB each:** the per-image limit stays at 10 MiB, which already covers phone photos.
 
 ## Pi owns model preparation
 
@@ -102,25 +73,6 @@ Node's dependency-watch message as its result, so every attached image was repor
 that variable when spawning Pi; `npm start` and the hosted service never set it, so built and
 deployed instances were unaffected. A regression test spawns a child with the variable set in the
 parent and checks the installed Pi accepts an image.
-
-## Verification and future changes
-
-- A boundary regression failed under the former limits, then passed with 10 MiB each / 20 MiB total.
-  It checks exact boundaries, one-byte overflow, the maximum image count and rejection of one more.
-  It now checks ten and eleven images and a 50 MiB total; the 2026-10-06 evidence below is for
-  the former four-image / 20 MiB policy.
-- `npm test`: **57 passed**. `npm run typecheck`: passed.
-- The former `test/browser-attachments.mjs` through `npx agent-browser` on scratch ports 7271/7272: passed.
-  Two distinct, valid PNGs of exactly 10 MiB each traversed browser → WebSocket → fake Pi → preview
-  route; each read back as exactly 10,485,760 bytes, and reconnect/reload retained the transcript.
-  The same journey verifies per-file/count/aggregate rejection and preserves valid draft attachments
-  after an over-limit addition.
-- The large PNG fixtures use ancillary metadata to reach exact sizes. This proves transport and
-  validation, not worst-case pixel decoding, phone-browser memory use or live provider acceptance.
-  No paid model call or user-instance mutation was needed.
-- Evidence: `/tmp/piano-upload-limits-{red,tests,typecheck,browser}.log` and
-  `/tmp/piano-upload-limits-browser/`. Checked against `a615429` plus these changes, Node 24 and
-  locked dependencies.
 
 Constants live in `shared/attachments.ts`; the wire schema and browser use them. Future increases
 need concrete user examples plus large-upload checks and a memory/transport review. General file

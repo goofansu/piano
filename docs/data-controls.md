@@ -1,41 +1,5 @@
 # Data controls
 
-Settings → Data controls manages session references on the current Piano. It is also a palette
-destination. Settings is unavailable while a remote machine is selected; use that machine's own
-Piano to unarchive its sessions. The peer boundary is unchanged (ADR 0004).
-
-## Retention
-
-**Unarchive** restores an existing archived reference, retaining its identity, title, project,
-pin, activity times, integration links and Pi history. It never starts Pi or an app. A closed
-folder stays closed: the confirmation says **Session unarchived · Folder remains closed**.
-This does not claim the session is invisible: a pin or project may still list it. Otherwise the
-confirmation is **Session unarchived**. Unknown and already-unarchived references are refused.
-
-**Archive all** archives every unarchived, unpinned reference without a running session. This
-includes closed folders and missing checkouts. It never stops Pi or apps. The confirmation reads
-**Running and pinned sessions are kept. Transcripts are kept.** Running follows the UI's existing
-“Not running” vocabulary, rather than confusing “Open” with viewing saved history. It includes
-Working, Waiting for input and Ready/idle Pi, app owners, startup, and any session whose execution
-ownership lock is held (including shutdown). A count read is only an observation; execution
-rechecks eligibility and the success toast reports the actual count written.
-
-The initiating client's selected stopped session is cleared if archived. Other clients keep the
-existing Archived view, which refuses further input: its composer is replaced by **Archived ·
-Read-only session**, which takes precedence over a removed checkout's notice. Its menus keep read and copy actions but
-disable Rename, Pin, Archive, Delete, project assignment and pull request link changes (the
-Pull request command and Changes button, and a linked pull request's Change link, Find from branch
-and Remove link). An archived session cannot be deleted until it is unarchived. Unarchive is one session at a time. Opening an archived session's address
-(`/s/<id>`) shows **Session archived** instead of trying to open it; its **Data controls** button
-opens Settings → Data controls, or, on a remote machine, the page points to that machine's Piano.
-The page follows the session's reference: once it is unarchived (or its history restored), the
-session opens at the same address — at once, or when Settings closes — just as reloading it would.
-
-A mutation keeps running on the server after the client disconnects. A lost connection or a
-missing reply (75 s) is therefore not reported as a failure: the warning says the change may have
-finished and to check Archived sessions. A refusal reads **Could not …:** followed by the
-server's reason; only a request that never left the browser reads plain **Could not …**.
-
 ## Ownership and interfaces
 
 - `web/src/components/DataControlsSettings.tsx`: the Settings page, neutral confirmation and row
