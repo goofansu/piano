@@ -35,6 +35,28 @@ export function sessionNavigationKey(e: KeyboardEvent): -1 | 1 | "modifier" | un
   return undefined;
 }
 
+export function machineNavigationIndex(
+  e: KeyboardEvent,
+  machineCount: number,
+  environment: { platform: string; standalone: boolean },
+): number | undefined {
+  if (
+    !environment.platform.startsWith("Mac") ||
+    !environment.standalone ||
+    e.defaultPrevented ||
+    e.repeat ||
+    isImeKey(e) ||
+    !e.metaKey ||
+    e.ctrlKey ||
+    e.altKey ||
+    e.shiftKey ||
+    !/^[1-9]$/.test(e.key)
+  )
+    return undefined;
+  const index = Number(e.key) - 1;
+  return index < machineCount ? index : undefined;
+}
+
 export const keys = (...parts: string[]) => parts.map((p) => (p === "mod" ? mod : p));
 
 export const isModelPickerKey = (e: React.KeyboardEvent) =>

@@ -341,6 +341,103 @@ await run(
         assert.equal(await draft(page), "REMOTE-DRAFT", "forward retains first peer ownership");
         await catalog(page, "remote", "second", "REMOTE-DRAFT");
 
+        const platform = await page.evaluate("navigator.platform");
+        const numericKeyConsumed = (key) =>
+          page.evaluate(`(() => {
+            const event = new KeyboardEvent('keydown', {
+              key: ${JSON.stringify(key)}, metaKey: true, bubbles: true, cancelable: true,
+            });
+            document.activeElement.dispatchEvent(event);
+            return event.defaultPrevented;
+          })()`);
+        const firstPeerRoute = `/m/eng-1/s/${sessionId}`;
+        await call("Emulation.setNavigatorOverrides", { platform: "MacIntel" });
+        assert.equal(
+          await page.evaluate("matchMedia('(display-mode: standalone)').matches"),
+          false,
+          "ordinary browser mode is not standalone",
+        );
+        assert.equal(await numericKeyConsumed("1"), false, "browser tab chord is not consumed");
+        assert.equal(await page.evaluate("location.pathname"), firstPeerRoute);
+        // Chromium CDP ignores display-mode in setEmulatedMedia; emulate only this query.
+        await page.evaluate(`(() => {
+          window.originalMatchMedia = window.matchMedia;
+          window.matchMedia = (query) => {
+            const media = window.originalMatchMedia(query);
+            if (query === '(display-mode: standalone)')
+              Object.defineProperty(media, 'matches', { value: true });
+            return media;
+          };
+        })()`);
+        assert.equal(
+          await page.evaluate("matchMedia('(display-mode: standalone)').matches"),
+          true,
+          "standalone display mode is emulated, not a native installed macOS PWA",
+        );
+        await call("Emulation.setNavigatorOverrides", { platform: "Linux x86_64" });
+        assert.equal(await numericKeyConsumed("1"), false, "non-Mac PWA leaves chord alone");
+        await call("Emulation.setNavigatorOverrides", { platform: "MacIntel" });
+        assert.equal(
+          await numericKeyConsumed("9"),
+          false,
+          "missing ninth machine leaves chord alone",
+        );
+        await page.press("Mod+k");
+        await page.until("!!document.querySelector('[cmdk-input]')");
+        assert.equal(await numericKeyConsumed("1"), false, "palette owns its editing context");
+        assert.equal(await page.evaluate("location.pathname"), firstPeerRoute);
+        await page.press("Escape");
+        await page.until("!document.querySelector('[cmdk-input]')");
+        await page.ab("focus", composer);
+        await page.capture("3c-before-machine-shortcut");
+        await page.press("Meta+3");
+        await page.until(`location.pathname === '/m/eng-2/s/${sessionId}'`);
+        await ready(page);
+        assert.equal(await draft(page), "SECOND-DRAFT", "Cmd+3 restores second peer draft");
+        await page.ab("focus", composer);
+        await page.press("Meta+2");
+        await page.until(`location.pathname === '${firstPeerRoute}'`);
+        await ready(page);
+        assert.equal(await draft(page), "REMOTE-DRAFT", "Cmd+2 restores first peer draft");
+        await page.ab("back");
+        await page.until(`location.pathname === '/m/eng-2/s/${sessionId}'`);
+        assert.equal(await draft(page), "SECOND-DRAFT", "shortcut uses picker history semantics");
+        await page.ab("forward");
+        await page.until(`location.pathname === '${firstPeerRoute}'`);
+        onRemote = false;
+        await page.press("Meta+1");
+        await page.until(`location.pathname === '/s/${sessionId}'`);
+        await ready(page);
+        assert.equal(await draft(page), "LOCAL-DRAFT", "Cmd+1 restores Local draft");
+        await page.click("button", "New session");
+        await page.until("!!document.querySelector('[aria-label=\"First message\"]')");
+        await page.ab("fill", '[aria-label="First message"]', "LOCAL-NEW-DRAFT");
+        onRemote = true;
+        await page.press("Meta+2");
+        await page.until(`location.pathname === '${firstPeerRoute}'`);
+        await ready(page);
+        assert.equal(await draft(page), "REMOTE-DRAFT");
+        onRemote = false;
+        await page.press("Meta+1");
+        await page.until("location.pathname === '/new'");
+        assert.equal(
+          await page.evaluate(`document.querySelector('[aria-label="First message"]')?.value`),
+          "LOCAL-NEW-DRAFT",
+          "new-session composer also retains its draft and remembered route",
+        );
+        onRemote = true;
+        await page.press("Meta+2");
+        await page.until(`location.pathname === '${firstPeerRoute}'`);
+        await ready(page);
+        assert.equal(await draft(page), "REMOTE-DRAFT");
+        await page.capture("3d-after-machine-shortcuts");
+        await page.evaluate(
+          "window.matchMedia = window.originalMatchMedia; delete window.originalMatchMedia",
+        );
+        assert.equal(await numericKeyConsumed("1"), false, "leaving standalone disables shortcut");
+        assert.equal(await page.evaluate("location.pathname"), firstPeerRoute);
+        await call("Emulation.setNavigatorOverrides", { platform });
+
         await page.ab("set", "viewport", "700", "850");
         const revealOpen = `document.querySelector('[data-slot="mobile-sidebar"]')?.getAttribute('data-state') === 'open'`;
         await page.click("button", "Show sidebar");

@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { listMachines } from "@/lib/api";
 import { observeDictationPage } from "@/lib/browserDictation";
+import { machineNavigationIndex, overlayOpen, ownsTextInput } from "@/lib/keys";
 import { LOCAL, type Machine, machineLocation, machinePath } from "@/lib/machine";
 import { forgetUnconfiguredMachines, machineLocationMemory } from "@/lib/machineMemory";
 import { createMachineStores } from "@/lib/machineStores";
@@ -40,6 +41,23 @@ export function MachineHost({ children }: { children: React.ReactNode }) {
     history.pushState(null, "", machinePath(next, machineLocationMemory(next).read() ?? "/new"));
     setId(next);
   };
+  const onMachineKey = useEffectEvent((event: KeyboardEvent) => {
+    const index = machineNavigationIndex(event, machines.length, {
+      platform: navigator.platform,
+      standalone: window.matchMedia("(display-mode: standalone)").matches,
+    });
+    if (index === undefined || overlayOpen()) return;
+    const target = event.target;
+    const composer =
+      target instanceof HTMLTextAreaElement && target.closest('[data-slot="draft-editor"]');
+    if (!composer && ownsTextInput(target)) return;
+    event.preventDefault();
+    switchMachine(machines[index].id);
+  });
+  useEffect(() => {
+    window.addEventListener("keydown", onMachineKey);
+    return () => window.removeEventListener("keydown", onMachineKey);
+  }, []);
   const machine = machines.find((m) => m.id === id);
   const { closeMobile } = useSidebarLayout();
   useEffect(() => {
