@@ -53,6 +53,8 @@ the [feature verification mapping policy](../../../../docs/testing.md#feature-ve
   [Transcript performance](../../../../docs/session-performance.md),
   [Radius artifacts](../../../../docs/radius-artifacts.md),
   [Remote Pianos](../../../../docs/remote-piano.md#developer-navigation).
+- [Share a session](./session-sharing.md).
+  Docs: [Session sharing](../../../../docs/session-sharing.md).
 - [Projects index](./projects-index.md).
   Docs: [Projects UX](../../../../docs/project-centered-ux.md),
   [Remote Pianos](../../../../docs/remote-piano.md#developer-navigation).

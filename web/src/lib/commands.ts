@@ -57,6 +57,7 @@ export interface CommandEffects {
   setCodeWrap: (on: boolean) => void;
   copy: (value: string, label: string) => void;
   openForm: (form: CommandForm) => void;
+  shareSession: (target: SessionTarget) => void;
   openUrl: (url: string) => void;
   openPreviewDetails: () => void;
   openPageEditor: (page: EditorPage) => void;
@@ -148,6 +149,10 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
       break;
     case "messages-only":
       effects.setMessagesOnly(intent.on);
+      break;
+    case "share":
+      if (!intent.target) return false;
+      effects.shareSession(intent.target);
       break;
     case "rename":
       if (!intent.target) return false;

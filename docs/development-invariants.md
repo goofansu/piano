@@ -202,6 +202,9 @@ application. Render transcripts/tool output as untrusted content. Redact known s
 before browser delivery and exported artifacts, except transcript messages, which show Pi's text
 ([ADR 0005](adr/0005-faithful-transcript-messages.md)); document that heuristic redaction is not
 containment.
+The explicit raw Session Share action is the narrow exception defined in
+[ADR 0005](adr/0005-confirmed-raw-session-sharing.md): confirmation discloses the complete
+unredacted saved file and an organization default audience that may be public.
 Do not forward the whole developer credential environment into an untrusted preview.
 
 ## INV-12 — Pi compatibility is tested, not inferred

@@ -168,6 +168,23 @@ async function peerServer(t: TestContext, spec: PeerSpec) {
       return;
     }
     const workspace = { id: identity.workspaceId, path: identity.cwd, folder: identity.cwd };
+    if (req.url?.startsWith("/api/session/share")) {
+      res.end(
+        JSON.stringify(
+          state.mode === "share-signed-out"
+            ? { status: "sign-in-required" }
+            : {
+                status: "shared",
+                share: {
+                  url: `https://radius.pi.dev/artifacts/${spec.id}`,
+                  visibility: "organization",
+                  expiresAt: "2027-01-01T00:00:00Z",
+                },
+              },
+        ),
+      );
+      return;
+    }
     if (req.url?.startsWith("/api/session/changes")) {
       res.end(
         JSON.stringify({

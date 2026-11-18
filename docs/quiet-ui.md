@@ -67,7 +67,7 @@ icon alone; an empty list is one `Empty` line, the section's icon and "No <nouns
 dialog opened where the thing is shown, its fields in place and Save in its footer.
 
 A session row's menu is one menu wherever the row appears (the sidebar, a project's home):
-Rename, Pin, the project items, then Archive and Delete last after a separator; the palette's
+Rename, Pin, Share session, the project items, then Archive and Delete last after a separator; the palette's
 Session commands end the same way, Delete red. A branch under a session's title is a quiet sans
 label; elsewhere a branch, path, file name or model id is mono, and a folder's name is sans.
 

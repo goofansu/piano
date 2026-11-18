@@ -94,7 +94,9 @@ See [ADR 0004](adr/0004-same-owner-piano-peer.md) for ownership and trust decisi
 
 Preserve `web → shared ← server`: the browser captures a machine owner, main relays to that
 configured peer, and the peer owns its sessions and decides which operations it admits.
-Unavailability never substitutes Local.
+Unavailability never substitutes Local. [Session sharing](session-sharing.md) uploads on the
+owning peer with its Radius provider credential; missing sign-in directs the user to that peer's
+own Providers settings, never Local's.
 
 Start at `server/PeerScope.ts` (admission), `server/PeerGateway.ts` (relay), `shared/machine.ts`
 and `web/src/lib/machine.ts`. `web/src/components/MachineHost.tsx` owns picker and shortcut

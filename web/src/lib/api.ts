@@ -218,6 +218,13 @@ export const workspaceWrittenFiles = async (
   return { workspace, observedAt: first!.observedAt, result: { status: "ready", files } };
 };
 
+export const shareSession = (workspaceId: string, sessionId: string, options: MachineRequest) =>
+  call(
+    Endpoints.shareSession,
+    { query: { workspaceId, sessionId }, body: { confirmed: true } },
+    options,
+  );
+
 export const sessionPullRequest = (
   workspaceId: string,
   sessionId: string,

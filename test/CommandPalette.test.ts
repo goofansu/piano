@@ -509,6 +509,7 @@ test("Session commands place the menus' sections in the menus' order, whatever t
   const menu = [
     "Rename",
     "Pin",
+    "Share session",
     "Open project: Launch",
     "Move to project: New project",
     "Remove from project",

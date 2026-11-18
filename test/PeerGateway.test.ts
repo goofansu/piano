@@ -695,6 +695,50 @@ test(
     );
 
     await t.test(
+      "sharing reaches only the owner, relays sign-in guidance, and never replays uncertainty",
+      async () => {
+        const path = `/peer/eng-1/api/session/share?workspaceId=${identity.workspaceId}&sessionId=${identity.sessionId}`;
+        const ask = (body: unknown = { confirmed: true }) =>
+          fetch(`${f.base}${path}`, {
+            method: "POST",
+            headers: { ...headers, Origin: f.base, "content-type": "application/json" },
+            body: JSON.stringify(body),
+          });
+        const before = f.state.requests.length;
+        assert.equal((await ask({})).status, 400);
+        assert.equal(f.state.requests.length, before);
+        assert.deepEqual(await (await ask()).json(), {
+          status: "shared",
+          share: {
+            url: "https://radius.pi.dev/artifacts/eng-1",
+            visibility: "organization",
+            expiresAt: "2027-01-01T00:00:00Z",
+          },
+        });
+        const sent = f.state.requests.at(-1)!;
+        assert.equal(
+          sent.url,
+          `/api/session/share?workspaceId=${identity.workspaceId}&sessionId=${identity.sessionId}`,
+        );
+        assert.equal(sent.headers.authorization, undefined);
+        assert.equal(sent.headers.cookie, undefined);
+        assert.deepEqual(JSON.parse(sent.body!), { confirmed: true });
+        f.state.mode = "share-signed-out";
+        assert.deepEqual(await (await ask()).json(), { status: "sign-in-required" });
+        f.state.mode = "http-dead";
+        const count = f.state.requests.length;
+        assert.equal((await ask()).status, 502);
+        assert.equal(f.state.requests.length, count + 1);
+        f.state.mode = "ready";
+        assert.deepEqual(
+          await readRegistry("unused", f.database),
+          original,
+          "sharing never changes Local's database",
+        );
+      },
+    );
+
+    await t.test(
       "a session's Changes are read and saved on the remote, each by its own method",
       async () => {
         const changesPath = `/peer/eng-1/api/session/changes?workspaceId=${identity.workspaceId}&sessionId=${identity.sessionId}`;

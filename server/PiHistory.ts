@@ -1,10 +1,11 @@
 import { createReadStream } from "node:fs";
-import { readdir, realpath, stat } from "node:fs/promises";
+import { open, readdir, realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import type { FileEntry, SessionHeader } from "@earendil-works/pi-coding-agent";
 import { Effect, type Scope } from "effect";
 import { emptySnapshot } from "../shared/sessionProjection.ts";
+import { SESSION_SHARE_MAX_BYTES } from "../shared/share.ts";
 import type { Snapshot } from "../shared/wire.ts";
 import { agentDir, directoryPath, sessionDirFor } from "./PiEnv.ts";
 import { fileVersion } from "./PiHistoryFile.ts";
@@ -24,6 +25,7 @@ export interface PiHistory {
     options?: { readonly confirmAbsent?: boolean },
   ) => Effect.Effect<HistoryLocation, PiSessionError>;
   readonly sessionIds: (cwd: string) => Effect.Effect<ReadonlySet<string>>;
+  readonly savedJsonl: (sessionId: string, file: string) => Effect.Effect<string, PiSessionError>;
   readonly peek: (sessionId: string, file: string | undefined) => Effect.Effect<Snapshot>;
   readonly metadata: (
     sessionId: string,
@@ -205,7 +207,55 @@ export const makePiHistory = Effect.fn("PiHistory.make")(function* (): Effect.fn
       Effect.orElseSucceed(() => new Set<string>()),
     );
 
+  const savedJsonl = (sessionId: string, file: string) =>
+    Effect.tryPromise({
+      try: async () => {
+        const handle = await open(file, "r");
+        try {
+          const before = await handle.stat({ bigint: true });
+          if (
+            !before.isFile() ||
+            before.size === 0n ||
+            before.size > BigInt(SESSION_SHARE_MAX_BYTES)
+          )
+            throw new Error("size");
+          const bytes = Buffer.alloc(Number(before.size));
+          let offset = 0;
+          while (offset < bytes.length) {
+            const read = await handle.read(bytes, offset, bytes.length - offset, offset);
+            if (!read.bytesRead) throw new Error("short read");
+            offset += read.bytesRead;
+          }
+          if (
+            fileVersion(before) !== fileVersion(await handle.stat({ bigint: true })) ||
+            fileVersion(before) !== fileVersion(await stat(file, { bigint: true }))
+          )
+            throw new Error("changed");
+          const content = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+          const lines = content.trimEnd().split("\n");
+          for (const [index, line] of lines.entries()) {
+            const entry = JSON.parse(line);
+            if (
+              !entry ||
+              typeof entry !== "object" ||
+              Array.isArray(entry) ||
+              (index === 0 && (entry.type !== "session" || entry.id !== sessionId))
+            )
+              throw new Error("invalid history");
+          }
+          return content;
+        } finally {
+          await handle.close();
+        }
+      },
+      catch: () =>
+        rejected(
+          "Could not read a complete saved session (10 MiB maximum). Let Pi finish saving and check the history file before sharing again.",
+        ),
+    });
+
   return {
+    savedJsonl,
     metadata,
     locate,
     sessionIds,

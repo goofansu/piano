@@ -54,7 +54,8 @@ export type SessionCommandId =
   | "pin"
   | "archive"
   | "delete"
-  | "new-session-here";
+  | "new-session-here"
+  | "share";
 
 export type SessionCommandIcon =
   | "copy"
@@ -73,7 +74,8 @@ export type SessionCommandIcon =
   | "unpin"
   | "archive"
   | "delete"
-  | "new";
+  | "new"
+  | "share";
 
 export type SessionCommandIntent =
   | { kind: "send"; command: ClientCommand }
@@ -88,7 +90,7 @@ export type SessionCommandIntent =
   | ({ kind: "stop-preview"; host: string } & PreviewClaim)
   | { kind: "preview-details" }
   | { kind: "messages-only"; on: boolean }
-  | { kind: "rename" | "delete"; target: SessionTarget | undefined }
+  | { kind: "rename" | "delete" | "share"; target: SessionTarget | undefined }
   | { kind: "archive"; target: SessionTarget | undefined; confirm: boolean }
   | { kind: "new-session"; cwd: string };
 
@@ -134,8 +136,8 @@ export function environmentRowMenu(
 }
 
 const END_OF_LIFE = ["archive", "delete"] as const;
-const ROW_SECTIONS = [["rename", "pin"], "project", END_OF_LIFE] as const;
-const HEADER_SECTIONS = [["rename", "pin"], "project", "display", END_OF_LIFE] as const;
+const ROW_SECTIONS = [["rename", "pin", "share"], "project", END_OF_LIFE] as const;
+const HEADER_SECTIONS = [["rename", "pin", "share"], "project", "display", END_OF_LIFE] as const;
 const HEADER_DETAILS = ["copy-session-path"] as const;
 
 const pick = (commands: readonly SessionCommand[], ids: readonly SessionCommandId[]) =>
@@ -340,6 +342,13 @@ export function sessionCommands(
     const mutable = !!subject && sessionMutable(state, subject);
     const reference = subject && sessionReference(state, subject);
     commands.push(
+      {
+        id: "share",
+        label: "Share session",
+        icon: "share",
+        enabled: !!subject && sessionReferenceChangeable(state, subject),
+        intent: { kind: "share", target: subject },
+      },
       {
         id: "rename",
         label: "Rename",
