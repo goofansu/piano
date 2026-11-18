@@ -120,11 +120,15 @@ export async function shareResultView(page, call, onEvent) {
           await page.evaluate(
             "[...document.querySelectorAll('[data-sonner-toast] button')].map(e => e.textContent.trim()).filter(Boolean)",
           ),
-          ["Link copied"],
-          "the result offers one action",
+          ["Open link", "Link copied"],
+          "the result offers Open link and Copy link, nothing else",
+        );
+        await page.evaluate(
+          "window.sharedOpens = []; window.open = (url) => { window.sharedOpens.push(url); return null; }",
         );
         await page.capture(`share-peer-${status}`);
-        await closeToast(page);
+        await page.click("button", "Open link");
+        assert.deepEqual(await page.evaluate("window.sharedOpens"), [share.url]);
       } else {
         await page.see("Radius may have created an artifact");
         assert.equal(

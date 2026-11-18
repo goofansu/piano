@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ApiError, shareSession } from "@/lib/api";
 import { isLocalId } from "@/lib/machine";
+import { openLink } from "@/lib/openLink";
 
 export interface ShareTarget {
   machineId: string;
@@ -97,6 +98,7 @@ function shared(
   toast.success("Session shared", {
     ...settled,
     description: undefined,
+    cancel: { label: "Open link", onClick: () => openLink(result.url) },
     action: {
       label: copied ? "Link copied" : "Copy link",
       onClick: (event) => {
