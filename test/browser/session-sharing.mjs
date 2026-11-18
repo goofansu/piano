@@ -20,7 +20,14 @@ export async function openShare(page, palette = false) {
 }
 
 async function closeToast(page) {
-  await page.click("button", "Close toast");
+  const count = "document.querySelectorAll('[data-sonner-toast]:not([data-removed=true])').length";
+  for (let left = await page.evaluate(count); left > 0; left = await page.evaluate(count)) {
+    await page.ab(
+      "click",
+      "[data-sonner-toast][data-front=true]:not([data-removed=true]) [data-close-button]",
+    );
+    await page.until(`${count} < ${left}`);
+  }
   await page.until("!document.querySelector('[data-sonner-toast]')");
 }
 
