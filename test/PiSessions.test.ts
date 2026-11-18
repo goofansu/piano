@@ -1166,6 +1166,41 @@ test("Pi's steering and follow-up queues remain paused after abort and can be re
   );
 });
 
+test("queued text reaches the queue and comes back from restore as typed, not secret-redacted", async () => {
+  const typed = "use password: hunter22";
+  await run(
+    Effect.gen(function* () {
+      const t = yield* (yield* PiSessions).open({ cwd: process.cwd(), sessionId: "queue" });
+      const ready = yield* Deferred.make<void>();
+      const queued = yield* collectUntil(
+        t.events.pipe(
+          Stream.tap((e) =>
+            e._tag === "snapshot" ? Deferred.succeed(ready, undefined) : Effect.void,
+          ),
+        ),
+        (e) => e._tag === "queue_update" && e.messages.length === 1,
+      ).pipe(Effect.forkChild);
+      yield* Deferred.await(ready);
+      yield* t.act({ _tag: "prompt", text: "ask queue" });
+      yield* t.act({ _tag: "prompt", text: typed });
+      const events = yield* Fiber.join(queued);
+      const expected = [{ kind: "follow-up", text: typed }];
+      const update = events.at(-1);
+      assert.equal(update?._tag, "queue_update");
+      if (update?._tag === "queue_update") assert.deepEqual(update.messages, expected);
+      assert.deepEqual((yield* t.state).queuedMessages, expected);
+      const late = yield* t.events.pipe(Stream.take(1), Stream.runCollect);
+      assert.equal(late[0]._tag, "snapshot");
+      if (late[0]._tag === "snapshot")
+        assert.deepEqual(late[0].snapshot.state.queuedMessages, expected);
+      assert.deepEqual(yield* t.act({ _tag: "restore_queue" }), {
+        _tag: "queue_restored",
+        messages: expected,
+      });
+    }).pipe(Effect.timeout("5 seconds"), Effect.scoped),
+  );
+});
+
 for (const mode of ["success", "abort-failure", "abort-exit", "clear-failure", "concurrent"]) {
   test(`composer Stop takes the queue before abort: ${mode}`, async () => {
     await run(

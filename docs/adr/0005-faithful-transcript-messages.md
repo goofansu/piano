@@ -6,7 +6,9 @@
 Transcript messages show what Pi wrote. Heuristic secret redaction changed ordinary examples,
 partial words and tool arguments, so the conversation in the browser disagreed with Pi's
 authoritative history. Messages, streaming replies, tool calls and results, and context rows
-therefore skip secret redaction; terminal control sequences are still stripped.
+therefore skip secret redaction; terminal control sequences are still stripped. Queued messages,
+and those Stop restores to the composer, are the user's own text on its way into the transcript, so
+they are faithful too: a redacted restore would resend altered text to Pi.
 
 Everything else keeps the existing redaction: dialogs and library proposals, extension status and
 widgets, notices, errors and session-closed details, HTTP responses, file previews, webhook payloads,

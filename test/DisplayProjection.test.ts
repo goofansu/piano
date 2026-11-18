@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { projectDisplay, projectServerMessage } from "../server/DisplayProjection.ts";
+import {
+  projectDisplay,
+  projectServerMessage,
+  projectSessionEvent,
+  projectSnapshot,
+} from "../server/DisplayProjection.ts";
+import type { ServerMessage, SessionState, Snapshot } from "../shared/wire.ts";
 
 test("a written file's path and placed name leave verbatim; display text under any other key is redacted", () => {
   const token = "token=abc12345";
@@ -51,4 +57,69 @@ test("a project's name and instructions leave the registry message as written; t
   const toast = projectServerMessage({ _tag: "toast", level: "info", message: instructions });
   assert.equal(toast._tag, "toast");
   assert.doesNotMatch(toast.message, /abc12345|sk-live-abc/);
+});
+
+test("queued and restored messages leave as typed with controls stripped; other text beside them is redacted", () => {
+  const typed = "use password: hunter22";
+  const queue = [{ kind: "follow-up" as const, text: `${typed}\u001b[31m` }];
+  const expected = [{ kind: "follow-up", text: typed }];
+  const cursor = { cwd: "/repo", sessionId: "s1", generation: "g1", sequence: 1 };
+
+  const restored = projectServerMessage({
+    _tag: "action_result",
+    cwd: "/repo",
+    sessionId: "s1",
+    result: { _tag: "queue_restored", messages: queue, stopError: `Stop failed: ${typed}` },
+  });
+  assert.equal(restored._tag, "action_result");
+  if (restored._tag !== "action_result" || restored.result._tag !== "queue_restored") return;
+  assert.deepEqual(restored.result.messages, expected);
+  assert.doesNotMatch(restored.result.stopError ?? "", /hunter22/);
+
+  const logs = projectServerMessage({
+    _tag: "action_result",
+    cwd: "/repo",
+    sessionId: "s1",
+    result: { _tag: "preview_observed", instanceId: null, logs: typed },
+  });
+  assert.equal(logs._tag, "action_result");
+  if (logs._tag === "action_result" && logs.result._tag === "preview_observed")
+    assert.doesNotMatch(logs.result.logs, /hunter22/);
+
+  const update = projectSessionEvent({ _tag: "queue_update", messages: queue });
+  assert.deepEqual(update, { _tag: "queue_update", messages: expected });
+
+  const state = {
+    sessionName: typed,
+    isStreaming: true,
+    queuedMessages: queue,
+    context: null,
+    cost: 0,
+    tokens: 0,
+  } as unknown as SessionState;
+  const changed = projectSessionEvent({ _tag: "state", state });
+  assert.equal(changed._tag, "state");
+  if (changed._tag !== "state") return;
+  assert.deepEqual(changed.state.queuedMessages, expected);
+  assert.doesNotMatch(changed.state.sessionName ?? "", /hunter22/);
+
+  const snapshot = { state, messages: [], dialogs: [] } as unknown as Snapshot;
+  const selected = projectServerMessage({
+    _tag: "selected",
+    selectionId: "sel",
+    cursor,
+    cwd: "/repo",
+    sessionId: "s1",
+    hosted: true,
+    snapshot,
+  } as unknown as ServerMessage);
+  assert.equal(selected._tag, "selected");
+  if (selected._tag !== "selected") return;
+  assert.deepEqual(selected.snapshot.state.queuedMessages, expected);
+  assert.doesNotMatch(selected.snapshot.state.sessionName ?? "", /hunter22/);
+  assert.deepEqual(projectSnapshot(snapshot).state.queuedMessages, expected);
+
+  const notice = projectServerMessage({ _tag: "toast", level: "info", message: typed });
+  assert.equal(notice._tag, "toast");
+  if (notice._tag === "toast") assert.doesNotMatch(notice.message, /hunter22/);
 });

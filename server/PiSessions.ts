@@ -25,7 +25,7 @@ import type {
   Snapshot,
 } from "../shared/wire.ts";
 import type { DeliveryOverflow } from "./BoundedDelivery.ts";
-import { projectDisplay } from "./DisplayProjection.ts";
+import { projectDisplay, projectState } from "./DisplayProjection.ts";
 import { inboundLimits, makeInboundCapacity } from "./InboundCapacity.ts";
 import { inputBytes } from "./InputBytes.ts";
 import { makePiHistory, type PiHistory } from "./PiHistory.ts";
@@ -218,9 +218,8 @@ export const PreviewOwnerOptions = Context.Reference<{
 
 const settled = (snapshot: Snapshot) => liveActivityOf(snapshot)._tag === "idle";
 
-const displayed = <A>(effect: Effect.Effect<A, PiSessionError>) =>
+const redactedErrors = <A>(effect: Effect.Effect<A, PiSessionError>) =>
   effect.pipe(
-    Effect.map(projectDisplay),
     Effect.mapError(
       (error) =>
         new PiSessionError({
@@ -721,13 +720,13 @@ const openSession = (
               Effect.flatMap((fiber) => restore(Fiber.join(fiber))),
             );
           }),
-        ).pipe(displayed),
+        ).pipe(redactedErrors),
       state: transaction(() => Effect.map(publication.snapshot, present)).pipe(
-        Effect.map(projectDisplay),
+        Effect.map((state) => projectState(state)),
       ),
       commands: Effect.suspend(() =>
         announced() ? Effect.fail(exited()) : child.read(piReadbacks.commands),
-      ).pipe(Effect.forkIn(sessionScope), Effect.flatMap(Fiber.join), displayed),
+      ).pipe(Effect.forkIn(sessionScope), Effect.flatMap(Fiber.join), redactedErrors),
     };
     return session;
   });

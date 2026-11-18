@@ -1,6 +1,14 @@
 import { stripVTControlCharacters } from "node:util";
 import { readProposal } from "../shared/library.ts";
-import type { Dialog, Project, ServerMessage, SessionEvent, Snapshot } from "../shared/wire.ts";
+import type {
+  Dialog,
+  Project,
+  ServerMessage,
+  SessionActionResult,
+  SessionEvent,
+  SessionState,
+  Snapshot,
+} from "../shared/wire.ts";
 
 const marker = "[REDACTED]";
 
@@ -135,12 +143,27 @@ function projectDialog(dialog: Dialog, redaction: DisplayRedaction): Dialog {
   return concealsApproval(dialog, redaction) ? { ...shown, concealed: true } : shown;
 }
 
+export function projectState(state: SessionState, redaction = compileRedaction()): SessionState {
+  const { queuedMessages, ...rest } = state;
+  const shown = redaction.wire(rest);
+  return queuedMessages === undefined
+    ? shown
+    : { ...shown, queuedMessages: stripControls(queuedMessages) };
+}
+
+function projectActionResult(result: SessionActionResult): SessionActionResult {
+  if (result._tag !== "queue_restored") return projectDisplay(result);
+  const { messages, ...rest } = result;
+  return { ...projectDisplay(rest), messages: stripControls(messages) };
+}
+
 export function projectSnapshot(snapshot: Snapshot): Snapshot {
-  const { messages, pending, tools, ...rest } = snapshot;
+  const { messages, pending, tools, state, ...rest } = snapshot;
   const redaction = compileRedaction();
   const shown = redaction.wire(rest);
   return {
     ...shown,
+    state: projectState(state, redaction),
     dialogs: rest.dialogs.map((dialog) => projectDialog(dialog, redaction)),
     messages,
     ...("pending" in snapshot ? { pending } : {}),
@@ -151,6 +174,8 @@ export function projectSnapshot(snapshot: Snapshot): Snapshot {
 export function projectSessionEvent(event: SessionEvent): SessionEvent {
   if (TRANSCRIPT_EVENTS.has(event._tag)) return event;
   if (event._tag === "snapshot") return { ...event, snapshot: projectSnapshot(event.snapshot) };
+  if (event._tag === "state") return { ...event, state: projectState(event.state) };
+  if (event._tag === "queue_update") return { ...event, messages: stripControls(event.messages) };
   if (event._tag === "dialog")
     return { ...event, dialog: projectDialog(event.dialog, compileRedaction()) };
   return projectDisplay(event);
@@ -173,6 +198,10 @@ export function projectServerMessage(message: ServerMessage): ServerMessage {
   if (message._tag === "session") {
     const { event, ...envelope } = message;
     return { ...projectDisplay(envelope), event };
+  }
+  if (message._tag === "action_result") {
+    const { result, ...envelope } = message;
+    return { ...projectDisplay(envelope), result: projectActionResult(result) };
   }
   if (message._tag === "selected") {
     const { snapshot, ...envelope } = message;
