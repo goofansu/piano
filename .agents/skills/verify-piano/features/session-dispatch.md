@@ -1,61 +1,12 @@
 # Session dispatch
 
-`scripts/dispatch-session.ts` lets an orchestrator (a script or another agent) start a Piano session
-from JSON stdin or a prompt file in a folder, optionally in a new worktree, then read its status or list a
-project's active sessions. It talks to Piano's `/ws` with an allowed Origin and prints JSON with a
-link a person can open.
-
-## Sub-features
-
-- `structured-start`: `--json` reads one request object from stdin, preserving literal prompt
-  text. Required fields: `prompt`, `cwd`, `outFile`, `wsUrl`, `origin`; see
-  [the caller contract](../../../../docs/session-dispatch.md#structured-input-for-bots).
-  Invalid input exits 2 before connection; an existing `outFile` exits 3.
-- `start`: `<prompt-file> <cwd>` creates and starts a session; prints `creation`, `submission`,
-  `handle.sessionId`, `link`.
-- `worktree`: `--worktree BRANCH` has Piano create a worktree first and start there; the isolated
-  scratch configuration uses `<repo>.<BRANCH>`. Use the returned `worktree.path`.
-- `inherit-project`: `--parent-session <id>` inherits that parent's current project, even in a
-  new worktree; `--no-inherit-project` starts ungrouped. Moving the parent later does not move
-  existing children. An unlisted or ambiguous parent refuses inheritance before creation.
-- `status`: `status <sessionId>` prints `disposition`, `needs`, `lastAnswer`, `changes`, `link`.
-- `list`: `list --project <id>` prints one JSON line per active member session.
-- `follow-up`: `follow-up <sessionId> <prompt-file> [--steer]` sends one more message to the
-  session and prints `submission` and `link`.
-- `options`: `--hooks` with `--worktree`, and an optional out-file (exit 3 when it exists). The
-  session always starts on Piano's default model and effort; `--model` and `--thinkingLevel` are
-  unknown options (exit 2).
-- `refusals`: a missing cwd fails locally with exit 2; a refused creation prints
-  `"creation":"refused"` and `"submission":"not_sent"`. No session remains and the first input
-  was not sent, but startup extensions or worktree hooks may already have run. Refusal is not
-  a rollback of their effects; inspect `detail` before retrying.
-- `needs-input`: on `--fake-pi dialogs`, a prompt starting `ask` leaves the session waiting on a
-  dialog ("Enter a value") that the web UI answers; `status` meanwhile reports
-  `"disposition": "needs_input"`.
-
-## How to get to it (user POV)
-
-- Shell: `node scripts/dispatch-session.ts --help` from the checkout, with
-  `PIANO_SESSION_WS_URL` and `PIANO_SESSION_ORIGIN` set (launch's `run.env` exports both) or
-  `--ws-url` / `--origin`.
-- Pi sessions inside Piano reach the same path through the `piano-dispatch` extension
-  (`extensions/piano-dispatch/index.ts`).
-- The printed `link` opens the session in the web UI.
-
 ## Driving it with agent-browser
 
-For the structured-input path, run `node test/browser/start-session.mjs <evidence-directory>`.
-It owns its scratch instance and browser: run it before manual Launch, not alongside it. Its final
-step sends JSON through process stdin (no shell), dispatches into a new worktree, opens the returned
-session link, compares the shell-sensitive prompt exactly with the fake-Pi audit, and checks that
-command substitutions did not create a marker file. It retains `structured-start.json` and
-`4-structured-dispatch.png`; this proves a real Piano session with fake Pi, not a model response.
+The structured-input (`--json`) path is covered by
+`node test/browser/start-session.mjs <evidence-directory>`.
 
-For the remaining manual checks:
-
-Preconditions: a seeded launch, `. "$RUN/run.env"` (exports `PIANO_SESSION_WS_URL=ws://127.0.0.1:$PORT/ws`,
-the backend, and `PIANO_SESSION_ORIGIN=$WEB_URL`), doctor passed; `echo "dispatch hello" > "$RUN/prompt.txt"`;
-`mkdir -p "$EVIDENCE/session-dispatch"`; `ab() { .agents/skills/verify-piano/scripts/ab.sh "$RUN" "$@"; }`.
+Preconditions for the manual checks: a seeded launch; `echo "dispatch hello" > "$RUN/prompt.txt"`;
+`mkdir -p "$EVIDENCE/session-dispatch"`.
 
 - `start`
   - Command: `node scripts/dispatch-session.ts "$RUN/prompt.txt" "$REPO" > "$EVIDENCE/session-dispatch/start.json"; echo $?`
@@ -117,10 +68,6 @@ the backend, and `PIANO_SESSION_ORIGIN=$WEB_URL`), doctor passed; `echo "dispatc
   the printed links come from `PIANO_SESSION_ORIGIN`, so they open the UI (`$WEB_URL`).
 - `status`'s `changes.files` counts uncommitted files whatever comparison the Changes pane shows.
 - Run it with the checkout's Node 24 (`node scripts/dispatch-session.ts`), not `npx tsx`.
-- In Pi, `piano_wait_sessions` observes exact returned handles; omission of its timeout waits
-  until completion or attention, while a timeout only bounds observation. There is no CLI wait
-  command. CLI proof does not exercise the extension's tool row, Open session link or child's
-  Dispatched from backlink; those need a real-Pi/scripted-model journey.
 - Start/follow-up report submission, not completion. A status read can still say `running`;
   observe the expected reply in the browser before asserting settled status. Do not resend.
 - `test/fake-pi.mjs` gives each `ask…` dialog the ID `d1`; a second ask in the same session may not

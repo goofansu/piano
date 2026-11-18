@@ -1,49 +1,8 @@
 # Settings › Skills and Prompts
 
-Settings (`/settings/<section>`) holds Providers, MCP, Skills, Prompts, Webhooks, Data controls and Preferences. Skills and
-Prompts are Piano-owned templates saved under the scratch database's skills and prompts folders:
-the user creates one from the page header or the Mod+K palette, views it by clicking its name,
-deletes it from the row menu, and sessions started afterwards load what is saved (already-running sessions do not). The
-sidebar's Settings opens Providers; the palette lists each section by name.
-
-## Sub-features
-
-- `open-settings`: the sidebar's Settings opens `/settings/providers`; Mod+K offers Providers,
-  MCP, Skills, Prompts, Webhooks, Data controls and Preferences (Radius is inside Providers, not a separate
-  palette destination); address bar `/settings/skills`,
-  `/settings/prompts`.
-- `skills-empty`: `/settings/skills` headed Skills with New skill; with none, "No skills yet".
-- `new-skill`: New skill (header or palette) opens a dialog: Name, Description (live count
-  "0 / 1,024"), Instructions ("0 / 20,000"), "Disable model invocation", Cancel and Create skill;
-  description text "Saved in Piano. Sessions started from now can use it."; Create skill stays
-  off until Name, Description and Instructions are valid; success toasts "Skill created" and the
-  row appears (name mono, description under it).
-- `skill-row-actions`: the row's name button opens View, which shows the skill's SKILL.md with
-  "Copy skill"; "Skill actions <name>" (shown while the row is pointed at or focused) holds a red
-  Delete, which asks "Delete skill?" (`Sessions started from now no longer load <name>.`) and
-  toasts "Skill deleted".
-- `prompts-empty`: `/settings/prompts` headed Prompts with New prompt; with none, "No prompts yet".
-- `new-prompt`: New prompt opens a dialog shaped as New skill (Name, Description "0 / 1,024",
-  Instructions "0 / 20,000", Cancel, Create prompt; no Disable model invocation). Create prompt
-  stays off until the three fields are valid; success toasts "Prompt created" and the row shows
-  name plus description.
-- `prompt-row-actions`: the row's name button opens View, which shows the prompt file with
-  "Copy prompt"; "Prompt actions <name>" holds a red Delete, which asks "Delete prompt?" with the
-  same "sessions started from now" wording and toasts "Prompt deleted".
-- `palette-new`: on Skills, Mod+K offers "New skill"; on Prompts, "New prompt". From other
-  screens, search `skill` / `prompt` to open that Settings section first.
-
-## How to get to it (user POV)
-
-- Sidebar: Settings (lands on Providers), then the Settings sections nav → Skills or Prompts.
-- Palette: Mod+K, choose Skills / Prompts / New skill / New prompt.
-- Address bar: `/settings/skills`, `/settings/prompts`.
-
 ## Driving it with agent-browser
 
-Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
-`ab() { .agents/skills/verify-piano/scripts/ab.sh "$RUN" "$@"; }`. Mod+K is `Control+k` on Linux,
-`Meta+k` on macOS.
+Preconditions: a seeded launch. Mod+K is `Control+k` on Linux, `Meta+k` on macOS.
 
 - `open-settings`
   - Action: `ab set viewport 1280 800; ab open "$WEB_URL/"; ab wait --text "Loose session";
@@ -107,12 +66,6 @@ Preconditions: a seeded launch, `. "$RUN/run.env"`, doctor passed;
 
 ## Gotchas
 
-- Pi's own prompt and skill folders are not listed; only Piano-created ones appear.
-- "Sessions started from now" means no automatic refresh of an already-running session's set;
-  Pi's explicit `/reload` is a separate path, not proved by this CRUD recipe.
-- Name and Description are required; Create stays off while either is empty or over the limit.
-- The create toast covers the row's actions button until it leaves; wait
-  `!document.querySelector('[data-sonner-toast]')` before opening the menu.
 - The browser fake discovers saved prompt/skill names for slash-completion, but does not expand
   templates or invoke skills. For a separate completion check, keep both entries instead of
   deleting the skill first. Choose a fresh scratch directory in `/new` through Directory →

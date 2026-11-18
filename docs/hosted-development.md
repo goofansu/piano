@@ -16,15 +16,9 @@ revision before acting; an old hostname or a development worktree is not a deplo
 
 ## Supported layout
 
-The templates under [`deploy/systemd/`](../deploy/systemd/) use `/home/exedev/piano`:
-
-| Unit | Listener | Responsibility |
-| --- | --- | --- |
-| `piano.service` | `127.0.0.1:8001` | Backend, API, sessions and built `web/dist` UI. |
-| `piano-web.socket` / `piano-web.service` | `127.0.0.1:8000` | Socket-activated HTTP/WebSocket proxy to the backend. |
-
-Inspect installed units before adapting paths. Enable the backend and proxy socket for reboot;
-the socket activates the proxy service. A disabled proxy service is not itself a failure.
+The templates under [`deploy/systemd/`](../deploy/systemd/) use `/home/exedev/piano`. Inspect
+installed units before adapting paths. Enable the backend and proxy socket for reboot; the
+socket activates the proxy service, so a disabled proxy service is not itself a failure.
 
 The daily UI is built, not Vite: losing Vite's HMR connection can reload the page and discard
 unsent input. Do not auto-watch the hosted backend; restarting it interrupts Pi children, and
@@ -85,11 +79,8 @@ browser-facing HTTPS origin, without a trailing slash, or override it in a syste
 placeholder intentionally fails application startup validation. Keep production origins separate
 from local development and generated preview origins.
 
-Origins are not inferred from Host or forwarded headers. The request Host must match an allowed
-origin's host or a loopback name. Missing and `null` origins are rejected on `/ws` and non-GET/HEAD/
-OPTIONS requests; ordinary read-only health GETs need no Origin. An Origin header is not a credential
-and does not replace exe.dev private access. See [browser origins](configuration.md#browser-origins).
-Changing a unit or origin and restarting is a deployment action, not development verification.
+An Origin header is not a credential and does not replace exe.dev private access. Changing a
+unit or origin and restarting is a deployment action, not development verification.
 
 ## Managed app previews
 

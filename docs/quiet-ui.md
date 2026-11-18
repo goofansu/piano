@@ -52,10 +52,7 @@ passes these checks:
 
 Shared structure, so every pane reads as one app: one header shape on the session, the right
 sidebar and Settings (a title, context beside or beneath it when that adds something, controls at
-the end). The session header adds folder/ref context beneath its title when its menu is a
-sheet (one-area-at-a-time or a narrow viewport). On a wide viewport it keeps the project breadcrumb
-and menu beside the title, even one-area-at-a-time; on a narrow viewport the menu moves to the end
-and replaces the breadcrumb as the route to project actions;
+the end);
 one status glyph, `StatusDot`, for every state (an app preview, a webhook delivery), breathing
 (its `busy` tone) only while something is in progress, and each state shown once: the sidebar row owns a
 session's state, so the header repeats nothing; a refresh control turns its own icon while it
@@ -148,31 +145,12 @@ and license attribution, and use `currentColor` to match the UI; see `web/public
 
 ## Command palette and shortcuts
 
-The command palette on Mod+K (`web/src/components/CommandPalette.tsx`, whose name, groups, headings
-and `!p` scope `web/src/lib/commandPalette.ts` decides) is the keyboard surface for
-navigation and view commands, grouped as Sessions (Recent sessions before searching), Projects,
-Global commands and Session commands (only with a selected session). Projects lists active projects
-by name and opens their pages; done projects remain reachable through the Projects index. A leading,
-standalone lowercase `!p` scopes results to active project navigation (`!p` browses, `!p launch`
-searches names). The placeholder is **Search sessions, projects and commands…**, while the field
-and dialog keep the full accessible name **Search sessions, projects and commands**. There is no
-persistent filter hint, filter button or footer. A standalone `!` (ignoring surrounding whitespace)
-offers only **Projects only · !p** in the results. Enter or a click inserts `!p `, retaining input
-focus and the open palette. Other tokens such
-as `!s`, `!c`, `!P` and `!pizza` are ordinary queries, not filters. A session's outputs are read in its
-session rail, not searched from the palette. A feature that adds an action the sidebar or header offers also adds
-a row in the appropriate command group, named as its button is, including a toggle, whose row
-reads its state ("Hide sidebar" while the sidebar is shown, "Show sidebar" while it is hidden). An
-icon button's label, its tooltip and the palette's name for the same surface are one string
-("Search sessions, projects and commands").
-Global shortcuts are Mod+K (palette), Sidebar's ⌘B (not Ctrl+B), and Alt+↑ / Alt+↓ (previous / next
-session in the sidebar's displayed order on the current machine). Session navigation follows the
-chosen grouping and sort: Pinned first, then expanded groups, including Done. It skips collapsed
-groups and disabled rows, includes offscreen rows, works with the sidebar hidden, and stops at
-either end without wrapping. With no displayed selection, ↓ chooses the first openable row and ↑
-the last. It works from the session composer without losing drafts, but not from Settings, other
-editable controls, or while a dialog, palette, menu or listbox is open. Selection uses the same
-immediate path as a row click, with no added fetch or delay. The composer alone binds Mod+/ to its
-model picker. Other actions are reached through the palette or their control. The
-[session navigation contract](sidebar-session-navigation.md) covers nearest reveal, focus,
-hidden sidebars and bounded selection reads.
+The command palette on Mod+K (`web/src/components/CommandPalette.tsx`,
+`web/src/lib/commandPalette.ts`) is the keyboard surface for navigation and view commands. A
+feature that adds an action the sidebar or header offers also adds a row in the appropriate
+command group, named as its button is, including a toggle, whose row reads its state ("Hide
+sidebar" while the sidebar is shown, "Show sidebar" while it is hidden). An icon button's label,
+its tooltip and the palette's name for the same surface are one string.
+Global shortcuts are Mod+K (palette), Sidebar's ⌘B (not Ctrl+B), and Alt+↑ / Alt+↓ (previous /
+next session). The composer alone binds Mod+/ to its model picker. Other actions are reached
+through the palette or their control.

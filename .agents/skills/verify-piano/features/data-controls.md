@@ -1,39 +1,10 @@
 # Settings › Data controls
 
-Data controls restores archived session references one at a time and archives stopped, unpinned
-sessions in bulk without deleting their transcripts. Settings → Data controls and the palette open
-`/settings/data-controls` on Local; a remote machine's data controls belong on its own Piano.
-
-## Sub-features
-
-- `archived-rows`: Sessions comes first, Archived sessions last. Each archived row shows its title,
-  small folder name (full path in `title`) and an outline Unarchive button; no Unarchive all.
-- `archived-address`: an archived session's `/s/<sessionId>` address shows Session archived and
-  a Data controls button, not an “Unable to open session.” banner; the button opens its recovery page.
-- `unarchive`: restores the reference and toasts Session unarchived. Reading its saved history
-  does not start a user Pi; an uncached composer catalog can start a probe.
-- `archive-all`: Archive all asks for confirmation with the eligible count and “Running and
-  pinned sessions are kept. Transcripts are kept.” Its action is neutral, not destructive.
-  Cancel/Escape changes nothing; confirmation at zero is disabled. The success count is the
-  number actually archived, not a promise that the earlier count stayed current.
-- `closed-folder`: Unarchive keeps a closed folder closed and says “Session unarchived · Folder
-  remains closed”. A pin or project may still make the session visible.
-- `layout`: one Settings column, matching text actions and readable titles/paths on desktop and
-  narrow viewports; no helper descriptions beneath the groups.
-
-## How to get to it (user POV)
-
-- Sidebar Settings → Data controls.
-- Mod+K → Data controls, including from another Settings section.
-- An archived session's `/s/<sessionId>` address → Data controls.
-- Address bar: `/settings/data-controls`. Settings is local-only, not a peer-session action.
-
 ## Driving it with agent-browser
 
-Preconditions: a fresh seeded default-fake launch, `. "$RUN/run.env"`, doctor passed;
-`ab() { .agents/skills/verify-piano/scripts/ab.sh "$RUN" "$@"; }`. Keep the loose seed stopped
-and unpinned, and the project seed available for Pin. Run the closed-folder check last; other
-recipes need the folder open. Capture with `capture.sh` as in the skill body.
+Preconditions: a fresh seeded default-fake launch. Keep the loose seed stopped and unpinned, and
+the project seed available for Pin. Run the closed-folder check last; other recipes need the folder
+open.
 
 - `archived-rows` and `unarchive`
   - Action: `ab open "$WEB_URL/s/verify-loose"; ab wait --text 'Answer 4.'`;
@@ -93,14 +64,6 @@ recipes need the folder open. Capture with `capture.sh` as in the skill body.
     above; `ab wait --text 'Session unarchived · Folder remains closed'`. Capture `09-closed`;
     `curl -s "$API_URL/api/folders"` confirms the folder did not reopen. Do not infer that a
     pinned or project-member session must disappear from every sidebar group.
-- Local-only prerequisite
-  - Action on a default launch: `ab open "$WEB_URL/m/not-configured/s/verify-plan";
-    ab wait --text 'Machine unavailable'`; capture the attempted route.
-  - Result: report peer Settings absence as `verified-unreachable`, not verified by local CRUD.
-    A configured, reachable peer is required. Follow [Open a session](./open-session.md#gotchas)
-    for the isolated remote journey and its run-limit exception; when stricter limits prohibit
-    it, retain that prerequisite rather than starting another instance.
-
 ## Gotchas
 
 - Use `[role=dialog]` for the confirmation, not `alertdialog`. Scope Unarchive to its row when
@@ -109,12 +72,8 @@ recipes need the folder open. Capture with `capture.sh` as in the skill body.
 - “Running” includes Ready/idle Pi, not just Working. Archive all preserves execution owners,
   starting sessions and held locks; this fake-Pi recipe proves the Working and pinned cases,
   not app-runtime survival or stale-write races.
-- The [Data controls contract](../../../../docs/data-controls.md#verification) links module checks
-  for app owners, startup/locks, stale writes and peer refusal. `test/PeerScope.test.ts` checks
-  both mutations and the count through `/ws/peer`; label it module-only evidence.
+- `test/PeerScope.test.ts` checks both mutations and the count through `/ws/peer`; label it
+  module-only evidence.
 - Closing the only seeded folder intentionally invalidates doctor's original one-folder check.
   Finish the closed-folder evidence, then Cleanup; do not treat that changed fixture as a server
   failure or continue unrelated recipes on the closed-folder baseline.
-- Keep the observed count, audit and captures with the tested revision. Fake Pi demonstrates
-  Piano's process handling, not a model. Capture busy labels/spinners separately if that
-  transient behavior is the claim being verified.

@@ -1,141 +1,17 @@
 # Image attachment policy
 
-Decision: **accepted, 2026-10-06; count raised to ten and total to 50 MiB, 2026-11-07**. Supersedes the
-initial 5 MiB-per-image / 10 MiB-total upload policy. This is a Piano input-safety policy, not a new Pi or provider restriction.
-
-## Limits
-
-| Constraint | Limit |
-| --- | --- |
-| Original file size | **10 MiB per image** (10,485,760 bytes) |
-| Image count | **10 per message** |
-| Combined original file size | **50 MiB per message** (52,428,800 bytes) |
-| Formats | PNG, JPEG/JPG, WebP, GIF |
-
-All three limits apply together; exact boundaries are accepted. Sizes count the original binary
-files, before base64 encoding or Pi's processing. A recognized raster signature and matching MIME
-are required; arbitrary files and SVG are not supported. GIF acceptance does not guarantee that a
-provider supports animation.
-
-Use the attachment button, paste, or drop images into either composer. Previews can be removed
-before sending. Image-only messages work. While Pi is working, images can queue with text or alone
-as steering or follow-up input. Editing queued messages or stopping restores only text, not images,
-matching Pi's queue-restoration API. Unsent image drafts stay in browser memory per session; a full
-reload discards them. Queued images survive browser refresh while Pi stays alive; pending queues
-do not survive a backend/Pi restart. The queue displays only Pi's text, without attachment counts.
-
-Piano uses the unmodified Pi runtime and takes its queue from Pi's events. Pi 1.2.0 removes a
-delivered queue entry by matching its text, so after it delivers an image-only queued message it
-still reports an empty entry in `queue_update` and `get_state`'s `pendingMessageCount`. Piano shows
-what Pi reports: an empty queue row, and a session that counts as working. Until the row is gone,
-Piano does not retire the idle Pi process and, if it closes, reports that Pi was released during work. Edit (Pi's
-`clear_queue`) or Stop clears the row; including text with an image avoids it.
-
 Decision: Pi's events are the source of truth for its queue. Piano does not filter, hide or
 reinterpret entries Pi reports, track the queue locally, patch Pi or send operations Pi lacks to
 work around this; the fix belongs upstream in Pi.
 
-Checkouts previously using the queue-metadata patch should run `npm ci` after updating to replace
-their patched `node_modules`. The patch installer and its npm postinstall hook have been removed.
-
-## Remote composers
-
-The same policy applies on configured peers, in both existing sessions and New session. Only
-images are enabled; remote voice input and general files remain unavailable. Draft acquisition
-and thumbnails are browser-local and machine-partitioned. Send prepares the images over a separate
-bounded HTTP stream to their owning peer, then submits a one-use reference on the conversation
-socket. **Uploading images…** is not proof of Pi/provider receipt. Upload failure, Cancel or
-navigation before submission retains the original draft and newer typing; uncertain prompt
-delivery must be inspected, never automatically retried.
-
-Transcript image links are machine- and session-qualified, with cache provenance checked on the
-peer. Reopening history repopulates the disposable cache; there is no Local fallback for a missing
-peer image. Pi remains the only durable image/history store. See
-[remote use](remote-piano.md#images), [ADR 0004](adr/0004-same-owner-piano-peer.md) and the
-[HTTP budgets](runtime-input-limits.md#remote-image-http-lane).
-
-The empty image-only queue behavior above was documented on Pi 1.2.0, whose queue removal was
-guarded by `if (messageText)`. Pi 1.5.2's source (`dist/core/agent-session.js`) no longer has that
-guard, so it should remove an image-only entry; this has not been observed with a real Pi. Fake-Pi
-remote checks deliberately report an empty text entry and verify Piano preserves it; they are
-not a new real-provider reproduction of Pi's behavior.
-
-## Why this combination
-
-- **10 MiB each:** accommodates typical screenshots and phone photos with fewer manual compression
-  steps. The earlier 5 MiB limit rejected files that Pi can successfully resize; the
-  [Pi research](research/2026-10-06-pi-image-restrictions.md) demonstrated this with an 8.24 MiB PNG.
-- **Ten images:** four was too few for multi-screen bug reports and step-by-step screenshots.
-- **50 MiB combined:** an iPhone 11 screenshot is about 3 MB, so ten of them need about 30 MB; the
-  former 20 MiB total refused that batch. 50 MiB allows ten images averaging 5 MiB or five at the
-  per-image maximum, and keeps the count from multiplying the per-image limit (100 MiB).
-- **Transport cost:** base64 expands 50 MiB to about **67 MiB**. The WebSocket message, Pi RPC
-  line and queue byte limits derive from the total attachment limit, and Pi's acknowledgement
-  deadline grows with the bytes written ([runtime input limits](runtime-input-limits.md)).
-  JSON parsing, browser previews, process I/O and decoding can hold additional copies; the total
-  upload cap is not a claim that memory consumption is only 50 MiB. Remote network upload uses
-  binary HTTP instead of base64 WebSocket frames; the same Pi stdin costs still apply.
-- **Not 20 MiB each:** the per-image limit stays at 10 MiB, which already covers phone photos.
-
 ## Pi owns model preparation
 
-Piano passes accepted images through PiSessions. Pi's default preprocessing fits each image within
-2000×2000 pixels and under 4.5 MiB of **base64-encoded image data**, with model-specific overrides.
-These are processing targets, not original-file upload ceilings. Pi settings can disable resizing
-or block images. Do not duplicate those policies or modify the user's Pi settings to meet Piano's
-upload policy. See the [version-pinned research and sources](research/2026-10-06-pi-image-restrictions.md).
+Piano passes accepted images through PiSessions; Pi's preprocessing fits them for the model. Do
+not duplicate those policies or modify the user's Pi settings to meet Piano's upload policy. See
+the [version-pinned research and sources](research/2026-10-06-pi-image-restrictions.md).
 
-This combination is compatible with Pi's processing, **not a guarantee of provider acceptance**.
-Providers also constrain the whole request, including images retained from previous messages,
-context tokens and endpoint-specific behavior. A successful local preview does not prove the model
-received the image; Pi's omission hints and provider errors remain authoritative.
-
-The registry stores no image bytes (INV-01); Pi owns its processed conversation images. Bounded
-preview URLs keep image bytes out of WebSocket snapshots (INV-05). Validation remains in both the
-browser and server; the service stays behind private access (INV-11). Protocol translation and
-processing remain at the PiSessions seam (INV-12).
-
-**Development environment only.** `npm run dev` runs the backend under `node --watch`, which sets
-`WATCH_REPORT_DEPENDENCIES=1` in the process environment. Pi 1.0.2's image-resize worker treats
-Node's dependency-watch message as its result, so every attached image was reported as
-"could not be resized below the inline image size limit" regardless of size. `PiTransport` strips
-that variable when spawning Pi; `npm start` and the hosted service never set it, so built and
-deployed instances were unaffected. A regression test spawns a child with the variable set in the
-parent and checks the installed Pi accepts an image.
-
-## Verification and future changes
-
-- A boundary regression failed under the former limits, then passed with 10 MiB each / 20 MiB total.
-  It checks exact boundaries, one-byte overflow, the maximum image count and rejection of one more.
-  It now checks ten and eleven images and a 50 MiB total; the 2026-10-06 evidence below is for
-  the former four-image / 20 MiB policy.
-- `npm test`: **57 passed**. `npm run typecheck`: passed.
-- The former `test/browser-attachments.mjs` through `npx agent-browser` on scratch ports 7271/7272: passed.
-  Two distinct, valid PNGs of exactly 10 MiB each traversed browser → WebSocket → fake Pi → preview
-  route; each read back as exactly 10,485,760 bytes, and reconnect/reload retained the transcript.
-  The same journey verifies per-file/count/aggregate rejection and preserves valid draft attachments
-  after an over-limit addition.
-- The large PNG fixtures use ancillary metadata to reach exact sizes. This proves transport and
-  validation, not worst-case pixel decoding, phone-browser memory use or live provider acceptance.
-  No paid model call or user-instance mutation was needed.
-- Evidence: `/tmp/piano-upload-limits-{red,tests,typecheck,browser}.log` and
-  `/tmp/piano-upload-limits-browser/`. Checked against `a615429` plus these changes, Node 24 and
-  locked dependencies.
+## Future changes
 
 Constants live in `shared/attachments.ts`; the wire schema and browser use them. Future increases
 need concrete user examples plus large-upload checks and a memory/transport review. General file
-support needs its own type and policy, not a broader image MIME allowlist. The
-[text-file checking research](research/2026-10-15-text-file-validation.md) proposes sharing the
-workspace preview's strict UTF-8, NUL-free, 1 MiB text rule. Composer text uploads and their
-aggregate/context budget remain unimplemented; this does not change the image policy above.
-
-Activation requires a UI build, `piano.service` restart for server validation, and browser reload.
-No build, deployment or restart was performed as part of this change; no proxy restart is needed.
-
-## Developer navigation
-
-- **Owners:** `shared/attachments.ts` (limits), `server/ImageTransfer.ts`, `server/PreparedImages.ts`
-  and `server/ImagePreviews.ts`, `web/src/lib/imageSender.ts` and `web/src/lib/useImageSend.ts`.
-- **Smallest check:** `node --test --import ./test/setup.ts test/PreparedImages.test.ts` (or
-  `test/ImagePreviews.test.ts`, `test/ImageSender.test.ts`); then the `images` steps of the
-  [Start a session recipe](../.agents/skills/verify-piano/features/start-session.md).
+support needs its own type and policy, not a broader image MIME allowlist.

@@ -21,18 +21,6 @@ Do not publish the raw control port or set `HOST=0.0.0.0` as an access shortcut.
 proxy alternative must protect both HTTP and WebSocket routes, prevent bypass of the proxy and apply
 the origin/access controls in INV-11. Serve generated application previews separately from control.
 
-## Optional contributor skills
-
-You may use Matt Pocock's skills, custom skills or ordinary prompting to develop Piano. Configure
-them through your normal Pi environment and follow the installed version's instructions; the
-[upstream collection](https://github.com/mattpocock/skills) evolves independently of Piano.
-Use the repository's glossary, ADRs and invariant IDs as project context. Skill-generated specs,
-plans and review findings can reference these documents without dictating Piano's product schema.
-
-No specific skill package, invocation sequence or document template is required to use Piano.
-Skill execution does not establish verification: retain the actual test/browser evidence and the
-requirement and revision it supports. See INV-09 and INV-13.
-
 ## PR evidence
 
 Stage local captures and logs under the [shared evidence root](testing.md#evidence-directories),

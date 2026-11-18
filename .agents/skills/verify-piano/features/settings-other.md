@@ -1,39 +1,8 @@
 # Settings › Providers, Webhooks and Preferences
 
-Providers holds accounts, API keys and Radius setup. Webhooks configures session-event receivers.
-Preferences controls voice input. These pages share Settings navigation and the palette; a
-credential-free scratch run can inspect setup, cancel the voice-key prompt and manage an inactive
-webhook without contacting its receiver. These observations do not prove sign-in or delivery.
-
-## Sub-features
-
-- `headers`: Settings section headers show the section name and its actions, without a Machine
-  picker. Settings belongs to Local; use a peer's own Piano for its settings.
-- `providers`: Providers has Radius, Accounts and API keys groups. Unsigned-in Radius offers
-  Sign in to Radius; Install Radius MCP and Install web search are disabled until setup permits them.
-- `api-key-setup`: the API keys group offers Add key for DeepSeek, Fireworks, Google, OpenCode
-  Go, OpenCode Zen and Vercel AI Gateway. Each opens its named API-key dialog; Cancel saves
-  nothing. A saved key instead offers Replace key / Remove key in the row's actions menu.
-- `preferences`: Voice input is off without a key. Turning it on opens OpenAI API key, explaining
-  that recordings and session context go through this Piano to OpenAI; Cancel leaves it off.
-  This main preference controls the idle microphone in both New and existing-session composers
-  on Local and every peer. Turning it off hides idle microphones, not an active operation's Cancel.
-- `webhook-empty`: Webhooks shows No webhooks yet and New webhook.
-- `webhook-create`: New webhook has URL, Bearer token Optional, Events and Active. A private HTTP
-  URL is refused inline. Creating an inactive public HTTPS entry saves it without a delivery.
-- `webhook-delete`: Webhook actions <host> → Delete asks Delete webhook?, then removes the row.
-
-## How to get to it (user POV)
-
-- Sidebar Settings → Providers, Webhooks or Preferences.
-- Mod+K → Providers, Webhooks or Preferences; on Webhooks, New webhook opens its editor.
-- Address bar: `/settings/providers`, `/settings/webhooks`, `/settings/preferences`.
-  Radius is within Providers, not a separate Settings section or palette destination.
-
 ## Driving it with agent-browser
 
-Preconditions: seeded launch, `. "$RUN/run.env"`, doctor passed;
-`ab() { .agents/skills/verify-piano/scripts/ab.sh "$RUN" "$@"; }`. No credentials or receiver are needed.
+Preconditions: a seeded launch. No credentials or receiver are needed.
 
 - `providers`
   - Action: `ab open "$WEB_URL/settings/providers"; ab wait '[aria-label="Sign in to Radius"]'`.
@@ -84,11 +53,6 @@ Preconditions: seeded launch, `. "$RUN/run.env"`, doctor passed;
 
 ## Gotchas
 
-- `test/browser/voice-input.mjs` is an exported helper, not a standalone journey. It runs inside
-  `remote-inputs.mjs` with main and two peers: real scratch settings, controlled browser device
-  APIs and a CDP transcription response, no paid call. It checks all-machine visibility, draft
-  insertion, cancellation and source isolation. Run that journey alone, under the narrow run-limit
-  exception; the key-dialog recipe above remains runnable on the default launch.
 - Voice transcription requires an approved OpenAI key, browser microphone permission and a
   recording-capable browser. The Preferences → Voice input → key-dialog route proves the
   missing-key prerequisite, not recording, context transmission or transcription into the draft.

@@ -5,19 +5,12 @@ description: Launch an isolated scratch Piano (own database, Pi dirs and HOME, f
 
 # Verify Piano
 
-Piano is a web UI (React + Vite) over a Node backend (`server/main.ts`) that starts Pi sessions in
-folders and their worktrees. Users touch the browser UI; orchestrators also use the dispatch CLI
-`scripts/dispatch-session.ts` and the `/ws` session socket. Prove behavior on a scratch instance
-this skill starts, never on the user's own Piano (local `7070`; on exe.dev `piano.service` on
-`127.0.0.1:8001` behind `piano-web` on `127.0.0.1:8000`), whose database is real.
+Prove behavior on a scratch instance this skill starts, never on the user's own Piano (local
+`7070`; exe.dev `127.0.0.1:8000`/`8001`), whose database is real.
 
-All paths below are relative to the repository root, and every script is written out in full: a
-worktree-isolated session refuses a command whose name comes from a variable. The scripts run on
-Linux and macOS alike: `lib.sh` reads processes and ports from whatever the host has (`/proc`,
-`ss` and `setsid`, or `ps` and `lsof`), so no step below changes with the platform. On exe.dev they
-put `~/node/bin` and `~/.local/bin` (Node, `wt`) on `PATH` themselves; record `node --version`
-rather than assuming those paths pin a version. The feature map in
-[`features/README.md`](features/README.md) says what to drive; this file says how.
+Paths are relative to the repository root. Write each script path out in full: a worktree-isolated
+session refuses a command whose name comes from a variable. [`features/README.md`](features/README.md)
+says what to drive; this file says how.
 
 ## Run limits
 
@@ -28,75 +21,25 @@ its [evidence](#evidence). If teardown cannot be confirmed, stop and report the 
 start a replacement.
 
 **Narrow exception:** `node test/browser/remote-session.mjs <evidence-directory>` and
-`node test/browser/remote-inputs.mjs <evidence-directory>` may each own main plus two headless
-peers and one browser. Run the two portions serially, each finishing cleanup before the next. Its existing harness gives each machine
-a separate database, HOME, XDG/Pi state and audit, loopback ports and recorded child ownership;
-the one harness tears all of them down before another journey or Launch. Run no other scratch
-instance alongside it. This exception is only for those committed multi-peer portions, not arbitrary
-parallel launches or reuse of live peers. Confirm its `run.json` cleanup result before continuing.
+`node test/browser/remote-inputs.mjs <evidence-directory>` each own main plus two headless peers
+and one browser. Run them serially, with no other scratch instance alongside, and confirm each
+`run.json` cleanup result before continuing.
 
 ## Launch
 
-First allocate an [evidence run](../../../docs/testing.md#evidence-directories) in this shell.
-That sets `EVIDENCE_RUN` for explicit harness output and `VERIFY_EVIDENCE` for manual launches.
-Choose one launch below after any harness journey has completed its cleanup.
+First allocate an [evidence run](../../../docs/testing.md#evidence-directories) in this shell and let
+any harness journey finish its cleanup. Then run `.agents/skills/verify-piano/scripts/launch.sh`
+(`--help` lists `--empty` and `--fake-pi`; `VERIFY_GH_CLI=<path>` supplies a stand-in `gh`).
 
-```bash
-.agents/skills/verify-piano/scripts/launch.sh                      # seeded: folder repo, 2 projects, 2 saved sessions
-.agents/skills/verify-piano/scripts/launch.sh --empty              # empty database: nothing registered
-.agents/skills/verify-piano/scripts/launch.sh --fake-pi dialogs    # test/fake-pi.mjs: "ask ..." opens a dialog, "crash ..." exits
-.agents/skills/verify-piano/scripts/launch.sh --fake-pi ask        # test/fake-dialog-pi.mjs: "/ask store 2 numeric" runs ask_user
-VERIFY_GH_CLI=<path> .agents/skills/verify-piano/scripts/launch.sh  # a stand-in gh (PIANO_GH_CLI), e.g. a wrapper over test/fixtures/fake-gh.mjs
-```
+Install the [development prerequisites](../../../README.md#develop), including agent-browser and
+Chromium, first.
 
-Install the [development prerequisites](../../../README.md#develop), including agent-browser
-and Chromium, first. Launch needs `node_modules` (runs `npm ci` when missing). It creates
-`/tmp/verify-piano/<run-id>/` (`VERIFY_SCRATCH` overrides the parent) holding:
+Only the default `test/browser/fake-pi.mjs` writes the audit (`$AUDIT`); on `--fake-pi dialogs` and
+`ask` prove what Pi received from its replies instead.
+Then `. "$RUN/run.env"` (written by `launch.sh`). After a failed launch, run Cleanup on the printed
+run dir anyway.
 
-- `db/piano.db`: a new database; Piano creates the schema on start. Seeded runs fill it first
-  through `.agents/skills/verify-piano/scripts/seed.ts` (the browser tests' own
-  `test/fixtures/registry.ts`), because only one
-  backend may own a database.
-- `repo/`: a committed throwaway Git repo (`README.md`, `src/answer.ts`, `.gitignore` ignoring
-  `ignored/`). Worktrees Piano creates appear beside it as `repo.<branch>`, still inside the run.
-- `pi-agent/`, `pi-sessions/`, `home/`: `PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR` and
-  `HOME` for the backend, keeping Pi history and home-directory configuration scratch-only.
-- `config/`, `cache/`, `state/`, `data/`: isolated XDG directories. Launch clears inherited
-  `WORKTRUNK_*` overrides and supplies an empty user/system Worktrunk config, so inherited
-  placement or hooks cannot redirect the throwaway worktrees outside this run.
-- `audit.jsonl`: every command the fake Pi received (`PIANO_TEST_AUDIT`). Only the default
-  `test/browser/fake-pi.mjs` writes it; on `--fake-pi dialogs` and `ask` there is no audit, so
-  prove what Pi received from its replies instead.
-- `logs/`, `pids`, `run.env`.
-
-The backend runs `node server/main.ts` with `HOST=127.0.0.1`, `PIANO_PI_CLI=test/browser/fake-pi.mjs`
-(echoes each prompt as `echo: <text>` with priced usage; a prompt of exactly `hold` runs until Stop;
-no model calls), `PI_OFFLINE=1` and `PIANO_ALLOWED_ORIGINS=<ui>,<api>`. The UI is Vite from `web/`
-with `PIANO_DEV_BACKEND` pointing at that backend. Both ports are free ports picked at launch
-(`VERIFY_PORT` / `VERIFY_WEB_PORT` pin them); 7070, 8000, 8001 and 5173 are refused.
-
-Ready means usable: launch waits until `GET /api/folders` answers, the UI serves its page and the
-UI's `/ws` proxy delivers the registry with the UI's origin, then prints:
-
-```
-READY registry over ws://127.0.0.1:<ui-port>/ws: 1 folder(s)
-api      http://127.0.0.1:<api-port>  (server pid <pid>)
-ui       http://127.0.0.1:<ui-port>  (vite pid <pid>)
-database /tmp/verify-piano/<run-id>/db/piano.db  seeded=1  fake-pi=browser
-evidence <EVIDENCE_RUN>/manual/<run-id>
-RUN=/tmp/verify-piano/<run-id>
-```
-
-Then `. "$RUN/run.env"` gives `RUN`, `EVIDENCE`, `REPO`, `DB`, `AUDIT`, `API_URL`, `WEB_URL`,
-`ORIGIN`, `PORT`, `WEB_PORT`, `EXPECTED_SHA`, `AB_SESSION`, and exports `PIANO_SESSION_WS_URL` /
-`PIANO_SESSION_ORIGIN` for the dispatch CLI. A launch that fails prints the log tail; run Cleanup on
-the printed run dir anyway.
-
-Seed data (seeded runs): folder `repo`; projects `verify` "Verify Project" and `empty` "Empty
-Project"; sessions `verify-plan` "Plan the verification"
-(project `verify`, saved PR link `#222`, last active 1 hour ago) and `verify-loose` "Loose session"
-(no project, 20 minutes ago), each with Pi history `What is 2 + 2? (<title>)` / `Answer 4.`; "Plan the verification" also holds one
-successful Pi `write` of `src/answer.ts` (hand-written, since fake Pi makes no tool calls).
+Seed data: `.agents/skills/verify-piano/scripts/seed.ts`.
 
 ### A deployed instance
 
@@ -124,38 +67,13 @@ Run it first, and again whenever anything looks off. It changes nothing.
 .agents/skills/verify-piano/scripts/doctor.sh --deployed         # on the VM, read-only
 ```
 
-For a scratch run it checks: both recorded PIDs alive with their recorded start time and
-working directory; each port owned by that PID; no real-Piano port in use; the
-checkout still at `EXPECTED_SHA` (dirty paths noted, since they run too); the server log naming this
-run's database; `GET /api/folders` listing only the throwaway repo (or nothing for `--empty`);
-POST `/api/ls` refused without Origin (403) and allowed with `ORIGIN` (200), which is Piano's only
-access control; the registry arriving over the UI's `/ws`; the fake-Pi command count.
-
-For `--deployed`: `piano.service`, `piano-web.socket` and `piano-web.service` active; 8001 owned by
-`piano.service`'s MainPID and 8000 by piano-web; the checkout SHA and whether it equals
-`origin/main` as last fetched (it never fetches); whether HEAD moved after the service started or
-after `web/dist` was built (then the running backend or UI predates the checkout); GETs on 8001 and
-8000; the allowed origins.
-
 ## Drive
 
-1. **The repo harness first.** Allocate an [evidence run](../../../docs/testing.md#evidence-directories)
-   if not already set in this shell. The committed critical paths start their own scratch instance
-   and browser, assert what a user sees and what Pi receives, and write screenshots into the
-   directory given as the first argument:
-
-   ```bash
-   node test/browser/start-session.mjs "$EVIDENCE_RUN/harness-start-session"
-   node test/browser/open-session.mjs "$EVIDENCE_RUN/harness-open-session"
-   node test/browser/transcript-rows.mjs "$EVIDENCE_RUN/harness-transcript-rows"
-   ```
-
-   Each prints its outcome and evidence directory. `PASSED` exits 0; failed, blocked, cancelled,
-   error or inconclusive runs exit nonzero. Inspect `run.json`, not just the exit code.
-   They do not need `launch.sh`: run them one at a time before Launch (or after cleaning up an
-   existing run), and let each finish its own teardown before the next journey or Launch.
-   `npm run test:browser` runs these and both remote portions serially under the narrow exception
-   above; on macOS both remote portions skip with exit 0, which is not a pass. `npm run verify` is the separate typecheck/lint/module-test baseline, not browser coverage.
+1. **The repo harness first.** The committed critical paths (`npm run test:browser`,
+   `package.json`) start their own scratch instance and browser and write evidence into the
+   directory given as the first argument. Run them one at a time before Launch or after Cleanup,
+   and inspect `run.json`, not just the exit code. On macOS both remote portions skip with exit 0,
+   which is not a pass.
 
    For mapped Preview behavior, also run `node test/browser/preview.mjs <evidence-directory>`
    serially before Launch. It needs the native supervisor and free ports described in
@@ -163,11 +81,9 @@ after `web/dist` was built (then the running backend or UI predates the checkout
    `PIANO_PREVIEW_CONFIG` containing `{"origin":"http://127.0.0.1"}` enables external-tab
    interaction without exe.dev authentication; it does not prove authenticated HTTPS access.
 
-   For peer coverage, run `node test/browser/remote-session.mjs <evidence-directory>` and then
-   `node test/browser/remote-inputs.mjs <another-evidence-directory>`, before Launch or after cleanup.
-   Confirm the first run’s cleanup before starting the second. `test/browser/voice-input.mjs` is only an imported helper: running it
-   directly performs no checks. The default manual launch still has no configured peer; report
-   that prerequisite honestly (see [Open a session](features/open-session.md)).
+   `test/browser/voice-input.mjs` is only an imported helper: running it directly performs no
+   checks. The default manual launch has no configured peer; report that prerequisite honestly (see
+   [Open a session](features/open-session.md)).
 
 2. **Then launch once and reuse `agent-browser`** for anything the harness does not cover,
    through `ab.sh`, which runs `agent-browser --session "$AB_SESSION"` from `PATH`.
@@ -209,19 +125,13 @@ evidence goes to `$EVIDENCE_RUN/manual/<run-id>/`, outside the scratch run dir, 
 After sourcing `run.env`, `$EVIDENCE` names that manual launch directory; `$EVIDENCE_RUN` remains
 the parent for the overall verification run. Keep retained logs and drive scripts there too.
 
-```bash
-.agents/skills/verify-piano/scripts/capture.sh "$RUN" <feature-id> <step>
-# -> $EVIDENCE/<feature-id>/<step>.png, <step>.aria.txt, <step>.state.json
-```
+Capture a step with `.agents/skills/verify-piano/scripts/capture.sh "$RUN" <feature-id> <step>`.
 
 The committed harness additionally records content identities, command/environment/journey and
 outcome in `run.json`; see [capture scope and limitations](../../../docs/testing.md#file-evidence-provenance).
 The manual shell flow below has its existing captures/logs, **not** that content fingerprint. Keep
 its drive script and separately identify the tested changes/environment on the PR; invoking the
 skill alone is not evidence.
-
-`state.json` records the URL, title, session header text and the fake-Pi command count at that
-moment. Cleanup adds `_run/` (server and Vite logs, `fake-pi-audit.jsonl`, `run.env`, `pids`).
 
 Proof standards:
 
@@ -242,13 +152,10 @@ Proof standards:
 .agents/skills/verify-piano/scripts/cleanup.sh "$RUN"
 ```
 
-It closes this run's browser session, sends TERM (KILL after 10 s) only to the PIDs in
-`$RUN/pids` whose kernel start time still matches, confirms both ports are free, copies logs, audit,
-`run.env` and `pids` into `$EVIDENCE/_run/`, deletes `$RUN` (only under the scratch root) and lists
-the kept evidence. Stop only instances and browser sessions this run owns; leave unrelated ones
-alone. Never kill by name (`pkill`, `pgrep -f`): other agents' scratch instances and the user's Piano
-run the same `node server/main.ts`. Run Cleanup after every failed attempt too. The harness journeys
-clean up their own instance and browser.
+Stop only instances and browser sessions this run owns. Never kill by name (`pkill`, `pgrep -f`):
+other agents' scratch instances and the user's Piano run the same `node server/main.ts`. Run
+Cleanup after every failed attempt too. The harness journeys clean up their own instance and
+browser.
 
 ## Gotchas
 
@@ -281,15 +188,8 @@ clean up their own instance and browser.
   SHA does not read; launch unsets it so a scratch backend never shares a live socket path.
 - A name that is only an `aria-label` (an icon button's, such as "Close answer.ts") is not page
   text: `wait --text` never sees it; wait on `'[aria-label="..."]'` instead.
-- Proved on an exe.dev VM (Linux, Node 24, Worktrunk 0.80), on macOS (Node 24) and on a Linux
-  cloud VM (Node 24.22).
-  A stock Mac has no `timeout`, so `ab.sh` and the browser close in `cleanup.sh` run unbounded
-  there; `VERIFY_AB_TIMEOUT` applies only where coreutils is installed.
-
 ## Keeping it current
 
 When a journey fails because the app changed (a renamed button, a moved menu item, a new route),
 update the feature file in the same change, never the assertion's intent. After changing launch
-isolation, run `.agents/skills/verify-piano/scripts/test-launch-isolation.sh`: it dispatches through
-real Worktrunk with owned stand-in user settings, asserts sibling worktree placement, and cleans up
-its scratch run while retaining evidence.
+isolation, run `.agents/skills/verify-piano/scripts/test-launch-isolation.sh`.

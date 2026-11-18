@@ -202,7 +202,7 @@ base64 uploads on slow links. Keep that cap at 1 MiB and use a separate bounded 
    to 100 MiB of original bytes; unclaimed references expire after ten minutes. This replaces
    the proposed temporary-file staging with a smaller bounded lifecycle: restart/teardown forgets
    preparations, without disk cleanup or another durable image store. See the exact
-   [resource budgets](../runtime-input-limits.md#remote-image-http-lane).
+   resource budgets in `shared/remoteImages.ts`.
 3. Normal `act`/`create_session` carries a small `preparedImages` reference. PeerScope still
    refuses inline remote images. ClientDispatch rejects mixed inline/reference input, verifies
    that the reference was prepared for this session (or, before a session exists, for this
@@ -269,7 +269,7 @@ This amendment accepts the main-owned option in the
   operation. Cancellation cannot promise provider work or charges were prevented. No automatic
   retries. Constructor/start/recorder/track failures discard audio and preserve the draft.
 - Actual recording bytes, main HTTP ingestion before JSON parsing, concurrent work, provider
-  response bytes/text and deadlines are bounded; see [voice budgets](../runtime-input-limits.md#voice-input).
+  response bytes/text and deadlines are bounded; see the voice budgets in `shared/voiceInput.ts`.
   These are resource limits, not a guarantee about browser heap on delayed mobile chunks or a
   transcription provider's entitlement/quality. Fake devices/providers establish Piano ownership
   and failure handling; real microphone, codecs, mobile background/lock and paid-provider behavior

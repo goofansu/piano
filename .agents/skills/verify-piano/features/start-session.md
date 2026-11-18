@@ -1,78 +1,13 @@
 # Start a session
 
-The New page asks "What should we work on?" at `/new` and `/projects/<id>/new` on desktop
-(the heading is hidden on narrow screens); the latter preselects the project. The user chooses a folder, optionally a model, effort and project, types
-the first message and sends it. Piano starts Pi in that folder, opens `/s/<sessionId>` and shows Pi's reply. A reload keeps
-the session without sending the message again; a message that cannot be sent keeps the draft.
-
-## Sub-features
-
-- `choose-folder`: combobox "Directory" lists registered folders and "Browse…", plus "Worktrees"
-  for a registered checkout. A folder whose directory is missing stays registered but is left out
-  until its directory returns; its sidebar row drops "New session in <folder>". Once New has
-  a directory (picked, or a default the loaded folders accepted), it stays there when its
-  checkout goes missing; New then reads "Checkout removed. Restore it at its path or choose another
-  directory." with Send disabled. `/new` defaults to the last-used
-  directory where a session can start, otherwise the first eligible registered folder; a missing
-  remembered root is skipped. A fresh `/projects/<id>/new` needs a directory choice.
-- `directory-trust`: a directory with `.pi` resources or `.agents/skills` shows "Directory trust"
-  beside Directory: Untrusted / Trusted. Toggling changes that machine's decision about loading
-  those resources, not another machine's decision for the same path. A decision whose answer
-  never arrives warns "Connection lost. <Trust|Untrust> folder may have finished; …" (or
-  "No reply. …"), never "Pi marked this folder as …".
-- `remote-new`: `/m/<machine>/new` uses the configured peer's registered directories, with trust
-  where needed, but no Browse… or worktree creation. A remembered directory no longer open on
-  that peer falls back to an open folder; it must not start on Local instead.
-- `model-effort`: the "Model: <model>; effort: <level>" button picks a model and effort, passed to
-  Pi as `--model` and `--thinking`.
-- `model-defaults`: the model picker shows New sessions' default, Refresh models, Use default
-  and Make default / Default. Use default restores the current choice without saving a new default.
-- `project`: the "Project" button lists "New project" and active projects, filing the new session
-  in the one chosen ("No project" clears a choice). Done projects are omitted as destinations;
-  an already-selected Done project remains named and checked, so the user can keep or clear it.
-- `first-message`: combobox "First message" plus "Send" starts the session and lands on it.
-  Desktop Enter sends; on a coarse-pointer device Enter inserts a newline.
-- `reload`: reloading `/s/<id>` shows the same transcript and sends no second prompt.
-- `draft-navigation`: leaving New for Projects and returning through New session keeps the
-  unsent draft within the page load; a full reload is not draft persistence.
-- `failed-start`: a conclusively failed startup returns to New with "Could not start session",
-  Retry and Dismiss, keeping the message, images, model and effort. Retry is explicit; an
-  uncertain start must be reconciled, not submitted again as a new session.
-- `images`: Attach images (file input "Image files"), paste or drop adds image tiles; Remove
-  <name> removes one. An unsupported file shows "Other files aren't supported yet." without
-  losing accepted images. Sent thumbnails link to "Open attached image" in a new tab.
-- `not-sent`: when the socket is down, Send is disabled and Enter keeps the draft without
-  creating a session. A send refused at the delivery boundary can instead show "Message not
-  sent. Your draft is kept; retry when the session reconnects."; disconnecting first does not
-  exercise that race.
-
-## How to get to it (user POV)
-
-- The sidebar's "New session" button, or the root URL with no session open.
-- A project home's composer ("First message" above its Sessions), or, with the sidebar grouped by
-  project, the group's "New session in <project>".
-- Address bar: `/new`, `/projects/<id>/new`. The project-name heading belongs to the project
-  home at `/projects/<id>`, not its New page.
-
 ## Driving it with agent-browser
 
-Preconditions: a fresh seeded launch with the default browser fake, `. "$RUN/run.env"`, doctor passed;
-`ab() { .agents/skills/verify-piano/scripts/ab.sh "$RUN" "$@"; }`. Run the harness journey first; it covers model, effort,
-project and reload on its own scratch instance, with its own folders and models (not the seed's).
+Preconditions: a fresh seeded launch with the default browser fake. Run
+`node test/browser/start-session.mjs <evidence-directory>` first; it uses its own folders and
+models, not the seed's.
 
-- Harness
-  - Command: `node test/browser/start-session.mjs "$EVIDENCE/start-session/harness"`
-  - Result: exit 0 and `PASSED start-session (<s>s), evidence in <dir>` with its screenshots.
-    It also measures compact Send/Mic faces inside nonoverlapping 44px touch targets at 390px,
-    414px and wide coarse-pointer layouts, returning to mouse layout without sending the draft.
-    The Mic uses a dummy scratch key; this proves geometry, not recording or transcription.
-- `choose-folder`
-  - Action: `ab set viewport 1280 800; ab open "$WEB_URL/new"; ab wait --text "What should we work on?";
-    ab find role combobox click --name "Directory" --exact`
-  - Result: the combobox already reads `repo`; listbox "Suggestions" with options `repo`
-    (selected), `Browse…`, `Worktrees`. `ab find role option click --name "repo" --exact`.
-    Capture `01-new`, then wait for the directory picker to close before using another control:
-    `ab wait --fn "!document.querySelector('[aria-label=\"Choose a directory\"]')"`.
+- `choose-folder`: after picking in combobox "Directory", wait for the picker to close before using
+  another control: `ab wait --fn "!document.querySelector('[aria-label=\"Choose a directory\"]')"`.
 - `directory-trust` (scratch resources only)
   - Preconditions: put a harmless skill at `$REPO/.agents/skills/demo/SKILL.md` before opening
     New: front matter `name: demo`, `description: Verification fixture.`, body `Reply briefly.`.
@@ -84,11 +19,6 @@ project and reload on its own scratch instance, with its own folders and models 
   - Result: Trusted replaces Untrusted. Capture `15-trusted`; click again and wait for
     `aria-pressed=false` to return to Untrusted. The seed without resources need not show this
     control. Cross-machine trust isolation requires the peer prerequisite below.
-- `remote-new` prerequisite
-  - Action: `ab open "$WEB_URL/m/not-configured/new"; ab wait --text 'Machine unavailable'`;
-    capture `16-peer-prerequisite`. Report `verified-unreachable` with that route and a
-    configured, reachable peer, never a local send as remote proof. See
-    [Open a session](./open-session.md#gotchas) for the multi-instance and authentication limits.
 - `model-defaults` (before sending, with the seed's default browser fake)
   - Action: `ab click '[aria-label^="Model:"]'; ab wait '[aria-label="Model and effort"]';
     ab find role option click --name "fake/gamma" --exact`;
@@ -108,21 +38,6 @@ project and reload on its own scratch instance, with its own folders and models 
     `/s/verify-plan`, Session information and actions → Move to project likewise omits Empty
     Project; capture that menu separately. Reopen Empty Project through its home menu before
     continuing recipes that need it active. Its Done home remains reachable from Projects → Done.
-- `first-message`
-  - Action: `ab fill '[aria-label="First message"]' "hello verify";
-    ab wait --fn "!document.querySelector('[aria-label=Send]').disabled"; ab press Enter;
-    ab wait --text "echo: hello verify"`
-  - Result: the URL becomes `/s/<uuid>`; the visible header title is `hello verify`, with
-    screen-reader `role=status` text `Ready`.
-    Capture `02-reply`.
-  - Side effect: the audit has one `start` for that session ID with `--session-id <uuid>`,
-    `--model fake/alpha`, `--thinking medium`, `"cwd": "$REPO"` (the chosen folder), and the run's
-    `--prompt-template` / `--skill` dirs under `$RUN/db/`, then one
-    `{"command":"prompt","text":"hello verify","sessionId":"<uuid>"}`:
-    `rg '"command":"(start|prompt)"' "$AUDIT" | rg -v '"probe"'`.
-- `reload`
-  - Action: `ab reload; ab wait --text "echo: hello verify"`
-  - Result: same URL and transcript. `rg -c '"command":"prompt"' "$AUDIT"` is still 1.
 - `draft-navigation` (before sending)
   - Action: `ab open "$WEB_URL/new"; ab wait --text 'What should we work on?';
     ab fill '[aria-label="First message"]' 'retained draft';
@@ -190,11 +105,6 @@ project and reload on its own scratch instance, with its own folders and models 
 
 ## Gotchas
 
-- Fake Pi writes no Pi history, so a session started on it is empty after a backend restart.
-- The Directory combobox reads "Directory" when no folder is chosen yet (an `--empty`
-  launch, an empty project's home); on the seed it already reads `repo`.
-- Count only non-`probe` audit entries: Piano starts a `probe` Pi for the composer's model and
-  command lists.
 - The one-folder seed does not prove fallback from a missing remembered root to another folder,
   or a project home's fallback to an older member's usable folder. Those branches need multiple
   registered scratch folders and removal of only a run-owned root. `test/Client.test.ts` covers

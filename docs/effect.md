@@ -8,13 +8,9 @@ Keep Effect packages on aligned versions, and verify lockfile upgrades.
 
 ## Writing Effect code
 
-First read `node_modules/effect/AGENTS.md`: it is the installed version's own
-guide, so prefer it to web docs or memory. For idioms, read the installed source and examples in
-`node_modules/effect/{src,ai-docs/src}` and `node_modules/@effect/platform-node/{src,ai-docs}`
-(child processes: `ai-docs/src/60_child-process`); reference only, import from the packages. Write
-a named or service-method effectful function as `Effect.fn("Module.name")(function* …)`, or
-`Effect.fnUntraced` on per-event hot paths, not as an arrow returning `Effect.gen`; keep
-`Effect.gen` for inline programs and callbacks. Annotate a return type with `Effect.fn.Return<A, E>`.
+First read `node_modules/effect/AGENTS.md`, the installed version's own guide; prefer it and the
+installed examples in `node_modules/effect/ai-docs/src` to web docs or memory. Name a traced
+function `Effect.fn("Module.name")`; use `Effect.fnUntraced` on per-event hot paths.
 
 ## Gotchas
 
