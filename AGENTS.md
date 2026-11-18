@@ -65,8 +65,8 @@ issue link when known, without inventing one. Judge a comment by necessity and a
 no fixed marker is required, and labeling narration a workaround does not justify it.
 
 Preserve required legal notices and functional tooling directives. Give lint/type suppressions a
-truthful, concise reason. Keep module overviews, API explanations and test narration in the owning
-docs rather than source comments. Leave upstream/vendor comments intact.
+truthful, concise reason. Let names, types and tests carry module overviews, API explanations and
+test narration; what they cannot say follows [Docs](#docs). Leave upstream/vendor comments intact.
 
 ## Docs
 
