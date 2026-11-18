@@ -397,6 +397,30 @@ await run(
         assert.equal(await page.evaluate("location.pathname"), firstPeerRoute);
         await page.press("Escape");
         await page.until("!document.querySelector('[cmdk-input]')");
+        await page.ab("click", "main header [data-session-menu]");
+        await page.until(`!!document.querySelector('[role="menu"]')`);
+        assert.equal(
+          await page.evaluate(
+            `!!document.activeElement?.closest('input, textarea, select, form, [role="textbox"], [contenteditable]')`,
+          ),
+          false,
+          "session menu focus is not a text field",
+        );
+        const machineKeyBehindMenu = await page.evaluate(`(() => {
+          const event = new KeyboardEvent('keydown', {
+            key: '3', metaKey: true, bubbles: true, cancelable: true,
+          });
+          document.body.dispatchEvent(event);
+          return event.defaultPrevented;
+        })()`);
+        await delay(300);
+        assert.deepEqual(
+          [machineKeyBehindMenu, await page.evaluate("location.pathname")],
+          [false, firstPeerRoute],
+          "an open menu keeps Cmd+3 from switching machines behind it",
+        );
+        await page.press("Escape");
+        await page.until(`!document.querySelector('[role="menu"]')`);
         await page.ab("focus", composer);
         await page.capture("3c-before-machine-shortcut");
         await page.press("Meta+3");

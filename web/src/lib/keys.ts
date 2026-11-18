@@ -13,16 +13,24 @@ export const isImeKey = (e: ImeFields | { nativeEvent: ImeFields }) => {
   return key.isComposing || key.keyCode === 229;
 };
 
-export const ownsTextInput = (el: EventTarget | null) =>
+const ownsTextInput = (el: EventTarget | null) =>
   el instanceof HTMLElement &&
   (el.isContentEditable ||
     /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) ||
     !!el.closest('form, [role="textbox"]'));
 
-export const overlayOpen = () =>
+const overlayOpen = () =>
   !!document.querySelector(
     '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [cmdk-root]',
   );
+
+export const shortcutBlocked = (
+  target: EventTarget | null,
+  { composer }: { composer?: string } = {},
+) =>
+  overlayOpen() ||
+  (!(composer && target instanceof HTMLTextAreaElement && target.closest(composer)) &&
+    ownsTextInput(target));
 
 const MODIFIERS = new Set(["Alt", "AltGraph", "Control", "Meta", "Shift"]);
 

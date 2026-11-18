@@ -1,13 +1,13 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import type { Client } from "./client.ts";
-import { overlayOpen, ownsTextInput, sessionNavigationKey } from "./keys.ts";
+import { sessionNavigationKey, shortcutBlocked } from "./keys.ts";
 import type { Navigation } from "./navigation.ts";
 import { adjacentSidebarSession, type SidebarList } from "./sidebarList.ts";
 
+const SESSION_COMPOSER = '[data-slot="session-composer"]';
+
 const sessionComposer = (target: EventTarget | null) =>
-  target instanceof HTMLTextAreaElement && target.closest('[data-slot="session-composer"]')
-    ? target
-    : null;
+  target instanceof HTMLTextAreaElement && target.closest(SESSION_COMPOSER) ? target : null;
 
 export function useSidebarSessionNavigation(
   list: SidebarList,
@@ -38,11 +38,9 @@ export function useSidebarSessionNavigation(
       if (key === "modifier") return;
       if (!key) editing.current = null;
       if (!key || navigation.getState().settings || navigation.getState().palette) return;
-      if (overlayOpen()) return;
-      const target = event.target;
-      const composer = sessionComposer(target);
-      if (!composer && ownsTextInput(target)) return;
+      if (shortcutBlocked(event.target, { composer: SESSION_COMPOSER })) return;
       event.preventDefault();
+      const composer = sessionComposer(event.target);
       const state = client.getState();
       const next = adjacentSidebarSession(list, state.session ?? state.selecting, key);
       if (next) {
