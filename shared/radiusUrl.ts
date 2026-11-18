@@ -1,4 +1,5 @@
 const RADIUS_HOSTS = ["radius.pi.dev", "radius.earendil.com"];
+export const RADIUS_MCP_URL = "https://radius.pi.dev/mcp";
 
 export function isRadiusUrl(value: string, { query = false }: { query?: boolean } = {}): boolean {
   let url: URL;
