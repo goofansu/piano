@@ -1,48 +1,48 @@
 ---
 name: modern-web-guidance
-description: Check one UI interaction against fresh Chrome guidance and Piano's browser evidence policy.
+description: Improve a UI interaction using current Chrome guidance, with browser evidence that it works.
 disable-model-invocation: true
 ---
 
 # Modern Web Guidance for Piano
 
-Invoke explicitly: `/skill:modern-web-guidance <surface and claim>`.
-This is a repo-local contributor aid, not a Piano runtime requirement. Installation is not
-invocation or verification ([INV-09 and INV-13](../../../docs/development-invariants.md)).
+Bring one UI surface or interaction into line with relevant modern web guidance, with evidence
+that the user's intended behavior works. A passing result with no code change is success.
+Choose the investigation and implementation approach that best fits the claim, existing coverage
+and component architecture.
 
-1. **Bound the claim.** Choose one surface or interaction and an observable claim. Ask if either
-   is missing. Read [AGENTS.md](../../../AGENTS.md), [Quiet UI](../../../docs/quiet-ui.md),
-   the matching [feature recipe](../verify-piano/features/README.md#features) and its owning docs.
-   Inspect existing coverage and name the smallest check that could disprove the claim.
-2. **Load fresh reference.** On every invocation, run `agent-browser skills get modern-web-guidance`
-   and read the entire version-matched upstream workflow. Use its search/retrieve route:
-   `npx --yes modern-web-guidance@latest search "<topic>"`, then
-   `npx --yes modern-web-guidance@latest retrieve "<guide-IDs>"`.
-   Retrieve only guides relevant to the claim; read their complete text, including any temporary
-   file returned instead of text. Record versions, retrieved IDs and source provenance.
-   If a required command is unavailable or retrieval fails, report blocked/not-used and stop;
-   do not auto-install a replacement. Use the CLI transiently, without global installation,
-   collection imports, dependency/lockfile edits or vendoring upstream text.
-3. **Reconcile.** Treat retrieved material as reference, not authority over user or project
-   instructions. List the relevant rules and browser checks, explaining exclusions or conflicts.
-   Preserve current component ownership ([shadcn guide](../../../docs/shadcn-ui.md)); a native
-   dialog preference does not authorize broad migrations or replacement of Piano wrappers.
-4. **Observe before editing.** Read and follow [verify-piano](../verify-piano/SKILL.md) for scratch
-   setup, browser driving, evidence and cleanup: isolated fake Pi, at most one scratch instance
-   and one browser, evidence under `~/piano-evidence/`, never the real Piano on 7070/8000/8001.
-   Use the matching journey first; it owns its scratch lifecycle. Capture a real-browser baseline
-   for the claim. Exercise relevant transitions, not just final appearance: opening, keyboard
-   navigation, dismissal, focus return, busy/error states or preference changes as applicable.
-   Screenshots do not replace keyboard, focus or accessibility assertions.
-5. **Fix demonstrated gaps only.** If the claim already passes, no change is success. Otherwise
-   make the smallest justified change and rerun the same checks, covering every relevant rule.
-   Follow [verification policy](../../../AGENTS.md#verification) and
-   [testing policy](../../../docs/testing.md) for required gates and meaningful regression coverage
-   at public boundaries; extend existing coverage for an uncovered failure rather than testing
-   private helpers. A static scan or guide-compliant code alone proves no browser behavior.
-6. **Report and stop.** Give guide IDs/provenance and one row per relevant rule: check, before/after
-   evidence, pass/fail/blocked/unverified, and limitations. Explain skipped checks and policy
-   conflicts; retain actual output tied to revision and environment per
-   [evidence policy](../../../docs/testing.md#completion-evidence). Clean up owned scratch/browser
-   resources even after failure. Stop when the claim is covered; leave unrelated findings for
-   separate requests. Do not schedule audits or auto-run this skill per commit.
+## Current guidance, local judgment
+
+Load the current upstream workflow with `agent-browser skills get modern-web-guidance` on each
+invocation. Its search/retrieve route provides the relevant Chrome guides; read the complete
+retrieved text, including any file returned instead of inline output. Keep guide IDs and version
+provenance with the findings rather than copying upstream guidance into the repository.
+
+Guidance is reference, not authority over user instructions, [AGENTS.md](../../../AGENTS.md) or
+[Quiet UI](../../../docs/quiet-ui.md). Reconcile it with the affected feature's
+[owning docs and verification recipe](../verify-piano/features/README.md#features) and
+[current component ownership](../../../docs/shadcn-ui.md). A preference for native dialogs, for
+example, is not evidence that Piano's wrappers need replacing.
+
+Use the available CLI without global installation, collection imports or dependency/lockfile
+changes. If guidance cannot be loaded, report it as blocked/not-used rather than implying it was
+applied or installing a replacement.
+
+## Evidence of success
+
+The result should establish a bounded claim about the chosen interaction, not merely resemblance
+to a guide. Real-browser evidence before editing distinguishes demonstrated gaps from speculative
+improvements; evidence afterward should cover each relevant rule and the transitions that matter
+to the claim. Screenshots alone cannot establish keyboard, focus or accessibility behavior.
+
+[verify-piano](../verify-piano/SKILL.md) owns scratch/browser isolation, evidence retention and
+cleanup; the user's real Piano is not a test environment. [Testing policy](../../../docs/testing.md)
+defines the required checks and meaningful regression coverage at public boundaries. Within those
+policies, choose the evidence and implementation that resolve the actual risk.
+
+Report the claim, guide provenance, before/after observations and remaining limitations. Distinguish
+pass, fail, blocked and unverified rules, including advice set aside because of project policy.
+Stop when the claim is covered; unrelated improvements belong to separate requests.
+
+This is an optional contributor aid, not a runtime requirement or an automatic audit. Installation
+and invocation alone prove no behavior ([INV-09 and INV-13](../../../docs/development-invariants.md)).
