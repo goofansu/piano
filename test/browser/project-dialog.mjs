@@ -15,7 +15,11 @@ export async function projectDialogFocus(page) {
   };
   const opened = async () => {
     await page.until(`!!${dialog}`);
-    assert.deepEqual(await focus(), { tag: "INPUT", name: "Name", inside: true });
+    assert.deepEqual(await focus(), {
+      tag: "INPUT",
+      name: "Name",
+      inside: true,
+    });
     assert.equal(
       await page.evaluate(
         `document.getElementById(${dialog}.getAttribute('aria-labelledby')).textContent`,
@@ -89,4 +93,51 @@ export async function projectDialogFocus(page) {
     } else await page.press("Escape");
     await closed();
   }
+}
+
+export async function commandDialogFocus(page) {
+  const describe = `(() => {
+    const e = document.activeElement;
+    return { tag: e.tagName, label: e === document.body ? '' : e.getAttribute('aria-label') ?? e.textContent.trim().slice(0, 40), sessionMenu: e.hasAttribute('data-session-menu'), projectMenu: e.hasAttribute('data-project-menu') };
+  })()`;
+  const dismiss = async (path, query, option, dialog, expected) => {
+    await page.open(path);
+    await page.until(`!!document.querySelector('main header')?.querySelector('${expected}')`);
+    await page.press("Mod+k");
+    await page.until(`!!document.querySelector('[cmdk-input]')`);
+    await page.ab("keyboard", "inserttext", query);
+    await page.until(
+      `document.querySelector('[cmdk-item][data-selected=true]')?.textContent.trim() === ${JSON.stringify(option)} && document.querySelector('[cmdk-item][data-selected=true]').getAttribute('aria-disabled') !== 'true'`,
+    );
+    await page.press("Enter");
+    await page.until(
+      `document.getElementById(document.querySelector('[role=dialog][data-state=open], [role=alertdialog][data-state=open]')?.getAttribute('aria-labelledby'))?.textContent === ${JSON.stringify(dialog)}`,
+    );
+    await page.press("Escape");
+    await page.until(`!document.querySelector('[role=dialog], [role=alertdialog]')`);
+    const returned = `document.activeElement === document.querySelector('main header ${expected}')`;
+    await page.until(returned).catch(() => {});
+    const active = await page.evaluate(describe);
+    console.log(`After dismissing ${dialog}:`, active);
+    assert.equal(
+      await page.evaluate(
+        `document.activeElement === document.querySelector('main header ${expected}')`,
+      ),
+      true,
+      `Escape from ${dialog} returns focus to ${expected}, not ${JSON.stringify(active)}`,
+    );
+  };
+  const session = "[data-session-menu]";
+  const failures = [];
+  for (const [path, command, dialog, expected] of [
+    ["/s/login-bug", "Rename", "Rename session", session],
+    ["/s/login-bug", "Share", "Share to Radius", session],
+    ["/s/login-bug", "Delete", "Delete session?", session],
+    ["/projects/qa", "Project settings", "Project settings", "[data-project-menu]"],
+  ])
+    await dismiss(path, command, command, dialog, expected).catch((error) => failures.push(error));
+  assert.deepEqual(
+    failures.map((error) => error.message),
+    [],
+  );
 }

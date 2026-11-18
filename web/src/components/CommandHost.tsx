@@ -44,12 +44,12 @@ import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { artifactsMenu } from "@/lib/artifactsMenu";
 import { confirmation, FORM_NOT_SENT } from "@/lib/commandForms";
-import { type Command, type CommandEffects, runCommand } from "@/lib/commands";
+import { type Command, type CommandEffects, type CommandForm, runCommand } from "@/lib/commands";
+import { focusReturn } from "@/lib/focusReturn";
 import { type GlobalCommandContext, globalCommands } from "@/lib/globalCommands";
 import type { SessionLayout } from "@/lib/navigation";
 import { openLink } from "@/lib/openLink";
 import { openPageEditor, pageAvailability } from "@/lib/pageEditor";
-import { pointerLast } from "@/lib/pointerClose";
 import { sessionProjectMenu } from "@/lib/projectCommands";
 import {
   type SessionCommand,
@@ -74,17 +74,13 @@ async function copySessionValue(value: string, label: string) {
   if (await copyText(value, failure)) toast.success(`${label} copied`);
 }
 
-function previewFocusReturn() {
-  const source = document.activeElement as HTMLElement | null;
-  const fallback = document.querySelector<HTMLElement>(
-    source?.closest("[data-slot=session-rail], [role=menu]")
-      ? '[data-slot=session-rail] [aria-label="More preview actions"]'
-      : "main header [data-session-menu]",
-  );
-  return (event: Event) => {
-    event.preventDefault();
-    if (!pointerLast()) (source?.isConnected ? source : fallback)?.focus({ preventScroll: true });
-  };
+const SESSION_MENU = "main header [data-session-menu]";
+
+function formFocusFallback(form: CommandForm) {
+  if (form.kind === "project") return '[data-command="new-project"]';
+  if (form.kind === "project-settings" || form.kind === "delete-project")
+    return "main header [data-project-menu]";
+  return SESSION_MENU;
 }
 
 const ICONS: Record<SessionCommandIcon, LucideIcon> = {
@@ -257,8 +253,7 @@ export function CommandHost({
   const projectSettings = form?.kind === "project-settings";
   const [previewDetails, setPreviewDetails] = useState<PreviewClaim | null>(null);
   const [sharing, setSharing] = useState<ShareTarget | null>(null);
-  const detailsFocus = useRef<((event: Event) => void) | undefined>(undefined);
-  const stopFocus = useRef<((event: Event) => void) | undefined>(undefined);
+  const returnFocus = useRef<((event: Event) => void) | undefined>(undefined);
 
   const effects: CommandEffects = {
     switchMachine: machineScope.switchMachine,
@@ -281,7 +276,7 @@ export function CommandHost({
     setAppearance: setTheme,
     copy: (value, label) => void copySessionValue(value, label),
     openForm: (form) => {
-      stopFocus.current = form.kind === "stop-preview" ? previewFocusReturn() : undefined;
+      returnFocus.current = focusReturn(formFocusFallback(form));
       forms.open(form);
       if (form.kind === "stop-preview") previews?.refresh();
     },
@@ -291,6 +286,7 @@ export function CommandHost({
         toast.error("Could not find this session’s workspace. Refresh the session list.");
         return;
       }
+      returnFocus.current = focusReturn(SESSION_MENU);
       setSharing({
         machineId: machineScope.machine.id,
         machineName: machineScope.machine.name,
@@ -302,7 +298,7 @@ export function CommandHost({
     },
     openUrl: openLink,
     openPreviewDetails: () => {
-      detailsFocus.current = previewFocusReturn();
+      returnFocus.current = focusReturn(SESSION_MENU);
       setPreviewDetails(previewClaim(state) ?? null);
       previews?.refresh();
     },
@@ -334,6 +330,7 @@ export function CommandHost({
           target={sharing}
           close={() => setSharing(null)}
           openProviders={() => openSettings("providers")}
+          onCloseAutoFocus={returnFocus.current}
         />
       )}
       <FormDialog
@@ -345,6 +342,7 @@ export function CommandHost({
           event.preventDefault();
           renameInputRef.current?.focus();
         }}
+        onCloseAutoFocus={returnFocus.current}
       >
         <form
           onSubmit={(event) => {
@@ -388,12 +386,12 @@ export function CommandHost({
         disabled={!answer.allowed}
         cancel={close}
         confirm={forms.submit}
-        onCloseAutoFocus={stopFocus.current}
+        onCloseAutoFocus={returnFocus.current}
       />
       <PreviewDetailsDialog
         claim={previewDetails}
         close={() => setPreviewDetails(null)}
-        onCloseAutoFocus={detailsFocus.current}
+        onCloseAutoFocus={returnFocus.current}
       />
       <ProjectDialogView
         open={!!project}
@@ -403,6 +401,7 @@ export function CommandHost({
         allowed={answer.allowed}
         submit={forms.submit}
         close={close}
+        onCloseAutoFocus={returnFocus.current}
       />
       <ProjectSettingsDialog
         open={projectSettings}
@@ -412,6 +411,7 @@ export function CommandHost({
         allowed={answer.allowed}
         submit={forms.submit}
         close={close}
+        onCloseAutoFocus={returnFocus.current}
       />
     </CommandsContext.Provider>
   );

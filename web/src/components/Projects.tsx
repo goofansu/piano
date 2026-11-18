@@ -107,6 +107,7 @@ export function ProjectCommandsMenu({
           trailing={trailing}
           className={cn(trailing && "-mr-(--glyph-pad)")}
           aria-label={`Project menu for ${project.name}`}
+          data-project-menu
         >
           <MoreHorizontalIcon />
         </PianoButton>
@@ -223,6 +224,7 @@ export function ProjectDialogView({
   allowed,
   submit,
   close,
+  onCloseAutoFocus,
 }: {
   open: boolean;
   dialog: ProjectDialog | undefined;
@@ -231,41 +233,21 @@ export function ProjectDialogView({
   allowed: boolean;
   submit: () => void;
   close: () => void;
+  onCloseAutoFocus?: (event: Event) => void;
 }) {
   const id = useId();
   const nameInput = useRef<HTMLInputElement>(null);
-  const returnFocus = useRef<HTMLElement | null>(null);
-  const cancelled = useRef(false);
-  const cancel = () => {
-    cancelled.current = true;
-    close();
-  };
   return (
     <FormDialog
       open={open}
-      close={cancel}
+      close={close}
       className="sm:max-w-xl"
       aria-describedby={undefined}
       onOpenAutoFocus={(event) => {
         event.preventDefault();
-        cancelled.current = false;
-        returnFocus.current =
-          document.activeElement instanceof HTMLElement && document.activeElement !== document.body
-            ? document.activeElement
-            : null;
         nameInput.current?.focus();
       }}
-      onCloseAutoFocus={(event) => {
-        if (!cancelled.current) return;
-        // Radix has no DialogTrigger here; a dismissed palette also loses its invoking row.
-        event.preventDefault();
-        const source = returnFocus.current;
-        const target =
-          source?.isConnected && source.checkVisibility()
-            ? source
-            : document.querySelector<HTMLElement>('[data-command="new-project"]');
-        target?.focus({ preventScroll: true });
-      }}
+      onCloseAutoFocus={onCloseAutoFocus}
     >
       <form
         className="flex flex-col gap-4"
@@ -279,7 +261,7 @@ export function ProjectDialogView({
         </DialogHeader>
         <ProjectFields id={id} draft={draft} setDraft={setDraft} nameRef={nameInput} />
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={cancel}>
+          <Button type="button" variant="outline" onClick={close}>
             Cancel
           </Button>
           <Button type="submit" disabled={!allowed}>
