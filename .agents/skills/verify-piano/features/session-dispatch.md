@@ -5,7 +5,7 @@
 The structured-input (`--json`) path is covered by
 `node test/browser/start-session.mjs <evidence-directory>`.
 
-Preconditions for the manual checks: a seeded launch; `echo "dispatch hello" > "$RUN/prompt.txt"`;
+Preconditions for the manual checks: a seeded launch; `printf 'dispatch hello' > "$RUN/prompt.txt"`;
 `mkdir -p "$EVIDENCE/session-dispatch"`.
 
 - `start`
@@ -21,6 +21,13 @@ Preconditions for the manual checks: a seeded launch; `echo "dispatch hello" > "
   - Command: `node scripts/dispatch-session.ts status <sessionId from worktree.json>`
   - Result: once the reply finishes, exit 0; `"disposition": "settled"`, `"lastAnswer": "echo: dispatch hello"`,
     `"changes": {"branch": "verify-wt", "files": 0, "pullRequest": null}`.
+- `status` for an archived session
+  - Preconditions: archive the stopped Loose session through its row menu, as in
+    [Data controls](./data-controls.md#driving-it-with-agent-browser), before continuing it.
+  - Command: `node scripts/dispatch-session.ts status verify-loose; echo $?`.
+  - Result: stderr `Session verify-loose is archived. Unarchive it in Settings → Data controls
+    to read its status.`, exit 2, no status JSON. Save stderr and the exit code too. Unarchive
+    that row in Data controls, then repeat: exit 0 with its saved answer, no user Pi start.
 - `list`
   - Command: `node scripts/dispatch-session.ts list --project verify`
   - Result: one line for `verify-plan` with `"projectId":"verify"`, `"lastAnswer":"Answer 4."`
