@@ -27,16 +27,19 @@ export function ShareSessionDialog({
   target,
   close,
   openProviders,
+  onCloseAutoFocus,
 }: {
   target: ShareTarget;
   close: () => void;
   openProviders: () => void;
+  onCloseAutoFocus?: (event: Event) => void;
 }) {
   return (
     <Dialog open onOpenChange={(next) => !next && close()}>
       <DialogContent
         className="sm:max-w-md"
         showCloseButton={false}
+        onCloseAutoFocus={onCloseAutoFocus}
         onInteractOutside={(event) => event.preventDefault()}
       >
         <DialogHeader>

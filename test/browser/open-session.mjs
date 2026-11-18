@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { setTimeout } from "node:timers/promises";
 import { run } from "./harness.mjs";
 import { checkMessageFidelity } from "./message-fidelity.mjs";
-import { projectDialogFocus } from "./project-dialog.mjs";
+import { commandDialogFocus, projectDialogFocus } from "./project-dialog.mjs";
 import {
   checkTranscriptResizeReadiness,
   measuredTranscriptAtBottom,
@@ -149,6 +149,7 @@ await run(
   },
   async (page) => {
     await projectDialogFocus(page);
+    await commandDialogFocus(page);
     await page.open("/");
     await page.see("Fix the login bug");
     await page.click("button", "Fix the login bug");

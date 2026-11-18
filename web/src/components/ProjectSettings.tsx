@@ -20,6 +20,7 @@ export function ProjectSettingsDialog({
   check,
   submit,
   close,
+  onCloseAutoFocus,
 }: {
   open: boolean;
   draft: ProjectDraft;
@@ -28,10 +29,17 @@ export function ProjectSettingsDialog({
   check: ProjectDraftCheck | undefined;
   submit: () => void;
   close: () => void;
+  onCloseAutoFocus?: (event: Event) => void;
 }) {
   const id = useId();
   return (
-    <FormDialog open={open} close={close} className="sm:max-w-xl" aria-describedby={undefined}>
+    <FormDialog
+      open={open}
+      close={close}
+      className="sm:max-w-xl"
+      aria-describedby={undefined}
+      onCloseAutoFocus={onCloseAutoFocus}
+    >
       <form
         className="flex flex-col gap-4"
         onSubmit={(event) => {
