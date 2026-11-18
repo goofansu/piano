@@ -15,7 +15,7 @@ is always `private`. No stable link, database association, version update, autom
 exists. A failed or interrupted upload may have committed; its toast provides no retry button and
 asks the user to check Radius before starting another share. Dismissing the toast or reloading
 loses the link;
-Radius remains its owner. See [the decision](adr/0005-confirmed-raw-session-sharing.md).
+Radius remains its owner. See [the decision](adr/0006-confirmed-raw-session-sharing.md).
 
 ## Owners and checks
 

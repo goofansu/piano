@@ -1,4 +1,4 @@
-# Confirmed raw session sharing
+# ADR 0006: Confirmed raw session sharing
 
 Session Share uploads the full saved Pi JSONL, unredacted, using the owning machine's Radius
 provider sign-in and an explicit `private` visibility. This deliberately supersedes INV-11's

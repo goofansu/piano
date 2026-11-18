@@ -203,7 +203,7 @@ before browser delivery and exported artifacts, except transcript messages, whic
 ([ADR 0005](adr/0005-faithful-transcript-messages.md)); document that heuristic redaction is not
 containment.
 The explicit raw Session Share action is the narrow exception defined in
-[ADR 0005](adr/0005-confirmed-raw-session-sharing.md): one explicit "Share to Radius" confirmation
+[ADR 0006](adr/0006-confirmed-raw-session-sharing.md): one explicit "Share to Radius" confirmation
 uploads the complete unredacted saved file as a Radius artifact with `private` visibility.
 Do not forward the whole developer credential environment into an untrusted preview.
 
