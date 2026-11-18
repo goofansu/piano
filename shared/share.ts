@@ -11,13 +11,16 @@ export const SessionShare = Schema.Struct({
     Schema.isMaxLength(2048),
     Schema.makeFilter((value) => isRadiusUrl(value)),
   ),
-  visibility: Schema.Literals(["private", "organization", "public"]),
-  expiresAt: Schema.String.check(Schema.makeFilter((value) => Number.isFinite(Date.parse(value)))),
 });
 export type SessionShare = typeof SessionShare.Type;
 
 export const SessionShareResult = Schema.Union([
   Schema.Struct({ status: Schema.Literal("shared"), share: SessionShare }),
+  Schema.Struct({
+    status: Schema.Literal("not-private"),
+    visibility: Schema.Literals(["organization", "public"]),
+    share: SessionShare,
+  }),
   Schema.Struct({ status: Schema.Literal("sign-in-required") }),
 ]);
 export type SessionShareResult = typeof SessionShareResult.Type;
