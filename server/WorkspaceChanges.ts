@@ -103,6 +103,30 @@ async function preview(
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
     const git = checkout.with({ env: { GIT_INDEX_FILE: temporaryIndex } });
+    const diffArgs = [
+      "diff",
+      "--no-ext-diff",
+      "--no-textconv",
+      "--no-renames",
+      "--ignore-submodules=none",
+      "--src-prefix=a/",
+      "--dst-prefix=b/",
+    ];
+    const numstat = async (args: readonly string[]): Promise<ChangeFile[]> =>
+      (await git.records([...diffArgs, ...args, "--numstat", "-z", base, "--", ...pathArgs])).map(
+        (row) => {
+          const match = /^(\d+|-)\t(\d+|-)\t([\s\S]+)$/.exec(row);
+          if (!match)
+            throw new Error("Incomplete or unsupported Git metadata; no file list is available.");
+          return {
+            path: git.safePath(match[3]),
+            binary: match[1] === "-",
+            additions: Number(match[1]) || 0,
+            deletions: Number(match[2]) || 0,
+          };
+        },
+      );
+    const indexed = scope === "uncommitted" ? await numstat(["--cached"]) : [];
     const untracked = (
       await git.records(["ls-files", "--others", "--exclude-standard", "-z", "--", ...pathArgs])
     ).map(git.safePath);
@@ -117,28 +141,12 @@ async function preview(
         ],
         { input: Buffer.from(`${untracked.join("\0")}\0`) },
       );
-    const diffArgs = [
-      "diff",
-      "--no-ext-diff",
-      "--no-textconv",
-      "--no-renames",
-      "--ignore-submodules=none",
-      "--src-prefix=a/",
-      "--dst-prefix=b/",
-    ];
-    const files: ChangeFile[] = (
-      await git.records([...diffArgs, "--numstat", "-z", base, "--", ...pathArgs])
-    ).map((row) => {
-      const match = /^(\d+|-)\t(\d+|-)\t([\s\S]+)$/.exec(row);
-      if (!match)
-        throw new Error("Incomplete or unsupported Git metadata; no file list is available.");
-      return {
-        path: git.safePath(match[3]),
-        binary: match[1] === "-",
-        additions: Number(match[1]) || 0,
-        deletions: Number(match[2]) || 0,
-      };
-    });
+    const working = await numstat([]);
+    const listed = new Set(working.map((file) => file.path));
+    const staged = indexed
+      .filter((file) => !listed.has(file.path))
+      .map((file) => ({ ...file, staged: true as const }));
+    const files: ChangeFile[] = [...working, ...staged];
     const local = await localWork(checkout, comparisons);
     if (!patch)
       return {
@@ -151,10 +159,26 @@ async function preview(
         local,
         files,
       };
-    const excerpt = await git.excerpt(
-      [...diffArgs, "--patch", base, "--", ...pathArgs],
-      path === undefined ? CHANGES_INITIAL_PATCH_BYTES : CHANGES_FILE_PATCH_BYTES,
-    );
+    const limit = path === undefined ? CHANGES_INITIAL_PATCH_BYTES : CHANGES_FILE_PATCH_BYTES;
+    let excerpt = await git.excerpt([...diffArgs, "--patch", base, "--", ...pathArgs], limit);
+    if (staged.length && !excerpt.truncated) {
+      const rest = limit - Buffer.byteLength(excerpt.text);
+      const index =
+        rest > 0
+          ? await git.excerpt(
+              [
+                ...diffArgs,
+                "--cached",
+                "--patch",
+                base,
+                "--",
+                ...staged.map((file) => `:(top,literal)${file.path}`),
+              ],
+              rest,
+            )
+          : { text: "", truncated: true };
+      excerpt = { text: excerpt.text + index.text, truncated: index.truncated };
+    }
     return {
       status: "ready",
       head,
@@ -184,9 +208,8 @@ const bounded = (observation: Observation): Observation =>
       };
 
 async function localWork(checkout: Checkout, comparisons: Comparisons): Promise<LocalWork> {
-  const untracked = await checkout.records(["ls-files", "--others", "--exclude-standard", "-z"]);
-  const uncommitted =
-    untracked.length > 0 ||
+  const base = comparisons.of("uncommitted").comparison.base;
+  const differs = async (cached: readonly string[]) =>
     (
       await checkout.run(
         [
@@ -195,12 +218,15 @@ async function localWork(checkout: Checkout, comparisons: Comparisons): Promise<
           "--no-textconv",
           "--ignore-submodules=none",
           "--quiet",
-          comparisons.of("uncommitted").comparison.base,
+          ...cached,
+          base,
           "--",
         ],
         { okCodes: [0, 1] },
       )
     ).code === 1;
+  const untracked = await checkout.records(["ls-files", "--others", "--exclude-standard", "-z"]);
+  const uncommitted = untracked.length > 0 || (await differs([])) || (await differs(["--cached"]));
   return { commitsNotPushed: await commitsNotPushed(checkout, comparisons), uncommitted };
 }
 

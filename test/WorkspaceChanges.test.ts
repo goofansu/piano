@@ -524,6 +524,45 @@ test("a merge conflict leaves the scope unavailable, keeping the scopes and loca
   assert.equal(ready(await preview("b")).files.length, 0);
 });
 
+test("live changes: a staged edit whose working copy matches HEAD stays listed with its staged patch until the index is clean", async (t) => {
+  const { repo, git, preview } = fixture(t);
+  writeFileSync(join(repo, "notes.txt"), "base\n");
+  writeFileSync(join(repo, "other.txt"), "base\n");
+  git("add", ".");
+  git("commit", "-qm", "base");
+  writeFileSync(join(repo, "notes.txt"), "staged\n");
+  git("add", "notes.txt");
+  writeFileSync(join(repo, "notes.txt"), "base\n");
+  writeFileSync(join(repo, "other.txt"), "unstaged\n");
+  assert.equal(git("status", "--porcelain"), "MM notes.txt\n M other.txt\n");
+  const index = readFileSync(join(repo, ".git/index"));
+
+  const listed = ready(await preview());
+  assert.deepEqual(listed.files, [
+    { path: "other.txt", additions: 1, deletions: 1, binary: false },
+    { path: "notes.txt", additions: 1, deletions: 1, binary: false, staged: true },
+  ]);
+  assert.deepEqual(listed.local, { commitsNotPushed: null, uncommitted: true });
+  const patches = parseUnifiedDiff(listed.diff);
+  assert.deepEqual(
+    patches.map((f) => f.path),
+    ["other.txt", "notes.txt"],
+  );
+  assert.match(patches[1]!.raw, /-base\n\+staged/);
+  const file = ready(await preview("notes.txt"));
+  assert.deepEqual(file.files, [listed.files[1]]);
+  assert.match(file.diff, /-base\n\+staged/);
+  assert.deepEqual(readFileSync(join(repo, ".git/index")), index);
+
+  writeFileSync(join(repo, "other.txt"), "base\n");
+  assert.equal(ready(await preview()).local.uncommitted, true, "the index is still dirty");
+  git("restore", "--staged", "notes.txt");
+  const clean = ready(await preview());
+  assert.deepEqual(clean.files, []);
+  assert.equal(clean.diff, "");
+  assert.equal(clean.local.uncommitted, false);
+});
+
 test("local work: commits not pushed count against the branch's upstream, not a same-named remote branch", async (t) => {
   const { git, preview } = fixture(t);
   git("switch", "-qc", "main");
