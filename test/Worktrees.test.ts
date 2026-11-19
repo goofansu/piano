@@ -17,13 +17,17 @@ import { NodeServices } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
 import { PianoCoreLive } from "../server/PianoServices.ts";
 import { Registry, RegistryDatabasePath } from "../server/Registry.ts";
+import { SessionChanges, SessionChangesLive } from "../server/SessionChanges.ts";
 import { SidebarView } from "../server/SidebarView.ts";
+import { WorkspaceChangesLive } from "../server/WorkspaceChanges.ts";
+import { WorkspaceCommands } from "../server/WorkspaceCommands.ts";
 import {
   checkoutHint,
   createWorktree,
   listWorktrees,
   WorktrunkCommand,
 } from "../server/Worktrees.ts";
+import type { WorktreeResult } from "../shared/wire.ts";
 import { forkWorktree } from "./fixtures/forkWorktree.ts";
 
 const git = (cwd: string, ...args: string[]) =>
@@ -554,5 +558,143 @@ console.log(JSON.stringify({action:'created',branch:'feature',path:${JSON.string
       Object.keys(inherited).flatMap((key) => (key in env ? [[key, env[key]]] : [])),
     ),
     { PIANO_INHERITED_MARKER: "kept" },
+  );
+});
+
+test("INV-06: recreating a worktree at its old path from another base records the new base for Branch Changes", async (t) => {
+  const { root, repo } = fixture(t),
+    cli = join(root, "wt"),
+    home = join(root, "home");
+  mkdirSync(home);
+  const wtPath = execFileSync("which", ["wt"], { encoding: "utf8" }).trim();
+  const isolated = {
+    HOME: home,
+    XDG_CONFIG_HOME: join(root, "config"),
+    XDG_CACHE_HOME: join(root, "cache"),
+    XDG_STATE_HOME: join(root, "state"),
+    WORKTRUNK_CONFIG_PATH: join(root, "config", "worktrunk", "config.toml"),
+  };
+  writeFileSync(
+    cli,
+    `#!${process.execPath}\nimport {spawnSync} from 'node:child_process';const r=spawnSync(${JSON.stringify(wtPath)},process.argv.slice(2),{stdio:'inherit',env:{...process.env,...${JSON.stringify(isolated)}}});process.exit(r.status??1);\n`,
+    { mode: 0o755 },
+  );
+  const commit = (cwd: string, message: string) =>
+    git(
+      cwd,
+      "-c",
+      "user.name=Test",
+      "-c",
+      "user.email=test@example.invalid",
+      "commit",
+      "-qm",
+      message,
+    );
+  git(repo, "checkout", "--quiet", "-b", "release");
+  writeFileSync(join(repo, "release-only.txt"), "release\n");
+  git(repo, "add", ".");
+  commit(repo, "release");
+  git(repo, "checkout", "--quiet", "main");
+  const setDefault = (branch: string) =>
+    execFileSync(cli, ["-C", repo, "config", "state", "default-branch", "set", branch], {
+      stdio: "pipe",
+    });
+
+  const layer = SessionChangesLive.pipe(
+    Layer.provideMerge(WorkspaceChangesLive),
+    Layer.provideMerge(PianoCoreLive({ idleMs: 0 })),
+    Layer.provide(NodeServices.layer),
+  );
+  const run = <A, E>(work: Effect.Effect<A, E, Layer.Success<typeof layer>>) =>
+    Effect.runPromise(
+      work.pipe(
+        Effect.scoped,
+        Effect.provide(layer),
+        Effect.provideService(RegistryDatabasePath, join(root, "registry.db")),
+        Effect.provideService(WorktrunkCommand, cli),
+      ),
+    );
+  const created = (result: WorktreeResult) => {
+    assert.equal(result.status, "ready", JSON.stringify(result));
+    if (result.status !== "ready") throw new Error("Creation failed");
+    return result;
+  };
+  const branchChanges = (cwd: string, sessionId: string) =>
+    Effect.gen(function* () {
+      const data = yield* (yield* Registry).get;
+      const workspace = data.workspaces.find((w) => w.path === cwd)!;
+      const session = data.sessions.find((s) => s.cwd === cwd && s.sessionId === sessionId)!;
+      const { result } = yield* (yield* SessionChanges).read(workspace, session, {
+        scope: "branch",
+      });
+      assert.equal(result.status, "ready", JSON.stringify(result));
+      if (result.status !== "ready") throw new Error("Changes failed");
+      return {
+        target: [result.comparison.target?.name, result.comparison.target?.from],
+        files: result.files.map((f) => f.path),
+      };
+    });
+  const recorded = (path: string) =>
+    Effect.map(
+      Effect.flatMap(Registry, (r) => r.get),
+      (d) => d.worktrees.find((w) => w.path === path),
+    );
+
+  const first = await run(
+    Effect.gen(function* () {
+      const commands = yield* WorkspaceCommands;
+      yield* (yield* Registry).addFolder(repo);
+      const first = created(yield* commands.createWorktree(repo, "topic", {}));
+      assert.equal(first.creation?.baseBranch, "main");
+      yield* (yield* Registry).addSession(first.path, "before-recreation");
+      return {
+        path: first.path,
+        workspaceId: (yield* (yield* Registry).get).workspaces.find((w) => w.path === first.path)!
+          .id,
+      };
+    }),
+  );
+  git(repo, "worktree", "remove", "--force", first.path);
+  git(repo, "branch", "-D", "topic");
+  setDefault("release");
+  await run(
+    Effect.gen(function* () {
+      const again = created(yield* (yield* WorkspaceCommands).createWorktree(repo, "topic", {}));
+      assert.equal(again.path, first.path);
+      assert.equal(again.creation?.baseBranch, "release");
+    }),
+  );
+  setDefault("main");
+
+  await run(
+    Effect.gen(function* () {
+      const registry = yield* Registry;
+      yield* registry.addSession(first.path, "fresh");
+      assert.deepEqual(yield* branchChanges(first.path, "fresh"), {
+        target: ["release", "worktree"],
+        files: [],
+      });
+      assert.deepEqual(yield* recorded(first.path), {
+        folder: repo,
+        path: first.path,
+        branch: "topic",
+        baseBranch: "release",
+      });
+
+      const commands = yield* WorkspaceCommands;
+      assert.equal((yield* commands.addWorktree(repo, first.path)).status, "ready");
+      yield* (yield* SidebarView).fresh;
+      assert.equal((yield* recorded(first.path))?.baseBranch, "release");
+      assert.deepEqual((yield* branchChanges(first.path, "fresh")).target, ["release", "worktree"]);
+
+      const data = yield* registry.get;
+      assert.equal(data.workspaces.find((w) => w.path === first.path)?.id, first.workspaceId);
+      const old = data.sessions.find((s) => s.sessionId === "before-recreation");
+      assert.equal(old?.cwd, first.path);
+      assert.deepEqual(yield* branchChanges(first.path, "before-recreation"), {
+        target: ["release", "worktree"],
+        files: [],
+      });
+    }),
   );
 });

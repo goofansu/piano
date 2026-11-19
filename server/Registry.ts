@@ -299,6 +299,7 @@ export class Registry extends Context.Service<
     readonly addFolder: (path: string) => Effect.Effect<string, RegistryError>;
     readonly removeFolder: (path: string) => Effect.Effect<void, RegistryError>;
     readonly addWorktree: (entry: WorktreeEntry) => Effect.Effect<void, RegistryError>;
+    readonly recordCreatedWorktree: (entry: WorktreeEntry) => Effect.Effect<void, RegistryError>;
     readonly observeWorktreeBranches: (
       observed: ReadonlyArray<{ readonly path: string; readonly branch: string }>,
     ) => Effect.Effect<void, RegistryError>;
@@ -621,6 +622,12 @@ export const RegistryLive = Layer.effect(
         update((d) =>
           d.worktrees.some((w) => w.path === entry.path)
             ? d
+            : { ...d, worktrees: [...d.worktrees, entry] },
+        ),
+      recordCreatedWorktree: (entry) =>
+        update((d) =>
+          d.worktrees.some((w) => w.path === entry.path)
+            ? { ...d, worktrees: d.worktrees.map((w) => (w.path === entry.path ? entry : w)) }
             : { ...d, worktrees: [...d.worktrees, entry] },
         ),
       observeWorktreeBranches: Effect.fn("Registry.observeWorktreeBranches")(function* (observed) {

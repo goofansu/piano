@@ -150,7 +150,13 @@ else{const r=readFileSync(${JSON.stringify(reply)},'utf8');if(r==='fail'){consol
         const commands = Context.get(
           yield* Layer.build(
             Layer.fresh(WorkspaceCommandsLive.pipe(Layer.provide(FolderWorktreesLive))),
-          ).pipe(Effect.provideService(Registry, { ...registry, addWorktree: () => record })),
+          ).pipe(
+            Effect.provideService(Registry, {
+              ...registry,
+              addWorktree: () => record,
+              recordCreatedWorktree: () => record,
+            }),
+          ),
           WorkspaceCommands,
         );
         const attempts = {

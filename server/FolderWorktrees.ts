@@ -34,7 +34,7 @@ export const FolderWorktreesLive = Layer.effect(
           .pipe(Effect.mapError((e) => new WorktreeError({ detail: e.detail })));
         const created = yield* createWorktree(folder, branch.trim(), { hooks: options.hooks });
         yield* registry
-          .addWorktree({
+          .recordCreatedWorktree({
             folder,
             path: created.path,
             branch: created.branch,
