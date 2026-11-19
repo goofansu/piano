@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { Effect, Layer } from "effect";
 import { Registry } from "../server/Registry.ts";
 import { SessionShareAuth } from "../server/SessionSharing.ts";
-import { SESSION_SHARE_MAX_BYTES, SHARE_NOT_SENT, SHARE_UNCONFIRMED } from "../shared/share.ts";
+import { SHARE_NOT_SENT, SHARE_UNCONFIRMED } from "../shared/share.ts";
 import { RadiusHttp, radiusCanary } from "./fixtures/RadiusHttp.ts";
 import { startRouter } from "./fixtures/router.ts";
 
@@ -109,7 +109,7 @@ test("Share uploads the registered saved file once, with owner auth and private 
     for (const invalid of [
       content + '{"type":',
       content.replace(`"id":"${id}"`, '"id":"another"'),
-      content + " ".repeat(SESSION_SHARE_MAX_BYTES),
+      content + " ".repeat(25 * 1024 * 1024),
       Buffer.concat([Buffer.from(content), Buffer.from([0xff])]),
     ]) {
       await writeFile(file, invalid);
@@ -122,6 +122,10 @@ test("Share uploads the registered saved file once, with owner auth and private 
     assert.equal((await share()).status, 409);
     assert.equal(authReads, reads);
     assert.equal(http.writes.length, before);
+    const full = content + " ".repeat(25 * 1024 * 1024 - Buffer.byteLength(content));
+    await writeFile(file, full);
+    assert.equal((await share()).status, 200, "a saved session of exactly 25 MiB is shared");
+    assert.equal(http.writes.at(-1)?.args.content, full);
     await writeFile(file, content);
   });
   await t.test(

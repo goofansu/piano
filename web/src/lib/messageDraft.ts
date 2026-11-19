@@ -4,6 +4,7 @@ import {
   base64Bytes,
   IMAGE_TYPE_LIST,
   imageType,
+  MAX_ATTACHMENT_NAME_LENGTH,
   MAX_IMAGE_BYTES,
   mebibytes,
 } from "../../../shared/attachments.ts";
@@ -253,7 +254,7 @@ export function createDrafts(): Drafts {
         for (const [i, file] of files.entries())
           added.push({
             kind: "image",
-            name: cutText(file.name, 255),
+            name: cutText(file.name, MAX_ATTACHMENT_NAME_LENGTH),
             mimeType: check.mimeTypes[i],
             data: await encode(file),
           });

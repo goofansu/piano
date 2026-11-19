@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { Schema } from "effect";
 import { imageLabel } from "../shared/attachments.ts";
-import type { Attachment, ServerMessage } from "../shared/wire.ts";
+import { ImageManifest } from "../shared/remoteImages.ts";
+import { Attachment, type ServerMessage } from "../shared/wire.ts";
 import {
   checkImages,
   createDrafts,
@@ -179,6 +181,22 @@ test("an addition the policy refuses leaves the draft's accepted images in place
     [],
     "drafts are per session",
   );
+});
+
+test("an overlong image filename is cut to the 255 code units both attachment schemas accept", async () => {
+  const drafts = createDrafts();
+  const key = sessionDraftKey({ cwd: "/scratch", sessionId: "long-name" });
+  await drafts.addImages(key, [pngFile("n".repeat(300))], encode);
+  const [image] = drafts.get(key).images.items;
+  assert.equal(image.name, "n".repeat(255));
+  const manifest = (name: string) => ({
+    target: { cwd: "/scratch" },
+    images: [{ name, mimeType: "image/png", size: 12 }],
+  });
+  Schema.decodeUnknownSync(Attachment)(image);
+  Schema.decodeUnknownSync(ImageManifest)(manifest(image.name));
+  assert.throws(() => Schema.decodeUnknownSync(Attachment)({ ...image, name: "n".repeat(256) }));
+  assert.throws(() => Schema.decodeUnknownSync(ImageManifest)(manifest("n".repeat(256))));
 });
 
 test("a draft is sendable with visible text or an image, and not while images are being read", () => {

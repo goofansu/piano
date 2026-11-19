@@ -31,6 +31,23 @@ new key is for new, reviewed work, never a retry workaround. A create response t
 returns `unknown` and is not created again. An intent is not confirmation. No local-file
 fallback exists.
 
+## Publishing from a file
+
+`radius_artifact_create` and `radius_artifact_update` take the document either as `content` or as
+`path`, exactly one of them. `path` names a local file, absolute or relative to the session's
+working directory. The extension reads it and publishes its exact text, so a large page does not
+have to be written out by the model or stored in the session history. The file is the staging copy
+only: the result is still the confirmed Radius URL, never the local path.
+
+The file must be a readable, non-empty, valid UTF-8 text file within the [file bound](#file-size).
+Anything else is refused before any request, with a message that does not repeat the path. The
+tool reads any file the Pi process can read, as Pi's own `read` tool does, and the model may not
+have seen its contents; review the file for secrets before publishing.
+
+An `operationKey` is bound to the text that was read. Retrying with the same key re-reads the
+file: unchanged text reconciles as before, and changed text is refused as different content, not
+published.
+
 ## Reading text in chunks
 
 `radius_artifact_view` keeps `content` as a string, but returns only one page. Its optional
@@ -54,8 +71,8 @@ For example, after `{ revision: 2, path: "index.md", nextOffset: 16383, ... }`, 
 ```
 
 Each call downloads the entire selected file into memory before returning the page: no HTTP Range
-support, local file, cache or automatic continuation is assumed. Downloads are capped at **16 MiB**,
-covering the existing 10 MiB Session Share upload cap with headroom, and retain the request's
+support, local file, cache or automatic continuation is assumed. Downloads are capped at **25 MiB**
+(see [File size](#file-size)) and retain the request's
 60-second deadline and cancellation. Repeated pages repeat that download cost. Invalid UTF-8 is
 rejected rather than silently replaced. Read only the pages needed for the task.
 
@@ -66,7 +83,30 @@ budget promises an exact token count. Structured callers receive the same bounde
 separate MCP reply cap remains 4 MiB. Multi-file artifacts without a selected path, empty manifests
 and non-text files still return metadata and
 manifest only, without content or page fields. Transport credentials and signed URLs stay internal.
-Create/update keep their independent **128 KiB publication limit**; Session Share is unchanged.
+
+## File size
+
+One bound covers every Piano function that sends a file to Radius or reads one back:
+`RADIUS_ARTIFACT_FILE_BYTES` in [`shared/radiusArtifacts.ts`](../shared/radiusArtifacts.ts),
+**25 MiB** of UTF-8 bytes per file. It is Radius's documented per-file limit.
+
+Source: <https://radius.pi.dev/v1/openapi.json>, in the description of the **Artifacts** tag under
+"Limits" (search the document for "Each file is limited"):
+
+> Each file is limited to 25 MiB, a revision may contain at most 1000 files, and an artifact may
+> contain at most 100 revisions.
+
+| Function | Over the bound |
+| --- | --- |
+| `radius_artifact_create` / `update` document, from `content` or `path` | Refused before any request; never truncated |
+| `radius_artifact_view` download | Stopped and reported as an error; never truncated |
+| [Session Share](session-sharing.md) saved JSONL | Refused before any upload |
+
+The create/update `content` schema also carries the number as a codepoint length, which is looser
+than the byte check that decides. View page sizes are a separate, model-facing budget. Radius's
+other limits, 1000 files per revision and 100 revisions per artifact, are left to Radius to
+enforce. Piano publishes through Radius's MCP tools with the text inline; that route accepting
+25 MiB is unverified against the live service.
 
 ## Owners and verification
 
@@ -80,7 +120,7 @@ Create/update keep their independent **128 KiB publication limit**; Session Shar
   registered tools using real Pi argument validation, credential resolution and session history,
   plus the real MCP SDK against an isolated HTTP adapter with fake credentials. Run:
   `node --test --import ./test/setup.ts test/RadiusArtifactExtension.test.ts`.
-  It covers exact Unicode reconstruction, pinned continuation while latest advances, 10 MiB reads,
+  It covers exact Unicode reconstruction, pinned continuation while latest advances, 25 MiB reads,
   page/download bounds, EOF, invalid offsets, abort, manifest selection and credential containment.
 - The [Open a session recipe](../.agents/skills/verify-piano/features/open-session.md) covers the
   Artifacts menu's confirmed-publication links. Its fake tool results do not prove chunk reading;

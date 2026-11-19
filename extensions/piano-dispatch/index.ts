@@ -34,6 +34,8 @@ import {
   readStatus,
   startDirectory,
   startSession,
+  WAIT_MAX_MS,
+  WAIT_MIN_MS,
   waitSessions,
   withLinks,
 } from "./SessionDispatch.ts";
@@ -88,8 +90,8 @@ const WaitParameters = obj({
   sessions: arr(Handle, { minItems: 1, maxItems: 32 }),
   timeoutMs: opt(
     int({
-      minimum: 1000,
-      maximum: 60000,
+      minimum: WAIT_MIN_MS,
+      maximum: WAIT_MAX_MS,
       description: "Only for an explicitly bounded observation; omit to wait for completion.",
     }),
   ),

@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer as createHttpServer, type Server } from "node:http";
+import { createConnection } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -515,3 +516,30 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
     }
   });
 }
+
+test("the CLI and the owner admit a 64 KiB preview request and refuse one byte more", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "preview-envelope-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const owner = await PreviewOwner.open({ cwd: root, sessionId: "envelope" }, "envelope");
+  t.after(() => owner.prepareRelease());
+  const unparseable = (bytes: number) => `${"x".repeat(bytes - 1)}\n`;
+  const cli = (bytes: number) =>
+    spawnSync(process.execPath, [new URL("../scripts/preview.ts", import.meta.url).pathname], {
+      input: unparseable(bytes),
+      encoding: "utf8",
+    }).stdout;
+  const sent = (bytes: number) =>
+    new Promise<string>((resolve) => {
+      const socket = createConnection({ path: owner.identity.endpoint });
+      let reply = "";
+      socket.setEncoding("utf8");
+      socket.on("connect", () => socket.write(unparseable(bytes)));
+      socket.on("data", (data) => (reply += data));
+      socket.on("error", () => {});
+      socket.on("close", () => resolve(reply));
+    });
+  assert.doesNotMatch(cli(64 * 1024), /exceeds/, "the CLI reads a request at the limit");
+  assert.deepEqual(JSON.parse(cli(64 * 1024 + 1)), { error: "Preview request exceeds 64 KiB." });
+  assert.match(await sent(64 * 1024), /"error"/, "the owner answers a request at the limit");
+  assert.equal(await sent(64 * 1024 + 1), "", "the owner drops an oversized request unanswered");
+});
