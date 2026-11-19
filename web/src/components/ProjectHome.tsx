@@ -23,8 +23,7 @@ import { ItemDescription } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { timeAgo } from "@/lib/format";
 import { isProjectDone, projectCommands } from "@/lib/projectCommands";
-import { projectHome, stableOrder } from "@/lib/projectHome";
-import type { SessionActivity } from "@/lib/sessionCatalog";
+import { type ProjectHomeCue, projectHome, stableOrder } from "@/lib/projectHome";
 import { useOffers } from "@/lib/useMachine";
 import { useNavigation } from "@/lib/useNavigation";
 import { type AppState, sessionKey } from "@/store";
@@ -39,10 +38,10 @@ const activityCues = {
   working: { tone: "busy", label: "Working" },
   idle: { tone: "ok", label: "Idle" },
   done: { tone: "done", label: "Finished" },
-} as const satisfies Partial<Record<SessionActivity, { tone: StatusTone; label: string }>>;
+} as const satisfies Record<ProjectHomeCue, { tone: StatusTone; label: string }>;
 
-function ActivityCue({ activity }: { activity: SessionActivity }) {
-  if (activity === "off") return null;
+function ActivityCue({ activity }: { activity: ProjectHomeCue | null }) {
+  if (!activity) return null;
   const { tone, label } = activityCues[activity];
   return (
     <span
@@ -196,7 +195,7 @@ export function ProjectHome({
                     }
                   >
                     <ItemDescription className="flex min-w-0 items-center gap-1.5 text-xs">
-                      <ActivityCue activity={s.activity} />
+                      <ActivityCue activity={s.cue} />
                       <SessionDetails folder={s.folder} branch={s.branch} />
                       {s.pullRequest && (
                         <span className="inline-flex shrink-0 items-center gap-1">

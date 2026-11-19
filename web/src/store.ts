@@ -45,6 +45,7 @@ export interface AppState {
   workspaces: Workspace[];
   registryLoaded: boolean;
   hosts: HostInfo[];
+  hostsCurrent: boolean;
   catalogs: Record<string, ModelCatalog>;
   catalogRevision: number;
   trusts: Record<string, ProjectTrust>;
@@ -85,6 +86,7 @@ export const initialState: AppState = {
   workspaces: [],
   registryLoaded: false,
   hosts: [],
+  hostsCurrent: false,
   catalogs: {},
   catalogRevision: 0,
   trusts: {},
@@ -134,6 +136,7 @@ function reduceAction(s: AppState, a: Action): AppState {
         ...s,
         connected: a.connected,
         unreachable: a.connected ? false : (a.lost ?? s.unreachable),
+        hostsCurrent: a.connected && s.connected && s.hostsCurrent,
         selectionId: a.connected ? s.selectionId : null,
         selecting: !a.connected && s.pendingCreate ? null : s.selecting,
         pendingCreate: a.connected ? s.pendingCreate : FirstMessage.connectionLost(s.pendingCreate),
@@ -248,7 +251,7 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
         const k = sessionKey(prev);
         if (now && !now.working && k !== viewing) done.add(k);
       }
-      return { ...s, hosts: [...m.hosts], done: [...done] };
+      return { ...s, hosts: [...m.hosts], hostsCurrent: s.connected, done: [...done] };
     }
     case "models":
       return { ...s, catalogs: { ...s.catalogs, [m.catalog.cwd]: m.catalog } };
