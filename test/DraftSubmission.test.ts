@@ -163,7 +163,7 @@ test("async image preparation preserves newer typing and rejects a captured send
   const key = sessionDraftKey({ cwd: "/scratch", sessionId: "existing" });
   drafts.setText(key, "original");
   other.setText(key, "other peer");
-  const captured = h.client.captureSend();
+  const { send: captured } = h.client.captureSend();
   let finish!: () => void;
   const prepared = new Promise<void>((resolve) => {
     finish = resolve;
@@ -210,7 +210,7 @@ test("failed image preparation restores its draft; uncertain prepared input is n
   );
   assert.equal(drafts.get(key).text, "keep me");
   assert.equal(drafts.get(key).prepareError, "upload refused");
-  const captured = h.client.captureSend();
+  const { send: captured } = h.client.captureSend();
   h.last().throws = true;
   assert.equal(
     await drafts.prepareSubmit(key, async (message) =>
@@ -459,7 +459,7 @@ test("PIN-160: a new-session image send prepared for one project is discarded af
     const done = sender.send(
       {
         machineId: "eng-1",
-        target: { cwd: "/scratch", projectId: "a" },
+        target: { cwd: "/scratch" },
         editor: {
           get attachments() {
             return drafts.get(key).images;
@@ -507,4 +507,70 @@ test("PIN-160: a new-session image send prepared for one project is discarded af
   assert.equal(h.creations()[0].projectId, "a");
   assert.deepEqual(h.creations()[0].preparedImages, { id: "prepared-3" });
   assert.deepEqual(discarded, ["prepared-1", "prepared-2"], "sent images are not discarded");
+});
+
+test("moving the client away from a pending remote image send aborts its upload", async (t) => {
+  const bytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]);
+  type Harness = ReturnType<typeof harness>;
+  const openNew = (h: Harness, projectId: string) =>
+    h.client.dispatch({ type: "open", page: { kind: "new", cwd: "/scratch", projectId } });
+  const moves: Record<string, { newPage?: true; move: (h: Harness) => void }> = {
+    "a project change": { newPage: true, move: (h) => openNew(h, "b") },
+    "a selection change": { move: (h) => h.client.select("/scratch", "other") },
+    "a disconnect": { move: (h) => h.last().events.close(1006) },
+  };
+  for (const [name, { newPage, move }] of Object.entries(moves)) {
+    await t.test(name, async (t) => {
+      const h = harness({ select: !newPage });
+      t.after(h.stop);
+      if (newPage) openNew(h, "a");
+      const drafts = createDrafts();
+      const target = newPage ? { cwd: "/scratch" } : { cwd: "/scratch", sessionId: "existing" };
+      const key = newPage
+        ? NEW_SESSION_DRAFT
+        : sessionDraftKey({ ...target, sessionId: "existing" });
+      drafts.setText(key, "Reply with exactly: X");
+      await drafts.addImages(
+        key,
+        [new File([bytes], "shot.png", { type: "image/png" })],
+        async () => Buffer.from(bytes).toString("base64"),
+      );
+      const uploads: AbortSignal[] = [];
+      const sender = createImageSender({
+        prepare: (_machine, _target, _images, signal) =>
+          new Promise((_resolve, reject) => {
+            uploads.push(signal);
+            signal.addEventListener("abort", () => reject(signal.reason));
+          }),
+        discard: () => {},
+      });
+      const done = sender.send(
+        {
+          machineId: "eng-1",
+          target,
+          editor: {
+            get attachments() {
+              return drafts.get(key).images;
+            },
+            get preparing() {
+              return drafts.get(key).preparing;
+            },
+            submit: (deliver) => drafts.submit(key, deliver),
+            prepareSubmit: (deliver) => drafts.prepareSubmit(key, deliver),
+          },
+          captureSend: h.client.captureSend,
+          choice: { start: {}, consume: () => {} },
+        },
+        (message, inputId, start) => messageCommand("follow-up", message, start, inputId),
+      );
+      assert.equal(uploads.length, 1);
+      assert.equal(uploads[0]!.aborted, false);
+      move(h);
+      assert.equal(uploads[0]!.aborted, true, `${name} aborts the upload, not only the send`);
+      await done;
+      assert.equal(drafts.get(key).text, "Reply with exactly: X", "the unsent text returns");
+      assert.equal(drafts.get(key).images.items.length, 1, "the unsent image returns");
+      assert.equal(h.actions().length, 0);
+    });
+  }
 });

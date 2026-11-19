@@ -278,7 +278,6 @@ export function SessionView({ state, send, captureSend }: Props) {
                 readOnly={readOnly}
                 send={send}
                 captureSend={captureSend}
-                selectionId={state.selectionId}
               />
             </div>
             {railInside && <SessionRail state={state} />}

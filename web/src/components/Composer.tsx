@@ -54,7 +54,6 @@ interface Props {
   readOnly?: SessionNotice;
   send: Client["send"];
   captureSend: Client["captureSend"];
-  selectionId: string | null;
 }
 
 const queueModePreference = createPreference<DeliveryMode>({
@@ -73,7 +72,6 @@ export function Composer({
   readOnly,
   send: sendCommand,
   captureSend,
-  selectionId,
 }: Props) {
   const directoryModels = useModelCatalog(t?.cwd);
   const models = actionsDisabled ? { ...directoryModels, refresh: undefined } : directoryModels;
@@ -100,7 +98,6 @@ export function Composer({
     editor,
     captureSend,
     { cwd: t?.cwd ?? "", sessionId: t?.sessionId },
-    selectionId,
     choice,
   );
   const [queueMode, setQueueMode] = usePreference(queueModePreference);

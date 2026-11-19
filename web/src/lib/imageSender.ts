@@ -17,7 +17,7 @@ export interface ImageSendEditor {
 
 export interface ImageSend {
   machineId: string;
-  target: { cwd: string; sessionId?: string | null; projectId?: string };
+  target: { cwd: string; sessionId?: string | null };
   editor: ImageSendEditor;
   captureSend: Client["captureSend"];
   choice: { start: StartOptions; consume: () => void };
@@ -51,7 +51,7 @@ export function createImageSender({ prepare, discard }: ImageSenderOptions): Ima
       active = null;
     },
     send: async ({ machineId, target, editor, captureSend, choice }, command) => {
-      const send = captureSend();
+      const { send, signal: stale } = captureSend();
       const { start } = choice;
       if (isLocalId(machineId) || !editor.attachments.items.length) {
         if (editor.submit((message, id) => send(command(message, id, start)))) choice.consume();
@@ -60,6 +60,7 @@ export function createImageSender({ prepare, discard }: ImageSenderOptions): Ima
       if (active || editor.preparing) return;
       const controller = new AbortController();
       active = controller;
+      const signal = AbortSignal.any([controller.signal, stale]);
       const consumed = await editor.prepareSubmit(async (message, id) => {
         let reference;
         try {
@@ -69,9 +70,9 @@ export function createImageSender({ prepare, discard }: ImageSenderOptions): Ima
               ? { cwd: target.cwd, sessionId: target.sessionId }
               : { cwd: target.cwd },
             message.attachments,
-            controller.signal,
+            signal,
           );
-          if (controller.signal.aborted) return "not-sent";
+          if (signal.aborted) return "not-sent";
           const prepared = preparedImageCommand(command(message, id, start), reference);
           const disposition = send(prepared, {
             text: message.text,
@@ -83,7 +84,7 @@ export function createImageSender({ prepare, discard }: ImageSenderOptions): Ima
           if (disposition !== "not-sent") reference = undefined;
           return disposition;
         } catch (error) {
-          if (controller.signal.aborted) return "not-sent";
+          if (signal.aborted) return "not-sent";
           throw error;
         } finally {
           if (reference) discard(machineId, reference);

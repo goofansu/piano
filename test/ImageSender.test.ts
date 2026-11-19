@@ -46,10 +46,13 @@ async function harness(disposition: SendDisposition = "sent") {
         machineId: "eng-1",
         target: TARGET,
         editor: editor(KEY),
-        captureSend: () => (command) => {
-          sent.push(command);
-          return disposition;
-        },
+        captureSend: () => ({
+          signal: new AbortController().signal,
+          send: (command) => {
+            sent.push(command);
+            return disposition;
+          },
+        }),
         choice: { start: START, consume: () => consumed++ },
       },
       (message, inputId, start) => messageCommand("follow-up", message, start, inputId),
