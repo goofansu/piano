@@ -284,6 +284,7 @@ function LiveFile({
   return (
     <FileSection
       file={file}
+      staged={metadata.staged}
       open={open}
       onOpenChange={onOpenChange}
       canAsk={!!onAsk}
@@ -296,6 +297,7 @@ function LiveFile({
 
 function FileSection({
   file,
+  staged,
   open,
   onOpenChange,
   canAsk,
@@ -304,6 +306,7 @@ function FileSection({
   retry,
 }: {
   file: DiffFile;
+  staged?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   canAsk: boolean;
@@ -315,6 +318,7 @@ function FileSection({
   const status =
     file.status === "added" ? "new" : file.status === "deleted" ? "deleted" : undefined;
   const description = [
+    staged ? "Staged; the working copy matches HEAD" : undefined,
     ...file.notes,
     large && !open ? `Large change (${lineCount(file)} lines); expand to read it` : undefined,
   ]

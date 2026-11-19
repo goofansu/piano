@@ -422,6 +422,7 @@ export const ChangeFile = Schema.Struct({
   additions: Schema.Number,
   deletions: Schema.Number,
   binary: Schema.Boolean,
+  staged: Schema.optional(Schema.Literal(true)),
 });
 export type ChangeFile = typeof ChangeFile.Type;
 export const ChangesScope = Schema.Literals(["branch", "uncommitted"]);
