@@ -57,6 +57,10 @@ async function harness(signedIn = true) {
     const event = { systemPromptOptions: { sections: {} as Record<string, string> } };
     await before!(event, ctx);
     assert.match(event.systemPromptOptions.sections.radius_artifacts, /never silently fall back/);
+    assert.match(
+      event.systemPromptOptions.sections.radius_artifacts,
+      /long document[^.]*by path[^.]*rather than passing it as content/,
+    );
   }
   await load();
   const http = new RadiusHttp();

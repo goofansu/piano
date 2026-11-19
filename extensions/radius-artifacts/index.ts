@@ -162,7 +162,7 @@ export default function radiusArtifacts(pi: ExtensionAPI) {
   let registered = false;
   pi.on("before_agent_start", (event) => {
     event.systemPromptOptions.sections.radius_artifacts =
-      "Artifact requests mean Radius by default. Local files are staging only unless the user explicitly requests local delivery. Use radius_artifact_create/update/view and return the confirmed Radius URL, visibility and expiration. If these tools are unavailable, ask the user to sign in to Radius and start a new session; never silently fall back to local files. Keep artifact identity and operationKey in the conversation. Unknown is not published: reconcile before any retry and ask the user if unresolved.";
+      "Artifact requests mean Radius by default. Local files are staging only unless the user explicitly requests local delivery. Use radius_artifact_create/update/view and return the confirmed Radius URL, visibility and expiration. Publish a long document, or one already on disk, by path: write it to a local file, in several edits if needed, rather than passing it as content, because a tool call cut off at the output limit is not executed. If these tools are unavailable, ask the user to sign in to Radius and start a new session; never silently fall back to local files. Keep artifact identity and operationKey in the conversation. Unknown is not published: reconcile before any retry and ask the user if unresolved.";
   });
   pi.on("session_start", async (_event, ctx) => {
     if (
