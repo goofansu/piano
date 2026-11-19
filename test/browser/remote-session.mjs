@@ -46,6 +46,7 @@ const composer = '[aria-label="Message"]';
 const queuedText = "queued image, password: hunter22";
 const draft = (page) => page.evaluate(`document.querySelector('${composer}')?.value`);
 const restoreHint = "Pi returns text only, so reattach any images.";
+const textOnly = "Pi returns queued text only. Reattach any images after Edit or Esc.";
 const restoredNotice = "Queued text moved to the draft; reattach any images";
 const describedBy = (page, selector) =>
   page.evaluate(
@@ -751,12 +752,18 @@ await run(
           "",
         );
         await page.capture("5b-image-only-pi-queue");
-        await page.ab("hover", 'button[aria-label="Edit queued message"]');
-        await page.until(
-          `[...document.querySelectorAll('[data-slot="tooltip-content"]')].some(t => t.textContent.includes(${JSON.stringify(restoreHint)}))`,
-        );
-        await page.capture("5b-image-only-edit-guidance-on-hover");
         await page.ab("focus", composer);
+        assert.equal(
+          await page.evaluate(`document.activeElement === document.querySelector('${composer}')`),
+          true,
+        );
+        assert.equal(
+          await describedBy(page, composer),
+          textOnly,
+          "the focused Message field describes the text-only restore before Esc",
+        );
+        await page.see(textOnly);
+        await page.capture("5b-image-only-before-esc-message-focused");
         await page.press("Escape");
         await page.until(`!document.querySelector('[aria-label="Queued messages"]')`);
         assert.equal(await draft(page), "", "an image-only message returns no text");
@@ -765,7 +772,14 @@ await run(
           false,
         );
         await toldToReattach(page);
-        await page.capture("5b-image-only-esc-restored-reattach-notice");
+        assert.equal(
+          await page.evaluate(
+            `document.querySelector('${composer}').hasAttribute('aria-describedby')`,
+          ),
+          false,
+          "the Message field drops the queue description once the queue is gone",
+        );
+        await page.capture("5b-image-only-after-esc-restored-reattach-notice");
         await toastsGone(page);
         const imageInputs = page.remote
           .received()
@@ -902,7 +916,14 @@ await run(
             "the paused upload has not delivered an input to Pi",
           );
           await page.capture("8a-stop-upload-paused");
-          await page.ab("hover", 'button[aria-label="Stop"]');
+          await page.ab("focus", 'button[aria-label="Stop"]');
+          assert.equal(
+            await page.evaluate(
+              `document.activeElement === document.querySelector('button[aria-label="Stop"]') && !!document.querySelector('[aria-label="Queued messages"]')`,
+            ),
+            true,
+            "Stop has keyboard focus while the queue is still present",
+          );
           await page.until(
             `[...document.querySelectorAll('[data-slot="tooltip-content"]')].some(t => t.textContent.includes("Stop and move queued text to the draft. Reattach any images."))`,
           );
@@ -911,8 +932,8 @@ await run(
             /Stop and move queued text to the draft\. Reattach any images\./,
             "Stop's accessible description carries the guidance",
           );
-          await page.capture("8c-stop-guidance-on-hover");
-          await page.click("button", "Stop");
+          await page.capture("8c-stop-guidance-on-keyboard-focus");
+          await page.press("Enter");
           await page.until(`document.querySelector('[aria-label="Send"]') !== null`);
           await call("Fetch.continueRequest", { requestId: heldUpload }).catch(() => {});
         } finally {

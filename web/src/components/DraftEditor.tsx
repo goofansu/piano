@@ -76,6 +76,7 @@ interface Props {
   model: ModelControl;
   onSend: (alt: boolean) => void;
   onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+  describedBy?: string;
   above?: ReactNode;
   delivery?: ReactNode;
   actions: ReactNode;
@@ -98,6 +99,7 @@ export function DraftEditor({
   model,
   onSend,
   onKeyDown,
+  describedBy,
   above,
   actions,
   delivery,
@@ -169,6 +171,7 @@ export function DraftEditor({
         disabled={disabled}
         rows={1}
         aria-label={label}
+        aria-describedby={describedBy}
         className={inputClassName}
         onValueChange={editor.setText}
         onKeyDown={(e) => {

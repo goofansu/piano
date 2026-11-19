@@ -18,6 +18,8 @@ export const STOP: ClientCommand = { _tag: "act", action: { _tag: "stop" } };
 export const RESTORE_QUEUE: ClientCommand = { _tag: "act", action: { _tag: "restore_queue" } };
 export const QUEUE_RESTORE_HINT =
   "Move queued text back to the draft without stopping Pi. Pi returns text only, so reattach any images.";
+export const QUEUE_TEXT_ONLY =
+  "Pi returns queued text only. Reattach any images after Edit or Esc.";
 export const QUEUE_RESTORED_NOTICE = "Queued text moved to the draft; reattach any images";
 
 export const messageCommand = (
