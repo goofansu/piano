@@ -159,7 +159,7 @@ export class RadiusClient {
     const transfer = z
       .object({
         method: z.literal("GET"),
-        url: z.string().refine((value) => isRadiusUrl(value, { query: true })),
+        url: z.string().refine((value) => isRadiusUrl(value, "download")),
         headers: z.record(z.string(), z.string()),
       })
       .safeParse(

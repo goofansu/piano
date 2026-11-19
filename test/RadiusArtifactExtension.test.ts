@@ -650,7 +650,7 @@ test("rejected writes, malformed replies, wrong identity and unsafe URLs never m
   }
 });
 
-test("view trusts only Radius viewing links and download URLs that pass the one Radius URL rule", async () => {
+test("view keeps strict viewing links but accepts root paths and fragments in trusted download URLs", async () => {
   const h = await harness();
   try {
     const created = await h.call("create", document);
@@ -672,17 +672,25 @@ test("view trusts only Radius viewing links and download URLs that pass the one 
     assert.equal(transfers.length, 0, "an untrusted viewing link stops before any download");
     const signed = `https://radius.pi.dev/transfer?id=${created.artifactId}&revision=1&secret=${radiusCanary}`;
     for (const url of [
-      `https://radius.pi.dev/?id=${created.artifactId}&revision=1`,
       `https://radius.pi.dev.evil.example/transfer?id=${created.artifactId}&revision=1`,
-      `${signed}#fragment`,
+      signed.replace("https:", "http:"),
+      signed.replace("https://", "https://user@"),
+      signed.replace("https://", "https://:password@"),
+      signed.replace("radius.pi.dev", "radius.pi.dev:8443"),
     ]) {
-      h.http.unsafeDownload = url;
+      h.http.downloadUrl = url;
       assert.equal((await h.call("view", { artifactId: created.artifactId })).status, "error", url);
     }
-    h.http.unsafeDownload = undefined;
     assert.deepEqual(transfers, [], "an untrusted download URL is never fetched");
-    assert.equal((await h.call("view", { artifactId: created.artifactId })).status, "confirmed");
-    assert.deepEqual(transfers, [signed], "a signed download URL keeps its query");
+    const accepted = [signed, signed.replace("/transfer?", "/?"), `${signed}#fragment`];
+    for (const url of accepted) {
+      h.http.downloadUrl = url;
+      const viewed = await h.call("view", { artifactId: created.artifactId });
+      assert.equal(viewed.status, "confirmed", url);
+      assert.equal(viewed.content, document.content);
+      assert.equal(viewed.url, created.url, "the viewing link is not the transfer URL");
+    }
+    assert.deepEqual(transfers, accepted, "accepted transfer URLs reach the download unchanged");
   } finally {
     h.cleanup();
   }

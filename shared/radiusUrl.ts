@@ -1,7 +1,7 @@
 const RADIUS_HOSTS = ["radius.pi.dev", "radius.earendil.com"];
 export const RADIUS_MCP_URL = "https://radius.pi.dev/mcp";
 
-export function isRadiusUrl(value: string, { query = false }: { query?: boolean } = {}): boolean {
+export function isRadiusUrl(value: string, purpose: "view" | "download" = "view"): boolean {
   let url: URL;
   try {
     url = new URL(value);
@@ -13,9 +13,7 @@ export function isRadiusUrl(value: string, { query = false }: { query?: boolean 
     !url.username &&
     !url.password &&
     !url.port &&
-    (query || !url.search) &&
-    !url.hash &&
-    url.pathname !== "/" &&
+    (purpose === "download" || (!url.search && !url.hash && url.pathname !== "/")) &&
     RADIUS_HOSTS.includes(url.hostname)
   );
 }

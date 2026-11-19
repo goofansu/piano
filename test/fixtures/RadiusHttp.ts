@@ -26,7 +26,7 @@ export class RadiusHttp {
   denied = false;
   wrongIdentity = false;
   unsafeUrl: string | undefined;
-  unsafeDownload: string | undefined;
+  downloadUrl: string | undefined;
   unavailable = false;
   unadvertised = new Set<string>();
   files: { path: string; content_type: string; stored_bytes: number }[] | undefined;
@@ -35,7 +35,7 @@ export class RadiusHttp {
     const url = new URL(String(input));
     assert.equal(url.origin, "https://radius.pi.dev", "no test request may leave the adapter");
     assert.equal(init?.redirect, "error", "credentials must not follow redirects");
-    if (url.pathname === "/transfer") {
+    if (url.pathname === "/transfer" || url.pathname === "/") {
       assert.equal(new Headers(init?.headers).has("authorization"), false);
       assert.equal(url.searchParams.get("secret"), radiusCanary);
       return new Response(
@@ -135,7 +135,7 @@ export class RadiusHttp {
         method: "GET",
         headers: {},
         url:
-          this.unsafeDownload ??
+          this.downloadUrl ??
           `https://radius.pi.dev/transfer?id=${artifact.id}&revision=${version}&secret=${radiusCanary}`,
         expires_at: "2027-01-01T00:00:00Z",
       });
