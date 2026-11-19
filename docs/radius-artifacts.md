@@ -44,6 +44,10 @@ Anything else is refused before any request, with a message that does not repeat
 tool reads any file the Pi process can read, as Pi's own `read` tool does, and the model may not
 have seen its contents; review the file for secrets before publishing.
 
+The session prompt tells the model to publish a long document, or one already on disk, by `path`.
+Pi does not execute a tool call whose response was cut off at the output token limit, so a document
+too long to write inline as `content` publishes nothing and only costs the tokens.
+
 An `operationKey` is bound to the text that was read. Retrying with the same key re-reads the
 file: unchanged text reconciles as before, and changed text is refused as different content, not
 published.
