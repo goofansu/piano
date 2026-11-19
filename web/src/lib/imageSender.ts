@@ -17,7 +17,7 @@ export interface ImageSendEditor {
 
 export interface ImageSend {
   machineId: string;
-  target: { cwd: string; sessionId?: string | null };
+  target: { cwd: string; sessionId?: string | null; projectId?: string };
   editor: ImageSendEditor;
   captureSend: Client["captureSend"];
   choice: { start: StartOptions; consume: () => void };

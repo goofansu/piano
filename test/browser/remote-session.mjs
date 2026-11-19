@@ -172,12 +172,26 @@ await run(
     let onRemote = false;
     let heldUpload;
     const imageRequests = [];
+    const imageTransfers = new Map();
     const surfaceRequests = [];
     try {
       await page.cdp(async (call, onEvent) => {
         onEvent(({ method, params }) => {
           if (method === "Fetch.requestPaused" && params.request.url.endsWith("/api/peer/images"))
             heldUpload = params.requestId;
+          if (
+            method === "Network.requestWillBeSent" &&
+            /\/api\/peer\/images(\/cancel)?$/.test(new URL(params.request.url).pathname)
+          )
+            imageTransfers.set(params.requestId, {
+              path: new URL(params.request.url).pathname,
+            });
+          if (imageTransfers.has(params.requestId)) {
+            const transfer = imageTransfers.get(params.requestId);
+            if (method === "Network.responseReceived") transfer.status = params.response.status;
+            if (method === "Network.loadingFailed")
+              Object.assign(transfer, { failed: params.errorText, canceled: !!params.canceled });
+          }
           if (
             method === "Network.requestWillBeSent" &&
             params.request.url.includes("/api/peer/image")
@@ -1230,6 +1244,177 @@ await run(
           "the peer lists the project with its one session",
         );
         assert.deepEqual(page.prompts(), [], "local Pi receives no project session");
+
+        const projectButton = 'button[aria-label="Project"]';
+        const projectClickable = () =>
+          page.until(
+            `(() => { const b = document.querySelector('${projectButton}'); if (!b || document.querySelector('[data-slot="dialog-overlay"], [role="dialog"]')) return false; const r = b.getBoundingClientRect(); const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return !!hit && b.contains(hit); })()`,
+          );
+        const pickProject = async (name) => {
+          await projectClickable();
+          await page.ab("click", projectButton);
+          await page.until(`!!document.querySelector('[aria-label="Choose a project"]')`);
+          await page.click("menuitem", name);
+          await page.until(`!document.querySelector('[aria-label="Choose a project"]')`);
+          await page.until(
+            `document.querySelector('${projectButton}')?.textContent.trim() === ${JSON.stringify(name)}`,
+          );
+        };
+        await page.click("button", "New session");
+        await remoteNewPage(page);
+        await projectClickable();
+        await page.ab("click", projectButton);
+        await page.click("menuitem", "New project");
+        await page.ab("find", "label", "Name", "fill", "Peer project B");
+        await page.click("button", "Create project");
+        await page.see("Project created");
+        await page.until(`/^\\/m\\/eng-1\\/projects\\/[^/]+\\/new$/.test(location.pathname)`);
+        await page.until(
+          `document.querySelector('${projectButton}')?.textContent.trim() === 'Peer project B'`,
+        );
+        const projectB = decodeURIComponent(
+          (await page.evaluate(`location.pathname`)).split("/").at(-2),
+        );
+        assert.notEqual(projectB, projectId);
+        const firstMessage = '[aria-label="First message"]';
+        const creationsSent = () =>
+          frames.filter(
+            ({ direction, message }) => direction === "sent" && message._tag === "create_session",
+          );
+        const projectSwitch = [];
+        const heldProjectSend = async (name, text, capture, during) => {
+          await pickProject("Peer project");
+          await page.until(`location.pathname === '/m/eng-1/projects/${projectId}/new'`);
+          await ready(page);
+          await imageEvent(page, "paste", name);
+          await page.ab("fill", firstMessage, text);
+          await page.until(`document.querySelector('[aria-label="Send"]')?.disabled === false`);
+          const before = creationsSent().length;
+          const uploadsBefore = new Set(imageTransfers.keys());
+          await call("Fetch.enable", {
+            patterns: [{ urlPattern: "*/api/peer/images", requestStage: "Request" }],
+          });
+          let released;
+          try {
+            await page.click("button", "Send");
+            await waitFor(`${name} upload paused`, () => !!heldUpload);
+            await page.see("Uploading images…");
+            await page.capture(`${capture}-held`);
+            await during();
+            await page.capture(`${capture}-switched`);
+            released = await call("Fetch.continueRequest", { requestId: heldUpload }).then(
+              () => "continued",
+              (error) => `refused: ${error.message}`,
+            );
+          } finally {
+            await call("Fetch.disable");
+            heldUpload = undefined;
+          }
+          await delay(500);
+          const transfers = [...imageTransfers]
+            .filter(([id]) => !uploadsBefore.has(id))
+            .map(([, transfer]) => transfer);
+          return { before, released, transfers };
+        };
+        const cancelledSend = async (name, text, capture, during, landing) => {
+          const { before, released, transfers } = await heldProjectSend(
+            name,
+            text,
+            capture,
+            during,
+          );
+          await page.until(`!document.body.innerText.includes('Uploading images…')`);
+          await page.until(`!!document.querySelector('[aria-label="Remove ${name}"]')`);
+          await page.until(
+            `document.querySelector('${firstMessage}')?.value === ${JSON.stringify(text)}`,
+          );
+          const after = creationsSent().length;
+          const selected = await page.evaluate(
+            `document.querySelector('${projectButton}')?.textContent.trim()`,
+          );
+          const path = await page.evaluate(`location.pathname`);
+          const record = {
+            journey: capture,
+            createSessionBefore: before,
+            createSessionAfter: after,
+            selectedProject: selected,
+            path,
+            draftText: await page.evaluate(`document.querySelector('${firstMessage}')?.value`),
+            draftImages: await page.evaluate(
+              `[...document.querySelectorAll('[aria-label^="Remove "][aria-label$=".png"]')].map(b => b.getAttribute('aria-label'))`,
+            ),
+            heldUploadRelease: released,
+            imageTransfers: transfers,
+          };
+          projectSwitch.push(record);
+          await page.capture(`${capture}-restored`);
+          assert.equal(after, before, `${capture}: the cancelled upload creates no session`);
+          assert.equal(selected, landing.name, `${capture}: the chosen project stays selected`);
+          assert.equal(path, `/m/eng-1/projects/${landing.id}/new`);
+          assert.deepEqual(record.draftImages, [`Remove ${name}`], "the unsent image returns");
+          assert.ok(
+            transfers.every((t) => t.path.endsWith("/api/peer/images") && t.status === undefined),
+            `${capture}: the held upload never reached the peer: ${JSON.stringify(transfers)}`,
+          );
+          assert.ok(!page.remote.prompts().includes(text), "the peer's Pi never sees the text");
+          await page.click("button", `Remove ${name}`);
+          await page.ab("fill", firstMessage, "");
+        };
+        await cancelledSend(
+          "project-a.png",
+          "PROJECT-A-CANCELLED",
+          "9j1-project-switch",
+          () => pickProject("Peer project B"),
+          { name: "Peer project B", id: projectB },
+        );
+        await cancelledSend(
+          "project-away.png",
+          "PROJECT-AWAY-CANCELLED",
+          "9j2-project-away-and-back",
+          async () => {
+            await pickProject("Peer project B");
+            await pickProject("Peer project");
+          },
+          { name: "Peer project", id: projectId },
+        );
+        const { before, released, transfers } = await heldProjectSend(
+          "project-kept.png",
+          "PROJECT-KEPT-ONCE",
+          "9j3-project-uninterrupted",
+          async () => {},
+        );
+        await page.see("echo: PROJECT-KEPT-ONCE");
+        const kept = creationsSent().slice(before);
+        projectSwitch.push({
+          journey: "9j3-project-uninterrupted",
+          createSessionBefore: before,
+          createSessionAfter: creationsSent().length,
+          createSessionProjectIds: kept.map(({ message }) => message.projectId),
+          createSessionPreparedImages: kept.map(({ message }) => message.preparedImages ?? null),
+          heldUploadRelease: released,
+          imageTransfers: transfers,
+          path: await page.evaluate(`location.pathname`),
+        });
+        await page.capture("9j3-project-uninterrupted-sent");
+        assert.equal(kept.length, 1, "an uninterrupted upload creates exactly one session");
+        assert.equal(kept[0].message.projectId, projectId, "in the selected project");
+        assert.ok(kept[0].message.preparedImages, "with the prepared image");
+        assert.equal(released, "continued");
+        assert.deepEqual(
+          transfers.map((t) => [t.path.endsWith("/api/peer/images"), t.status]),
+          [[true, 200]],
+          "the delayed upload prepared the image once",
+        );
+        assert.equal(
+          page.remote
+            .received()
+            .find((e) => e.command === "prompt" && e.text === "PROJECT-KEPT-ONCE")?.images?.length,
+          1,
+        );
+        writeFileSync(
+          join(page.evidence, "project-switch-sends.json"),
+          JSON.stringify(projectSwitch, null, 2),
+        );
         onRemote = false;
         await machine(page, "Local");
         await page.click("button", "Projects");

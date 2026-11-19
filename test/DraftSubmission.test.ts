@@ -4,6 +4,7 @@ import { LOCAL, machineFrameBytes, PEER_FRAME_BYTES } from "../shared/machine.ts
 import { type ClientMessage, encodeServerMessage } from "../shared/wire.ts";
 import { createClient } from "../web/src/lib/client.ts";
 import { messageCommand, newSessionCommand } from "../web/src/lib/composerControl.ts";
+import { createImageSender } from "../web/src/lib/imageSender.ts";
 import { machineOffers } from "../web/src/lib/machineOffers.ts";
 import { createDrafts, NEW_SESSION_DRAFT, sessionDraftKey } from "../web/src/lib/messageDraft.ts";
 import { emptyChoice, type ModelTarget, modelChoice } from "../web/src/lib/modelChoice.ts";
@@ -434,4 +435,76 @@ test("a new session's first message whose send throws opens the session as uncer
   h.reconnect();
   h.accept();
   assert.equal(h.creations().length, 1, "reconnect never replays the creation");
+});
+
+test("PIN-160: a new-session image send prepared for one project is discarded after the project changes", async (t) => {
+  const h = harness({ select: false });
+  t.after(h.stop);
+  const drafts = createDrafts();
+  const key = NEW_SESSION_DRAFT;
+  const bytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]);
+  const uploads: Array<(reference: { id: string }) => void> = [];
+  const discarded: string[] = [];
+  const sender = createImageSender({
+    prepare: () => new Promise((resolve) => uploads.push(resolve)),
+    discard: (_machine, reference) => discarded.push(reference.id),
+  });
+  const open = (projectId?: string) =>
+    h.client.dispatch({ type: "open", page: { kind: "new", cwd: "/scratch", projectId } });
+  const send = async (switches: Array<string | undefined>) => {
+    drafts.setText(key, "Reply with exactly: X");
+    await drafts.addImages(key, [new File([bytes], "shot.png", { type: "image/png" })], async () =>
+      Buffer.from(bytes).toString("base64"),
+    );
+    const done = sender.send(
+      {
+        machineId: "eng-1",
+        target: { cwd: "/scratch", projectId: "a" },
+        editor: {
+          get attachments() {
+            return drafts.get(key).images;
+          },
+          get preparing() {
+            return drafts.get(key).preparing;
+          },
+          submit: (deliver) => drafts.submit(key, deliver),
+          prepareSubmit: (deliver) => drafts.prepareSubmit(key, deliver),
+        },
+        captureSend: h.client.captureSend,
+        choice: { start: {}, consume: () => {} },
+      },
+      (message, attemptId, start) => ({
+        ...newSessionCommand({ cwd: "/scratch", projectId: "a" }, message, start),
+        attemptId,
+      }),
+    );
+    assert.equal(drafts.get(key).preparing?.text, "Reply with exactly: X");
+    for (const projectId of switches) open(projectId);
+    uploads.at(-1)!({ id: `prepared-${uploads.length}` });
+    await done;
+  };
+  const restored = () => {
+    assert.equal(drafts.get(key).text, "Reply with exactly: X", "the unsent text returns");
+    assert.equal(drafts.get(key).images.items.length, 1, "the unsent image returns");
+  };
+  open("a");
+  await send(["b"]);
+  assert.equal(h.creations().length, 0, "switching from A to B refuses the A send");
+  assert.deepEqual(discarded, ["prepared-1"]);
+  restored();
+  assert.deepEqual(h.client.getState().view, { kind: "new", cwd: "/scratch", projectId: "b" });
+
+  open("a");
+  drafts.removeImage(key, 0);
+  await send(["b", "a"]);
+  assert.equal(h.creations().length, 0, "away and back still refuses the A send");
+  assert.deepEqual(discarded, ["prepared-1", "prepared-2"]);
+  restored();
+
+  drafts.removeImage(key, 0);
+  await send([]);
+  assert.equal(h.creations().length, 1, "an uninterrupted send starts one session");
+  assert.equal(h.creations()[0].projectId, "a");
+  assert.deepEqual(h.creations()[0].preparedImages, { id: "prepared-3" });
+  assert.deepEqual(discarded, ["prepared-1", "prepared-2"], "sent images are not discarded");
 });

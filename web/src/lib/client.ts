@@ -146,6 +146,7 @@ export function createClient({
       next.selectionId !== state.selectionId ||
       next.view.kind !== state.view.kind ||
       focusedDirectory(next)?.cwd !== focusedDirectory(state)?.cwd ||
+      startPage(next.view)?.projectId !== startPage(state.view)?.projectId ||
       next.connected !== state.connected
     )
       navigationEpoch++;
