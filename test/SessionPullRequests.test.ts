@@ -545,3 +545,49 @@ test("exe.dev: discovery from a worktree that pushes to a fork searches the trac
   assert.equal(found.pullRequest?.number, 42, JSON.stringify(found));
   assert.deepEqual([found.link?.headRepo, found.link?.baseRepo], ["me/fork", "up/repo"]);
 });
+
+for (const [label, base] of [
+  ["a base remote named parent", "parent"],
+  ["a partial-clone upstream remote", "upstream"],
+] as const)
+  test(`exe.dev: discovery searches ${label} for a fork's pull request at origin`, async (t) => {
+    const f = await fixture(t),
+      host = "github.int.exe.xyz",
+      log = join(f.root, "gh.log");
+    f.git("remote", "set-url", "origin", `https://${host}/me/fork.git`);
+    f.git("remote", "add", base, `https://${host}/up/repo.git`);
+    if (base === "upstream") {
+      f.git("config", "remote.upstream.promisor", "true");
+      f.git("config", "remote.upstream.partialclonefilter", "blob:none");
+      assert.match(f.git("remote", "-v"), /\(fetch\) \[blob:none\]/);
+    }
+    f.git("update-ref", "refs/remotes/origin/feature", "HEAD");
+    f.git("branch", "--set-upstream-to", "origin/feature");
+    const pr = (number: number, owner: string) => ({
+      ...candidate(number, "feature", owner),
+      url: `https://github.com/up/repo/pull/${number}`,
+      headRepository: { name: "fork" },
+      baseRefName: "main",
+    });
+    f.control({
+      prs: [pr(42, "me"), pr(7, "someone")],
+      expectedHost: host,
+      expectedRepos: [`${host}/up/repo`, `${host}/me/fork`],
+      log,
+    });
+    const found = await f.change({ action: "discover" });
+    assert.equal(found.error, undefined);
+    assert.equal(found.pullRequest?.number, 42, JSON.stringify(found));
+    assert.deepEqual([found.link?.headRepo, found.link?.baseRepo], ["me/fork", "up/repo"]);
+    const searched = readFileSync(log, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => (JSON.parse(line) as { args: string[] }).args.slice(0, -1).join(" "))
+      .toSorted();
+    assert.deepEqual(
+      searched,
+      ["me/fork", "up/repo"].map(
+        (repo) => `pr list --head feature --state open --limit 100 --repo ${host}/${repo} --json`,
+      ),
+    );
+  });
