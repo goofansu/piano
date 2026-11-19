@@ -1,7 +1,7 @@
 import type { ChangeFile, ChangesScope, Comparison, Workspace } from "@shared/wire";
 import { cn } from "cn";
 import { FileDiffIcon, GitPullRequestIcon, MessageSquarePlusIcon } from "lucide-react";
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ChangesActions, ChangesScopeMenu, ChangesStaleNote } from "@/components/ChangesHeader";
 import { DisclosureChevron } from "@/components/Disclosure";
@@ -25,6 +25,8 @@ import {
   initialDisclosure,
   isLarge,
   type LoadedFile,
+  patchNote,
+  patchSource,
   refreshKey,
   type SheetBody,
   type ShownChanges,
@@ -226,7 +228,6 @@ function SheetBodyView({
               metadata={metadata}
               initial={initial}
               workspace={body.changes.workspace}
-              observedAt={body.changes.observedAt}
               readFile={readFile(body.changes.result.comparison)}
               open={open}
               onOpenChange={(next) => onOpenChange(metadata.path, next)}
@@ -242,49 +243,39 @@ function LiveFile({
   metadata,
   initial,
   workspace,
-  observedAt,
   readFile,
   open,
   onOpenChange,
   onAsk,
 }: {
   metadata: ChangeFile;
-  initial?: DiffFile;
+  initial?: LoadedFile;
   workspace: Workspace;
-  observedAt: string;
   readFile: ReadFile;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAsk: ((loaded: LoadedFile) => void) | undefined;
 }) {
-  const seeded = useMemo<LoadedFile | undefined>(
-    () =>
-      initial ? { file: { ...initial, ...metadata }, observedAt, truncated: false } : undefined,
-    [initial, metadata, observedAt],
-  );
   const [kept, setKept] = useState(false);
   const fetched = useObservation(
     JSON.stringify([workspace.id, workspace.path, metadata.path]),
     (signal) => readFile(metadata.path, signal),
-    { enabled: !seeded && (open || kept) },
+    { enabled: !initial && (open || kept) },
   );
   useEffect(() => {
     if (fetched.value) setKept(true);
   }, [fetched.value]);
-  const loaded = seeded ?? fetched.value;
+  const loaded = initial ?? fetched.value;
   const error = fetched.failure,
     busy = fetched.loading;
-  const file: DiffFile = loaded?.file ?? {
-    ...metadata,
-    status: "modified",
-    notes: [],
-    hunks: [],
-    raw: "",
+  const shown: Pick<LoadedFile, "file" | "source"> = loaded ?? {
+    file: { ...metadata, status: "modified", notes: [], hunks: [], raw: "" },
+    source: patchSource(metadata),
   };
   return (
     <FileSection
-      file={file}
-      staged={metadata.staged}
+      file={shown.file}
+      note={patchNote(shown)}
       open={open}
       onOpenChange={onOpenChange}
       canAsk={!!onAsk}
@@ -297,7 +288,7 @@ function LiveFile({
 
 function FileSection({
   file,
-  staged,
+  note,
   open,
   onOpenChange,
   canAsk,
@@ -306,7 +297,7 @@ function FileSection({
   retry,
 }: {
   file: DiffFile;
-  staged?: boolean;
+  note?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   canAsk: boolean;
@@ -318,7 +309,7 @@ function FileSection({
   const status =
     file.status === "added" ? "new" : file.status === "deleted" ? "deleted" : undefined;
   const description = [
-    staged ? "Staged; the working copy matches HEAD" : undefined,
+    note,
     ...file.notes,
     large && !open ? `Large change (${lineCount(file)} lines); expand to read it` : undefined,
   ]
