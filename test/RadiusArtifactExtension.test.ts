@@ -1,5 +1,15 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, truncateSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
+import { once } from "node:events";
+import {
+  closeSync,
+  constants,
+  mkdtempSync,
+  openSync,
+  rmSync,
+  truncateSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -759,14 +769,15 @@ test("a path that is ambiguous, unreadable, empty, not UTF-8 or over 25 MiB publ
     const { content: _content, ...byPath } = document;
     writeFileSync(join(h.root, "empty.md"), "");
     writeFileSync(join(h.root, "binary.md"), Buffer.from([0x23, 0xff]));
-    writeFileSync(join(h.root, "full.md"), Buffer.alloc(25 * 1024 * 1024, "x"));
+    const fullText = "é".repeat((25 * 1024 * 1024) / 2);
+    writeFileSync(join(h.root, "full.md"), fullText);
     writeFileSync(join(h.root, "large.md"), "");
     truncateSync(join(h.root, "large.md"), 25 * 1024 * 1024 + 1);
     for (const [args, refusal] of [
       [{ ...document, path: "empty.md" }, /exactly one of content or path/],
       [byPath, /exactly one of content or path/],
       [{ ...byPath, path: "missing.md" }, /could not be read/],
-      [{ ...byPath, path: "." }, /could not be read/],
+      [{ ...byPath, path: "." }, /not a regular file/],
       [{ ...byPath, path: "empty.md" }, /file is empty/],
       [{ ...byPath, path: "binary.md" }, /not valid UTF-8/],
       [{ ...byPath, path: "large.md" }, /25 MiB publication limit/],
@@ -780,6 +791,128 @@ test("a path that is ambiguous, unreadable, empty, not UTF-8 or over 25 MiB publ
     const full = await h.call("create", { ...byPath, path: "full.md" });
     assert.equal(full.status, "confirmed", full.message);
     assert.equal(h.http.writes.length, 1, "a file of exactly 25 MiB is published");
+    assert.equal(h.http.writes[0].args.content, fullText, "the file's exact text is published");
+  } finally {
+    h.cleanup();
+  }
+});
+
+const intents = (h: Awaited<ReturnType<typeof harness>>) =>
+  h.sessionManager
+    .getBranch()
+    .filter((entry) => entry.type === "custom" && entry.customType === "radius-artifact-intent-v1");
+
+test(
+  "a FIFO or directory path is refused at once without waiting for a writer",
+  { timeout: 10000 },
+  async () => {
+    const h = await harness();
+    const fifo = join(h.root, "pipe.md");
+    execFileSync("mkfifo", [fifo]);
+    try {
+      const { content: _content, ...byPath } = document;
+      for (const path of ["pipe.md", "."]) {
+        const refused = await h.call("create", { ...byPath, path });
+        assert.equal(refused.status, "error");
+        assert.match(refused.message, /not a regular file; nothing was published/);
+        assert.equal(
+          JSON.stringify(refused).includes(h.root),
+          false,
+          "no local path in the result",
+        );
+      }
+      assert.equal(h.http.writes.length, 0);
+      assert.equal(intents(h).length, 0);
+    } finally {
+      // Releases a reader blocked in open(2) on the FIFO if the refusal regresses.
+      try {
+        closeSync(openSync(fifo, constants.O_WRONLY | constants.O_NONBLOCK));
+      } catch {}
+      h.cleanup();
+    }
+  },
+);
+
+async function grow(path: string, start: number, total: number, chunk: number, pauseMs: number) {
+  writeFileSync(path, Buffer.alloc(start, "x"));
+  const writer = spawn(
+    process.execPath,
+    [
+      "-e",
+      `const fs = require("node:fs");
+      const [path, total, size, pause] = process.argv.slice(1);
+      const fd = fs.openSync(path, "a");
+      const chunk = Buffer.alloc(Number(size), "y");
+      const sleep = new Int32Array(new SharedArrayBuffer(4));
+      for (let n = 0; n < Number(total); n += chunk.length) {
+        fs.writeSync(fd, chunk);
+        if (n === 0) process.stdout.write("growing\\n");
+        Atomics.wait(sleep, 0, 0, Number(pause));
+      }`,
+      path,
+      String(total),
+      String(chunk),
+      String(pauseMs),
+    ],
+    { stdio: ["ignore", "pipe", "inherit"], timeout: 10000 },
+  );
+  const exited = once(writer, "exit");
+  await once(writer.stdout, "data");
+  return async () => {
+    writer.kill();
+    await exited;
+  };
+}
+
+test(
+  "a file that grows while it is read, below or past 25 MiB, publishes nothing",
+  { timeout: 30000 },
+  async () => {
+    const h = await harness();
+    const path = join(h.root, "growing.md");
+    const { content: _content, ...byPath } = document;
+    try {
+      for (const [start, total, chunk, pauseMs, refusal] of [
+        [20 * 1024 * 1024, 2 * 1024 * 1024, 4 * 1024, 0.2, /changed while reading/],
+        [23 * 1024 * 1024, 8 * 1024 * 1024, 256 * 1024, 0, /25 MiB publication limit|changed/],
+      ] as const) {
+        const stop = await grow(path, start, total, chunk, pauseMs);
+        try {
+          const refused = await h.call("create", { ...byPath, path: "growing.md" });
+          assert.equal(refused.status, "error");
+          assert.match(refused.message, refusal);
+          assert.equal(JSON.stringify(refused).includes(h.root), false, "no local path");
+        } finally {
+          await stop();
+        }
+      }
+      assert.equal(h.http.writes.length, 0);
+      assert.equal(intents(h).length, 0);
+    } finally {
+      h.cleanup();
+    }
+  },
+);
+
+test("cancelling while a file is read publishes and records nothing", async () => {
+  const h = await harness();
+  try {
+    writeFileSync(join(h.root, "full.md"), Buffer.alloc(25 * 1024 * 1024, "x"));
+    const controller = new AbortController();
+    globalThis.fetch = async (input, init) => {
+      const response = await h.http.fetch(input, init);
+      // The tools/list reply settles in microtasks, so this timer fires once connect has
+      // finished and the file open is in flight.
+      if (String(init?.body).includes('"tools/list"')) setTimeout(() => controller.abort(), 0);
+      return response;
+    };
+    const { content: _content, ...byPath } = document;
+    const cancelled = await h.call("create", { ...byPath, path: "full.md" }, controller.signal);
+    assert.equal(cancelled.status, "error");
+    assert.match(cancelled.message, /cancelled; nothing was published/);
+    assert.equal(JSON.stringify(cancelled).includes(h.root), false, "no local path in the result");
+    assert.equal(h.http.writes.length, 0);
+    assert.equal(intents(h).length, 0, "a cancelled read records no publication intent");
   } finally {
     h.cleanup();
   }
