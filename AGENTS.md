@@ -7,6 +7,12 @@ it. Inspect existing coverage first. Add a regression test only for a meaningful
 already protected; test observable contracts, not private helpers or mock choreography. For a bug,
 reproduce it before fixing it when feasible, then show the same check passing.
 
+Ground new fallback states, retries and compatibility branches in observed reproducible behavior,
+documented supported contracts or explicit requirements. Fake or mutated external replies alone
+do not establish a real bug. Trust documented guarantees while retaining ordinary boundary
+validation and required security/resource protections. For a hypothetical upstream contract
+violation, report uncertainty or ask before expanding product behavior.
+
 ### What to add and run
 
 | Change | Verification |

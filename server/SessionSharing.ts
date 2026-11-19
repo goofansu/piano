@@ -50,7 +50,8 @@ const Reply = Schema.Struct({
     latest_version: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
     url: Schema.optional(Schema.String),
     canonical_url: Schema.optional(Schema.String),
-    visibility: Schema.Literals(["private", "organization", "public"]),
+    visibility: SessionShare.fields.visibility,
+    expires_at: SessionShare.fields.expiresAt,
   }),
 });
 
@@ -109,12 +110,14 @@ export const SessionSharingLive = Layer.effect(
                     fresh: 1,
                   }),
                 );
-                const share = Schema.decodeUnknownSync(SessionShare)({
-                  url: artifact.url ?? artifact.canonical_url,
-                });
-                return artifact.visibility === "private"
-                  ? { status: "shared", share }
-                  : { status: "not-private", visibility: artifact.visibility, share };
+                return {
+                  status: "shared",
+                  share: Schema.decodeUnknownSync(SessionShare)({
+                    url: artifact.url ?? artifact.canonical_url,
+                    visibility: artifact.visibility,
+                    expiresAt: artifact.expires_at,
+                  }),
+                };
               } catch (error) {
                 if (error instanceof RadiusAuthenticationError)
                   return { status: "sign-in-required" };

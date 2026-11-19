@@ -74,7 +74,6 @@ async function share(target: ShareTarget, openMachine: OpenMachine) {
       signal: AbortSignal.timeout(SESSION_SHARE_TIMEOUT_MS + 15_000),
     });
     if (result.status === "shared") shared(result.share, settled, false);
-    else if (result.status === "not-private") notPrivate(result.share, result.visibility, settled);
     else signInRequired(target.machine, settled, openMachine);
   } catch (error) {
     toast.error(
@@ -109,24 +108,6 @@ function signInRequired(
       ? "Sign in Radius to share."
       : `Sign in Radius on ${machine.name} to share.`,
     action: providers ? { label: "Providers", onClick: providers } : undefined,
-  });
-}
-
-function notPrivate(
-  result: SessionShare,
-  visibility: "organization" | "public",
-  settled: { id: string | number; duration: number },
-) {
-  toast.warning("Share is not Private", {
-    ...settled,
-    description: `Radius created it with ${visibility === "public" ? "Public" : "Organization"} visibility. Change it in Radius.`,
-    action: {
-      label: "Open link",
-      onClick: (event) => {
-        event.preventDefault();
-        openLink(result.url);
-      },
-    },
   });
 }
 

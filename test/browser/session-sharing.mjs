@@ -102,7 +102,7 @@ export async function shareResultView(page, call, onEvent) {
     patterns: [{ urlPattern: "*/api/session/share*", requestStage: "Request" }],
   });
   try {
-    for (const status of ["shared", "not-private", "uncertain"]) {
+    for (const status of ["shared", "uncertain"]) {
       held = undefined;
       await openShare(page);
       await page.click("button", "Share");
@@ -121,17 +121,20 @@ export async function shareResultView(page, call, onEvent) {
       await page.capture(`share-peer-${status}-pending`);
       assert.match(held.request.url, /\/peer\/eng-1\/api\/session\/share\?/);
       assert.deepEqual(JSON.parse(held.request.postData), { confirmed: true });
-      const share = { url: "https://radius.pi.dev/artifacts/synthetic-share" };
-      const reply = {
-        shared: { status, share },
-        "not-private": { status, visibility: "organization", share },
-        uncertain: { error: "Remote machine unavailable." },
-      }[status];
+      const share = {
+        url: "https://radius.pi.dev/artifacts/synthetic-share",
+        visibility: "private",
+        expiresAt: "2027-01-01T00:00:00Z",
+      };
       await call("Fetch.fulfillRequest", {
         requestId: held.requestId,
-        responseCode: status === "uncertain" ? 502 : 200,
+        responseCode: status === "shared" ? 200 : 502,
         responseHeaders: [{ name: "content-type", value: "application/json" }],
-        body: Buffer.from(JSON.stringify(reply)).toString("base64"),
+        body: Buffer.from(
+          JSON.stringify(
+            status === "shared" ? { status, share } : { error: "Remote machine unavailable." },
+          ),
+        ).toString("base64"),
       });
       if (status === "shared") {
         await page.see("Session shared");
@@ -163,28 +166,6 @@ export async function shareResultView(page, call, onEvent) {
           "the link stays available after opening it",
         );
         await closeToast(page);
-      } else if (status === "not-private") {
-        await page.see("Share is not Private");
-        await page.see("Radius created it with Organization visibility. Change it in Radius.");
-        assert.equal(
-          await page.evaluate("document.body.innerText.includes('Session shared')"),
-          false,
-          "a share Radius did not make private is not reported as shared",
-        );
-        assert.deepEqual(
-          await page.evaluate(
-            "[...document.querySelectorAll('[data-sonner-toast] button')].map(e => e.textContent.trim()).filter(Boolean)",
-          ),
-          ["Open link"],
-          "the artifact exists, so its link is offered to change it in Radius",
-        );
-        await page.evaluate(
-          "window.sharedOpens = []; window.open = (url) => { window.sharedOpens.push(url); return null; }",
-        );
-        await page.capture(`share-peer-${status}`);
-        await toastButton(page, "Open link");
-        assert.deepEqual(await page.evaluate("window.sharedOpens"), [share.url]);
-        await closeToast(page);
       } else {
         await page.see("Radius may have created an artifact");
         assert.equal(
@@ -199,7 +180,7 @@ export async function shareResultView(page, call, onEvent) {
       }
       await page.until("!document.querySelector('[data-sonner-toast]')");
     }
-    assert.equal(requests.length, 3, "one request per confirmation, no retry");
+    assert.equal(requests.length, 2, "one request per confirmation, no retry");
   } finally {
     await call("Fetch.disable");
   }
