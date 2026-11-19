@@ -6,7 +6,7 @@ import { LOCAL } from "../web/src/lib/machine.ts";
 import { machineOffers } from "../web/src/lib/machineOffers.ts";
 import { projectCommands, projectMenu } from "../web/src/lib/projectCommands.ts";
 import { projectHome, stableOrder } from "../web/src/lib/projectHome.ts";
-import { type AppState, initialState } from "../web/src/store.ts";
+import { type AppState, initialState, sessionKey } from "../web/src/store.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
 
 const local = machineOffers(LOCAL);
@@ -90,6 +90,39 @@ test("a project's home lists every member session, newest activity first, with i
     ],
     "archived members and other projects' sessions stay out",
   );
+});
+
+test("a project's home carries each member's catalog activity, and activity never reorders rows", () => {
+  const activities = (s: AppState) => {
+    const home = projectHome(s, "p1");
+    assert.equal(home.kind, "home");
+    return home.sessions.map((r) => [r.sessionId, r.activity]);
+  };
+  const working: AppState = {
+    ...state,
+    hosts: [
+      { cwd: "/repo", sessionId: "newton", working: true },
+      { cwd: "/work/repo.sort", sessionId: "sort", working: false },
+    ],
+  };
+  assert.deepEqual(activities(working), [
+    ["sort", "idle"],
+    ["gone", "off"],
+    ["newton", "working"],
+  ]);
+  const finished: AppState = {
+    ...working,
+    hosts: [
+      { cwd: "/repo", sessionId: "newton", working: false },
+      { cwd: "/work/repo.sort", sessionId: "sort", working: false },
+    ],
+    done: [sessionKey({ cwd: "/repo", sessionId: "newton" })],
+  };
+  assert.deepEqual(activities(finished), [
+    ["sort", "idle"],
+    ["gone", "off"],
+    ["newton", "done"],
+  ]);
 });
 
 test("a project's home waits for the registry before deciding the project is missing", () => {

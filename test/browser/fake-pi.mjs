@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { fidelityText } from "./message-fidelity.mjs";
 
@@ -256,6 +256,13 @@ function handle(cmd) {
             },
           });
         }, 120);
+      } else if (cmd.message === "hold until released") {
+        const release = join(dirname(process.env.PIANO_TEST_AUDIT ?? ""), "release-hold");
+        streamTimer = setInterval(() => {
+          if (!existsSync(release)) return;
+          clearInterval(streamTimer);
+          reply("released");
+        }, 50);
       } else if (cmd.message !== "hold") reply(`echo: ${cmd.message}`);
       return;
     }

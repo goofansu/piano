@@ -9,7 +9,7 @@ import { ListRow, RowMenu } from "@/components/RowActions";
 import { SessionDetails } from "@/components/SessionDetails";
 import { SettingsGroup, SettingsList } from "@/components/SettingsSectionFrame";
 import { SessionMenu } from "@/components/SidebarSessionList";
-import { StatusDot } from "@/components/StatusDot";
+import { StatusDot, type StatusTone } from "@/components/StatusDot";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -24,6 +24,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { timeAgo } from "@/lib/format";
 import { isProjectDone, projectCommands } from "@/lib/projectCommands";
 import { projectHome, stableOrder } from "@/lib/projectHome";
+import type { SessionActivity } from "@/lib/sessionCatalog";
 import { useOffers } from "@/lib/useMachine";
 import { useNavigation } from "@/lib/useNavigation";
 import { type AppState, sessionKey } from "@/store";
@@ -32,6 +33,29 @@ function useStableOrder(keys: readonly string[]): string[] {
   const order = useRef<string[]>([]);
   order.current = stableOrder(order.current, keys);
   return order.current;
+}
+
+const activityCues = {
+  working: { tone: "busy", label: "Working" },
+  idle: { tone: "ok", label: "Idle" },
+  done: { tone: "done", label: "Finished" },
+} as const satisfies Partial<Record<SessionActivity, { tone: StatusTone; label: string }>>;
+
+function ActivityCue({ activity }: { activity: SessionActivity }) {
+  if (activity === "off") return null;
+  const { tone, label } = activityCues[activity];
+  return (
+    <span
+      data-activity={activity}
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1.5",
+        activity === "working" && "font-medium text-ink",
+      )}
+    >
+      <StatusDot tone={tone} />
+      {label}
+    </span>
+  );
 }
 
 function ProjectHomeSkeleton() {
@@ -172,6 +196,7 @@ export function ProjectHome({
                     }
                   >
                     <ItemDescription className="flex min-w-0 items-center gap-1.5 text-xs">
+                      <ActivityCue activity={s.activity} />
                       <SessionDetails folder={s.folder} branch={s.branch} />
                       {s.pullRequest && (
                         <span className="inline-flex shrink-0 items-center gap-1">
