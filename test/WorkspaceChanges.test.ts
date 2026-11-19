@@ -622,6 +622,41 @@ test("live changes: each loaded patch carries its own source, so its badge and A
   assert.deepEqual(readFileSync(join(repo, ".git/index")), index);
 });
 
+test("local work: a branch or single-file read still reports staged-only and untracked edits elsewhere, leaving the index untouched", async (t) => {
+  const { repo, git, read } = fixture(t);
+  git("switch", "-qc", "main");
+  writeFileSync(join(repo, "a"), "base\n");
+  writeFileSync(join(repo, "b"), "base\n");
+  git("add", ".");
+  git("commit", "-qm", "base");
+  git("switch", "-qc", "feature");
+  writeFileSync(join(repo, "a"), "feature\n");
+  git("commit", "-qam", "feature");
+  const reads = [
+    { scope: "branch", hints: { worktreeBase: "main" } },
+    { scope: "branch", hints: { worktreeBase: "main" }, path: "a" },
+    { scope: "uncommitted", path: "a" },
+  ] as const;
+  const uncommitted = async () => {
+    const seen = [];
+    for (const options of reads) seen.push(ready(await read(options)).local.uncommitted);
+    return seen;
+  };
+  assert.deepEqual(await uncommitted(), [false, false, false]);
+
+  writeFileSync(join(repo, "b"), "staged\n");
+  git("add", "b");
+  writeFileSync(join(repo, "b"), "base\n");
+  assert.deepEqual(await uncommitted(), [true, true, true], "a staged-only edit");
+  git("restore", "--staged", "b");
+
+  writeFileSync(join(repo, "new"), "untracked\n");
+  const index = readFileSync(join(repo, ".git/index"));
+  assert.deepEqual(await uncommitted(), [true, true, true], "an untracked file");
+  assert.deepEqual(readFileSync(join(repo, ".git/index")), index);
+  assert.equal(git("status", "--porcelain"), "?? new\n");
+});
+
 test("local work: commits not pushed count against the branch's upstream, not a same-named remote branch", async (t) => {
   const { git, preview } = fixture(t);
   git("switch", "-qc", "main");
