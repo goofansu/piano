@@ -62,23 +62,25 @@ export const observeBranchRemote = Effect.fn("GitHubPullRequests.observeBranchRe
   return branchRemote(observed.home);
 });
 
-// gh ranks remotes in this order when it picks a base repository itself (github.com discovery
-// passes no --repo); the exe.dev integration needs an explicit --repo, so rank them the same.
-const BASE_REMOTE_PRIORITY = ["upstream", "github", "origin"];
-
-function searchRepos(remotesVerbose: string, host: GitHubHost, headRepo: string): string[] {
-  const rank = (name: string) => {
-    const i = BASE_REMOTE_PRIORITY.indexOf(name);
-    return i < 0 ? BASE_REMOTE_PRIORITY.length : i;
-  };
-  const remotes = remotesVerbose.split("\n").flatMap((line) => {
-    const [, name = "", url = ""] = line.match(/^(\S+)\s+(\S+)\s+\(fetch\)$/) ?? [];
-    const github = githubRemote(url);
-    return github?.apiHost === host ? [{ name, repo: github.repo }] : [];
+// A fork's pull request is listed only in its base repository, and gh's exe.dev integration needs
+// an explicit --repo, so search every repository a remote on the same host names.
+const searchRepos = Effect.fn("GitHubPullRequests.searchRepos")(function* (
+  cwd: string,
+  host: GitHubHost,
+  headRepo: string,
+): Effect.fn.Return<string[], PullRequestError> {
+  const read = (args: string[]) =>
+    gitText(cwd, args, { userConfig: true }).pipe(Effect.mapError((e) => failure(e.detail)));
+  const names = (yield* read(["remote"])).split("\n").filter(Boolean);
+  const urls = yield* Effect.forEach(names, (name) => read(["remote", "get-url", name]), {
+    concurrency: "unbounded",
   });
-  const base = remotes.toSorted((a, b) => rank(a.name) - rank(b.name))[0]?.repo;
-  return [...new Set([...(base ? [base] : []), headRepo])];
-}
+  const repos = urls.flatMap((url) => {
+    const github = githubRemote(url.trim());
+    return github?.apiHost === host ? [github.repo] : [];
+  });
+  return [...new Set([headRepo, ...repos])];
+});
 
 export const isFromBranch = (
   pr: { readonly head?: string | undefined; readonly headRepo?: string | undefined },
@@ -323,16 +325,7 @@ export const GitHubPullRequestsLive = Layer.effect(
         });
       }),
       openForHead: Effect.fn("GitHubPullRequests.openForHead")(function* (cwd, branch, repo, host) {
-        const repos =
-          host === EXE_GITHUB
-            ? searchRepos(
-                yield* gitText(cwd, ["remote", "-v"], { userConfig: true }).pipe(
-                  Effect.mapError((error) => failure(error.detail)),
-                ),
-                host,
-                repo,
-              )
-            : [null];
+        const repos = host === EXE_GITHUB ? yield* searchRepos(cwd, host, repo) : [null];
         const lists = yield* Effect.forEach(
           repos,
           (searched) =>
