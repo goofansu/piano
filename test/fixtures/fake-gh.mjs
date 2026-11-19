@@ -1,13 +1,16 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
 
 const fixture = JSON.parse(readFileSync(process.env.PIANO_TEST_GH_FIXTURE, "utf8"));
 const args = process.argv.slice(2),
   list = args[1] === "list";
 const repo = args.includes("--repo") ? args[args.indexOf("--repo") + 1] : undefined;
+if (fixture.log)
+  appendFileSync(fixture.log, `${JSON.stringify({ GH_HOST: process.env.GH_HOST, args })}\n`);
 if (
   (fixture.expectedHost && process.env.GH_HOST !== fixture.expectedHost) ||
-  (fixture.expectedRepo && repo !== fixture.expectedRepo)
+  (fixture.expectedRepo && repo !== fixture.expectedRepo) ||
+  (fixture.expectedRepos && !fixture.expectedRepos.includes(repo))
 ) {
   console.error("Incorrect GitHub API routing");
   process.exit(1);
@@ -32,13 +35,19 @@ if (fixture.checksError && fields.includes("statusCheckRollup")) {
   console.error(fixture.checksError);
   process.exit(1);
 }
+const baseRepo = (pr) => new URL(pr.url).pathname.split("/").slice(1, 3).join("/").toLowerCase();
+const listedIn = (pr) =>
+  !repo || baseRepo(pr) === repo.split("/").slice(-2).join("/").toLowerCase();
 const selected = (pr) =>
   Object.fromEntries(Object.entries(pr).filter(([key]) => fields.includes(key)));
 if (list)
   console.log(
     JSON.stringify(
       fixture.prs
-        .filter((p) => p.headRefName === args[args.indexOf("--head") + 1] && p.state === "OPEN")
+        .filter(
+          (p) =>
+            p.headRefName === args[args.indexOf("--head") + 1] && p.state === "OPEN" && listedIn(p),
+        )
         .map(selected),
     ),
   );

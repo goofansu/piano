@@ -2,7 +2,7 @@ import { Context, Data, Effect, Layer, Schema } from "effect";
 import { EXE_GITHUB, type GitHubHost, pullRequestIdentity } from "../shared/pullRequestIdentity.ts";
 import type { PullRequest } from "../shared/wire.ts";
 import { childEnvironment } from "./ChildEnvironment.ts";
-import { type BranchHome, observeGit } from "./GitCheckout.ts";
+import { type BranchHome, gitText, observeGit } from "./GitCheckout.ts";
 import { GhCommand, run as runProcess, type SubprocessError } from "./Subprocess.ts";
 
 export class PullRequestError extends Data.TaggedError("PullRequestError")<{
@@ -61,6 +61,24 @@ export const observeBranchRemote = Effect.fn("GitHubPullRequests.observeBranchRe
   if (observed.status === "non-git" || !observed.home) return null;
   return branchRemote(observed.home);
 });
+
+// gh ranks remotes in this order when it picks a base repository itself (github.com discovery
+// passes no --repo); the exe.dev integration needs an explicit --repo, so rank them the same.
+const BASE_REMOTE_PRIORITY = ["upstream", "github", "origin"];
+
+function searchRepos(remotesVerbose: string, host: GitHubHost, headRepo: string): string[] {
+  const rank = (name: string) => {
+    const i = BASE_REMOTE_PRIORITY.indexOf(name);
+    return i < 0 ? BASE_REMOTE_PRIORITY.length : i;
+  };
+  const remotes = remotesVerbose.split("\n").flatMap((line) => {
+    const [, name = "", url = ""] = line.match(/^(\S+)\s+(\S+)\s+\(fetch\)$/) ?? [];
+    const github = githubRemote(url);
+    return github?.apiHost === host ? [{ name, repo: github.repo }] : [];
+  });
+  const base = remotes.toSorted((a, b) => rank(a.name) - rank(b.name))[0]?.repo;
+  return [...new Set([...(base ? [base] : []), headRepo])];
+}
 
 export const isFromBranch = (
   pr: { readonly head?: string | undefined; readonly headRepo?: string | undefined },
@@ -305,30 +323,49 @@ export const GitHubPullRequestsLive = Layer.effect(
         });
       }),
       openForHead: Effect.fn("GitHubPullRequests.openForHead")(function* (cwd, branch, repo, host) {
-        const output = yield* ghJson(
-          cwd,
-          [
-            "pr",
-            "list",
-            "--head",
-            branch,
-            "--state",
-            "open",
-            "--limit",
-            "100",
-            ...(host === EXE_GITHUB ? ["--repo", `${EXE_GITHUB}/${repo}`] : []),
-            "--json",
-          ],
-          host,
+        const repos =
+          host === EXE_GITHUB
+            ? searchRepos(
+                yield* gitText(cwd, ["remote", "-v"], { userConfig: true }).pipe(
+                  Effect.mapError((error) => failure(error.detail)),
+                ),
+                host,
+                repo,
+              )
+            : [null];
+        const lists = yield* Effect.forEach(
+          repos,
+          (searched) =>
+            ghJson(
+              cwd,
+              [
+                "pr",
+                "list",
+                "--head",
+                branch,
+                "--state",
+                "open",
+                "--limit",
+                "100",
+                ...(searched ? ["--repo", `${EXE_GITHUB}/${searched}`] : []),
+                "--json",
+              ],
+              host,
+            ).pipe(
+              Effect.flatMap((output) =>
+                Effect.try({
+                  try: () =>
+                    Schema.decodeUnknownSync(
+                      Schema.fromJsonString(Schema.Array(GitHubPullRequest)),
+                    )(output).map((raw) => ({ head: raw.headRefName, pullRequest: facts(raw) })),
+                  catch: () => failure("GitHub returned an invalid pull request response."),
+                }),
+              ),
+            ),
+          { concurrency: "unbounded" },
         );
-        const candidates = yield* Effect.try({
-          try: () =>
-            Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(GitHubPullRequest)))(
-              output,
-            ).map((raw) => ({ head: raw.headRefName, pullRequest: facts(raw) })),
-          catch: () => failure("GitHub returned an invalid pull request response."),
-        });
-        return candidates
+        return lists
+          .flat()
           .filter((p) =>
             isFromBranch(
               { head: p.head, headRepo: p.pullRequest.headRepo },

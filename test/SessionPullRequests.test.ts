@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { type TestContext, test } from "node:test";
@@ -458,4 +458,90 @@ test("INV-01: discovery asks GitHub for the branch where the session's own workt
   const found = await f.get();
   assert.equal(found.pullRequest?.number, 42, JSON.stringify(found));
   assert.deepEqual([found.link?.head, found.link?.headRepo], ["feat", "me/fork"]);
+});
+
+test("exe.dev: discovery searches the upstream repository for a fork's pull request and matches only the fork's branch", async (t) => {
+  const f = await fixture(t),
+    host = "github.int.exe.xyz",
+    log = join(f.root, "gh.log");
+  f.git("remote", "set-url", "origin", `https://${host}/me/fork.git`);
+  f.git("remote", "add", "upstream", `https://${host}/up/repo.git`);
+  f.git("update-ref", "refs/remotes/origin/feature", "HEAD");
+  f.git("branch", "--set-upstream-to", "origin/feature");
+  const pr = (number: number, base: string, owner: string, name: string) => ({
+    ...candidate(number, "feature", owner),
+    url: `https://github.com/${base}/pull/${number}`,
+    headRepository: { name },
+    baseRefName: "main",
+  });
+  const fromFork = pr(42, "up/repo", "me", "fork"),
+    otherFork = pr(7, "up/repo", "someone", "fork"),
+    sameRepo = pr(3, "me/fork", "me", "fork"),
+    elsewhere = pr(9, "someone/fork", "someone", "fork");
+  const serve = async (prs: object[]) => {
+    await f.change({ action: "remove" });
+    rmSync(log, { force: true });
+    f.control({
+      prs,
+      expectedHost: host,
+      expectedRepos: [`${host}/up/repo`, `${host}/me/fork`],
+      log,
+    });
+  };
+  const calls = () =>
+    readFileSync(log, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { GH_HOST: string; args: string[] })
+      .map(({ GH_HOST, args }) => `${GH_HOST} ${args.slice(0, -1).join(" ")}`)
+      .toSorted();
+  const listed = (repo: string) =>
+    `${host} pr list --head feature --state open --limit 100 --repo ${host}/${repo} --json`;
+
+  await serve([fromFork, otherFork, elsewhere]);
+  const found = await f.change({ action: "discover" });
+  assert.equal(found.pullRequest?.number, 42, JSON.stringify(found));
+  assert.deepEqual(found.link, {
+    url: fromFork.url,
+    source: "branch",
+    apiHost: host,
+    head: "feature",
+    base: "main",
+    headRepo: "me/fork",
+    baseRepo: "up/repo",
+  });
+  assert.deepEqual(calls(), [listed("me/fork"), listed("up/repo")]);
+
+  await serve([otherFork, elsewhere]);
+  const none = await f.change({ action: "discover" });
+  assert.deepEqual([none.link, none.pullRequest, none.error], [null, null, undefined]);
+
+  await serve([sameRepo, otherFork]);
+  assert.equal((await f.change({ action: "discover" })).pullRequest?.number, 3);
+
+  await serve([fromFork, sameRepo]);
+  assert.match((await f.change({ action: "discover" })).error!, /Several/);
+  assert.deepEqual(calls(), [listed("me/fork"), listed("up/repo")]);
+});
+
+test("exe.dev: discovery from a worktree that pushes to a fork searches the tracked upstream", async (t) => {
+  const host = "github.int.exe.xyz";
+  const { repo, worktree, git } = forkWorktree(t);
+  git(repo, "remote", "set-url", "origin", `https://${host}/up/repo.git`);
+  git(repo, "remote", "set-url", "fork", `https://${host}/me/fork.git`);
+  const f = await fixture(t, worktree);
+  const pr = (number: number, owner: string, name: string) => ({
+    ...candidate(number, "feat", owner),
+    url: `https://github.com/up/repo/pull/${number}`,
+    headRepository: { name },
+    baseRefName: "main",
+  });
+  f.control({
+    prs: [pr(7, "up", "repo"), pr(42, "me", "fork"), pr(8, "someone", "fork")],
+    expectedHost: host,
+    expectedRepos: [`${host}/up/repo`, `${host}/me/fork`],
+  });
+  const found = await f.get();
+  assert.equal(found.pullRequest?.number, 42, JSON.stringify(found));
+  assert.deepEqual([found.link?.headRepo, found.link?.baseRepo], ["me/fork", "up/repo"]);
 });
