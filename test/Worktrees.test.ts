@@ -561,7 +561,7 @@ console.log(JSON.stringify({action:'created',branch:'feature',path:${JSON.string
   );
 });
 
-test("INV-06: recreating a worktree at its old path from another base records the new base for Branch Changes", async (t) => {
+test("INV-06: recreating a worktree at its old path from another base records the new base for Branch Changes, and a branch made outside Piano drops it", async (t) => {
   const { root, repo } = fixture(t),
     cli = join(root, "wt"),
     home = join(root, "home");
@@ -694,6 +694,20 @@ test("INV-06: recreating a worktree at its old path from another base records th
       assert.deepEqual(yield* branchChanges(first.path, "before-recreation"), {
         target: ["release", "worktree"],
         files: [],
+      });
+    }),
+  );
+
+  git(repo, "worktree", "remove", "--force", first.path);
+  git(repo, "worktree", "add", "-q", "-b", "elsewhere", first.path, "main");
+  await run(
+    Effect.gen(function* () {
+      yield* (yield* SidebarView).fresh;
+      assert.deepEqual((yield* branchChanges(first.path, "fresh")).target, ["main", "assumed"]);
+      assert.deepEqual(yield* recorded(first.path), {
+        folder: repo,
+        path: first.path,
+        branch: "elsewhere",
       });
     }),
   );
