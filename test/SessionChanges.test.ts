@@ -79,7 +79,12 @@ async function fixture(t: TestContext) {
   const registry = await runtime.runPromise(Registry);
   await runtime.runPromise(registry.addFolder(repo));
   await runtime.runPromise(
-    registry.addWorktree({ folder: repo, path: worktree, branch: "feature", baseBranch: "main" }),
+    registry.recordCreatedWorktree({
+      folder: repo,
+      path: worktree,
+      branch: "feature",
+      baseBranch: "main",
+    }),
   );
   await runtime.runPromise(registry.addSession(worktree, "one"));
   await runtime.runPromise(registry.addSession(worktree, "two"));
