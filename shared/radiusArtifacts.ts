@@ -11,6 +11,8 @@ import {
 } from "@earendil-works/pi-schema";
 import { z } from "zod";
 
+export const RADIUS_ARTIFACT_FILE_BYTES = 25 * 1024 * 1024;
+export const RADIUS_ARTIFACT_FILE_LIMIT = `${RADIUS_ARTIFACT_FILE_BYTES / 2 ** 20} MiB`;
 export const RADIUS_ARTIFACT_PUBLICATION = "radius-artifact-publication-v1";
 export const ArtifactPublication = z.object({
   artifactId: z.string().min(1),

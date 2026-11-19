@@ -305,19 +305,19 @@ test("view defines UTF-8 byte boundaries, EOF and invalid page arguments", async
   }
 });
 
-test("view pages a 10 MiB session-sized file and bounds content even when JSON escaping expands it", async () => {
+test("view pages a 25 MiB file, the largest one shared or published, and bounds content even when JSON escaping expands it", async () => {
   const h = await harness();
   try {
     await h.call("create", document);
     const version = h.http.artifacts.get("artifact-1")!.versions[0];
     version.content_type = "application/x-ndjson";
-    version.content = '{"message":"' + "s".repeat(10 * 1024 * 1024 - 15) + '"}\n';
-    assert.equal(Buffer.byteLength(version.content), 10 * 1024 * 1024);
-    for (const offset of [0, 5 * 1024 * 1024, 10 * 1024 * 1024 - 20]) {
+    version.content = '{"message":"' + "s".repeat(25 * 1024 * 1024 - 15) + '"}\n';
+    assert.equal(Buffer.byteLength(version.content), 25 * 1024 * 1024);
+    for (const offset of [0, 5 * 1024 * 1024, 25 * 1024 * 1024 - 20]) {
       const page = await h.call("view", { artifactId: "artifact-1", revision: 1, offset });
       assert.equal(page.status, "confirmed", page.message);
       assert.equal(page.content, version.content.slice(offset, offset + 16384));
-      assert.equal(page.totalBytes, 10 * 1024 * 1024);
+      assert.equal(page.totalBytes, 25 * 1024 * 1024);
       assert.equal(page.nextOffset, offset + 16384 < page.totalBytes! ? offset + 16384 : null);
       assert.ok(
         Buffer.byteLength(JSON.stringify(page)) < 18000,
@@ -350,13 +350,13 @@ test("view pages a 10 MiB session-sized file and bounds content even when JSON e
 });
 
 test(
-  "view caps streamed downloads at 16 MiB, cancels oversized bodies and rejects invalid UTF-8",
+  "view caps streamed downloads at 25 MiB, cancels oversized bodies and rejects invalid UTF-8",
   { timeout: 10000 },
   async () => {
     const h = await harness();
     try {
       await h.call("create", document);
-      let bytes = 16 * 1024 * 1024;
+      let bytes = 25 * 1024 * 1024;
       let cancelled = false;
       let invalidUtf8 = false;
       globalThis.fetch = async (input, init) => {
@@ -372,7 +372,7 @@ test(
                 const size = Math.min(64 * 1024, bytes - sent);
                 controller.enqueue(Buffer.alloc(size, "x"));
                 sent += size;
-              } else if (bytes === 16 * 1024 * 1024) controller.close();
+              } else if (bytes === 25 * 1024 * 1024) controller.close();
             },
             cancel() {
               cancelled = true;
@@ -389,7 +389,7 @@ test(
       bytes++;
       const tooLarge = await h.call("view", args);
       assert.equal(tooLarge.status, "error");
-      assert.match(tooLarge.message, /16 MiB download limit/);
+      assert.match(tooLarge.message, /25 MiB download limit/);
       assert.equal(tooLarge.content, undefined);
       assert.equal(cancelled, true, "over-limit bodies stop downloading without waiting for EOF");
       invalidUtf8 = true;
@@ -446,7 +446,7 @@ test(
   },
 );
 
-test("view keeps manifest-only results and path selection; publication retains its 128 KiB limit", async () => {
+test("view keeps manifest-only results and path selection; publication accepts a document up to 25 MiB", async () => {
   const h = await harness();
   try {
     await h.call("create", document);
@@ -477,14 +477,21 @@ test("view keeps manifest-only results and path selection; publication retains i
     assert.equal(selected.content, "# Or");
     assert.equal(selected.path, "report.md");
     assert.equal(selected.nextOffset, 4);
-    const tooLarge = await h.call("create", {
+    const large = await h.call("create", {
       ...document,
       operationKey: "large",
-      content: "é".repeat(65537),
+      content: "é".repeat((25 * 1024 * 1024) / 2),
+    });
+    assert.equal(large.status, "confirmed", large.message);
+    assert.equal(h.http.writes.length, 2);
+    const tooLarge = await h.call("create", {
+      ...document,
+      operationKey: "too-large",
+      content: "é".repeat((25 * 1024 * 1024) / 2 + 1),
     });
     assert.equal(tooLarge.status, "error");
-    assert.match(tooLarge.message, /128 KiB publication limit/);
-    assert.equal(h.http.writes.length, 1);
+    assert.match(tooLarge.message, /25 MiB publication limit/);
+    assert.equal(h.http.writes.length, 2);
   } finally {
     h.cleanup();
   }

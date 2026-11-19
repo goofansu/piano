@@ -4,8 +4,11 @@ import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import type { FileEntry, SessionHeader } from "@earendil-works/pi-coding-agent";
 import { Effect, type Scope } from "effect";
+import {
+  RADIUS_ARTIFACT_FILE_BYTES,
+  RADIUS_ARTIFACT_FILE_LIMIT,
+} from "../shared/radiusArtifacts.ts";
 import { emptySnapshot } from "../shared/sessionProjection.ts";
-import { SESSION_SHARE_MAX_BYTES } from "../shared/share.ts";
 import type { Snapshot } from "../shared/wire.ts";
 import { agentDir, directoryPath, sessionDirFor } from "./PiEnv.ts";
 import { fileVersion } from "./PiHistoryFile.ts";
@@ -216,7 +219,7 @@ export const makePiHistory = Effect.fn("PiHistory.make")(function* (): Effect.fn
           if (
             !before.isFile() ||
             before.size === 0n ||
-            before.size > BigInt(SESSION_SHARE_MAX_BYTES)
+            before.size > BigInt(RADIUS_ARTIFACT_FILE_BYTES)
           )
             throw new Error("size");
           const bytes = Buffer.alloc(Number(before.size));
@@ -250,7 +253,7 @@ export const makePiHistory = Effect.fn("PiHistory.make")(function* (): Effect.fn
       },
       catch: () =>
         rejected(
-          "Could not read a complete saved session (10 MiB maximum). Let Pi finish saving and check the history file before sharing again.",
+          `Could not read a complete saved session (${RADIUS_ARTIFACT_FILE_LIMIT} maximum). Let Pi finish saving and check the history file before sharing again.`,
         ),
     });
 

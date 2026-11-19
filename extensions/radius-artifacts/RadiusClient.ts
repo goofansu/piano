@@ -2,9 +2,12 @@ import { isUtf8 } from "node:buffer";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { z } from "zod";
+import {
+  RADIUS_ARTIFACT_FILE_BYTES,
+  RADIUS_ARTIFACT_FILE_LIMIT,
+} from "../../shared/radiusArtifacts.ts";
 import { isRadiusUrl, RADIUS_MCP_URL } from "../../shared/radiusUrl.ts";
 
-export const ARTIFACT_DOWNLOAD_BYTES = 16 * 1024 * 1024;
 export const ARTIFACT_PAGE_BYTES = 16 * 1024;
 export const ARTIFACT_MAX_PAGE_BYTES = 32 * 1024;
 
@@ -184,9 +187,9 @@ export class RadiusClient {
         const { value, done } = await reader.read();
         if (done) break;
         bytes += value.length;
-        if (bytes > ARTIFACT_DOWNLOAD_BYTES)
+        if (bytes > RADIUS_ARTIFACT_FILE_BYTES)
           throw new RadiusError(
-            "Artifact content exceeds the 16 MiB download limit; open its Radius viewing URL.",
+            `Artifact content exceeds the ${RADIUS_ARTIFACT_FILE_LIMIT} download limit; open its Radius viewing URL.`,
           );
         chunks.push(value);
       }
