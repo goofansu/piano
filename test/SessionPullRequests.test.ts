@@ -618,3 +618,39 @@ test("exe.dev: discovery skips a same-host remote naming a repository GitHub can
   assert.equal(found.pullRequest?.number, 42, JSON.stringify(found));
   assert.deepEqual([found.link?.headRepo, found.link?.baseRepo], ["me/fork", "up/repo"]);
 });
+
+test("github.com: discovery searches a base remote named parent for a fork's pull request at origin", async (t) => {
+  const f = await fixture(t),
+    log = join(f.root, "gh.log");
+  f.git("remote", "set-url", "origin", "https://github.com/me/fork.git");
+  f.git("remote", "add", "parent", "https://github.com/up/repo.git");
+  f.git("update-ref", "refs/remotes/origin/feature", "HEAD");
+  f.git("branch", "--set-upstream-to", "origin/feature");
+  f.control({
+    prs: [
+      {
+        ...candidate(42, "feature", "me"),
+        url: "https://github.com/up/repo/pull/42",
+        headRepository: { name: "fork" },
+        baseRefName: "main",
+      },
+    ],
+    expectedHost: "github.com",
+    log,
+  });
+  const found = await f.change({ action: "discover" });
+  assert.equal(found.error, undefined);
+  assert.equal(found.pullRequest?.number, 42, JSON.stringify(found));
+  assert.deepEqual([found.link?.headRepo, found.link?.baseRepo], ["me/fork", "up/repo"]);
+  const searched = readFileSync(log, "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => (JSON.parse(line) as { args: string[] }).args.slice(0, -1).join(" "))
+    .toSorted();
+  assert.deepEqual(
+    searched,
+    ["me/fork", "up/repo"].map(
+      (repo) => `pr list --head feature --state open --limit 100 --repo github.com/${repo} --json`,
+    ),
+  );
+});

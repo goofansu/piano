@@ -62,8 +62,9 @@ export const observeBranchRemote = Effect.fn("GitHubPullRequests.observeBranchRe
   return branchRemote(observed.home);
 });
 
-// A fork's pull request is listed only in its base repository, and gh's exe.dev integration needs
-// an explicit --repo, so search every repository a remote on the same host names.
+// A fork's pull request is listed only in its base repository. Without --repo, gh 2.101 lists one
+// repository it picks from the remotes (origin over a base remote named parent), so search every
+// repository a remote on the same host names.
 const searchRepos = Effect.fn("GitHubPullRequests.searchRepos")(function* (
   cwd: string,
   host: GitHubHost,
@@ -338,7 +339,7 @@ export const GitHubPullRequestsLive = Layer.effect(
         });
       }),
       openForHead: Effect.fn("GitHubPullRequests.openForHead")(function* (cwd, branch, repo, host) {
-        const repos = host === EXE_GITHUB ? yield* searchRepos(cwd, host, repo) : [null];
+        const repos = yield* searchRepos(cwd, host, repo);
         const lists = yield* Effect.forEach(
           repos,
           (searched) =>
@@ -353,14 +354,14 @@ export const GitHubPullRequestsLive = Layer.effect(
                 "open",
                 "--limit",
                 "100",
-                ...(searched ? ["--repo", `${EXE_GITHUB}/${searched}`] : []),
+                "--repo",
+                `${host}/${searched}`,
                 "--json",
               ],
               host,
             ).pipe(
               Effect.catchIf(
                 (error) =>
-                  searched !== null &&
                   searched !== repo &&
                   error.reason === "exit" &&
                   onlyRepositoryUnresolved(error.stderr),
