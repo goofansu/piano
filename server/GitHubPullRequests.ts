@@ -139,6 +139,16 @@ export function onlyChecksRefused(stderr: string): boolean {
   );
 }
 
+const onlyRepositoryUnresolved = (stderr: string) => {
+  const errors = graphqlErrors(stderr);
+  return (
+    errors.length > 0 &&
+    errors.every(
+      (e) => e.path === "repository" && e.message.startsWith("Could not resolve to a Repository "),
+    )
+  );
+};
+
 export function ghFailureDetail(
   error: Pick<SubprocessError, "reason" | "stderr">,
   host: GitHubHost,
@@ -294,12 +304,15 @@ export const GitHubPullRequestsLive = Layer.effect(
         timeout: 15000,
         limit: 4 * 1024 * 1024,
       }).pipe(Effect.map((result) => result.stdout.toString().trim()));
-    const ghJson = (cwd: string, args: string[], host: GitHubHost) =>
+    const ghJsonOutput = (cwd: string, args: string[], host: GitHubHost) =>
       gh(cwd, [...args, fields], host).pipe(
         Effect.catchIf(
           (error) => error.reason === "exit" && onlyChecksRefused(error.stderr),
           () => gh(cwd, [...args, fieldsWithoutChecks], host),
         ),
+      );
+    const ghJson = (cwd: string, args: string[], host: GitHubHost) =>
+      ghJsonOutput(cwd, args, host).pipe(
         Effect.mapError((error) => failure(ghFailureDetail(error, host))),
       );
     return GitHubPullRequests.of({
@@ -329,7 +342,7 @@ export const GitHubPullRequestsLive = Layer.effect(
         const lists = yield* Effect.forEach(
           repos,
           (searched) =>
-            ghJson(
+            ghJsonOutput(
               cwd,
               [
                 "pr",
@@ -345,6 +358,15 @@ export const GitHubPullRequestsLive = Layer.effect(
               ],
               host,
             ).pipe(
+              Effect.catchIf(
+                (error) =>
+                  searched !== null &&
+                  searched !== repo &&
+                  error.reason === "exit" &&
+                  onlyRepositoryUnresolved(error.stderr),
+                () => Effect.succeed("[]"),
+              ),
+              Effect.mapError((error) => failure(ghFailureDetail(error, host))),
               Effect.flatMap((output) =>
                 Effect.try({
                   try: () =>

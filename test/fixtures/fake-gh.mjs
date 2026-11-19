@@ -7,6 +7,13 @@ const args = process.argv.slice(2),
 const repo = args.includes("--repo") ? args[args.indexOf("--repo") + 1] : undefined;
 if (fixture.log)
   appendFileSync(fixture.log, `${JSON.stringify({ GH_HOST: process.env.GH_HOST, args })}\n`);
+const unresolved = repo?.split("/").slice(-2).join("/");
+if (fixture.unresolvedRepos?.includes(unresolved)) {
+  console.error(
+    `GraphQL: Could not resolve to a Repository with the name '${unresolved}'. (repository)`,
+  );
+  process.exit(1);
+}
 if (
   (fixture.expectedHost && process.env.GH_HOST !== fixture.expectedHost) ||
   (fixture.expectedRepo && repo !== fixture.expectedRepo) ||
