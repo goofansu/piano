@@ -153,9 +153,24 @@ export function MessageList({
     },
     [virtual],
   );
+  const measureElement = useCallback(
+    (row: HTMLDivElement | null) => {
+      virtual.measureElement(row);
+      // TanStack defers new-row measurements while scrolling; settle them before paint.
+      if (row) measureRow(row);
+    },
+    [virtual, measureRow],
+  );
   const window = virtual.getVirtualItems();
   const deferredWindow = useDeferredValue(window);
   const readyKeys = new Set(deferredWindow.map((item) => item.key));
+  const top = virtual.scrollOffset ?? 0;
+  const bottom = top + (virtual.scrollRect?.height ?? 0);
+  const isReady = (item: (typeof window)[number]) =>
+    jumping ||
+    !virtual.isScrolling ||
+    readyKeys.has(item.key) ||
+    (item.end > top && item.start < bottom);
 
   return (
     <div className={cn("relative min-h-0 flex-1", className)}>
@@ -164,11 +179,7 @@ export function MessageList({
         onScrollCapture={viewport.scrolled}
         data-slot="transcript"
         data-message-count={messages.length}
-        data-window-pending={
-          virtual.isScrolling && !jumping && window.some((item) => !readyKeys.has(item.key))
-            ? ""
-            : undefined
-        }
+        data-window-pending={window.some((item) => !isReady(item)) ? "" : undefined}
         className="h-full overflow-y-auto pl-(--gutter) pr-[calc(var(--gutter)+var(--rail-inset))] [overflow-anchor:none]"
       >
         <div className="mx-auto w-full max-w-3xl py-6 md:py-8">
@@ -206,12 +217,12 @@ export function MessageList({
                         next?.kind === "reply" &&
                         !next.text &&
                         next.tools.length > 0;
-                      const ready = jumping || !virtual.isScrolling || readyKeys.has(item.key);
+                      const ready = isReady(item);
                       const gap = next ? (adjacentTools ? 12 : 24) : 0;
                       return (
                         <div
                           key={item.key}
-                          ref={ready ? virtual.measureElement : undefined}
+                          ref={ready ? measureElement : undefined}
                           data-index={item.index}
                           className="absolute left-0 top-0 flex w-full flex-col gap-6"
                           style={{
