@@ -6,7 +6,7 @@ import { LOCAL } from "../web/src/lib/machine.ts";
 import { machineOffers } from "../web/src/lib/machineOffers.ts";
 import { projectCommands, projectMenu } from "../web/src/lib/projectCommands.ts";
 import { projectHome, stableOrder } from "../web/src/lib/projectHome.ts";
-import { type AppState, initialState, sessionKey } from "../web/src/store.ts";
+import { type Action, type AppState, initialState, reduce } from "../web/src/store.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
 
 const local = machineOffers(LOCAL);
@@ -92,37 +92,104 @@ test("a project's home lists every member session, newest activity first, with i
   );
 });
 
-test("a project's home carries each member's catalog activity, and activity never reorders rows", () => {
-  const activities = (s: AppState) => {
-    const home = projectHome(s, "p1");
-    assert.equal(home.kind, "home");
-    return home.sessions.map((r) => [r.sessionId, r.activity]);
-  };
-  const working: AppState = {
-    ...state,
-    hosts: [
+const cues = (s: AppState) => {
+  const home = projectHome(s, "p1");
+  assert.equal(home.kind, "home");
+  return home.sessions.map((r) => [r.label, r.cue]);
+};
+const hosts = (list: AppState["hosts"]): Action => ({
+  type: "server",
+  message: { _tag: "hosts", hosts: list },
+});
+const connected = reduce(state, { type: "connected", connected: true });
+
+test("a project's home cues each member's activity from the current host snapshot, and activity never reorders rows", () => {
+  const working = reduce(
+    connected,
+    hosts([
       { cwd: "/repo", sessionId: "newton", working: true },
       { cwd: "/work/repo.sort", sessionId: "sort", working: false },
-    ],
-  };
-  assert.deepEqual(activities(working), [
-    ["sort", "idle"],
-    ["gone", "off"],
-    ["newton", "working"],
+    ]),
+  );
+  assert.deepEqual(cues(working), [
+    ["fix sorting", "idle"],
+    ["Untitled", null],
+    ["newton from katie", "working"],
   ]);
-  const finished: AppState = {
-    ...working,
-    hosts: [
+  const finished = reduce(
+    working,
+    hosts([
       { cwd: "/repo", sessionId: "newton", working: false },
       { cwd: "/work/repo.sort", sessionId: "sort", working: false },
-    ],
-    done: [sessionKey({ cwd: "/repo", sessionId: "newton" })],
-  };
-  assert.deepEqual(activities(finished), [
-    ["sort", "idle"],
-    ["gone", "off"],
-    ["newton", "done"],
+    ]),
+  );
+  assert.deepEqual(cues(finished), [
+    ["fix sorting", "idle"],
+    ["Untitled", null],
+    ["newton from katie", "done"],
   ]);
+});
+
+test("a starting session's row says Starting alone until startup completes, then shows its activity", () => {
+  const starting = reduce(
+    connected,
+    hosts([{ cwd: "/repo", sessionId: "newton", working: false, starting: true }]),
+  );
+  assert.deepEqual(cues(starting)[2], ["Starting", null]);
+  const started = reduce(starting, hosts([{ cwd: "/repo", sessionId: "newton", working: true }]));
+  assert.deepEqual(cues(started)[2], ["newton from katie", "working"]);
+  const idle = reduce(starting, hosts([{ cwd: "/repo", sessionId: "newton", working: false }]));
+  assert.deepEqual(cues(idle)[2], ["newton from katie", "idle"]);
+});
+
+test("a lost connection withholds live activity until the reconnected host snapshot arrives", () => {
+  const busy = reduce(
+    connected,
+    hosts([
+      { cwd: "/repo", sessionId: "newton", working: true },
+      { cwd: "/work/repo.sort", sessionId: "sort", working: true },
+    ]),
+  );
+  const finishedSort = reduce(
+    busy,
+    hosts([
+      { cwd: "/repo", sessionId: "newton", working: true },
+      { cwd: "/work/repo.sort", sessionId: "sort", working: false },
+    ]),
+  );
+  assert.deepEqual(cues(finishedSort), [
+    ["fix sorting", "done"],
+    ["Untitled", null],
+    ["newton from katie", "working"],
+  ]);
+  const lost = reduce(finishedSort, { type: "connected", connected: false, lost: true });
+  assert.deepEqual(
+    cues(lost),
+    [
+      ["fix sorting", "done"],
+      ["Untitled", null],
+      ["newton from katie", null],
+    ],
+    "a turn already seen to end stays Finished; live Working is not presented as current",
+  );
+  const reopened = reduce(lost, { type: "connected", connected: true });
+  assert.deepEqual(cues(reopened), cues(lost), "the cached snapshot is still stale on reconnect");
+  const fresh = reduce(
+    reopened,
+    hosts([
+      { cwd: "/repo", sessionId: "newton", working: true },
+      { cwd: "/work/repo.sort", sessionId: "sort", working: false },
+    ]),
+  );
+  assert.deepEqual(cues(fresh), cues(finishedSort));
+  const endedDuringOutage = reduce(
+    reopened,
+    hosts([
+      { cwd: "/repo", sessionId: "newton", working: false },
+      { cwd: "/work/repo.sort", sessionId: "sort", working: false },
+    ]),
+  );
+  assert.deepEqual(cues(endedDuringOutage)[2], ["newton from katie", "done"]);
 });
 
 test("a project's home waits for the registry before deciding the project is missing", () => {

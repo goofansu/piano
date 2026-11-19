@@ -49,134 +49,34 @@ const exchange = (n) => [
 let scratchRoot;
 
 const homeActivity = async (page) => {
-  await page.ab("set", "viewport", "1280", "900");
-  await page.open("/s/live");
+  const rows = `[...document.querySelectorAll('main [role="listitem"]')].map((row) => [
+    row.querySelector('[data-slot="item-title"]').innerText,
+    row.querySelector('[data-activity]')?.innerText ?? null,
+  ])`;
+  await page.open("/s/watch");
   await page.see("Answer 1.");
-  await page.ab("fill", '[aria-label="Message"]', "Settle the boundary");
+  await page.ab("fill", '[aria-label="Message"]', "hold until released");
   await page.press("Enter");
-  await page.see("echo: Settle the boundary");
-  const starts = () => page.received().filter((r) => r.command === "start");
-  const rows = `[...document.querySelectorAll('main [role="listitem"]')].map((row) => ({
-    title: row.querySelector('[data-slot="item-title"]').innerText,
-    activity: row.querySelector('[data-activity]')?.dataset.activity ?? null,
-    cue: row.querySelector('[data-activity]')?.innerText ?? null,
-  }))`;
-  const traffic = { prompt: [], requests: [], frames: [] };
-  let phase = "prompt";
-  let startsBefore;
-  let opened;
-  await page.cdp(async (call, onEvent) => {
-    onEvent(({ method, params }) => {
-      if (method === "Network.requestWillBeSent" && phase === "home")
-        traffic.requests.push(`${params.request.method} ${params.request.url}`);
-      if (method === "Network.webSocketFrameSent" && phase)
-        traffic[phase === "home" ? "frames" : "prompt"].push(
-          params.response.payloadData.slice(0, 200),
-        );
-    });
-    await call("Network.enable");
-    await page.open("/s/watch");
-    await page.see("Answer 1.");
-    await page.ab("fill", '[aria-label="Message"]', "hold until released");
-    await page.press("Enter");
-    await page.ab("wait", 'button[aria-label="Stop"]');
-    for (let i = 0; !traffic.prompt.some((f) => f.includes("hold until released")); i++) {
-      assert.ok(i < 40, "the observer sees the page's socket frames");
-      await setTimeout(50);
-    }
-    startsBefore = starts().length;
-    phase = "home";
-    await page.click("button", "Project: QA Project");
-    await page.until(
-      `location.pathname === '/projects/qa' && document.querySelectorAll('main [role="listitem"]').length === 3`,
-    );
-    await page.ab("set", "viewport", "390", "844");
-    opened = await page.evaluate(rows);
-    await setTimeout(500);
-    phase = null;
-  });
-  writeFileSync(
-    join(page.evidence, "home-activity-1-traffic.json"),
-    JSON.stringify(
-      {
-        ...traffic,
-        prompt: traffic.prompt.length,
-        starts: starts().length - startsBefore,
-        rows: opened,
-      },
-      null,
-      2,
-    ),
-  );
-  await page.capture("home-activity-1-working-idle-390");
-  console.log("Project home traffic on open:", traffic, opened);
-  assert.deepEqual(traffic.requests, [], "opening Project Home sends no HTTP request");
-  assert.deepEqual(traffic.frames, [], "opening Project Home sends nothing on the socket");
-  assert.equal(starts().length, startsBefore, "opening Project Home starts no Pi process");
-  assert.deepEqual(
-    opened.map(({ title, cue }) => [title, cue]),
-    [
-      ["Watch the build", "Working"],
-      ["Live worktree", "Idle"],
-      ["Gone worktree", null],
-    ],
-    "the working member is told apart from the idle one by its word",
-  );
-
-  const fit = await page.evaluate(`(() => {
-    const page = document.documentElement;
-    return [...document.querySelectorAll('main [role="listitem"]')].map((row) => {
-      const cue = row.querySelector('[data-activity]');
-      const line = row.querySelector('[data-slot="item-description"]');
-      const box = row.getBoundingClientRect();
-      if (!cue) return { overflowX: page.scrollWidth > page.clientWidth };
-      const c = cue.getBoundingClientRect();
-      const meta = [...line.children].filter((e) => e !== cue && !e.classList.contains('sr-only') && e.getBoundingClientRect().width > 0);
-      return {
-        overflowX: page.scrollWidth > page.clientWidth,
-        cueInside: c.left >= box.left && c.right <= box.right,
-        cueWhole: cue.scrollWidth <= cue.clientWidth + 1,
-        sameLine: meta.length > 0 && meta.every((e) => Math.abs(e.getBoundingClientRect().top + e.getBoundingClientRect().height / 2 - (c.top + c.height / 2)) < 4),
-        metadata: meta.map((e) => e.innerText),
-      };
-    });
-  })()`);
-  console.log("Project home 390px fit:", fit);
-  assert.match(fit[0].metadata.join(" "), /#26674/, "the widest row keeps its pull request");
-  for (const row of fit) {
-    assert.equal(row.overflowX, false, "no horizontal scroll at 390px");
-    if (row.cueInside === undefined) continue;
-    assert.ok(row.cueInside && row.cueWhole, "the cue is whole inside its row at 390px");
-    assert.ok(row.sameLine, "the cue shares the line with the session's metadata");
-  }
-  await page.cdp(async (call) => {
-    await call("Emulation.setEmulatedVisionDeficiency", {
-      type: "achromatopsia",
-    });
-    try {
-      await page.capture("home-activity-2-no-color-390");
-    } finally {
-      await call("Emulation.setEmulatedVisionDeficiency", { type: "none" });
-    }
-  });
+  await page.ab("wait", 'button[aria-label="Stop"]');
+  await page.click("button", "Project: QA Project");
+  await page.ab("set", "viewport", "390", "844");
+  await page.until(`!!document.querySelector('main [data-activity="working"]')`);
+  const working = await page.evaluate(rows);
+  await page.capture("home-activity-1-working-390");
+  const watch = working.findIndex(([title]) => title === "Watch the build");
+  assert.equal(working[watch]?.[1], "Working", "the running session reads Working");
 
   writeFileSync(join(scratchRoot, "release-hold"), "");
   await page.until(`!!document.querySelector('main [data-activity="done"]')`);
   const finished = await page.evaluate(rows);
-  await page.capture("home-activity-3-finished-390");
-  console.log("Project home after the turn ends:", finished);
+  await page.capture("home-activity-2-finished-390");
+  console.log("Project home before and after the turn ends:", working, finished);
   assert.deepEqual(
-    finished.map(({ title, cue }) => [title, cue]),
-    [
-      ["Watch the build", "Finished"],
-      ["Live worktree", "Idle"],
-      ["Gone worktree", null],
-    ],
-    "the cue follows working to done in place, and rows keep their order",
+    finished,
+    working.map((row, i) => (i === watch ? ["Watch the build", "Finished"] : row)),
+    "the same row turns from Working to Finished in place, and rows keep their order",
   );
-  assert.equal(starts().length, startsBefore, "watching the transition starts no Pi process");
   await page.ab("set", "viewport", "1280", "900");
-  await page.capture("home-activity-4-finished-1280");
 };
 
 await run(

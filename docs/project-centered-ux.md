@@ -6,4 +6,7 @@ catalog): no request, no Git, no Pi (PIN-83).
 A home's session row leads its second line with the catalog's activity as a `StatusDot` beside its
 word: Working, Idle or Finished, and nothing when Pi is off. Finished is the catalog's `done`: Pi's
 turn ended while the session was not open. It says nothing about whether the work passed
-verification, so the row does not say "Done" (PIN-164).
+verification, so the row does not say "Done" (PIN-164). A starting session's row says Starting
+alone. While the connection is lost, and until the reconnected server sends its host snapshot, the
+row shows no Working or Idle, since the cached snapshot may be stale; Finished stays, because that
+turn was seen to end.

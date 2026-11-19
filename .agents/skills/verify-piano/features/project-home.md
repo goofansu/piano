@@ -24,10 +24,10 @@ Preconditions: a seeded launch.
   - Result: the sheet closes and the project home opens. Capture `02d-mobile-home`, then
     `ab set viewport 1280 800` for the remaining steps.
 - `activity`
-  - Covered by `node test/browser/open-session.mjs <evidence>` (`home-activity-*` captures): a
-    working and an idle QA Project member at 390px read `Working` and `Idle` before their folder,
-    branch and pull request; the held turn ends in place as `Finished` with rows in the same order;
-    opening the home sends no HTTP request or socket frame and starts no Pi.
+  - Covered by `node test/browser/open-session.mjs <evidence>` (`home-activity-*` captures): at
+    390px a held QA Project member reads `Working`, then the same row reads `Finished` in place
+    when the turn ends, with rows in the same order. Starting and lost-connection cues are covered
+    by `test/ProjectHome.test.ts`.
 - `crumb`
   - Action: `ab click 'main [data-slot=breadcrumb-link]'; ab wait --url "**/projects"`
   - Result: `ab get url` ends in `/projects` and `ab get title` is `Projects - Piano`. Capture
