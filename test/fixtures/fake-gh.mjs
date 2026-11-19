@@ -7,6 +7,10 @@ const args = process.argv.slice(2),
 const repo = args.includes("--repo") ? args[args.indexOf("--repo") + 1] : undefined;
 if (fixture.log)
   appendFileSync(fixture.log, `${JSON.stringify({ GH_HOST: process.env.GH_HOST, args })}\n`);
+if (list && !repo) {
+  console.error("fake gh: pr list without --repo lists only the one base repository gh picks");
+  process.exit(1);
+}
 const unresolved = repo?.split("/").slice(-2).join("/");
 if (fixture.unresolvedRepos?.includes(unresolved)) {
   console.error(
@@ -43,8 +47,7 @@ if (fixture.checksError && fields.includes("statusCheckRollup")) {
   process.exit(1);
 }
 const baseRepo = (pr) => new URL(pr.url).pathname.split("/").slice(1, 3).join("/").toLowerCase();
-const listedIn = (pr) =>
-  !repo || baseRepo(pr) === repo.split("/").slice(-2).join("/").toLowerCase();
+const listedIn = (pr) => baseRepo(pr) === repo.split("/").slice(-2).join("/").toLowerCase();
 const selected = (pr) =>
   Object.fromEntries(Object.entries(pr).filter(([key]) => fields.includes(key)));
 if (list)
