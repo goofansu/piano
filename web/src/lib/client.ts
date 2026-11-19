@@ -2,10 +2,11 @@ import type { ClientCommand, ServerMessage } from "@shared/wire";
 import { refusedAttempt } from "../../../shared/creationVerdict.ts";
 import { closureNeedsAttention } from "../../../shared/sessionStatus.ts";
 import { type Action, type AppState, reduce, sessionDelivery } from "../store.ts";
-import { QUEUE_RESTORED_NOTICE } from "./composerControl.ts";
+import { QUEUE_IMAGES_REMOVED_NOTICE, QUEUE_RESTORED_NOTICE } from "./composerControl.ts";
 import { browserTimers, type RequestTimers } from "./correlatedRequest.ts";
 import { machineMemory } from "./machineMemory.ts";
 import type { MachineOffers } from "./machineOffers.ts";
+import { restoredQueueText } from "./messageDraft.ts";
 import { projectStartDirectory } from "./projectHome.ts";
 import { focusedDirectory, sessionReady } from "./sessionContext.ts";
 import { startPage } from "./startPage.ts";
@@ -251,7 +252,13 @@ export function createClient({
     else if (elsewhere) notify(`Could not start session: ${m.message}`, "error");
     else if (m._tag === "toast") notify(m.message, m.level);
     else if (m._tag === "action_result" && m.result._tag === "queue_restored") {
-      if (m.result.messages.length) notify(QUEUE_RESTORED_NOTICE, "info");
+      if (m.result.messages.length)
+        notify(
+          restoredQueueText(m.result.messages)
+            ? QUEUE_RESTORED_NOTICE
+            : QUEUE_IMAGES_REMOVED_NOTICE,
+          "info",
+        );
       if (m.result.stopError) notify(m.result.stopError, "error");
     } else if (m._tag === "worktree_result" && m.result.status === "ready" && m.result.creation)
       notify(
