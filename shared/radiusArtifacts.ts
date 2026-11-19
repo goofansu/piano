@@ -1,4 +1,14 @@
-import { arr, int, num, obj, opt, type Schema, type Static, str } from "@earendil-works/pi-schema";
+import {
+  arr,
+  int,
+  nullable,
+  num,
+  obj,
+  opt,
+  type Schema,
+  type Static,
+  str,
+} from "@earendil-works/pi-schema";
 import { z } from "zod";
 
 export const RADIUS_ARTIFACT_PUBLICATION = "radius-artifact-publication-v1";
@@ -67,5 +77,9 @@ export const RadiusArtifactResult = obj({
   expiresAt: opt(str()),
   files: opt(arr(obj({ path: str(), content_type: str(), stored_bytes: num() }))),
   content: opt(str()),
+  path: opt(str()),
+  offset: opt(int()),
+  nextOffset: opt(nullable(int())),
+  totalBytes: opt(int()),
 });
 export type RadiusArtifactResult = Static<typeof RadiusArtifactResult>;
