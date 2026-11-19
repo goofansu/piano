@@ -20,6 +20,13 @@ import {
 } from "../server/WorkspaceChanges.ts";
 import { answerJson } from "../shared/http.ts";
 import { CHANGES_ANSWER_BYTES, type WorkspaceChanges as Observation } from "../shared/wire.ts";
+import {
+  askText,
+  changedFile,
+  changesSheet,
+  initialDisclosure,
+  patchNote,
+} from "../web/src/lib/changesView.ts";
 import { parseUnifiedDiff } from "../web/src/lib/diff.ts";
 import { forkWorktree } from "./fixtures/forkWorktree.ts";
 
@@ -561,6 +568,58 @@ test("live changes: a staged edit whose working copy matches HEAD stays listed w
   assert.deepEqual(clean.files, []);
   assert.equal(clean.diff, "");
   assert.equal(clean.local.uncommitted, false);
+});
+
+test("live changes: each loaded patch carries its own source, so its badge and Ask prompt agree with its contents", async (t) => {
+  const { repo, git, preview } = fixture(t);
+  const workspace = { id: "scratch", path: repo };
+  const lines = (word: string) =>
+    Array.from({ length: 3000 }, (_, i) => `${word} ${i} ${"x".repeat(40)}\n`).join("");
+  writeFileSync(join(repo, "notes.txt"), "base\n");
+  writeFileSync(join(repo, "big.txt"), lines("base"));
+  git("add", ".");
+  git("commit", "-qm", "base");
+  writeFileSync(join(repo, "notes.txt"), "base\nindex only\n");
+  git("add", "notes.txt");
+  writeFileSync(join(repo, "notes.txt"), "base\n");
+  const index = readFileSync(join(repo, ".git/index"));
+
+  const listed = changesSheet({
+    observation: await preview(),
+    busy: false,
+    disclosure: initialDisclosure,
+  });
+  assert.equal(listed.body.kind, "files");
+  if (listed.body.kind !== "files") return;
+  const seeded = listed.body.files.find((f) => f.metadata.path === "notes.txt")?.initial;
+  assert.ok(seeded, "the staged patch arrives with the list");
+  assert.equal(seeded.source, "index");
+  assert.match(seeded.file.raw, /\+index only/);
+  assert.equal(patchNote(seeded), "Staged; the working copy matches HEAD");
+  assert.match(askText(seeded), /^About `notes\.txt` \(staged diff of the index against HEAD/);
+  assert.doesNotMatch(askText(seeded), /working-tree/);
+
+  writeFileSync(join(repo, "big.txt"), lines("edit"));
+  const observation = await preview();
+  const deferred = changesSheet({ observation, busy: false, disclosure: initialDisclosure });
+  if (deferred.body.kind !== "files" || observation.result.status !== "ready")
+    throw new Error("Changes did not list files");
+  const row = deferred.body.files.find((f) => f.metadata.path === "notes.txt");
+  assert.equal(row?.metadata.staged, true);
+  assert.equal(row?.initial, undefined, "the large sibling defers notes.txt to expansion");
+  writeFileSync(join(repo, "notes.txt"), "base\ndisk edit\n");
+  const loaded = changedFile(
+    workspace,
+    await preview("notes.txt"),
+    "notes.txt",
+    observation.result.comparison,
+  );
+  assert.equal(loaded.source, "working-tree");
+  assert.match(loaded.file.raw, /\+disk edit/);
+  assert.doesNotMatch(loaded.file.raw, /index only/);
+  assert.equal(patchNote(loaded), undefined);
+  assert.match(askText(loaded), /^About `notes\.txt` \(live working-tree diff/);
+  assert.deepEqual(readFileSync(join(repo, ".git/index")), index);
 });
 
 test("local work: commits not pushed count against the branch's upstream, not a same-named remote branch", async (t) => {

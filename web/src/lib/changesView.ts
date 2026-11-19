@@ -118,7 +118,14 @@ export interface LoadedFile {
   file: DiffFile;
   observedAt: string;
   truncated: boolean;
+  source: PatchSource;
 }
+
+export type PatchSource = "working-tree" | "index";
+export const patchSource = (stats: Pick<ChangeFile, "staged">): PatchSource =>
+  stats.staged ? "index" : "working-tree";
+export const patchNote = ({ source }: Pick<LoadedFile, "source">) =>
+  source === "index" ? "Staged; the working copy matches HEAD" : undefined;
 
 export function changedFile(
   expected: Pick<Workspace, "id" | "path">,
@@ -146,16 +153,39 @@ export function changedFile(
         ? `Patch is too large to display a complete line (${FILE_PATCH_LIMIT} limit).`
         : "File changed or no longer has a diff. Refresh changes.",
     );
-  return { file: { ...file, ...stats }, observedAt, truncated: result.truncated };
+  return {
+    file: { ...file, ...stats },
+    observedAt,
+    truncated: result.truncated,
+    source: patchSource(stats),
+  };
 }
 
-const seeds = new WeakMap<ReadyResult, ReadonlyMap<string, DiffFile>>();
-function seedFiles(ready: ReadyResult): ReadonlyMap<string, DiffFile> {
+const seeds = new WeakMap<ReadyResult, ReadonlyMap<string, LoadedFile>>();
+function seedFiles(ready: ReadyResult, observedAt: string): ReadonlyMap<string, LoadedFile> {
   let seed = seeds.get(ready);
   if (!seed) {
     const parsed = parseUnifiedDiff(ready.diff);
     if (ready.truncated) parsed.pop();
-    seed = new Map(parsed.map((file) => [file.path, file]));
+    const stats = new Map(ready.files.map((f) => [f.path, f]));
+    seed = new Map(
+      parsed.flatMap((file) => {
+        const metadata = stats.get(file.path);
+        return metadata
+          ? [
+              [
+                file.path,
+                {
+                  file: { ...file, ...metadata },
+                  observedAt,
+                  truncated: false,
+                  source: patchSource(metadata),
+                },
+              ] as const,
+            ]
+          : [];
+      }),
+    );
     seeds.set(ready, seed);
   }
   return seed;
@@ -171,7 +201,7 @@ export const initialDisclosure: Disclosure = { collapsed: new Set(), opened: new
 
 export interface SheetFile {
   metadata: ChangeFile;
-  initial?: DiffFile;
+  initial?: LoadedFile;
   open: boolean;
 }
 
@@ -193,10 +223,10 @@ export interface ChangesSheetView {
   everyCollapsed: boolean;
 }
 
-const isOpen = (state: Disclosure, path: string, seed: ReadonlyMap<string, DiffFile>) => {
+const isOpen = (state: Disclosure, path: string, seed: ReadonlyMap<string, LoadedFile>) => {
   if (state.collapsed.has(path)) return false;
   const seeded = seed.get(path);
-  return (seeded !== undefined && !isLarge(seeded)) || state.opened.has(path);
+  return (seeded !== undefined && !isLarge(seeded.file)) || state.opened.has(path);
 };
 
 export function changesSheet({
@@ -212,7 +242,7 @@ export function changesSheet({
 }): ChangesSheetView {
   const result = observation?.result;
   if (observation && result?.status === "ready") {
-    const seed = seedFiles(result);
+    const seed = seedFiles(result, observation.observedAt);
     const files = result.files.map((metadata) => ({
       metadata,
       initial: seed.get(metadata.path),
@@ -293,5 +323,10 @@ export function fileMessage({
 const clock = (iso: string) =>
   new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
-export const askText = ({ file, observedAt, truncated }: LoadedFile) =>
-  `About \`${file.path}\` (live working-tree diff inspected at ${clock(observedAt)}; ${truncated ? "partial patch, not the complete file" : "not an immutable revision"}):\n\n\`\`\`diff\n${file.raw}\`\`\`\n`;
+const SOURCE_NAMES: Record<PatchSource, string> = {
+  "working-tree": "live working-tree diff",
+  index: "staged diff of the index against HEAD; the working file matches HEAD;",
+};
+
+export const askText = ({ file, observedAt, truncated, source }: LoadedFile) =>
+  `About \`${file.path}\` (${SOURCE_NAMES[source]} inspected at ${clock(observedAt)}; ${truncated ? "partial patch, not the complete file" : "not an immutable revision"}):\n\n\`\`\`diff\n${file.raw}\`\`\`\n`;
