@@ -21,6 +21,7 @@ import {
 } from "./RadiusClient.ts";
 
 const entryType = "radius-artifact-intent-v1";
+const PUBLICATION_BYTES = 128 * 1024;
 const Intent = z.object({
   key: z.string(),
   fingerprint: z.string(),
@@ -42,7 +43,7 @@ const document = {
   title: str({ minLength: 1, maxLength: 256 }),
   content: str({
     minLength: 1,
-    maxLength: 131072,
+    maxLength: PUBLICATION_BYTES,
     description: "Document text, not a local file path. Review it for secrets before publishing.",
   }),
   contentType: StringEnum([
@@ -169,8 +170,10 @@ export default function radiusArtifacts(pi: ExtensionAPI) {
         expectedRevision?: number;
       },
     ): Promise<RadiusArtifactResult> => {
-      if (Buffer.byteLength(params.content) > 128 * 1024)
-        throw new RadiusError("Document exceeds the 128 KiB publication limit.");
+      if (Buffer.byteLength(params.content) > PUBLICATION_BYTES)
+        throw new RadiusError(
+          `Document exceeds the ${PUBLICATION_BYTES / 1024} KiB publication limit.`,
+        );
       const fingerprint = createHash("sha256")
         .update(
           JSON.stringify([

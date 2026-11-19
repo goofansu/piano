@@ -11,6 +11,7 @@ import {
   PreviewStartError,
 } from "./PreviewAdapter.ts";
 import { READY_INTERVAL_MS, WARMUP_SECONDS } from "./PreviewReadiness.ts";
+import { PREVIEW_REQUEST_BYTES } from "./PreviewRequest.ts";
 
 export type PreviewOutcome = { result: unknown } | { error: unknown; attempted?: unknown };
 
@@ -88,7 +89,7 @@ export class PreviewOwner {
       let input = "";
       const receive = (chunk: string) => {
         input += chunk;
-        if (Buffer.byteLength(input) > 65536) {
+        if (Buffer.byteLength(input) > PREVIEW_REQUEST_BYTES) {
           socket.destroy();
           return;
         }

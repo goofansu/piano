@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import {
   IMAGE_TYPES,
+  MAX_ATTACHMENT_NAME_LENGTH,
   MAX_ATTACHMENTS,
   MAX_ATTACHMENT_BYTES,
   MAX_IMAGE_BYTES,
@@ -8,9 +9,11 @@ import {
 import { IMAGE_PREVIEW_BYTES, IMAGE_PREVIEW_HASH } from "./imagePreviews.ts";
 import { URL_ID } from "./urlId.ts";
 
+const MANIFEST_BYTES = 16 * 1024;
+const MANIFEST_PREFIX_BYTES = 4;
 export const remoteImageLimits = {
-  manifestBytes: 16 * 1024,
-  bodyBytes: MAX_ATTACHMENT_BYTES + 16 * 1024 + 4,
+  manifestBytes: MANIFEST_BYTES,
+  bodyBytes: MANIFEST_PREFIX_BYTES + MANIFEST_BYTES + MAX_ATTACHMENT_BYTES,
   batches: 2,
   laneTransfers: 2,
   ttlMs: 10 * 60_000,
@@ -46,7 +49,7 @@ export const ImageManifest = Schema.Struct({
   target: ImageTarget,
   images: Schema.Array(
     Schema.Struct({
-      name: Schema.String.check(Schema.isMaxLength(255)),
+      name: Schema.String.check(Schema.isMaxLength(MAX_ATTACHMENT_NAME_LENGTH)),
       mimeType: Schema.Literals(IMAGE_TYPES),
       size: Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(MAX_IMAGE_BYTES)),
     }),

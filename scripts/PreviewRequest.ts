@@ -2,6 +2,8 @@ import { StringEnum } from "@earendil-works/pi-ai";
 import { arr, map, num, obj, opt, type Static, str } from "@earendil-works/pi-schema";
 import { START_TIMEOUT_SECONDS } from "./PreviewReadiness.ts";
 
+export const PREVIEW_REQUEST_BYTES = 64 * 1024;
+
 export const PreviewParameters = obj({
   action: StringEnum(["start", "status", "stop"] as const),
   command: opt(arr(str(), { minItems: 1 })),

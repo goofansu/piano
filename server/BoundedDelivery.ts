@@ -6,9 +6,9 @@ export class DeliveryOverflow extends Data.TaggedError("DeliveryOverflow")<{
   readonly oversized: boolean;
 }> {}
 
-export const makeDelivery = Effect.fnUntraced(function* <A>(
-  limits = { messages: 256, bytes: 8 * 1024 * 1024 },
-) {
+const queueLimits = { messages: 256, bytes: 8 * 1024 * 1024 };
+
+export const makeDelivery = Effect.fnUntraced(function* <A>(limits = queueLimits) {
   const queue = yield* Queue.dropping<{ value: A; bytes: number }>(limits.messages);
   const failed = yield* Deferred.make<never, DeliveryOverflow>();
   let bytes = 0,
@@ -55,7 +55,7 @@ export interface SocketClose {
 }
 
 export const socketLimits = {
-  queue: { messages: 256, bytes: 8 * 1024 * 1024 },
+  queue: queueLimits,
   window: { frames: 32, bytes: 8 * 1024 * 1024 },
   frameBytes: 8 * 1024 * 1024,
   ackTimeout: "10 seconds" as Duration.Input,

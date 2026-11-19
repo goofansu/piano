@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { PREVIEW_OWNER_ENV } from "../shared/dispatch.ts";
 import { PreviewAdapter, type PreviewConfig, type PreviewRequest } from "./PreviewAdapter.ts";
 import { ownerRequest } from "./PreviewClient.ts";
+import { PREVIEW_REQUEST_BYTES } from "./PreviewRequest.ts";
 
 process.umask(0o077);
 try {
@@ -12,7 +13,8 @@ try {
   process.stdin.setEncoding("utf8");
   for await (const chunk of process.stdin) {
     input += chunk;
-    if (Buffer.byteLength(input) > 65536) throw new Error("Preview request exceeds 64 KiB.");
+    if (Buffer.byteLength(input) > PREVIEW_REQUEST_BYTES)
+      throw new Error(`Preview request exceeds ${PREVIEW_REQUEST_BYTES / 1024} KiB.`);
   }
   const request: PreviewRequest = JSON.parse(input);
   const config: PreviewConfig = process.env.PIANO_PREVIEW_CONFIG

@@ -3,6 +3,7 @@ import {
   base64Bytes,
   IMAGE_TYPES,
   MAX_ATTACHMENT_BYTES,
+  MAX_ATTACHMENT_NAME_LENGTH,
   MAX_ATTACHMENTS,
   MAX_IMAGE_BYTES,
 } from "./attachments.ts";
@@ -11,7 +12,7 @@ import { PreparedImages } from "./remoteImages.ts";
 
 export const Attachment = Schema.Struct({
   kind: Schema.Literal("image"),
-  name: Schema.String.check(Schema.isMaxLength(255)),
+  name: Schema.String.check(Schema.isMaxLength(MAX_ATTACHMENT_NAME_LENGTH)),
   mimeType: Schema.Literals(IMAGE_TYPES),
   data: Schema.String.check(
     Schema.isMaxLength(4 * Math.ceil(MAX_IMAGE_BYTES / 3)),
