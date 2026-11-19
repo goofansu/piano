@@ -47,6 +47,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { abbrevHome, clamp, stripAnsi, toolArgsText } from "@/lib/format";
 import type { MessageError } from "@/lib/messageError";
 import { routePath } from "@/lib/routes";
+import { createScrollRenderBudget } from "@/lib/scrollRenderBudget";
 import type { SessionDestination } from "@/lib/sessionCatalog";
 import { disclosureRow } from "@/lib/styles";
 import {
@@ -143,23 +144,34 @@ export function MessageList({
     projection.history[index] ??
     (index === projection.history.length ? projection.pending : undefined);
   const { virtual, jumping } = useVirtualTranscript(projection, ref, list, viewport);
+  const [unmeasured] = useState(() => new Set<HTMLElement>());
+  const [budget] = useState(() => createScrollRenderBudget());
   const measureRow = useCallback(
     (row: HTMLElement) => {
-      // Radix unmounts closed content in a nested commit; measure in the next microtask.
-      queueMicrotask(() => {
-        if (!row.isConnected) return;
-        flushSync(() => virtual.resizeItem(virtual.indexFromElement(row), row.offsetHeight));
-      });
+      if (unmeasured.size === 0)
+        // Radix unmounts closed content in a nested commit; measure in the next microtask.
+        queueMicrotask(() => {
+          const rows = [...unmeasured].filter((row) => row.isConnected);
+          unmeasured.clear();
+          flushSync(() => {
+            for (const row of rows)
+              virtual.resizeItem(virtual.indexFromElement(row), row.offsetHeight);
+          });
+          budget.settled();
+        });
+      unmeasured.add(row);
     },
-    [virtual],
+    [virtual, unmeasured, budget],
   );
   const measureElement = useCallback(
     (row: HTMLDivElement | null) => {
       virtual.measureElement(row);
+      if (!row) return;
+      if (virtual.isScrolling) budget.mounted();
       // TanStack defers new-row measurements while scrolling; settle them before paint.
-      if (row) measureRow(row);
+      measureRow(row);
     },
-    [virtual, measureRow],
+    [virtual, measureRow, budget],
   );
   const window = virtual.getVirtualItems();
   const deferredWindow = useDeferredValue(window);
@@ -170,13 +182,19 @@ export function MessageList({
     jumping ||
     !virtual.isScrolling ||
     readyKeys.has(item.key) ||
-    (item.end > top && item.start < bottom);
+    (budget.affordable() && item.end > top && item.start < bottom);
 
   return (
     <div className={cn("relative min-h-0 flex-1", className)}>
       <div
         ref={ref}
-        onScrollCapture={viewport.scrolled}
+        onScrollCapture={() => {
+          budget.scrolled();
+          viewport.scrolled();
+        }}
+        onWheelCapture={budget.input}
+        onTouchMoveCapture={budget.input}
+        onKeyDownCapture={budget.input}
         data-slot="transcript"
         data-message-count={messages.length}
         data-window-pending={window.some((item) => !isReady(item)) ? "" : undefined}
