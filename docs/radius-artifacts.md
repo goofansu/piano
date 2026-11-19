@@ -88,8 +88,13 @@ manifest only, without content or page fields. Transport credentials and signed 
 
 One bound covers every Piano function that sends a file to Radius or reads one back:
 `RADIUS_ARTIFACT_FILE_BYTES` in [`shared/radiusArtifacts.ts`](../shared/radiusArtifacts.ts),
-**25 MiB** of UTF-8 bytes per file. It is Radius's documented per-file limit, from the Limits
-paragraph of the Artifacts section in its [OpenAPI document](https://radius.pi.dev/v1/openapi.json).
+**25 MiB** of UTF-8 bytes per file. It is Radius's documented per-file limit.
+
+Source: <https://radius.pi.dev/v1/openapi.json>, in the description of the **Artifacts** tag under
+"Limits" (search the document for "Each file is limited"):
+
+> Each file is limited to 25 MiB, a revision may contain at most 1000 files, and an artifact may
+> contain at most 100 revisions.
 
 | Function | Over the bound |
 | --- | --- |
