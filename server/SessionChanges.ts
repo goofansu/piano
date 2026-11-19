@@ -38,8 +38,8 @@ export const SessionChangesLive = Layer.effect(
       const link = session.pullRequest;
       const hints: TargetHints = {
         ...(link ? { pullRequest: pullRequestBranches(link) } : {}),
-        ...(worktree?.baseBranch
-          ? { worktreeBase: { branch: worktree.branch, base: worktree.baseBranch } }
+        ...(worktree?.created
+          ? { worktreeBase: { branch: worktree.created.branch, base: worktree.created.baseBranch } }
           : {}),
       };
       return hints;
