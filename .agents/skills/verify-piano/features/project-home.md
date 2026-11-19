@@ -23,6 +23,11 @@ Preconditions: a seeded launch.
     `ab find role button click --name "Verify Project" --exact; ab wait --url "**/projects/verify"`.
   - Result: the sheet closes and the project home opens. Capture `02d-mobile-home`, then
     `ab set viewport 1280 800` for the remaining steps.
+- `activity`
+  - Covered by `node test/browser/open-session.mjs <evidence>` (`home-activity-*` captures): a
+    working and an idle QA Project member at 390px read `Working` and `Idle` before their folder,
+    branch and pull request; the held turn ends in place as `Finished` with rows in the same order;
+    opening the home sends no HTTP request or socket frame and starts no Pi.
 - `crumb`
   - Action: `ab click 'main [data-slot=breadcrumb-link]'; ab wait --url "**/projects"`
   - Result: `ab get url` ends in `/projects` and `ab get title` is `Projects - Piano`. Capture
