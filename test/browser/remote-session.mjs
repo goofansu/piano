@@ -1246,7 +1246,12 @@ await run(
         assert.deepEqual(page.prompts(), [], "local Pi receives no project session");
 
         const projectButton = 'button[aria-label="Project"]';
+        const projectClickable = () =>
+          page.until(
+            `(() => { const b = document.querySelector('${projectButton}'); if (!b || document.querySelector('[data-slot="dialog-overlay"], [role="dialog"]')) return false; const r = b.getBoundingClientRect(); const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return !!hit && b.contains(hit); })()`,
+          );
         const pickProject = async (name) => {
+          await projectClickable();
           await page.ab("click", projectButton);
           await page.until(`!!document.querySelector('[aria-label="Choose a project"]')`);
           await page.click("menuitem", name);
@@ -1257,6 +1262,7 @@ await run(
         };
         await page.click("button", "New session");
         await remoteNewPage(page);
+        await projectClickable();
         await page.ab("click", projectButton);
         await page.click("menuitem", "New project");
         await page.ab("find", "label", "Name", "fill", "Peer project B");
