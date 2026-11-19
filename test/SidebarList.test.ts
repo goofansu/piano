@@ -42,6 +42,7 @@ const view = (groupBy: GroupBy): SidebarView => ({
   folderAndBranch: false,
 });
 const GROUPINGS: GroupBy[] = ["folder", "project", "date"];
+const OCTOBER_FIRST = { updatedAt: new Date(2026, 9, 1, 12).toISOString() };
 const titles = (items: ReadonlyArray<{ title?: string }>) => items.map((s) => s.title);
 const selecting = (state: AppState, cwd: string, sessionId: string | null): AppState => ({
   ...state,
@@ -448,7 +449,7 @@ test("sidebar list: a pinned session shows only under Pinned, even when its fold
     folders: [folder("/repo")],
     sessionReferences: [
       sessionReference("/repo", "pinned-open", { title: "Pinned open", pinned: true }),
-      sessionReference("/repo", "unfiled", { title: "Unfiled" }),
+      sessionReference("/repo", "unfiled", { title: "Unfiled", ...OCTOBER_FIRST }),
       sessionReference("/closed/app", "pinned-closed", { title: "Pinned closed", pinned: true }),
     ],
   };
@@ -480,8 +481,8 @@ test("sidebar list: folder and branch adds a line only where a row has something
     ...loaded,
     folders: [folder("/repo"), plain],
     sessionReferences: [
-      sessionReference("/repo", "git", { title: "Git", branch: "main" }),
-      sessionReference("/notes", "plain", { title: "Plain", branch: null }),
+      sessionReference("/repo", "git", { title: "Git", branch: "main", ...OCTOBER_FIRST }),
+      sessionReference("/notes", "plain", { title: "Plain", branch: null, ...OCTOBER_FIRST }),
       sessionReference("/notes", "pinned", { title: "Pinned", branch: null, pinned: true }),
     ],
   };

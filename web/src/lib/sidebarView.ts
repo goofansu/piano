@@ -115,7 +115,11 @@ export function projectGroups<
 }
 
 const NAMED_DAYS = 7;
-const dayFormat = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
+const dayFormat = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  timeZone: "UTC",
+});
 
 export interface DateGroup {
   key: string;
@@ -136,7 +140,12 @@ function groupAt(now: Date, bucket: number): DateGroup {
   if (bucket === NAMED_DAYS) return OLDER;
   if (bucket > NAMED_DAYS) return UNKNOWN;
   const day = localMidnight(now, -bucket);
-  const label = bucket === 0 ? "Today" : bucket === 1 ? "Yesterday" : dayFormat.format(day);
+  const label =
+    bucket === 0
+      ? "Today"
+      : bucket === 1
+        ? "Yesterday"
+        : dayFormat.format(Date.UTC(day.getFullYear(), day.getMonth(), day.getDate()));
   return { key: isoDay(day), label };
 }
 
