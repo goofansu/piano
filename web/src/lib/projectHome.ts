@@ -31,16 +31,6 @@ export interface ProjectHomeSession extends SessionEntry {
   cue: ProjectHomeCue | null;
 }
 
-function activityCue(
-  activity: SessionActivity,
-  starting: boolean,
-  hostsCurrent: boolean,
-): ProjectHomeCue | null {
-  if (starting || activity === "off") return null;
-  if (activity === "done") return "done";
-  return hostsCurrent ? activity : null;
-}
-
 export interface ProjectHome {
   kind: "home";
   project: Project;
@@ -54,17 +44,15 @@ export function projectHome(state: AppState, projectId: string): ProjectHomeView
   const project = findProject(state, projectId);
   if (!project) return { kind: "missing" };
   const links = new Map(state.sessionReferences.map((r) => [sessionKey(r), r.pullRequest]));
-  const starting = new Set(state.hosts.filter((h) => h.starting).map(sessionKey));
   const sessions = sessionCatalog(state)
     .filter((entry) => entry.projectId === projectId)
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     .map((entry): ProjectHomeSession => {
-      const key = sessionKey(entry);
-      const link = links.get(key);
+      const link = links.get(sessionKey(entry));
       return {
         ...entry,
         pullRequest: link ? pullRequestView({ link, pullRequest: null })?.name : undefined,
-        cue: activityCue(entry.activity, starting.has(key), state.hostsCurrent),
+        cue: entry.activity === "off" ? null : entry.activity,
       };
     });
   return { kind: "home", project, sessions };

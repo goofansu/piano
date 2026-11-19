@@ -5,6 +5,23 @@ import { findProject } from "./projectCommands.ts";
 
 export type SessionActivity = "working" | "done" | "idle" | "off";
 
+type Host = AppState["hosts"][number];
+
+function liveActivity(
+  host: Host | undefined,
+  done: boolean,
+  hostsCurrent: boolean,
+): SessionActivity {
+  if (host?.starting) return "off";
+  if (host?.working) return hostsCurrent ? "working" : "off";
+  if (done) return "done";
+  return host && hostsCurrent ? "idle" : "off";
+}
+
+export function anySessionWorking(state: Pick<AppState, "hosts" | "hostsCurrent">): boolean {
+  return state.hosts.some((h) => liveActivity(h, false, state.hostsCurrent) === "working");
+}
+
 export interface SessionEntry {
   cwd: string;
   sessionId: string;
@@ -158,7 +175,7 @@ function entries(state: AppState): SessionEntry[] {
       archived: ref.archived,
       pinned: !!ref.pinned,
       listed: !ref.archived && (!!folder || !!project),
-      activity: host?.working ? "working" : done.has(key) ? "done" : host ? "idle" : "off",
+      activity: liveActivity(host, done.has(key), state.hostsCurrent),
       selected: isSession(current, ref),
       unavailable: ref.unavailable,
       hint: ref.unavailable && HINTS[ref.unavailable],
@@ -191,6 +208,7 @@ export function createSessionCatalog(): (state: AppState) => SessionEntry[] {
       state.folders,
       state.projects,
       state.hosts,
+      state.hostsCurrent,
       state.done,
       current?.cwd,
       current?.sessionId,

@@ -3,13 +3,16 @@ import { test } from "node:test";
 import type { FolderView, SessionState, WorktreeView } from "../shared/wire.ts";
 import { addressFor, decideRoute } from "../web/src/lib/navigation.ts";
 import {
+  anySessionWorking,
   archivedSessionCatalog,
   catalogEntry,
+  createSessionCatalog,
   folderFor,
   recentSessions,
   sessionAddress,
   sessionCatalog,
   sessionDestination,
+  type SessionEntry,
   unavailableSessionPage,
 } from "../web/src/lib/sessionCatalog.ts";
 import { sessionContext } from "../web/src/lib/sessionContext.ts";
@@ -19,7 +22,7 @@ import {
   projectGroups,
   sortSessions,
 } from "../web/src/lib/sidebarView.ts";
-import { type AppState, initialState, sessionKey } from "../web/src/store.ts";
+import { type Action, type AppState, initialState, reduce } from "../web/src/store.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
 
 const worktree = (path: string, branch: string | null, root: boolean): WorktreeView => ({
@@ -136,17 +139,33 @@ test("an unavailable member says why, and only lost history disables it", () => 
   assert.equal(fine.disabled, false);
 });
 
+const hosts = (list: AppState["hosts"]): Action => ({
+  type: "server",
+  message: { _tag: "hosts", hosts: list },
+});
+const online = reduce(state, { type: "connected", connected: true });
+
 test("activity follows the live host broadcast, and the selection marks one entry", () => {
-  const live: AppState = {
-    ...state,
-    hosts: [
+  const selecting = {
+    ...online,
+    selecting: { cwd: "/work/repo.feature", sessionId: "open-member" },
+  };
+  const busy = reduce(
+    selecting,
+    hosts([
+      { cwd: "/repo", sessionId: "open-unfiled", working: true },
+      { cwd: "/work/repo.feature", sessionId: "open-member", working: false },
+      { cwd: "/closed/app", sessionId: "closed-member", working: true },
+    ]),
+  );
+  const live = reduce(
+    busy,
+    hosts([
       { cwd: "/repo", sessionId: "open-unfiled", working: true },
       { cwd: "/work/repo.feature", sessionId: "open-member", working: false },
       { cwd: "/closed/app", sessionId: "closed-member", working: false },
-    ],
-    done: [sessionKey({ cwd: "/closed/app", sessionId: "closed-member" })],
-    selecting: { cwd: "/work/repo.feature", sessionId: "open-member" },
-  } as AppState;
+    ]),
+  );
   const all = sessionCatalog(live);
   const of = (id: string) => all.find((s) => s.sessionId === id)!;
   assert.equal(of("open-unfiled").activity, "working");
@@ -157,6 +176,64 @@ test("activity follows the live host broadcast, and the selection marks one entr
     all.filter((s) => s.selected).map((s) => s.sessionId),
     ["open-member"],
   );
+});
+
+test("a starting session has no live activity, and a stale host snapshot shows no Working or Idle", () => {
+  const memoized = createSessionCatalog();
+  const watched = ["open-unfiled", "open-member", "closed-member"];
+  const activity = (s: AppState) => {
+    const of = (catalog: SessionEntry[]) =>
+      watched.map((id) => catalog.find((e) => e.sessionId === id)?.activity);
+    const fresh = of(sessionCatalog(s));
+    assert.deepEqual(of(memoized(s)), fresh, "the memoized catalog gives the same answer");
+    return { sessions: fresh, anyWorking: anySessionWorking(s) };
+  };
+  const starting = reduce(
+    online,
+    hosts([
+      { cwd: "/repo", sessionId: "open-unfiled", working: true },
+      { cwd: "/work/repo.feature", sessionId: "open-member", working: false, starting: true },
+      { cwd: "/closed/app", sessionId: "closed-member", working: true },
+    ]),
+  );
+  assert.deepEqual(activity(starting), {
+    sessions: ["working", "off", "working"],
+    anyWorking: true,
+  });
+  assert.equal(
+    sessionCatalog(starting).find((e) => e.sessionId === "open-member")?.label,
+    "Starting",
+    "a starting session says so alone",
+  );
+  const current = reduce(
+    starting,
+    hosts([
+      { cwd: "/repo", sessionId: "open-unfiled", working: true },
+      { cwd: "/work/repo.feature", sessionId: "open-member", working: false },
+      { cwd: "/closed/app", sessionId: "closed-member", working: false },
+    ]),
+  );
+  assert.deepEqual(activity(current), {
+    sessions: ["working", "idle", "done"],
+    anyWorking: true,
+  });
+  const lost = reduce(current, { type: "connected", connected: false, lost: true });
+  assert.deepEqual(
+    activity(lost),
+    { sessions: ["off", "off", "done"], anyWorking: false },
+    "a turn already seen to end stays Finished; live Working and Idle are not presented as current",
+  );
+  const reopened = reduce(lost, { type: "connected", connected: true });
+  assert.deepEqual(activity(reopened), activity(lost), "the cached snapshot is stale on reconnect");
+  const fresh = reduce(
+    reopened,
+    hosts([
+      { cwd: "/repo", sessionId: "open-unfiled", working: true },
+      { cwd: "/work/repo.feature", sessionId: "open-member", working: false },
+      { cwd: "/closed/app", sessionId: "closed-member", working: false },
+    ]),
+  );
+  assert.deepEqual(activity(fresh), activity(current));
 });
 
 test("archived rows share catalog formatting, include closed folders and sort newest updated first", () => {
