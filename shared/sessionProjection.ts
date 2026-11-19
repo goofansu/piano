@@ -130,6 +130,7 @@ export function applySessionEvent(snapshot: Snapshot, event: SessionEvent): Snap
         },
       };
     case "response_completed":
+    case "response_failed":
     case "notice":
       return snapshot;
   }

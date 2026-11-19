@@ -227,6 +227,7 @@ export const WebhooksLive = Layer.effect(
       if (!previous && event._tag === "snapshot") return [];
       const events: WebhookEvent[] = [];
       if (event._tag === "response_completed") events.push("session.completed");
+      if (event._tag === "response_failed") events.push("session.failed");
       const dialog = dispositionOf(observed, true).dialog;
       const before = previous && dispositionOf(previous, true).dialog;
       if (dialog && (dialog.id !== before?.id || dialog.generation !== before?.generation))
@@ -243,7 +244,13 @@ export const WebhooksLive = Layer.effect(
       });
     });
     const emit = Effect.fn("Webhooks.emit")(
-      function* (event: WebhookEvent, cwd: string, sessionId: string, snapshot: Snapshot) {
+      function* (
+        event: WebhookEvent,
+        cwd: string,
+        sessionId: string,
+        snapshot: Snapshot,
+        cause: SessionEvent,
+      ) {
         const configured = yield* stored;
         const hooks = configured.filter((h) => h.active && h.events.includes(event));
         if (!hooks.length) return;
@@ -271,6 +278,16 @@ export const WebhooksLive = Layer.effect(
         const answer = full == null ? null : cutText(full, LAST_ANSWER_CHARS);
         const { dialog } = dispositionOf(snapshot, true);
         const closure = snapshot.state.closure;
+        const failure =
+          cause._tag === "response_failed"
+            ? { reason: "turn_failed", detail: clean(cause.detail), exitCode: null }
+            : closure
+              ? {
+                  reason: closure._tag,
+                  detail: clean(closure.detail),
+                  exitCode: closure._tag === "exited" ? closure.code : null,
+                }
+              : undefined;
         for (const hook of hooks) {
           const payload: WebhookPayload = {
             ...(yield* envelope(event)),
@@ -299,14 +316,10 @@ export const WebhooksLive = Layer.effect(
                   },
                 }
               : {}),
-            ...(event === "session.failed" && closure
+            ...(event === "session.failed" && failure
               ? {
                   action: url ? `Open session in Piano: ${url}` : "Open session in Piano.",
-                  failure: {
-                    reason: closure._tag,
-                    detail: clean(closure.detail),
-                    exitCode: closure._tag === "exited" ? closure.code : null,
-                  },
+                  failure,
                   answer,
                 }
               : {}),
@@ -379,7 +392,7 @@ export const WebhooksLive = Layer.effect(
       }),
       observe: Effect.fn("Webhooks.observe")(function* (cwd, sessionId, previous, event, observed) {
         for (const sent of triggered(previous, event, observed))
-          yield* emit(sent, cwd, sessionId, observed);
+          yield* emit(sent, cwd, sessionId, observed, event);
       }),
     });
   }),

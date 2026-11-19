@@ -83,6 +83,7 @@ function eventMessages(event: SessionEvent): readonly RenderMsg[] {
       return event.messages;
     case "state":
     case "response_completed":
+    case "response_failed":
     case "queue_update":
     case "submission":
     case "tool_update":

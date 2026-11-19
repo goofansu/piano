@@ -699,6 +699,7 @@ export class PiProjector {
   private seenDialogs = new Set<string>();
   private liveRun = false;
   private responseSucceeded = false;
+  private responseFailure: string | undefined;
   private cancelled = false;
 
   abort(): void {
@@ -732,6 +733,7 @@ export class PiProjector {
       case "agent_start":
         this.liveRun = true;
         this.responseSucceeded = false;
+        this.responseFailure = undefined;
         this.cancelled = false;
         return { ...project([], { isStreaming: true }), runStarted: true };
       case "queue_update": {
@@ -743,12 +745,20 @@ export class PiProjector {
         ]);
       }
       case "agent_settled": {
-        const completed = this.liveRun && this.responseSucceeded && !this.cancelled;
+        const ended = this.liveRun && !this.cancelled && raw.aborted !== true;
+        const completed = ended && this.responseSucceeded;
+        const failure = ended ? this.responseFailure : undefined;
         this.liveRun = false;
         this.turnRetry = false;
         this.summaryRetry = false;
         return project(
-          [...this.settle(), ...(completed ? [{ _tag: "response_completed" as const }] : [])],
+          [
+            ...this.settle(),
+            ...(completed ? [{ _tag: "response_completed" as const }] : []),
+            ...(failure === undefined
+              ? []
+              : [{ _tag: "response_failed" as const, detail: failure }]),
+          ],
           { isStreaming: false, isCompacting: false, isRetrying: false },
           ["context", "state", "stats"],
         );
@@ -964,7 +974,10 @@ export class PiProjector {
       case "message_end": {
         const reserved = event.message?.role === "assistant" ? this.partial?.id : undefined;
         if (event.message?.role === "assistant") {
-          this.responseSucceeded = turnEnding(event.message.stopReason) === "completed";
+          const ending = turnEnding(event.message.stopReason);
+          this.responseSucceeded = ending === "completed";
+          this.responseFailure =
+            ending === "failed" ? (event.message.errorMessage ?? "Pi stopped: error") : undefined;
           this.partial = undefined;
           this.blocks.clear();
         }
