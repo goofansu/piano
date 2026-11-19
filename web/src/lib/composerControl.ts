@@ -16,6 +16,9 @@ const deliveryAction = (kind: DeliveryMode): "steer" | "prompt" =>
 
 export const STOP: ClientCommand = { _tag: "act", action: { _tag: "stop" } };
 export const RESTORE_QUEUE: ClientCommand = { _tag: "act", action: { _tag: "restore_queue" } };
+export const QUEUE_RESTORE_HINT =
+  "Move queued text back to the draft without stopping Pi. Pi returns text only, so reattach any images.";
+export const QUEUE_RESTORED_NOTICE = "Queued text moved to the draft; reattach any images";
 
 export const messageCommand = (
   kind: DeliveryMode,
@@ -74,7 +77,7 @@ export function composerControl(s: ComposerSituation): ComposerControl {
       hint:
         s.queued > 0
           ? {
-              lead: "Stop and move queued input to the draft.",
+              lead: "Stop and move queued text to the draft. Reattach any images.",
               key: "Esc",
               tail: " edits without stopping.",
             }

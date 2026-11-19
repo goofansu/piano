@@ -26,6 +26,7 @@ import {
   DELIVERY_MODES,
   type DeliveryMode,
   messageCommand,
+  QUEUE_RESTORE_HINT,
   queuePanel,
   RESTORE_QUEUE,
   STOP,
@@ -186,9 +187,7 @@ export function Composer({
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <Hint of={["Esc"]}>
-                      Move queued messages back to the draft without stopping Pi
-                    </Hint>
+                    <Hint of={["Esc"]}>{QUEUE_RESTORE_HINT}</Hint>
                   </TooltipContent>
                 </Tooltip>
               </div>
