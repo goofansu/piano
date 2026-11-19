@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawn } from "node:child_process";
-import { once } from "node:events";
+import { execFileSync } from "node:child_process";
 import {
+  appendFileSync,
   closeSync,
   constants,
   mkdtempSync,
   openSync,
+  readdirSync,
+  readlinkSync,
+  realpathSync,
   rmSync,
   truncateSync,
   writeFileSync,
@@ -833,66 +836,66 @@ test(
   },
 );
 
-async function grow(path: string, start: number, total: number, chunk: number, pauseMs: number) {
-  writeFileSync(path, Buffer.alloc(start, "x"));
-  const writer = spawn(
-    process.execPath,
-    [
-      "-e",
-      `const fs = require("node:fs");
-      const [path, total, size, pause] = process.argv.slice(1);
-      const fd = fs.openSync(path, "a");
-      const chunk = Buffer.alloc(Number(size), "y");
-      const sleep = new Int32Array(new SharedArrayBuffer(4));
-      for (let n = 0; n < Number(total); n += chunk.length) {
-        fs.writeSync(fd, chunk);
-        if (n === 0) process.stdout.write("growing\\n");
-        Atomics.wait(sleep, 0, 0, Number(pause));
-      }`,
-      path,
-      String(total),
-      String(chunk),
-      String(pauseMs),
-    ],
-    { stdio: ["ignore", "pipe", "inherit"], timeout: 10000 },
-  );
-  const exited = once(writer, "exit");
-  await once(writer.stdout, "data");
-  return async () => {
-    writer.kill();
-    await exited;
-  };
+function growsOnceOpen(path: string, bytes: Buffer) {
+  const target = realpathSync(path);
+  const signal = new AbortController().signal;
+  let grown = false;
+  const check = signal.throwIfAborted.bind(signal);
+  Object.defineProperty(signal, "throwIfAborted", {
+    value() {
+      const open = readdirSync("/proc/self/fd").some((fd) => {
+        try {
+          return readlinkSync(`/proc/self/fd/${fd}`) === target;
+        } catch {
+          return false;
+        }
+      });
+      if (open && !grown) {
+        grown = true;
+        appendFileSync(target, bytes);
+      }
+      check();
+    },
+  });
+  return { signal, grown: () => grown };
 }
 
-test(
-  "a file that grows while it is read, below or past 25 MiB, publishes nothing",
-  { timeout: 30000 },
-  async () => {
-    const h = await harness();
-    const path = join(h.root, "growing.md");
-    const { content: _content, ...byPath } = document;
-    try {
-      for (const [start, total, chunk, pauseMs, refusal] of [
-        [20 * 1024 * 1024, 2 * 1024 * 1024, 4 * 1024, 0.2, /changed while reading/],
-        [23 * 1024 * 1024, 8 * 1024 * 1024, 256 * 1024, 0, /25 MiB publication limit|changed/],
-      ] as const) {
-        const stop = await grow(path, start, total, chunk, pauseMs);
-        try {
-          const refused = await h.call("create", { ...byPath, path: "growing.md" });
-          assert.equal(refused.status, "error");
-          assert.match(refused.message, refusal);
-          assert.equal(JSON.stringify(refused).includes(h.root), false, "no local path");
-        } finally {
-          await stop();
-        }
-      }
-      assert.equal(h.http.writes.length, 0);
-      assert.equal(intents(h).length, 0);
-    } finally {
-      h.cleanup();
+test("a file that grows while it is read, below or past 25 MiB, publishes nothing; the same file at rest publishes", async () => {
+  const h = await harness();
+  const path = join(h.root, "growing.md");
+  const { content: _content, ...byPath } = document;
+  try {
+    for (const [start, added, refusal] of [
+      [20 * 1024 * 1024, 4 * 1024, /changed while reading; nothing was published/],
+      [25 * 1024 * 1024, 1, /25 MiB publication limit/],
+    ] as const) {
+      writeFileSync(path, Buffer.alloc(start, "x"));
+      const growth = growsOnceOpen(path, Buffer.alloc(added, "y"));
+      const refused = await h.call("create", { ...byPath, path: "growing.md" }, growth.signal);
+      assert.equal(growth.grown(), true, "the file grew while the reader held it open");
+      assert.equal(refused.status, "error");
+      assert.match(refused.message, refusal);
+      assert.equal(JSON.stringify(refused).includes(h.root), false, "no local path");
     }
-  },
-);
+    assert.equal(h.http.writes.length, 0);
+    assert.equal(intents(h).length, 0);
+
+    for (const size of [20 * 1024 * 1024, 20 * 1024 * 1024 + 4 * 1024]) {
+      const text = "x".repeat(size);
+      writeFileSync(path, text);
+      const published = await h.call("create", {
+        ...byPath,
+        operationKey: `stable-${size}`,
+        path: "growing.md",
+      });
+      assert.equal(published.status, "confirmed", published.message);
+      assert.equal(h.http.writes.at(-1)?.args.content, text, "a file at rest publishes exactly");
+    }
+    assert.equal(h.http.writes.length, 2);
+  } finally {
+    h.cleanup();
+  }
+});
 
 test("cancelling while a file is read publishes and records nothing", async () => {
   const h = await harness();
