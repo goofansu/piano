@@ -1,4 +1,7 @@
+import { isUtf8 } from "node:buffer";
 import { createHash, randomUUID } from "node:crypto";
+import { open } from "node:fs/promises";
+import { resolve } from "node:path";
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { int, obj, opt, type Static, str } from "@earendil-works/pi-schema";
@@ -42,11 +45,21 @@ const document = {
       "Stable name for this publication intent. Reuse exactly on retry; never change it to bypass an uncertain result.",
   }),
   title: str({ minLength: 1, maxLength: 256 }),
-  content: str({
-    minLength: 1,
-    maxLength: RADIUS_ARTIFACT_FILE_BYTES,
-    description: "Document text, not a local file path. Review it for secrets before publishing.",
-  }),
+  content: opt(
+    str({
+      minLength: 1,
+      maxLength: RADIUS_ARTIFACT_FILE_BYTES,
+      description:
+        "Document text. Give this or path, not both. Review it for secrets before publishing.",
+    }),
+  ),
+  path: opt(
+    str({
+      minLength: 1,
+      description:
+        "Local UTF-8 text file to publish as the document, absolute or relative to the working directory. Give this or content, not both. Prefer it for a document already on disk, so its text is not repeated here. Review the file for secrets before publishing.",
+    }),
+  ),
   contentType: StringEnum([
     "text/markdown",
     "text/html",
@@ -56,6 +69,30 @@ const document = {
     "application/x-asciicast",
   ] as const),
 };
+const tooLarge = () =>
+  new RadiusError(`Document exceeds the ${RADIUS_ARTIFACT_FILE_LIMIT} publication limit.`);
+async function fileText(cwd: string, path: string) {
+  let bytes: Buffer;
+  try {
+    const handle = await open(resolve(cwd, path), "r");
+    try {
+      const { size } = await handle.stat();
+      if (size > RADIUS_ARTIFACT_FILE_BYTES) throw tooLarge();
+      bytes = await handle.readFile();
+    } finally {
+      await handle.close();
+    }
+  } catch (error) {
+    throw error instanceof RadiusError
+      ? error
+      : new RadiusError("The file could not be read; nothing was published.");
+  }
+  if (bytes.length > RADIUS_ARTIFACT_FILE_BYTES) throw tooLarge();
+  if (!bytes.length) throw new RadiusError("The file is empty; nothing was published.");
+  if (!isUtf8(bytes))
+    throw new RadiusError("The file is not valid UTF-8 text; nothing was published.");
+  return bytes.toString("utf8");
+}
 const CreateParameters = obj(document);
 const UpdateParameters = obj({
   ...document,
@@ -162,19 +199,26 @@ export default function radiusArtifacts(pi: ExtensionAPI) {
     const publish = async (
       client: RadiusClient,
       ctx: ExtensionContext,
-      params: {
+      request: {
         operationKey: string;
         title: string;
-        content: string;
+        content?: string;
+        path?: string;
         contentType: string;
         artifactId?: string;
         expectedRevision?: number;
       },
     ): Promise<RadiusArtifactResult> => {
-      if (Buffer.byteLength(params.content) > RADIUS_ARTIFACT_FILE_BYTES)
-        throw new RadiusError(
-          `Document exceeds the ${RADIUS_ARTIFACT_FILE_LIMIT} publication limit.`,
-        );
+      const content =
+        request.content !== undefined && request.path === undefined
+          ? request.content
+          : request.content === undefined && request.path !== undefined
+            ? await fileText(ctx.cwd, request.path)
+            : undefined;
+      if (content === undefined)
+        throw new RadiusError("Give exactly one of content or path; nothing was published.");
+      if (Buffer.byteLength(content) > RADIUS_ARTIFACT_FILE_BYTES) throw tooLarge();
+      const params = { ...request, content };
       const fingerprint = createHash("sha256")
         .update(
           JSON.stringify([
@@ -289,7 +333,7 @@ export default function radiusArtifacts(pi: ExtensionAPI) {
       name: RADIUS_ARTIFACT_CREATE_TOOL,
       label: "Create Radius artifact",
       description:
-        "Publish a textual artifact to Radius (private). Returns a confirmed Radius viewing URL, identity, revision and expiry, never a local path. An operationKey is a durable intent in Pi history; repeating it only reconciles, never republishes.",
+        "Publish a textual artifact to Radius (private), from content or from a local file path. Returns a confirmed Radius viewing URL, identity, revision and expiry, never a local path. An operationKey is a durable intent in Pi history; repeating it only reconciles, never republishes.",
       promptSnippet: "Publish artifacts to Radius and return their confirmed viewing links",
       parameters: CreateParameters,
       execute: (_id, params: Static<typeof CreateParameters>, signal, _onUpdate, ctx) =>

@@ -31,6 +31,23 @@ new key is for new, reviewed work, never a retry workaround. A create response t
 returns `unknown` and is not created again. An intent is not confirmation. No local-file
 fallback exists.
 
+## Publishing from a file
+
+`radius_artifact_create` and `radius_artifact_update` take the document either as `content` or as
+`path`, exactly one of them. `path` names a local file, absolute or relative to the session's
+working directory. The extension reads it and publishes its exact text, so a large page does not
+have to be written out by the model or stored in the session history. The file is the staging copy
+only: the result is still the confirmed Radius URL, never the local path.
+
+The file must be a readable, non-empty, valid UTF-8 text file within the [file bound](#file-size).
+Anything else is refused before any request, with a message that does not repeat the path. The
+tool reads any file the Pi process can read, as Pi's own `read` tool does, and the model may not
+have seen its contents; review the file for secrets before publishing.
+
+An `operationKey` is bound to the text that was read. Retrying with the same key re-reads the
+file: unchanged text reconciles as before, and changed text is refused as different content, not
+published.
+
 ## Reading text in chunks
 
 `radius_artifact_view` keeps `content` as a string, but returns only one page. Its optional
@@ -76,7 +93,7 @@ paragraph of the Artifacts section in its [OpenAPI document](https://radius.pi.d
 
 | Function | Over the bound |
 | --- | --- |
-| `radius_artifact_create` / `update` document | Refused before any request; never truncated |
+| `radius_artifact_create` / `update` document, from `content` or `path` | Refused before any request; never truncated |
 | `radius_artifact_view` download | Stopped and reported as an error; never truncated |
 | [Session Share](session-sharing.md) saved JSONL | Refused before any upload |
 

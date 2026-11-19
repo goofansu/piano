@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -34,6 +34,7 @@ async function harness(signedIn = true) {
   if (signedIn) await runtime.setRuntimeApiKey("radius", radiusCanary);
   const sessionManager = SessionManager.inMemory(root);
   const ctx = {
+    cwd: root,
     sessionManager,
     modelRegistry: new ModelRegistry(runtime),
   } as unknown as ExtensionContext;
@@ -62,6 +63,7 @@ async function harness(signedIn = true) {
   const original = globalThis.fetch;
   globalThis.fetch = http.fetch;
   return {
+    root,
     http,
     runtime,
     load,
@@ -709,6 +711,71 @@ test("pre-aborted work cannot publish or expose a transfer credential", async ()
     const result = await h.call("create", document, AbortSignal.abort());
     assert.notEqual(result.status, "confirmed");
     assert.equal(h.http.writes.length, 0);
+  } finally {
+    h.cleanup();
+  }
+});
+
+test("create and update publish a local file by path, absolute or relative to the working directory", async () => {
+  const h = await harness();
+  try {
+    const page = `<!doctype html><p>${"é".repeat(200 * 1024)}</p>`;
+    writeFileSync(join(h.root, "report.html"), page);
+    const { content: _content, ...byPath } = { ...document, contentType: "text/html" };
+    const created = await h.call("create", { ...byPath, path: "report.html" });
+    assert.equal(created.status, "confirmed", created.message);
+    assert.equal(h.http.writes.at(-1)?.args.content, page, "the file's exact text is published");
+    assert.equal(h.http.writes.at(-1)?.args.content_type, "text/html");
+
+    const revised = `${page}<p>revised</p>`;
+    writeFileSync(join(h.root, "report.html"), revised);
+    const updated = await h.call("update", {
+      ...byPath,
+      operationKey: "report-2",
+      path: join(h.root, "report.html"),
+      artifactId: created.artifactId,
+      expectedRevision: 1,
+    });
+    assert.equal(updated.status, "confirmed", updated.message);
+    assert.equal(updated.revision, 2);
+    assert.equal(h.http.writes.at(-1)?.args.content, revised);
+
+    const stale = await h.call("create", { ...byPath, path: "report.html" });
+    assert.equal(stale.status, "error");
+    assert.match(stale.message, /operationKey belongs to different content/);
+    assert.equal(h.http.writes.length, 2, "a changed file is not republished under a used key");
+  } finally {
+    h.cleanup();
+  }
+});
+
+test("a path that is ambiguous, unreadable, empty, not UTF-8 or over 25 MiB publishes nothing", async () => {
+  const h = await harness();
+  try {
+    const { content: _content, ...byPath } = document;
+    writeFileSync(join(h.root, "empty.md"), "");
+    writeFileSync(join(h.root, "binary.md"), Buffer.from([0x23, 0xff]));
+    writeFileSync(join(h.root, "full.md"), Buffer.alloc(25 * 1024 * 1024, "x"));
+    writeFileSync(join(h.root, "large.md"), "");
+    truncateSync(join(h.root, "large.md"), 25 * 1024 * 1024 + 1);
+    for (const [args, refusal] of [
+      [{ ...document, path: "empty.md" }, /exactly one of content or path/],
+      [byPath, /exactly one of content or path/],
+      [{ ...byPath, path: "missing.md" }, /could not be read/],
+      [{ ...byPath, path: "." }, /could not be read/],
+      [{ ...byPath, path: "empty.md" }, /file is empty/],
+      [{ ...byPath, path: "binary.md" }, /not valid UTF-8/],
+      [{ ...byPath, path: "large.md" }, /25 MiB publication limit/],
+    ] as const) {
+      const refused = await h.call("create", args);
+      assert.equal(refused.status, "error");
+      assert.match(refused.message, refusal);
+      assert.equal(JSON.stringify(refused).includes(h.root), false, "no local path in the result");
+    }
+    assert.equal(h.http.writes.length, 0);
+    const full = await h.call("create", { ...byPath, path: "full.md" });
+    assert.equal(full.status, "confirmed", full.message);
+    assert.equal(h.http.writes.length, 1, "a file of exactly 25 MiB is published");
   } finally {
     h.cleanup();
   }
