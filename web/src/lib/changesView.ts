@@ -144,48 +144,45 @@ export function changedFile(
     (result.comparison.scope !== comparison.scope || result.comparison.base !== comparison.base)
   )
     throw new Error(CHANGES_MOVED);
-  const file = parseUnifiedDiff(result.diff).find((f) => f.path === path);
-  const stats = result.files.find((f) => f.path === path);
-  if (!stats) throw new Error("File metadata is unavailable. Refresh changes.");
-  if (!file)
-    throw new Error(
-      result.truncated
-        ? `Patch is too large to display a complete line (${FILE_PATCH_LIMIT} limit).`
-        : "File changed or no longer has a diff. Refresh changes.",
-    );
-  return {
-    file: { ...file, ...stats },
-    observedAt,
-    truncated: result.truncated,
-    source: patchSource(stats),
-  };
+  const loaded = loadedPatches(result, observedAt, { dropTruncatedLast: false }).get(path);
+  if (loaded) return loaded;
+  if (!result.files.some((f) => f.path === path))
+    throw new Error("File metadata is unavailable. Refresh changes.");
+  throw new Error(
+    result.truncated
+      ? `Patch is too large to display a complete line (${FILE_PATCH_LIMIT} limit).`
+      : "File changed or no longer has a diff. Refresh changes.",
+  );
+}
+
+function loadedPatches(
+  ready: ReadyResult,
+  observedAt: string,
+  { dropTruncatedLast }: { dropTruncatedLast: boolean },
+): Map<string, LoadedFile> {
+  const parsed = parseUnifiedDiff(ready.diff);
+  if (ready.truncated && dropTruncatedLast) parsed.pop();
+  const truncated = ready.truncated && !dropTruncatedLast;
+  const stats = new Map(ready.files.map((f) => [f.path, f]));
+  const loaded = new Map<string, LoadedFile>();
+  for (const file of parsed) {
+    const metadata = stats.get(file.path);
+    if (metadata && !loaded.has(file.path))
+      loaded.set(file.path, {
+        file: { ...file, ...metadata },
+        observedAt,
+        truncated,
+        source: patchSource(metadata),
+      });
+  }
+  return loaded;
 }
 
 const seeds = new WeakMap<ReadyResult, ReadonlyMap<string, LoadedFile>>();
 function seedFiles(ready: ReadyResult, observedAt: string): ReadonlyMap<string, LoadedFile> {
   let seed = seeds.get(ready);
   if (!seed) {
-    const parsed = parseUnifiedDiff(ready.diff);
-    if (ready.truncated) parsed.pop();
-    const stats = new Map(ready.files.map((f) => [f.path, f]));
-    seed = new Map(
-      parsed.flatMap((file) => {
-        const metadata = stats.get(file.path);
-        return metadata
-          ? [
-              [
-                file.path,
-                {
-                  file: { ...file, ...metadata },
-                  observedAt,
-                  truncated: false,
-                  source: patchSource(metadata),
-                },
-              ] as const,
-            ]
-          : [];
-      }),
-    );
+    seed = loadedPatches(ready, observedAt, { dropTruncatedLast: true });
     seeds.set(ready, seed);
   }
   return seed;
