@@ -8,6 +8,7 @@ import {
   checkTranscriptResizeReadiness,
   measuredTranscriptAtBottom,
 } from "./transcript-resize.mjs";
+import { checkTranscriptHistoryScroll, seedScrollHistory } from "./transcript-scroll.mjs";
 
 const listsOwnTheirItems = async (page, where) => {
   const strays = await page.evaluate(`[...document.querySelectorAll('[role="list"]')]
@@ -136,6 +137,7 @@ await run(
       projects: [{ id: "qa", name: "QA Project" }],
       sessions: [
         ...navigation,
+        ...seedScrollHistory({ history, cwd }),
         { ...reference("nav-pin", "Navigation pin", 0), pinned: true },
         reference("login-bug", "Fix the login bug", 0.063),
         reference("release-notes", "Release notes", 0.63),
@@ -891,6 +893,7 @@ await run(
     await page.until("!document.querySelector('[aria-label=Question]')");
     await page.capture("15-inline-answered");
     await checkTranscriptResizeReadiness(page);
+    await checkTranscriptHistoryScroll(page);
     await page.open("/s/login-bug");
     await page.see("echo: Add a regression test");
     await checkMessageFidelity(page);
