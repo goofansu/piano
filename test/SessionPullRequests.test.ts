@@ -591,3 +591,30 @@ for (const [label, base] of [
       ),
     );
   });
+
+test("exe.dev: discovery skips a same-host remote naming a repository GitHub cannot resolve", async (t) => {
+  const f = await fixture(t),
+    host = "github.int.exe.xyz";
+  f.git("remote", "set-url", "origin", `https://${host}/me/fork.git`);
+  f.git("remote", "add", "upstream", `https://${host}/up/repo.git`);
+  f.git("remote", "add", "gone", `https://${host}/gone/repo.git`);
+  f.git("update-ref", "refs/remotes/origin/feature", "HEAD");
+  f.git("branch", "--set-upstream-to", "origin/feature");
+  f.control({
+    prs: [
+      {
+        ...candidate(42, "feature", "me"),
+        url: "https://github.com/up/repo/pull/42",
+        headRepository: { name: "fork" },
+        baseRefName: "main",
+      },
+    ],
+    expectedHost: host,
+    expectedRepos: [`${host}/up/repo`, `${host}/me/fork`],
+    unresolvedRepos: ["gone/repo"],
+  });
+  const found = await f.change({ action: "discover" });
+  assert.equal(found.error, undefined);
+  assert.equal(found.pullRequest?.number, 42, JSON.stringify(found));
+  assert.deepEqual([found.link?.headRepo, found.link?.baseRepo], ["me/fork", "up/repo"]);
+});
