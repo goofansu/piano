@@ -22,6 +22,12 @@ export const sessionDraftKey = (s: { cwd: string; sessionId: string | null }) =>
 export const appendParagraph = (existing: string, text: string) =>
   `${existing}${existing.trim() ? "\n\n" : ""}${text}`;
 
+export const restoredQueueText = (messages: readonly { text: string }[]) =>
+  messages
+    .map((message) => message.text)
+    .filter(Boolean)
+    .join("\n\n");
+
 export interface ImageDraft {
   items: readonly Attachment[];
   busy: boolean;
@@ -321,7 +327,7 @@ export function createDrafts(): Drafts {
           if (verdict.outcome === "not_sent") giveBack(verdict.inputId, sessionOf(m, source));
           else unconfirmed.delete(verdict.inputId);
         else if (m._tag === "action_result" && m.result._tag === "queue_restored") {
-          const restored = m.result.messages.map((message) => message.text).join("\n\n");
+          const restored = restoredQueueText(m.result.messages);
           if (restored) paragraph(sessionDraftKey(m), restored);
         }
       }),

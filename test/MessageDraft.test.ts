@@ -363,6 +363,24 @@ test("a restored queue appends as a paragraph to its own session's draft, whiche
     "other draft",
     "an empty queue erases nothing",
   );
+  client.restore(current, [
+    { kind: "follow-up", text: "" },
+    { kind: "steering", text: "" },
+  ]);
+  assert.equal(
+    drafts.get(sessionDraftKey(current)).text,
+    "other draft",
+    "an image-only queue returns no text",
+  );
+  client.restore(current, [
+    { kind: "follow-up", text: "" },
+    { kind: "steering", text: "mixed" },
+  ]);
+  assert.equal(
+    drafts.get(sessionDraftKey(current)).text,
+    "other draft\n\nmixed",
+    "image-only messages add no blank paragraphs",
+  );
 
   drafts.setText(sessionDraftKey(current), " \n");
   client.restore(current, [{ kind: "steering", text: "restored" }]);

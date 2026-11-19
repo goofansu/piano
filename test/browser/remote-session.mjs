@@ -48,6 +48,7 @@ const draft = (page) => page.evaluate(`document.querySelector('${composer}')?.va
 const restoreHint = "Pi returns text only, so reattach any images.";
 const textOnly = "Pi returns queued text only. Reattach any images after Edit or Esc.";
 const restoredNotice = "Queued text moved to the draft; reattach any images";
+const imagesRemovedNotice = "Queued images removed; reattach them to the draft";
 const describedBy = (page, selector) =>
   page.evaluate(
     `document.getElementById(document.querySelector('${selector}')?.getAttribute('aria-describedby') ?? '')?.textContent ?? ''`,
@@ -64,9 +65,9 @@ const editGuidance = async (page, label, capture) => {
   await page.capture(capture);
   return description;
 };
-const toldToReattach = async (page) => {
+const toldToReattach = async (page, notice = restoredNotice) => {
   await page.until(
-    `[...document.querySelectorAll('[aria-live] [data-sonner-toast]')].some(t => t.textContent.includes(${JSON.stringify(restoredNotice)}))`,
+    `[...document.querySelectorAll('[aria-live] [data-sonner-toast]')].some(t => t.textContent.includes(${JSON.stringify(notice)}))`,
   );
 };
 const clearDraft = async (page) => {
@@ -785,7 +786,14 @@ await run(
           await page.evaluate(`!!document.querySelector('[aria-label="Remove empty-queue.png"]')`),
           false,
         );
-        await toldToReattach(page);
+        await toldToReattach(page, imagesRemovedNotice);
+        assert.equal(
+          await page.evaluate(
+            `[...document.querySelectorAll('[data-sonner-toast]')].some(t => t.textContent.includes(${JSON.stringify(restoredNotice)}))`,
+          ),
+          false,
+          "an image-only restore does not claim text moved",
+        );
         assert.equal(
           await page.evaluate(
             `document.querySelector('${composer}').hasAttribute('aria-describedby')`,

@@ -21,6 +21,7 @@ export const QUEUE_RESTORE_HINT =
 export const QUEUE_TEXT_ONLY =
   "Pi returns queued text only. Reattach any images after Edit or Esc.";
 export const QUEUE_RESTORED_NOTICE = "Queued text moved to the draft; reattach any images";
+export const QUEUE_IMAGES_REMOVED_NOTICE = "Queued images removed; reattach them to the draft";
 
 export const messageCommand = (
   kind: DeliveryMode,

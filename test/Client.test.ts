@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ClientMessage, Dialog, ServerMessage, SessionClosure } from "../shared/wire.ts";
 import { createClient, type NotifyLevel } from "../web/src/lib/client.ts";
-import { QUEUE_RESTORED_NOTICE } from "../web/src/lib/composerControl.ts";
+import {
+  QUEUE_IMAGES_REMOVED_NOTICE,
+  QUEUE_RESTORED_NOTICE,
+} from "../web/src/lib/composerControl.ts";
 import { trustCommand } from "../web/src/lib/globalCommands.ts";
 import { LOCAL } from "../web/src/lib/machine.ts";
 import { machineOffers } from "../web/src/lib/machineOffers.ts";
@@ -364,7 +367,7 @@ test("notifications: applied session notices notify; rejected frames do not", ()
   ]);
 });
 
-test("a restored queue says Pi returned only its text, so images need reattaching", () => {
+test("a restored queue says whether text reached the draft, and that images need reattaching", () => {
   const h = harness();
   h.status(true);
   const restored = (
@@ -379,11 +382,25 @@ test("a restored queue says Pi returned only its text, so images need reattachin
   h.server(restored([]));
   assert.deepEqual(h.notes, [], "Stop with nothing queued restores nothing");
   h.server(restored([{ kind: "follow-up", text: "" }]));
+  h.server(
+    restored([
+      { kind: "follow-up", text: "" },
+      { kind: "steering", text: "" },
+    ]),
+  );
   h.server(restored([{ kind: "steering", text: "typed" }], "Stop failed: no"));
+  h.server(
+    restored([
+      { kind: "follow-up", text: "" },
+      { kind: "steering", text: "typed" },
+    ]),
+  );
   assert.deepEqual(h.notes, [
-    [QUEUE_RESTORED_NOTICE, "info"],
+    [QUEUE_IMAGES_REMOVED_NOTICE, "info"],
+    [QUEUE_IMAGES_REMOVED_NOTICE, "info"],
     [QUEUE_RESTORED_NOTICE, "info"],
     ["Stop failed: no", "error"],
+    [QUEUE_RESTORED_NOTICE, "info"],
   ]);
 });
 
