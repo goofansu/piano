@@ -5,8 +5,10 @@ asks for local delivery. A failed publication is never silently delivered as a l
 
 ### Use without Piano
 
-This is a standalone Pi package with no Piano imports or environment requirements. From a checkout
-with `npm install` completed, try it for one invocation:
+This is a standalone Pi package with no Piano environment requirements. It imports dependency-free
+modules from the checkout's `shared/` and `server/LocalFile.ts` by relative path, so load it from a
+checkout rather than a copied folder. From a checkout with `npm install` completed, try it for one
+invocation:
 
 ```sh
 pi --extension /absolute/path/to/piano/extensions/radius-artifacts/index.ts
@@ -118,6 +120,9 @@ enforce. Piano publishes through Radius's MCP tools with the text inline; that r
   create/update/view, validates tool arguments through Pi's schemas and pins view revisions.
 - [`RadiusClient.ts`](../extensions/radius-artifacts/RadiusClient.ts) owns bounded MCP/transfer
   requests and UTF-8 page reads; Radius remains the owner of revision content.
+- [`server/LocalFile.ts`](../server/LocalFile.ts) reads a document given by `path`: regular files
+  only, bounded, cancellable and refused if its length changes during the read. File previews and
+  Session Share read through it too.
 - [`shared/radiusArtifacts.ts`](../shared/radiusArtifacts.ts) defines the additive structured
   result contract and publication receipts; viewing does not write a receipt.
 - [`test/RadiusArtifactExtension.test.ts`](../test/RadiusArtifactExtension.test.ts) exercises the

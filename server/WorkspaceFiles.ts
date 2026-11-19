@@ -1,5 +1,4 @@
-import { constants } from "node:fs";
-import { access, open, realpath } from "node:fs/promises";
+import { access, realpath } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { Data, Effect } from "effect";
 import { fileTypeFromBuffer } from "file-type";
@@ -10,6 +9,7 @@ import {
   previewKindByName,
 } from "../shared/files.ts";
 import type { Workspace } from "../shared/wire.ts";
+import { LocalFileRefusal, openLocalFile } from "./LocalFile.ts";
 
 class FileRefusal extends Data.TaggedError("FileRefusal")<{ readonly detail: string }> {}
 const refuse = (detail: string): never => {
@@ -153,13 +153,13 @@ async function acquire(workspace: Workspace, path: string, signal: AbortSignal):
   const requested = await name(spelled);
   const shown = (await place(workspace, path)) ?? requested;
   const target = await realpath(spelled);
-  const file = await open(target, constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW);
+  const file = await openLocalFile(target, { noFollow: true }).catch((error: unknown) =>
+    error instanceof LocalFileRefusal && error.reason === "not-file"
+      ? refuse("Choose a regular file, not a directory or device.")
+      : Promise.reject(error),
+  );
   try {
-    const stat = await file.stat();
-    if (!stat.isFile()) refuse("Choose a regular file, not a directory or device.");
-    const header = Buffer.alloc(8192);
-    const initial = await file.read(header, 0, header.length, 0);
-    const head = header.subarray(0, initial.bytesRead);
+    const head = await file.prefix(8192);
     const claimed = previewKindByName(requested);
     const binaryName = claimed !== undefined && binaryKinds.has(claimed);
     const detected =
@@ -183,18 +183,13 @@ async function acquire(workspace: Workspace, path: string, signal: AbortSignal):
           limit / MiB +
           " MiB.",
       );
-    if (stat.size > limit) tooLarge();
-    const bytes = Buffer.alloc(stat.size + 1);
-    let length = 0;
-    while (length < bytes.length) {
-      signal.throwIfAborted();
-      const result = await file.read(bytes, length, bytes.length - length, length);
-      if (!result.bytesRead) break;
-      length += result.bytesRead;
-    }
-    if (length > limit) tooLarge();
-    if (length !== stat.size) refuse("This file changed while reading. Try the link again.");
-    const data = bytes.subarray(0, length);
+    const data = await file.whole(limit, signal).catch((error: unknown) => {
+      if (!(error instanceof LocalFileRefusal)) throw error;
+      if (error.reason === "too-large") return tooLarge();
+      if (error.reason === "changed")
+        return refuse("This file changed while reading. Try the link again.");
+      throw error;
+    });
     const identity = { workspaceId: workspace.id, path: shown };
     if (binary) {
       const actual = mimeBase(await fileTypeFromBuffer(data).catch(() => undefined));

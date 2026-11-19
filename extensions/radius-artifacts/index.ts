@@ -1,12 +1,11 @@
 import { isUtf8 } from "node:buffer";
 import { createHash, randomUUID } from "node:crypto";
-import { constants } from "node:fs";
-import { open } from "node:fs/promises";
 import { resolve } from "node:path";
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { int, obj, opt, type Static, str } from "@earendil-works/pi-schema";
 import { z } from "zod";
+import { LocalFileRefusal, readLocalFile } from "../../server/LocalFile.ts";
 import {
   artifactPublication,
   RADIUS_ARTIFACT_FILE_BYTES,
@@ -75,34 +74,15 @@ const tooLarge = () =>
 async function fileText(cwd: string, path: string, signal: AbortSignal | undefined) {
   let bytes: Buffer;
   try {
-    signal?.throwIfAborted();
-    const handle = await open(resolve(cwd, path), constants.O_RDONLY | constants.O_NONBLOCK);
-    try {
-      const stat = await handle.stat();
-      if (!stat.isFile())
-        throw new RadiusError("The path is not a regular file; nothing was published.");
-      if (stat.size > RADIUS_ARTIFACT_FILE_BYTES) throw tooLarge();
-      bytes = Buffer.alloc(stat.size + 1);
-      let length = 0;
-      while (length < bytes.length) {
-        signal?.throwIfAborted();
-        const { bytesRead } = await handle.read(bytes, length, bytes.length - length, length);
-        if (!bytesRead) break;
-        length += bytesRead;
-      }
-      if (length > RADIUS_ARTIFACT_FILE_BYTES) throw tooLarge();
-      if (length !== stat.size)
-        throw new RadiusError("The file changed while reading; nothing was published.");
-      bytes = bytes.subarray(0, length);
-    } finally {
-      await handle.close();
-    }
-    signal?.throwIfAborted();
+    bytes = await readLocalFile(resolve(cwd, path), { limit: RADIUS_ARTIFACT_FILE_BYTES, signal });
   } catch (error) {
     if (signal?.aborted) throw new RadiusError("Publication was cancelled; nothing was published.");
-    throw error instanceof RadiusError
-      ? error
-      : new RadiusError("The file could not be read; nothing was published.");
+    if (error instanceof LocalFileRefusal && error.reason === "not-file")
+      throw new RadiusError("The path is not a regular file; nothing was published.");
+    if (error instanceof LocalFileRefusal && error.reason === "too-large") throw tooLarge();
+    if (error instanceof LocalFileRefusal && error.reason === "changed")
+      throw new RadiusError("The file changed while reading; nothing was published.");
+    throw new RadiusError("The file could not be read; nothing was published.");
   }
   if (!bytes.length) throw new RadiusError("The file is empty; nothing was published.");
   if (!isUtf8(bytes))

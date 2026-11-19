@@ -31,8 +31,9 @@ Radius remains its owner. See [the decision](adr/0006-confirmed-raw-session-shar
 - `server/PiHistory.ts`, exposed through `PiSessions.history.savedJsonl`: unchanged UTF-8 bytes
   from the registered file, at most 25 MiB (the shared
   [Radius file bound](radius-artifacts.md#file-size), from
-  <https://radius.pi.dev/v1/openapi.json>); regular-file and before/after identity/version checks,
-  JSONL parsing and matching session header. Missing, incomplete or changing files are refused,
+  <https://radius.pi.dev/v1/openapi.json>); read through `server/LocalFile.ts` (regular files
+  only, refused if the length changes during the read), path identity/version checks before and
+  after, JSONL parsing and matching session header. Missing, incomplete or changing files are refused,
   never repaired, truncated or retried. This does not lock Pi's writer or flush unsaved state.
 - `extensions/radius-artifacts/RadiusClient.ts`: existing direct authenticated MCP adapter,
   redirects refused, no auth-provider/reconnection retry, 4 MiB response bound and deadlines.
