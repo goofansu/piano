@@ -1901,7 +1901,12 @@ const r=spawnSync(${JSON.stringify(real)},a,{stdio:'inherit',env:{...process.env
         assert.ok(git(repo, "worktree", "list", "--porcelain").includes(`worktree ${entry.cwd}\n`));
         assert.equal(git(entry.cwd, "branch", "--show-current"), "slow");
         assert.deepEqual((yield* registry.get).worktrees, [
-          { folder: realpathSync(repo), path: entry.cwd, branch: "slow", baseBranch: "main" },
+          {
+            folder: realpathSync(repo),
+            path: entry.cwd,
+            branch: "slow",
+            created: { branch: "slow", baseBranch: "main" },
+          },
         ]);
         yield* until(
           Effect.map(hosts.list, (list) =>

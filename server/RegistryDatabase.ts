@@ -21,7 +21,7 @@ const schema = `
   ) STRICT;
   CREATE TABLE worktrees (
     path TEXT PRIMARY KEY NOT NULL REFERENCES workspaces(path), folder_path TEXT NOT NULL,
-    branch TEXT NOT NULL, position INTEGER NOT NULL, base_branch TEXT
+    branch TEXT NOT NULL, position INTEGER NOT NULL, created_branch TEXT, base_branch TEXT
   ) STRICT;
   CREATE TABLE sessions (
     cwd TEXT NOT NULL REFERENCES workspaces(path), session_id TEXT NOT NULL,
@@ -97,15 +97,24 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
   },
   worktrees: {
     name: "worktrees",
-    columns: ["path", "folder_path", "branch", "position", "base_branch"],
+    columns: ["path", "folder_path", "branch", "position", "created_branch", "base_branch"],
     keys: 1,
     key: (w) => [w.path],
-    encode: (w, i) => [w.path, w.folder, w.branch, i, w.baseBranch ?? null],
+    encode: (w, i) => [
+      w.path,
+      w.folder,
+      w.branch,
+      i,
+      w.created?.branch ?? null,
+      w.created?.baseBranch ?? null,
+    ],
     decode: (r) => ({
       path: r.path as string,
       folder: r.folder_path as string,
       branch: r.branch as string,
-      ...(r.base_branch === null ? {} : { baseBranch: r.base_branch as string }),
+      ...(r.created_branch === null || r.base_branch === null
+        ? {}
+        : { created: { branch: r.created_branch as string, baseBranch: r.base_branch as string } }),
     }),
   },
   sessions: {
@@ -322,7 +331,8 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
         version !== 14 &&
         version !== 15 &&
         version !== 16 &&
-        version !== 17
+        version !== 17 &&
+        version !== 18
       )
         throw new Error(
           `Unsupported registry database version ${version}; upgrade Piano rather than resetting the database.`,
@@ -405,6 +415,17 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
         )
           db.exec("ALTER TABLE sessions ADD COLUMN retention_version INTEGER NOT NULL DEFAULT 0;");
         db.exec("PRAGMA user_version = 17;");
+      }
+      if (Number(version) < 18) {
+        if (
+          !db
+            .prepare("SELECT 1 FROM pragma_table_info('worktrees') WHERE name = 'created_branch'")
+            .get()
+        )
+          db.exec("ALTER TABLE worktrees ADD COLUMN created_branch TEXT;");
+        db.exec(
+          "UPDATE worktrees SET created_branch = branch WHERE base_branch IS NOT NULL AND created_branch IS NULL; PRAGMA user_version = 18;",
+        );
       }
       db.exec("COMMIT");
     } catch (error) {

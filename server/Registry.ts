@@ -40,7 +40,7 @@ const WorktreeEntry = Schema.Struct({
   folder: Schema.String,
   path: Schema.String,
   branch: Schema.String,
-  baseBranch: Schema.optional(Schema.String),
+  created: Schema.optional(Schema.Struct({ branch: Schema.String, baseBranch: Schema.String })),
 });
 export type WorktreeEntry = typeof WorktreeEntry.Type;
 
@@ -299,9 +299,14 @@ export class Registry extends Context.Service<
     readonly addFolder: (path: string) => Effect.Effect<string, RegistryError>;
     readonly removeFolder: (path: string) => Effect.Effect<void, RegistryError>;
     readonly addWorktree: (
-      entry: Omit<WorktreeEntry, "baseBranch">,
+      entry: Omit<WorktreeEntry, "created">,
     ) => Effect.Effect<void, RegistryError>;
-    readonly recordCreatedWorktree: (entry: WorktreeEntry) => Effect.Effect<void, RegistryError>;
+    readonly recordCreatedWorktree: (entry: {
+      readonly folder: string;
+      readonly path: string;
+      readonly branch: string;
+      readonly baseBranch: string;
+    }) => Effect.Effect<void, RegistryError>;
     readonly observeWorktreeBranches: (
       observed: ReadonlyArray<{ readonly path: string; readonly branch: string }>,
     ) => Effect.Effect<void, RegistryError>;
@@ -626,12 +631,14 @@ export const RegistryLive = Layer.effect(
             ? d
             : { ...d, worktrees: [...d.worktrees, entry] },
         ),
-      recordCreatedWorktree: (entry) =>
-        update((d) =>
+      recordCreatedWorktree: ({ folder, path, branch, baseBranch }) => {
+        const entry: WorktreeEntry = { folder, path, branch, created: { branch, baseBranch } };
+        return update((d) =>
           d.worktrees.some((w) => w.path === entry.path)
             ? { ...d, worktrees: d.worktrees.map((w) => (w.path === entry.path ? entry : w)) }
             : { ...d, worktrees: [...d.worktrees, entry] },
-        ),
+        );
+      },
       observeWorktreeBranches: Effect.fn("Registry.observeWorktreeBranches")(function* (observed) {
         const branches = new Map(
           observed.filter((o) => o.branch.trim()).map((o) => [o.path, o.branch] as const),
@@ -643,8 +650,7 @@ export const RegistryLive = Layer.effect(
             const branch = branches.get(w.path);
             if (branch === undefined || branch === w.branch) return w;
             changed = true;
-            const { baseBranch: _, ...rest } = w;
-            return { ...rest, branch };
+            return { ...w, branch };
           });
           return changed ? { ...d, worktrees } : d;
         });

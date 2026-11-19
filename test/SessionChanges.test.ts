@@ -178,9 +178,15 @@ test("a worktree's recorded base applies only while the checkout is on the branc
     return [comparison.target?.name, comparison.target?.from];
   };
   assert.deepEqual(await target(), ["main", "worktree"]);
+  const observe = (branch: string) =>
+    f.runtime.runPromise(f.registry.observeWorktreeBranches([{ path: f.worktree, branch }]));
   f.git(f.worktree, "switch", "-q", "-c", "other");
   assert.deepEqual(await target(), ["main", "assumed"]);
+  await observe("other");
+  assert.deepEqual(await target(), ["main", "assumed"]);
   f.git(f.worktree, "switch", "-q", "feature");
+  assert.deepEqual(await target(), ["main", "worktree"]);
+  await observe("feature");
   assert.deepEqual(await target(), ["main", "worktree"]);
 });
 

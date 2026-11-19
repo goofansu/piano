@@ -222,7 +222,12 @@ console.log(${JSON.stringify(JSON.stringify({ action: "created", branch: "next",
         registry.get.pipe(Effect.map((d) => d.worktrees.find((w) => w.path === path))),
         "the worktree registered",
       );
-      assert.deepEqual(registered, { folder: repo, path, branch: "next", baseBranch: "main" });
+      assert.deepEqual(registered, {
+        folder: repo,
+        path,
+        branch: "next",
+        created: { branch: "next", baseBranch: "main" },
+      });
     }).pipe(Effect.provideService(WorktrunkCommand, wt)),
   );
 });
