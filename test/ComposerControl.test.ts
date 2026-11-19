@@ -91,7 +91,7 @@ test("while Pi works an empty draft makes the button Stop, and Stop is refused w
   assert.equal(stop.enabled, true);
   assert.deepEqual(stop.hint, { lead: "Stop", key: "Esc" });
   assert.deepEqual(at({ streaming: true, queued: 2 }).hint, {
-    lead: "Stop and move queued input to the draft.",
+    lead: "Stop and move queued text to the draft. Reattach any images.",
     key: "Esc",
     tail: " edits without stopping.",
   });

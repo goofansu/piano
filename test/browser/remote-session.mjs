@@ -45,6 +45,37 @@ const waitFor = async (claim, observe) => {
 const composer = '[aria-label="Message"]';
 const queuedText = "queued image, password: hunter22";
 const draft = (page) => page.evaluate(`document.querySelector('${composer}')?.value`);
+const restoreHint = "Pi returns text only, so reattach any images.";
+const textOnly = "Pi returns queued text only. Reattach any images after Edit or Esc.";
+const restoredNotice = "Queued text moved to the draft; reattach any images";
+const describedBy = (page, selector) =>
+  page.evaluate(
+    `document.getElementById(document.querySelector('${selector}')?.getAttribute('aria-describedby') ?? '')?.textContent ?? ''`,
+  );
+const editGuidance = async (page, label, capture) => {
+  const selector = `button[aria-label="${label}"]`;
+  await page.ab("focus", selector);
+  await page.until(
+    `document.getElementById(document.querySelector('${selector}').getAttribute('aria-describedby') ?? '')?.textContent.includes(${JSON.stringify(restoreHint)})`,
+  );
+  const description = await describedBy(page, selector);
+  assert.match(description, /Move queued text back to the draft without stopping Pi/);
+  assert.match(description, /reattach any images/, "focused Edit describes the image loss");
+  await page.capture(capture);
+  return description;
+};
+const toldToReattach = async (page) => {
+  await page.until(
+    `[...document.querySelectorAll('[aria-live] [data-sonner-toast]')].some(t => t.textContent.includes(${JSON.stringify(restoredNotice)}))`,
+  );
+};
+const clearDraft = async (page) => {
+  await page.ab("click", composer);
+  await page.press("Mod+A");
+  await page.press("Backspace");
+  await page.until(`document.querySelector('${composer}')?.value === ""`);
+};
+const toastsGone = (page) => page.until("!document.querySelector('[data-sonner-toast]')");
 const ready = (page) =>
   page.until(`document.querySelector('[aria-label^="Model:"]')?.disabled === false`);
 const send = async (page, text) => {
@@ -695,14 +726,19 @@ await run(
           queuedText,
           "the queue shows the user's text as typed",
         );
-        await page.click("button", "Edit queued message");
+        await editGuidance(page, "Edit queued message", "5a-mixed-edit-guidance-on-focus");
+        await page.press("Enter");
         await page.until(
           `document.querySelector('${composer}')?.value === ${JSON.stringify(queuedText)} && !document.querySelector('[aria-label="Queued messages"]')`,
         );
         assert.equal(
           await page.evaluate(`!!document.querySelector('[aria-label="Remove queued.png"]')`),
           false,
+          "Pi returns only the mixed message's text",
         );
+        await toldToReattach(page);
+        await page.capture("5a-mixed-restored-text-reattach-notice");
+        await toastsGone(page);
         await page.ab("click", composer);
         await page.press("Mod+A");
         await page.press("Backspace");
@@ -716,9 +752,35 @@ await run(
           "",
         );
         await page.capture("5b-image-only-pi-queue");
-        await page.click("button", "Edit queued message");
+        await page.ab("focus", composer);
+        assert.equal(
+          await page.evaluate(`document.activeElement === document.querySelector('${composer}')`),
+          true,
+        );
+        assert.equal(
+          await describedBy(page, composer),
+          textOnly,
+          "the focused Message field describes the text-only restore before Esc",
+        );
+        await page.see(textOnly);
+        await page.capture("5b-image-only-before-esc-message-focused");
+        await page.press("Escape");
         await page.until(`!document.querySelector('[aria-label="Queued messages"]')`);
-        assert.equal(await draft(page), "");
+        assert.equal(await draft(page), "", "an image-only message returns no text");
+        assert.equal(
+          await page.evaluate(`!!document.querySelector('[aria-label="Remove empty-queue.png"]')`),
+          false,
+        );
+        await toldToReattach(page);
+        assert.equal(
+          await page.evaluate(
+            `document.querySelector('${composer}').hasAttribute('aria-describedby')`,
+          ),
+          false,
+          "the Message field drops the queue description once the queue is gone",
+        );
+        await page.capture("5b-image-only-after-esc-restored-reattach-notice");
+        await toastsGone(page);
         const imageInputs = page.remote
           .received()
           .filter((e) => e.command === "prompt" && e.images);
@@ -808,7 +870,6 @@ await run(
         await page.capture("7-reconnected-same-generation");
 
         const beforeReload = selected().length;
-        const promptsBeforeStopUpload = page.remote.prompts();
         await call("Fetch.enable", {
           patterns: [{ urlPattern: "*/api/peer/images", requestStage: "Request" }],
         });
@@ -827,6 +888,24 @@ await run(
           process.kill(pid, 0);
           assert.equal(starts().length, 1, "disconnect and reload never replace remote Pi");
           await page.capture("8-remote-deep-link-reload");
+          for (const [i, text] of ["queued one", "queued two"].entries()) {
+            await page.ab("fill", composer, text);
+            await page.press("Enter");
+            await page.see(`Queued messages (${i + 1})`);
+          }
+          await editGuidance(page, "Edit all queued messages", "8b-edit-all-guidance-on-focus");
+          await page.press("Enter");
+          await page.until(
+            `document.querySelector('${composer}')?.value === "queued one\\n\\nqueued two" && !document.querySelector('[aria-label="Queued messages"]')`,
+          );
+          await toldToReattach(page);
+          await page.capture("8b-edit-all-text-restored-in-order");
+          await clearDraft(page);
+          await toastsGone(page);
+          await page.ab("fill", composer, "queued three");
+          await page.press("Enter");
+          await page.see("Queued messages (1)");
+          const promptsBeforeStopUpload = page.remote.prompts();
           await imageEvent(page, "paste", "stop-upload.png");
           await page.press("Enter");
           await waitFor("stop image upload paused", () => !!heldUpload);
@@ -837,7 +916,24 @@ await run(
             "the paused upload has not delivered an input to Pi",
           );
           await page.capture("8a-stop-upload-paused");
-          await page.click("button", "Stop");
+          await page.ab("focus", 'button[aria-label="Stop"]');
+          assert.equal(
+            await page.evaluate(
+              `document.activeElement === document.querySelector('button[aria-label="Stop"]') && !!document.querySelector('[aria-label="Queued messages"]')`,
+            ),
+            true,
+            "Stop has keyboard focus while the queue is still present",
+          );
+          await page.until(
+            `[...document.querySelectorAll('[data-slot="tooltip-content"]')].some(t => t.textContent.includes("Stop and move queued text to the draft. Reattach any images."))`,
+          );
+          assert.match(
+            await describedBy(page, 'button[aria-label="Stop"]'),
+            /Stop and move queued text to the draft\. Reattach any images\./,
+            "Stop's accessible description carries the guidance",
+          );
+          await page.capture("8c-stop-guidance-on-keyboard-focus");
+          await page.press("Enter");
           await page.until(`document.querySelector('[aria-label="Send"]') !== null`);
           await call("Fetch.continueRequest", { requestId: heldUpload }).catch(() => {});
         } finally {
@@ -845,7 +941,11 @@ await run(
           heldUpload = undefined;
         }
         await page.until(`!!document.querySelector('[aria-label="Remove stop-upload.png"]')`);
+        await page.until(`document.querySelector('${composer}')?.value === "queued three"`);
+        await toldToReattach(page);
+        await page.capture("8d-stop-restored-queued-text");
         await page.click("button", "Remove stop-upload.png");
+        await clearDraft(page);
         await waitFor("Stop reaches only remote Pi", () =>
           page.remote
             .received()
@@ -855,7 +955,7 @@ await run(
         assert.equal(page.received().filter((entry) => entry.command === "abort").length, 0);
         assert.deepEqual(
           page.remote.prompts(),
-          [echo, "question", "stream", queuedText, ""],
+          [echo, "question", "stream", queuedText, "", "queued one", "queued two", "queued three"],
           "each input reaches the peer once, never resent",
         );
         assert.deepEqual(page.prompts(), [], "no local prompt from remote UI");
@@ -923,7 +1023,17 @@ await run(
         assert.equal(creations[0].message.projectId, undefined, "no project chosen");
         assert.deepEqual(
           page.remote.prompts(),
-          [echo, "question", "stream", queuedText, "", created],
+          [
+            echo,
+            "question",
+            "stream",
+            queuedText,
+            "",
+            "queued one",
+            "queued two",
+            "queued three",
+            created,
+          ],
           "the new session's first message reaches the peer once",
         );
         assert.ok(

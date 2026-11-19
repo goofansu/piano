@@ -2,6 +2,7 @@ import { isWorking } from "@shared/sessionProjection";
 import type { VoiceHints } from "@shared/voiceInput";
 import { cn } from "cn";
 import { ArrowUpIcon, ChevronDownIcon, PencilIcon, SquareIcon } from "lucide-react";
+import { useId } from "react";
 import { ContextDetails } from "@/components/ContextDetails";
 import { ComposerSend, DraftEditor, useDraftEditor } from "@/components/DraftEditor";
 import { JumpTo } from "@/components/JumpTo";
@@ -26,6 +27,8 @@ import {
   DELIVERY_MODES,
   type DeliveryMode,
   messageCommand,
+  QUEUE_RESTORE_HINT,
+  QUEUE_TEXT_ONLY,
   queuePanel,
   RESTORE_QUEUE,
   STOP,
@@ -125,6 +128,7 @@ export function Composer({
   };
   const figures = contextFigures(usage?.context, catalog, choice.model);
   const queue = queuePanel(queuedMessages, streaming);
+  const queueHintId = useId();
 
   if (readOnly) {
     return (
@@ -152,6 +156,7 @@ export function Composer({
         model={choice}
         onSend={send}
         voice={() => place ?? {}}
+        describedBy={queue ? queueHintId : undefined}
         onKeyDown={(e) => {
           if (e.key === "Escape" && control.escape) {
             e.preventDefault();
@@ -186,12 +191,13 @@ export function Composer({
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <Hint of={["Esc"]}>
-                      Move queued messages back to the draft without stopping Pi
-                    </Hint>
+                    <Hint of={["Esc"]}>{QUEUE_RESTORE_HINT}</Hint>
                   </TooltipContent>
                 </Tooltip>
               </div>
+              <p id={queueHintId} className="mb-2 shrink-0 text-xs text-ink-3">
+                {QUEUE_TEXT_ONLY}
+              </p>
               <ol className="flex min-h-0 max-h-[min(9rem,20dvh)] flex-col gap-2 overflow-y-auto">
                 {queuedMessages.map((message, index) => (
                   <li key={`${message.kind}-${index}`} className="flex min-w-0 flex-col gap-1">
