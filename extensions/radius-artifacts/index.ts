@@ -1,5 +1,6 @@
 import { isUtf8 } from "node:buffer";
 import { createHash, randomUUID } from "node:crypto";
+import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { resolve } from "node:path";
 import { StringEnum } from "@earendil-works/pi-ai";
@@ -71,23 +72,38 @@ const document = {
 };
 const tooLarge = () =>
   new RadiusError(`Document exceeds the ${RADIUS_ARTIFACT_FILE_LIMIT} publication limit.`);
-async function fileText(cwd: string, path: string) {
+async function fileText(cwd: string, path: string, signal: AbortSignal | undefined) {
   let bytes: Buffer;
   try {
-    const handle = await open(resolve(cwd, path), "r");
+    signal?.throwIfAborted();
+    const handle = await open(resolve(cwd, path), constants.O_RDONLY | constants.O_NONBLOCK);
     try {
-      const { size } = await handle.stat();
-      if (size > RADIUS_ARTIFACT_FILE_BYTES) throw tooLarge();
-      bytes = await handle.readFile();
+      const stat = await handle.stat();
+      if (!stat.isFile())
+        throw new RadiusError("The path is not a regular file; nothing was published.");
+      if (stat.size > RADIUS_ARTIFACT_FILE_BYTES) throw tooLarge();
+      bytes = Buffer.alloc(stat.size + 1);
+      let length = 0;
+      while (length < bytes.length) {
+        signal?.throwIfAborted();
+        const { bytesRead } = await handle.read(bytes, length, bytes.length - length, length);
+        if (!bytesRead) break;
+        length += bytesRead;
+      }
+      if (length > RADIUS_ARTIFACT_FILE_BYTES) throw tooLarge();
+      if (length !== stat.size)
+        throw new RadiusError("The file changed while reading; nothing was published.");
+      bytes = bytes.subarray(0, length);
     } finally {
       await handle.close();
     }
+    signal?.throwIfAborted();
   } catch (error) {
+    if (signal?.aborted) throw new RadiusError("Publication was cancelled; nothing was published.");
     throw error instanceof RadiusError
       ? error
       : new RadiusError("The file could not be read; nothing was published.");
   }
-  if (bytes.length > RADIUS_ARTIFACT_FILE_BYTES) throw tooLarge();
   if (!bytes.length) throw new RadiusError("The file is empty; nothing was published.");
   if (!isUtf8(bytes))
     throw new RadiusError("The file is not valid UTF-8 text; nothing was published.");
@@ -199,6 +215,7 @@ export default function radiusArtifacts(pi: ExtensionAPI) {
     const publish = async (
       client: RadiusClient,
       ctx: ExtensionContext,
+      signal: AbortSignal | undefined,
       request: {
         operationKey: string;
         title: string;
@@ -213,7 +230,7 @@ export default function radiusArtifacts(pi: ExtensionAPI) {
         request.content !== undefined && request.path === undefined
           ? request.content
           : request.content === undefined && request.path !== undefined
-            ? await fileText(ctx.cwd, request.path)
+            ? await fileText(ctx.cwd, request.path, signal)
             : undefined;
       if (content === undefined)
         throw new RadiusError("Give exactly one of content or path; nothing was published.");
@@ -337,7 +354,7 @@ export default function radiusArtifacts(pi: ExtensionAPI) {
       promptSnippet: "Publish artifacts to Radius and return their confirmed viewing links",
       parameters: CreateParameters,
       execute: (_id, params: Static<typeof CreateParameters>, signal, _onUpdate, ctx) =>
-        run(ctx, signal, (client) => publish(client, ctx, params)),
+        run(ctx, signal, (client) => publish(client, ctx, signal, params)),
     });
     pi.registerTool({
       ...common,
@@ -347,7 +364,7 @@ export default function radiusArtifacts(pi: ExtensionAPI) {
         "Publish a new revision to the same Radius artifact and URL, preserving visibility. View first and supply expectedRevision. Reuse the operationKey on uncertain outcomes; retries only read. Replaces the file set; earlier revisions remain available.",
       parameters: UpdateParameters,
       execute: (_id, params: Static<typeof UpdateParameters>, signal, _onUpdate, ctx) =>
-        run(ctx, signal, (client) => publish(client, ctx, params)),
+        run(ctx, signal, (client) => publish(client, ctx, signal, params)),
     });
     pi.registerTool({
       name: RADIUS_ARTIFACT_VIEW_TOOL,
