@@ -26,8 +26,8 @@ Preconditions: a seeded launch.
 - `activity`
   - Covered by `node test/browser/open-session.mjs <evidence>` (`home-activity-*` captures): at
     390px a held QA Project member reads `Working`, then the same row reads `Finished` in place
-    when the turn ends, with rows in the same order. Starting and lost-connection cues are covered
-    by `test/ProjectHome.test.ts`.
+    when the turn ends, with rows in the same order. Starting and lost-connection activity is
+    covered by `test/SessionCatalog.test.ts`.
 - `crumb`
   - Action: `ab click 'main [data-slot=breadcrumb-link]'; ab wait --url "**/projects"`
   - Result: `ab get url` ends in `/projects` and `ab get title` is `Projects - Piano`. Capture

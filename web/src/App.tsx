@@ -20,7 +20,11 @@ import { machineFrameBytes, machineLocation, machineSocketUrl } from "@/lib/mach
 import { initialView } from "@/lib/navigation";
 import { pendingDialogs } from "@/lib/piDialogs";
 import { parseRoute } from "@/lib/routes";
-import { type UnavailableSessionPage, unavailableSessionPage } from "@/lib/sessionCatalog";
+import {
+  anySessionWorking,
+  type UnavailableSessionPage,
+  unavailableSessionPage,
+} from "@/lib/sessionCatalog";
 import { toastNotify as notify } from "@/lib/toastNotify";
 import { useClient } from "@/lib/useClient";
 import { useMachineScope, useOffers, usePreviews } from "@/lib/useMachine";
@@ -104,7 +108,7 @@ function MachineApp() {
     (cwd: string) => dispatch({ type: "new_directory", cwd }),
     [dispatch],
   );
-  const anyWorking = state.hosts.some((h) => h.working);
+  const anyWorking = anySessionWorking(state);
 
   return (
     <SidebarActivityContext.Provider value={anyWorking}>
