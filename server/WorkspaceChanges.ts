@@ -147,7 +147,11 @@ async function preview(
       .filter((file) => !listed.has(file.path))
       .map((file) => ({ ...file, staged: true as const }));
     const files: ChangeFile[] = [...working, ...staged];
-    const local = await localWork(checkout, comparisons);
+    const local = await localWork(
+      checkout,
+      comparisons,
+      scope === "uncommitted" && path === undefined ? files : undefined,
+    );
     if (!patch)
       return {
         status: "ready",
@@ -207,7 +211,14 @@ const bounded = (observation: Observation): Observation =>
         },
       };
 
-async function localWork(checkout: Checkout, comparisons: Comparisons): Promise<LocalWork> {
+async function localWork(
+  checkout: Checkout,
+  comparisons: Comparisons,
+  uncommittedFiles?: readonly ChangeFile[],
+): Promise<LocalWork> {
+  const commits = await commitsNotPushed(checkout, comparisons);
+  if (uncommittedFiles)
+    return { commitsNotPushed: commits, uncommitted: uncommittedFiles.length > 0 };
   const base = comparisons.of("uncommitted").comparison.base;
   const differs = async (cached: readonly string[]) =>
     (
@@ -227,7 +238,7 @@ async function localWork(checkout: Checkout, comparisons: Comparisons): Promise<
     ).code === 1;
   const untracked = await checkout.records(["ls-files", "--others", "--exclude-standard", "-z"]);
   const uncommitted = untracked.length > 0 || (await differs([])) || (await differs(["--cached"]));
-  return { commitsNotPushed: await commitsNotPushed(checkout, comparisons), uncommitted };
+  return { commitsNotPushed: commits, uncommitted };
 }
 
 const exists = (workspace: Workspace, path: string): Promise<boolean> =>
