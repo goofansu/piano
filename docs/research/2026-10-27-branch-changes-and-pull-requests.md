@@ -95,7 +95,7 @@ status and in Details, no fetch ever:
 | Order | Target | Label |
 | --- | --- | --- |
 | 1 | The pull request's base, when the linked or discovered PR's head is the inspected branch in the checkout's GitHub repository: `refs/remotes/<remote>/<base>` (`<remote>` is the branch's tracking remote, else `origin`). | `main` · pull request base |
-| 2 | The base branch Worktrunk reported when Piano created this worktree, saved on the worktree entry and dropped once the worktree is seen on another branch. | `main` · worktree base |
+| 2 | The base branch Worktrunk reported when Piano created this worktree, saved on the worktree entry with its branch, and applied only while the worktree is on that branch. | `main` · worktree base |
 | 3 | The remote's default branch as Git holds it locally: `refs/remotes/<remote>/HEAD`. | `main` |
 | 4 | A local `main` or `master`, when nothing above exists (a repository without a remote). | `main` · assumed |
 | — | None. | Branch unavailable: no base branch known |

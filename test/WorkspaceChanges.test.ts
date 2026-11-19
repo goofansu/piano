@@ -259,7 +259,7 @@ test("branch scope: a commit or push keeps the branch's patch; advancing only th
   git("switch", "-qc", "feature");
   writeFileSync(join(repo, "a"), "edited\n");
   writeFileSync(join(repo, "b"), "new\n");
-  const hints = { worktreeBase: "main" };
+  const hints = { worktreeBase: { branch: "feature", base: "main" } };
   const before = ready(await read({ scope: "branch", hints }));
   assert.equal(before.comparison.scope, "branch");
   assert.equal(before.comparison.target?.name, "main");
@@ -312,7 +312,10 @@ test("branch scope: the target is the pull request's base for its own head, else
     baseRepo: "example/repo",
   };
   const fromPr = ready(
-    await read({ scope: "branch", hints: { pullRequest, worktreeBase: "main" } }),
+    await read({
+      scope: "branch",
+      hints: { pullRequest, worktreeBase: { branch: "feature", base: "main" } },
+    }),
   );
   assert.deepEqual(
     [fromPr.comparison.target?.name, fromPr.comparison.target?.from],
@@ -321,7 +324,10 @@ test("branch scope: the target is the pull request's base for its own head, else
   const other = ready(
     await read({
       scope: "branch",
-      hints: { pullRequest: { ...pullRequest, head: "other" }, worktreeBase: "main" },
+      hints: {
+        pullRequest: { ...pullRequest, head: "other" },
+        worktreeBase: { branch: "feature", base: "main" },
+      },
     }),
   );
   assert.deepEqual(
@@ -334,7 +340,10 @@ test("branch scope: the target is the pull request's base for its own head, else
     { ...pullRequest, baseRepo: "unrelated/repo" },
   ]) {
     const ignored = ready(
-      await read({ scope: "branch", hints: { pullRequest: hint, worktreeBase: "main" } }),
+      await read({
+        scope: "branch",
+        hints: { pullRequest: hint, worktreeBase: { branch: "feature", base: "main" } },
+      }),
     );
     assert.equal(ignored.comparison.target?.from, "worktree");
   }
@@ -346,7 +355,9 @@ test("branch scope: the target is the pull request's base for its own head, else
     [remote.comparison.target?.ref, remote.comparison.target?.from],
     ["refs/remotes/origin/main", "remote-default"],
   );
-  const missing = ready(await read({ scope: "branch", hints: { worktreeBase: "gone" } }));
+  const missing = ready(
+    await read({ scope: "branch", hints: { worktreeBase: { branch: "feature", base: "gone" } } }),
+  );
   assert.equal(missing.comparison.target?.from, "remote-default");
 });
 
@@ -368,7 +379,10 @@ test("branch scope: a pull request applies to the branch by its name on its remo
     ready(
       await read({
         scope: "branch",
-        hints: { pullRequest: { ...pullRequest, head }, worktreeBase: "main" },
+        hints: {
+          pullRequest: { ...pullRequest, head },
+          worktreeBase: { branch: "feat", base: "main" },
+        },
       }),
     ).comparison.target?.from;
   assert.equal(await target("james/feat"), "pull-request");
@@ -633,8 +647,8 @@ test("local work: a branch or single-file read still reports staged-only and unt
   writeFileSync(join(repo, "a"), "feature\n");
   git("commit", "-qam", "feature");
   const reads = [
-    { scope: "branch", hints: { worktreeBase: "main" } },
-    { scope: "branch", hints: { worktreeBase: "main" }, path: "a" },
+    { scope: "branch", hints: { worktreeBase: { branch: "feature", base: "main" } } },
+    { scope: "branch", hints: { worktreeBase: { branch: "feature", base: "main" } }, path: "a" },
     { scope: "uncommitted", path: "a" },
   ] as const;
   const uncommitted = async () => {
@@ -733,7 +747,7 @@ test("a branch pushed to a fork compares with the base on the remote it started 
   git("add", "f");
   git("commit", "-qm", "feat");
   for (const [hints, from] of [
-    [{ worktreeBase: "main" }, "worktree"],
+    [{ worktreeBase: { branch: "feat", base: "main" } }, "worktree"],
     [{}, "remote-default"],
   ] as const) {
     const branch = ready(await read({ scope: "branch", hints }));

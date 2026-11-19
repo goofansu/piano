@@ -10,7 +10,7 @@ import { type BranchHead, branchRemote, githubRemote, isFromBranch } from "./Git
 
 export interface TargetHints {
   readonly pullRequest?: PullRequestBranches;
-  readonly worktreeBase?: string;
+  readonly worktreeBase?: { readonly branch: string; readonly base: string };
 }
 
 export interface Comparisons {
@@ -87,17 +87,18 @@ async function remoteDefault(checkout: Checkout, remote: string): Promise<Compar
 
 async function resolveTarget(
   checkout: Checkout,
-  upstream: Upstream,
+  branch: { readonly name: string; readonly upstream: Upstream },
   head: BranchHead | null,
   hints: TargetHints,
 ): Promise<ComparisonTarget | null> {
+  const { upstream } = branch;
   const { tracked } = upstream;
   if (head && hints.pullRequest) {
     const target = await pullRequestTarget(checkout, upstream, hints.pullRequest);
     if (target) return target;
   }
-  if (hints.worktreeBase) {
-    const target = await namedTarget(checkout, tracked, hints.worktreeBase, "worktree");
+  if (hints.worktreeBase?.branch === branch.name) {
+    const target = await namedTarget(checkout, tracked, hints.worktreeBase.base, "worktree");
     if (target) return target;
   }
   const fallback = await remoteDefault(checkout, tracked);
@@ -118,7 +119,7 @@ async function branchScope(
 ): Promise<{ comparison: Comparison } | { unavailable: string; target?: ComparisonTarget }> {
   if (!head) return { unavailable: "No commits yet." };
   if (!branch) return { unavailable: "Detached HEAD." };
-  const target = await resolveTarget(checkout, branch.upstream, pullRequestHead, hints);
+  const target = await resolveTarget(checkout, branch, pullRequestHead, hints);
   if (!target) return { unavailable: "No base branch known." };
   const { upstream } = branch;
   if (
