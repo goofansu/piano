@@ -90,7 +90,7 @@ function MachineApp() {
     () => (offers.worktrees ? checkoutRefresh.follow(client) : undefined),
     [client, offers],
   );
-  useEffect(() => drafts.follow(client), [client, drafts]);
+  useEffect(() => drafts.follow(client, notify), [client, drafts]);
   useEffect(() => questionReplies.follow(client), [client, questionReplies]);
   useEffect(() => previews?.follow(client, notify), [client, previews]);
   const layout = useSidebarLayout();

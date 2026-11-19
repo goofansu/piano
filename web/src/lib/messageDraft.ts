@@ -28,6 +28,10 @@ export const restoredQueueText = (messages: readonly { text: string }[]) =>
     .filter(Boolean)
     .join("\n\n");
 
+export const QUEUE_RESTORED_NOTICE = "Queued text moved to the draft; reattach any images";
+export const QUEUE_IMAGES_REMOVED_NOTICE = "Queued images removed; reattach them to the draft";
+export type DraftNotify = (message: string, level: "info") => void;
+
 export interface ImageDraft {
   items: readonly Attachment[];
   busy: boolean;
@@ -154,7 +158,7 @@ export interface Drafts {
     key: DraftKey | null,
     deliver: (message: DraftMessage, inputId: string) => SendDisposition,
   ) => boolean;
-  follow: (source: DraftSource) => () => void;
+  follow: (source: DraftSource, notify: DraftNotify) => () => void;
   prepareSubmit: (
     key: DraftKey | null,
     deliver: (message: DraftMessage, inputId: string) => Promise<SendDisposition>,
@@ -320,15 +324,20 @@ export function createDrafts(): Drafts {
       });
       return disposition !== "not-sent";
     },
-    follow: (source) =>
+    follow: (source, notify) =>
       source.listen((m) => {
         const verdict = inputVerdictOf(m);
         if (verdict)
           if (verdict.outcome === "not_sent") giveBack(verdict.inputId, sessionOf(m, source));
           else unconfirmed.delete(verdict.inputId);
-        else if (m._tag === "action_result" && m.result._tag === "queue_restored") {
+        else if (
+          m._tag === "action_result" &&
+          m.result._tag === "queue_restored" &&
+          m.result.messages.length
+        ) {
           const restored = restoredQueueText(m.result.messages);
           if (restored) paragraph(sessionDraftKey(m), restored);
+          notify(restored ? QUEUE_RESTORED_NOTICE : QUEUE_IMAGES_REMOVED_NOTICE, "info");
         }
       }),
   };

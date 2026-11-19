@@ -1721,7 +1721,7 @@ const archiveRace = (options: { startsClosingHost?: boolean } = {}) =>
       overflow: (e) => Effect.die(e),
     });
     const drafts = createDrafts();
-    drafts.follow(browser);
+    drafts.follow(browser, () => {});
     const key = sessionDraftKey({ cwd, sessionId });
     browser.select(cwd, sessionId);
     yield* yield* a.receive(requests.find((m) => m._tag === "select")!);

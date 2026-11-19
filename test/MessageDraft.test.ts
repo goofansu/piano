@@ -11,6 +11,8 @@ import {
   EMPTY_DRAFT,
   hasContent,
   type ImageCandidate,
+  QUEUE_IMAGES_REMOVED_NOTICE,
+  QUEUE_RESTORED_NOTICE,
   sendable,
   sessionDraftKey,
 } from "../web/src/lib/messageDraft.ts";
@@ -341,7 +343,8 @@ function source() {
 test("a restored queue appends as a paragraph to its own session's draft, whichever is on screen", () => {
   const drafts = createDrafts();
   const client = source();
-  const stop = drafts.follow(client);
+  const notices: string[] = [];
+  const stop = drafts.follow(client, (message) => notices.push(message));
   const original = { cwd: "/scratch/a", sessionId: "a" };
   const current = { cwd: "/scratch/b", sessionId: "b" };
   drafts.setText(sessionDraftKey(original), "existing edit");
@@ -397,6 +400,16 @@ test("a restored queue appends as a paragraph to its own session's draft, whiche
     " \nrestored",
     "stopping stops following",
   );
+  assert.deepEqual(
+    notices,
+    [
+      QUEUE_RESTORED_NOTICE,
+      QUEUE_IMAGES_REMOVED_NOTICE,
+      QUEUE_RESTORED_NOTICE,
+      QUEUE_RESTORED_NOTICE,
+    ],
+    "each non-empty restore says whether text reached the draft; an empty one says nothing",
+  );
 });
 
 test("text added to a draft starts a new paragraph only after visible text; typing appends as typed", () => {
@@ -428,8 +441,8 @@ test("PIN-132: two tabs' first sends carry distinct input IDs, so one tab's rece
   const page = source();
   const key = sessionDraftKey({ cwd: "/scratch", sessionId: "two-tabs" });
   const [a, b] = [createDrafts(), createDrafts()];
-  a.follow(page);
-  b.follow(page);
+  a.follow(page, () => {});
+  b.follow(page, () => {});
   const sent: string[] = [];
   for (const [drafts, text] of [
     [a, "from A"],
@@ -453,7 +466,7 @@ test("PIN-132: two tabs' first sends carry distinct input IDs, so one tab's rece
 test("PIN-132: refused images returned while another is added stay editable past the limit, never sent", async () => {
   const page = source();
   const drafts = createDrafts();
-  drafts.follow(page);
+  drafts.follow(page, () => {});
   const key = sessionDraftKey({ cwd: "/scratch", sessionId: "eleven-images" });
   drafts.setText(key, "ten shots");
   await drafts.addImages(
@@ -502,7 +515,7 @@ test("PIN-132: refused images returned while another is added stay editable past
 test("a follow-up its session refused before Pi saw it comes back to its draft, once", () => {
   const page = source();
   const drafts = createDrafts();
-  drafts.follow(page);
+  drafts.follow(page, () => {});
   const key = sessionDraftKey({ cwd: "/scratch", sessionId: "not-sent" });
   const send = (text: string) => {
     let inputId = "";

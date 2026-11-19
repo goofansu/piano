@@ -102,7 +102,7 @@ test("failed creation restores text, quotes, images and options; reconnect only 
   const h = harness({ select: false });
   t.after(h.stop);
   const drafts = createDrafts();
-  t.after(drafts.follow(h.client));
+  t.after(drafts.follow(h.client, () => {}));
   const key = NEW_SESSION_DRAFT;
   drafts.setText(key, "Keep the first input");
   drafts.addQuote(key, "Context");
@@ -334,7 +334,7 @@ test("a first message refused after its session was created returns to that sess
   const h = harness({ select: false });
   t.after(h.stop);
   const drafts = createDrafts();
-  t.after(drafts.follow(h.client));
+  t.after(drafts.follow(h.client, () => {}));
   drafts.setText(NEW_SESSION_DRAFT, "Start here");
   drafts.submit(NEW_SESSION_DRAFT, (message, attemptId) =>
     h.client.send({
