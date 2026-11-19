@@ -67,16 +67,18 @@ export interface ClientOptions {
 
 export type ClientUpdate = "live" | "immediate";
 
+export interface CapturedSend {
+  send: (command: ClientCommand, preview?: ReturnType<typeof firstMessage>) => SendDisposition;
+  signal: AbortSignal;
+}
+
 export interface Client {
   getState: () => AppState;
   subscribe: (listener: (update: ClientUpdate) => void) => () => void;
   start: () => () => void;
   send: (command: ClientCommand) => SendDisposition;
   decideTrust: (path: string, trusted: boolean) => void;
-  captureSend: () => (
-    command: ClientCommand,
-    preview?: ReturnType<typeof firstMessage>,
-  ) => SendDisposition;
+  captureSend: () => CapturedSend;
   select: (cwd: string, sessionId: string | null) => void;
   dispatch: (action: LocalAction) => void;
   listen: (listener: (message: ServerMessage) => void) => () => void;
@@ -114,7 +116,11 @@ export function createClient({
 
   let state = withNewPageDirectory(initial);
   let connection: Connection | null = null;
-  let navigationEpoch = 0;
+  let epoch = new AbortController();
+  const advanceEpoch = () => {
+    epoch.abort();
+    epoch = new AbortController();
+  };
   let asked: string | null = null;
   let observing: string | null = null;
   const listeners = new Set<(update: ClientUpdate) => void>();
@@ -149,7 +155,7 @@ export function createClient({
       startPage(next.view)?.projectId !== startPage(state.view)?.projectId ||
       next.connected !== state.connected
     )
-      navigationEpoch++;
+      advanceEpoch();
     state = next;
     askAboutFocus();
     for (const listener of listeners) listener(action.type === "server" ? "live" : "immediate");
@@ -294,20 +300,23 @@ export function createClient({
     start: () => {
       const opened = connect({ onMessage, onStatus });
       connection = opened;
+      advanceEpoch();
       return () => {
         opened.close();
-        if (connection === opened) connection = null;
+        if (connection !== opened) return;
+        connection = null;
+        advanceEpoch();
       };
     },
     send,
     decideTrust,
     captureSend: () => {
-      const epoch = navigationEpoch;
-      const socket = connection;
-      return (command, preview) =>
-        epoch === navigationEpoch && socket === connection && state.connected
-          ? send(command, preview)
-          : "not-sent";
+      const { signal } = epoch;
+      return {
+        signal,
+        send: (command, preview) =>
+          !signal.aborted && state.connected ? send(command, preview) : "not-sent",
+      };
     },
     select: (cwd, sessionId) => {
       const current = state.session ?? state.selecting;

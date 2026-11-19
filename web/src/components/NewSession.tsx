@@ -136,13 +136,7 @@ export function NewSessionComposer({
       ? state.pendingCreate.options
       : undefined,
   );
-  const imageSend = useImageSend(
-    editor,
-    client.captureSend,
-    { cwd, projectId },
-    state.selectionId,
-    choice,
-  );
+  const imageSend = useImageSend(editor, client.captureSend, { cwd }, choice);
   const refusal = cwd ? offers.startRefusal(state, cwd) : undefined;
   const checkoutMissing = refusal === "checkout-missing";
   const ready =

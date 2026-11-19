@@ -8,17 +8,13 @@ export function useImageSend(
   editor: ImageSend["editor"],
   captureSend: Client["captureSend"],
   target: ImageSend["target"],
-  selection: string | null,
   choice: ImageSend["choice"],
 ) {
   const machineId = useMachineId();
   const [sender] = useState(() =>
     createImageSender({ prepare: prepareImages, discard: discardImages }),
   );
-  useEffect(
-    () => sender.abandon,
-    [sender, machineId, target.cwd, target.sessionId, target.projectId, selection],
-  );
+  useEffect(() => sender.abandon, [sender]);
   return {
     cancel: sender.cancel,
     send: (command: Parameters<ImageSender["send"]>[1]) =>
