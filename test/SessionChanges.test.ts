@@ -171,6 +171,19 @@ test("a session's Changes compare its worktree with the base Piano recorded, kee
   assert.equal(refused.result.status, "unavailable");
 });
 
+test("a worktree's recorded base applies only while the checkout is on the branch it was recorded with", async (t) => {
+  const f = await fixture(t);
+  const target = async () => {
+    const { comparison } = ready(await f.read(f.worktree, "one", { scope: "branch" }));
+    return [comparison.target?.name, comparison.target?.from];
+  };
+  assert.deepEqual(await target(), ["main", "worktree"]);
+  f.git(f.worktree, "switch", "-q", "-c", "other");
+  assert.deepEqual(await target(), ["main", "assumed"]);
+  f.git(f.worktree, "switch", "-q", "feature");
+  assert.deepEqual(await target(), ["main", "worktree"]);
+});
+
 test("INV-01/07: a manual foreign PR with the same head name stays linked without hiding branch changes", async (t) => {
   const f = await fixture(t);
   f.git(f.repo, "branch", "-f", "release", "feature");
