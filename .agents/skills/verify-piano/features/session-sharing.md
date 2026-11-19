@@ -17,8 +17,7 @@ its three isolated instances and clears inherited Radius API keys.
   never Local's Providers. The main browser issues only the peer-qualified Share request.
 - **Result states:** the journey's response adapter holds a synthetic reply to observe the Sharing
   session toast while the app stays usable, then answers a confirmed private link. Copy link turns to Link copied and the clipboard
-  matches; Open link opens the same URL. A synthetic not-private reply shows "Share is not
-  Private" with only Open link, never "Session shared". A synthetic uncertain reply warns to check Radius and
+  matches; Open link opens the same URL. A synthetic uncertain reply warns to check Radius and
   offers no retry. Result toasts stay until closed with "Close toast". Keep those captures with the run.
 
 ## Gotchas

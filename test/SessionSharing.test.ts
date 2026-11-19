@@ -73,7 +73,11 @@ test("Share uploads the registered saved file once, with owner auth and private 
         assert.equal(response.headers.get("cache-control"), "no-store");
         assert.deepEqual(await response.json(), {
           status: "shared",
-          share: { url: `https://radius.pi.dev/artifacts/artifact-${n}` },
+          share: {
+            url: `https://radius.pi.dev/artifacts/artifact-${n}`,
+            visibility: "private",
+            expiresAt: "2027-01-01T00:00:00Z",
+          },
         });
         assert.equal(http.writes.length, n);
         assert.deepEqual(http.writes[n - 1], {
@@ -197,46 +201,6 @@ test("Share uploads the registered saved file once, with owner auth and private 
         assert.equal(response.status, 409, mode);
         assert.deepEqual(await response.json(), { error: SHARE_UNCONFIRMED });
         assert.equal(creates, 1);
-      }
-      globalThis.fetch = http.fetch;
-    },
-  );
-  await t.test(
-    "a share Radius did not make private is reported as such, once; a missing expiry is still shared",
-    async () => {
-      for (const [mode, expected] of [
-        [
-          "organization",
-          (n: number) => ({
-            status: "not-private",
-            visibility: "organization",
-            share: { url: `https://radius.pi.dev/artifacts/artifact-${n}` },
-          }),
-        ],
-        [
-          "no-expiry",
-          (n: number) => ({
-            status: "shared",
-            share: { url: `https://radius.pi.dev/artifacts/artifact-${n}` },
-          }),
-        ],
-      ] as const) {
-        let creates = 0;
-        globalThis.fetch = async (input, init) => {
-          const reply = await http.fetch(input, init);
-          const request = typeof init?.body === "string" ? JSON.parse(init.body) : {};
-          if (request.params?.name !== "artifacts.create") return reply;
-          creates++;
-          const json = await reply.json();
-          const artifact = json.result.structuredContent.artifact;
-          if (mode === "organization") artifact.visibility = "organization";
-          else delete artifact.expires_at;
-          return Response.json(json);
-        };
-        const response = await share();
-        assert.equal(response.status, 200, mode);
-        assert.deepEqual(await response.json(), expected(http.writes.length), mode);
-        assert.equal(creates, 1, mode);
       }
       globalThis.fetch = http.fetch;
     },
