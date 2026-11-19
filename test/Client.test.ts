@@ -382,6 +382,12 @@ test("a restored queue says whether text reached the draft, and that images need
   h.server(restored([]));
   assert.deepEqual(h.notes, [], "Stop with nothing queued restores nothing");
   h.server(restored([{ kind: "follow-up", text: "" }]));
+  h.server(
+    restored([
+      { kind: "follow-up", text: "" },
+      { kind: "steering", text: "" },
+    ]),
+  );
   h.server(restored([{ kind: "steering", text: "typed" }], "Stop failed: no"));
   h.server(
     restored([
@@ -390,6 +396,7 @@ test("a restored queue says whether text reached the draft, and that images need
     ]),
   );
   assert.deepEqual(h.notes, [
+    [QUEUE_IMAGES_REMOVED_NOTICE, "info"],
     [QUEUE_IMAGES_REMOVED_NOTICE, "info"],
     [QUEUE_RESTORED_NOTICE, "info"],
     ["Stop failed: no", "error"],

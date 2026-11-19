@@ -23,7 +23,10 @@ export const appendParagraph = (existing: string, text: string) =>
   `${existing}${existing.trim() ? "\n\n" : ""}${text}`;
 
 export const restoredQueueText = (messages: readonly { text: string }[]) =>
-  messages.map((message) => message.text).join("\n\n");
+  messages
+    .map((message) => message.text)
+    .filter(Boolean)
+    .join("\n\n");
 
 export interface ImageDraft {
   items: readonly Attachment[];
