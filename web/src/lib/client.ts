@@ -167,13 +167,14 @@ export function createClient({
   const send = (m: ClientCommand, preview?: ReturnType<typeof firstMessage>): SendDisposition => {
     if (m._tag === "select" || m._tag === "create_session") {
       const selectionId = newSelectionId();
+      const shown = m._tag === "create_session" ? (preview ?? firstMessage(m)) : undefined;
       const selecting = () =>
         apply({
           type: "selecting",
           selectionId,
           cwd: m.cwd,
           sessionId: m._tag === "select" ? m.sessionId : null,
-          firstMessage: m._tag === "create_session" ? (preview ?? firstMessage(m)) : undefined,
+          firstMessage: shown,
           attemptId: m.attemptId,
           projectId: m._tag === "create_session" ? m.projectId : undefined,
           options: m._tag === "create_session" ? m.options : undefined,
@@ -185,7 +186,7 @@ export function createClient({
       }
       const disposition = connection?.send({ ...m, selectionId }) ?? "not-sent";
       if (disposition === "not-sent") {
-        if (firstMessage(m)) notify(notSent(), "warning");
+        if (shown) notify(notSent(), "warning");
       } else {
         lastDirectory.write(m.cwd);
         selecting();

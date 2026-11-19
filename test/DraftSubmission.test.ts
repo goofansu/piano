@@ -574,3 +574,48 @@ test("moving the client away from a pending remote image send aborts its upload"
     });
   }
 });
+
+test("a remote new session's image-only first message that is known not sent says so", async (t) => {
+  const h = harness({ select: false });
+  t.after(h.stop);
+  h.client.dispatch({ type: "open", page: { kind: "new", cwd: "/scratch" } });
+  const drafts = createDrafts();
+  const key = NEW_SESSION_DRAFT;
+  const bytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]);
+  await drafts.addImages(key, [new File([bytes], "shot.png", { type: "image/png" })], async () =>
+    Buffer.from(bytes).toString("base64"),
+  );
+  const discarded: string[] = [];
+  const sender = createImageSender({
+    prepare: async () => ({ id: "prepared" }),
+    discard: (_machine, reference) => discarded.push(reference.id),
+  });
+  h.last().open = false;
+  await sender.send(
+    {
+      machineId: "eng-1",
+      target: { cwd: "/scratch" },
+      editor: {
+        get attachments() {
+          return drafts.get(key).images;
+        },
+        get preparing() {
+          return drafts.get(key).preparing;
+        },
+        submit: (deliver) => drafts.submit(key, deliver),
+        prepareSubmit: (deliver) => drafts.prepareSubmit(key, deliver),
+      },
+      captureSend: h.client.captureSend,
+      choice: { start: {}, consume: () => {} },
+    },
+    (message, attemptId, start) => ({
+      ...newSessionCommand({ cwd: "/scratch", projectId: undefined }, message, start),
+      attemptId,
+    }),
+  );
+  assert.equal(h.creations().length, 0);
+  assert.deepEqual(discarded, ["prepared"]);
+  assert.equal(drafts.get(key).images.items.length, 1, "the unsent image returns");
+  assert.equal(h.notices.length, 1, "the unsent first message is announced");
+  assert.match(h.notices[0]!, /Your draft is kept/);
+});
