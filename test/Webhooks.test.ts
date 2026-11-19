@@ -58,7 +58,7 @@ const run = <A, E>(
     ),
   );
 const live =
-  (name: string, requests: Received[]) =>
+  (name: string, requests: Received[], fetch: typeof globalThis.fetch = receive(requests)) =>
   <A, E>(work: Effect.Effect<A, E, Webhooks | SessionHosts | Registry | Scope.Scope>) =>
     work.pipe(
       Effect.timeout("10 seconds"),
@@ -71,7 +71,7 @@ const live =
         ),
       ),
       Effect.provideService(RegistryDatabasePath, join(root, `${name}.db`)),
-      Effect.provideService(WebhookFetch, receive(requests)),
+      Effect.provideService(WebhookFetch, fetch),
       Effect.provideService(PiCli, {
         node: process.execPath,
         cli: new URL("./fake-pi.mjs", import.meta.url).pathname,
@@ -807,6 +807,66 @@ test("live fake-Pi completion/dialog/exit drive the worker once; opening history
       );
     }).pipe(live("live", requests)),
   );
+});
+
+test("a turn that exhausts retries on a live host reaches a subscribed receiver as one session.failed; a recovered retry only completes", async () => {
+  const received: Received[] = [];
+  const server = createServer((req, res) => {
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", () => {
+      received.push({
+        url: req.url!,
+        headers: new Headers(req.headers as Record<string, string>),
+        body: JSON.parse(body),
+      });
+      res.writeHead(204);
+      res.end();
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const loopback: typeof fetch = (target, init) =>
+    globalThis.fetch(`http://127.0.0.1:${address.port}${new URL(String(target)).pathname}`, init);
+  const events = (path: string) =>
+    received.filter((r) => r.url === path && r.body.event !== "ping").map((r) => r.body.event);
+  try {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const hooks = yield* Webhooks,
+          hosts = yield* SessionHosts;
+        yield* registered;
+        yield* hooks.save({
+          ...input,
+          url: "https://receiver.example/all",
+          events: WEBHOOK_EVENTS,
+        });
+        yield* hooks.save({ ...input, url: "https://receiver.example/completed" });
+        const session = yield* hosts.open({ cwd, sessionId: "s" });
+        yield* session.act({ _tag: "prompt", text: "retry exhaust" });
+        yield* wait(() => events("/all").includes("session.failed"));
+        yield* session.act({ _tag: "prompt", text: "retry recover" });
+        yield* wait(() => events("/completed").includes("session.completed"));
+        yield* session.act({ _tag: "prompt", text: "retry wait" });
+        yield* session.act({ _tag: "abort" });
+        yield* wait(() => events("/all").length === 2);
+        yield* Effect.sleep(100);
+        assert.deepEqual(events("/all"), ["session.failed", "session.completed"]);
+        assert.deepEqual(events("/completed"), ["session.completed"]);
+        const failed = received.find((r) => r.body.event === "session.failed")!.body;
+        assert.equal(failed.session?.id, "s");
+        assert.deepEqual(failed.failure, {
+          reason: "turn_failed",
+          detail: "529 overloaded (attempt 3) at [path]",
+          exitCode: null,
+        });
+      }).pipe(live("retries", [], loopback)),
+    );
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
 });
 
 test("a Piano shutdown during work announces nothing, as shutdown drops pending work", async () => {

@@ -6,7 +6,7 @@ import { PiCli } from "../server/PiCli.ts";
 import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
 import type { SessionAction } from "../shared/wire.ts";
 
-test("completion is a live settled success (a truncated reply included), not agent_end, retry, error, abort, duplicate settle or a reopened snapshot", async () => {
+test("completion is a live settled success (a truncated reply included), not agent_end, retry, error, abort, duplicate settle or a reopened snapshot; failure is a settled error, once", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {
       const session = yield* (yield* PiSessions).open({
@@ -26,23 +26,40 @@ test("completion is a live settled success (a truncated reply included), not age
         yield* Deferred.await(ready);
         yield* session.act(action);
         const events = yield* Fiber.join(collector);
-        return events.filter((e) => e._tag === "response_completed").length;
+        const count = (tag: string) => events.filter((e) => e._tag === tag).length;
+        return [count("response_completed"), count("response_failed")];
       });
-      assert.equal(yield* act({ _tag: "prompt", text: "notification pause" }), 0);
-      assert.equal(yield* act({ _tag: "prompt", text: "notification finish" }), 1);
-      assert.equal(yield* act({ _tag: "prompt", text: "notification error" }), 0);
-      assert.equal(
+      assert.deepEqual(yield* act({ _tag: "prompt", text: "notification pause" }), [0, 0]);
+      assert.deepEqual(yield* act({ _tag: "prompt", text: "notification finish" }), [1, 0]);
+      assert.deepEqual(yield* act({ _tag: "prompt", text: "notification error" }), [0, 1]);
+      assert.deepEqual(
         yield* act({ _tag: "prompt", text: "notification length" }),
-        1,
+        [1, 0],
         "a reply cut off at the token limit still ended the turn",
       );
-      assert.equal(yield* act({ _tag: "prompt", text: "notification pause" }), 0);
-      assert.equal(
+      assert.deepEqual(yield* act({ _tag: "prompt", text: "notification pause" }), [0, 0]);
+      assert.deepEqual(
         yield* act({ _tag: "abort" }),
-        0,
+        [0, 0],
         "even a preceding stop message is suppressed by abort",
       );
-      assert.equal(yield* act({ _tag: "prompt", text: "notification success" }), 1);
+      assert.deepEqual(
+        yield* act({ _tag: "prompt", text: "retry recover" }),
+        [1, 0],
+        "a failed attempt that a retry recovers completes",
+      );
+      assert.deepEqual(
+        yield* act({ _tag: "prompt", text: "retry exhaust" }),
+        [0, 1],
+        "only the attempt that exhausts retries fails, once",
+      );
+      assert.deepEqual(yield* act({ _tag: "prompt", text: "retry wait" }), [0, 0]);
+      assert.deepEqual(
+        yield* act({ _tag: "abort" }),
+        [0, 0],
+        "cancelling during a retry's backoff is not a failure",
+      );
+      assert.deepEqual(yield* act({ _tag: "prompt", text: "notification success" }), [1, 0]);
       const reopened = yield* session.events.pipe(Stream.take(1), Stream.runCollect);
       assert.deepEqual(
         reopened.map((e) => e._tag),

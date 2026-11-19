@@ -346,7 +346,7 @@ function handle(cmd) {
         return respond(cmd, undefined, "abort before clear");
       streaming = false;
       out({ type: "agent_end", messages: [], willRetry: false });
-      out({ type: "agent_settled" });
+      out({ type: "agent_settled", aborted: true });
       if (sessionId === "response-notifications")
         out({ type: "extension_ui_request", method: "notify", message: "completion barrier" });
       return respond(cmd, undefined);
@@ -466,6 +466,60 @@ function handle(cmd) {
           streaming = false;
           out({ type: "agent_settled" });
         }, 200);
+        return;
+      }
+      if (cmd.message.startsWith("retry ")) {
+        respond(cmd, { disposition: "started" });
+        streaming = true;
+        const failures = cmd.message === "retry exhaust" ? 3 : 1;
+        const attempt = (stopReason, i) => {
+          out({ type: "agent_start" });
+          const message = {
+            role: "assistant",
+            content: stopReason === "stop" ? [{ type: "text", text: "Recovered reply" }] : [],
+            stopReason,
+            ...(stopReason === "error"
+              ? { errorMessage: `529 overloaded (attempt ${i}) at /srv/provider/secret.log` }
+              : {}),
+          };
+          messages.push(message);
+          out({ type: "message_start", message });
+          out({ type: "message_end", message });
+          return message;
+        };
+        for (let i = 1; i <= failures; i++) {
+          const message = attempt("error", i);
+          const willRetry = i < failures || cmd.message !== "retry exhaust";
+          out({ type: "agent_end", messages: [message], willRetry });
+          if (!willRetry) break;
+          out({
+            type: "auto_retry_start",
+            attempt: i,
+            maxAttempts: 2,
+            delayMs: 1,
+            errorMessage: message.errorMessage,
+          });
+        }
+        if (cmd.message === "retry wait")
+          return out({
+            type: "extension_ui_request",
+            method: "notify",
+            message: "completion barrier",
+          });
+        if (cmd.message === "retry recover") {
+          const message = attempt("stop", failures + 1);
+          out({ type: "auto_retry_end", success: true, attempt: failures });
+          out({ type: "agent_end", messages: [message], willRetry: false });
+        } else
+          out({
+            type: "auto_retry_end",
+            success: false,
+            attempt: failures - 1,
+            finalError: messages.at(-1).errorMessage,
+          });
+        streaming = false;
+        out({ type: "agent_settled", aborted: false });
+        out({ type: "extension_ui_request", method: "notify", message: "completion barrier" });
         return;
       }
       if (cmd.message.startsWith("notification ")) {

@@ -278,6 +278,7 @@ export const SessionEvent = Schema.Union([
   Schema.TaggedStruct("snapshot", { snapshot: Snapshot }),
   Schema.TaggedStruct("state", { state: SessionState }),
   Schema.TaggedStruct("response_completed", {}),
+  Schema.TaggedStruct("response_failed", { detail: Schema.String }),
   Schema.TaggedStruct("queue_update", { messages: Schema.Array(QueuedMessage) }),
   Schema.TaggedStruct("submission", { submission: PromptSubmission }),
   Schema.TaggedStruct("message_update", { message: RenderMsg }),
