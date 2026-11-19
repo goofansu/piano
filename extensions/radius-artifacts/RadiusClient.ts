@@ -1,7 +1,12 @@
+import { isUtf8 } from "node:buffer";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { z } from "zod";
 import { isRadiusUrl, RADIUS_MCP_URL } from "../../shared/radiusUrl.ts";
+
+export const ARTIFACT_DOWNLOAD_BYTES = 16 * 1024 * 1024;
+export const ARTIFACT_PAGE_BYTES = 16 * 1024;
+export const ARTIFACT_MAX_PAGE_BYTES = 32 * 1024;
 
 export class RadiusError extends Error {}
 export class RadiusAuthenticationError extends RadiusError {}
@@ -144,7 +149,13 @@ export class RadiusClient {
     return result.data;
   }
 
-  async content(id: string, version: number, path: string) {
+  async content(
+    id: string,
+    version: number,
+    path: string,
+    offset = 0,
+    maxBytes = ARTIFACT_PAGE_BYTES,
+  ) {
     const transfer = z
       .object({
         method: z.literal("GET"),
@@ -173,16 +184,49 @@ export class RadiusClient {
         const { value, done } = await reader.read();
         if (done) break;
         bytes += value.length;
-        if (bytes > 128 * 1024)
+        if (bytes > ARTIFACT_DOWNLOAD_BYTES)
           throw new RadiusError(
-            "Artifact content exceeds the 128 KiB view limit; open its Radius viewing URL.",
+            "Artifact content exceeds the 16 MiB download limit; open its Radius viewing URL.",
           );
         chunks.push(value);
       }
     } finally {
       await reader.cancel().catch(() => {});
     }
-    return Buffer.concat(chunks).toString("utf8");
+    const buffer = Buffer.concat(chunks);
+    if (!isUtf8(buffer)) throw new RadiusError("Artifact content is not valid UTF-8 text.");
+    if (offset > bytes) throw new RadiusError("Requested offset is beyond the end of the file.");
+    const continuationByte = (index: number) => (buffer[index] & 0xc0) === 0x80;
+    if (offset < bytes && continuationByte(offset))
+      throw new RadiusError(
+        "Requested offset is inside a UTF-8 codepoint; use a returned nextOffset.",
+      );
+    let end = Math.min(offset + maxBytes, bytes);
+    while (end < bytes && continuationByte(end)) end--;
+    let jsonBytes = 0;
+    for (let i = offset; i < end; i++) {
+      const byte = buffer[i];
+      jsonBytes +=
+        byte < 0x20
+          ? [8, 9, 10, 12, 13].includes(byte)
+            ? 2
+            : 6
+          : byte === 0x22 || byte === 0x5c
+            ? 2
+            : 1;
+      if (jsonBytes > ARTIFACT_MAX_PAGE_BYTES) {
+        end = i;
+        while (continuationByte(end)) end--;
+        break;
+      }
+    }
+    return {
+      content: buffer.toString("utf8", offset, end),
+      path,
+      offset,
+      nextOffset: end < bytes ? end : null,
+      totalBytes: bytes,
+    };
   }
 }
 

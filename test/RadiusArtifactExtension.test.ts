@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { validateToolArguments } from "@earendil-works/pi-ai";
 import {
   type ExtensionAPI,
   type ExtensionContext,
@@ -13,6 +14,7 @@ import {
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import radiusArtifacts from "../extensions/radius-artifacts/index.ts";
+import type { RadiusArtifactResult } from "../shared/radiusArtifacts.ts";
 import { RadiusHttp, radiusCanary } from "./fixtures/RadiusHttp.ts";
 
 const document = {
@@ -65,12 +67,17 @@ async function harness(signedIn = true) {
     load,
     names: () => [...tools.keys()],
     sessionManager,
-    async call(name: string, args: unknown, signal?: AbortSignal) {
+    async call(name: string, args: Record<string, unknown>, signal?: AbortSignal) {
       const definition = tools.get(`radius_artifact_${name}`);
       assert.ok(definition);
       const result = await definition.execute(
         "call",
-        args,
+        validateToolArguments(definition, {
+          type: "toolCall",
+          id: "call",
+          name: definition.name,
+          arguments: JSON.parse(JSON.stringify(args)),
+        }),
         signal,
         undefined,
         ctx as ExtensionToolContext,
@@ -81,7 +88,10 @@ async function harness(signedIn = true) {
         "credentials and raw errors never reach Pi history",
       );
       assert.equal(JSON.stringify(result).includes("/tmp/"), false, "no local-file delivery");
-      return result.structuredContent as Record<string, unknown>;
+      const modelText = result.content[0];
+      assert.equal(modelText.type, "text");
+      assert.deepEqual(JSON.parse(modelText.text), result.structuredContent);
+      return result.structuredContent as RadiusArtifactResult;
     },
     cleanup() {
       globalThis.fetch = original;
@@ -151,6 +161,10 @@ test("create confirms a private Radius publication; update retains identity and 
     assert.equal(h.http.writes[1].args.visibility, undefined, "updates do not set visibility");
     const viewed = await h.call("view", { artifactId: "artifact-1" });
     assert.equal(viewed.content, "# Revised");
+    assert.equal(viewed.path, "index.md");
+    assert.equal(viewed.offset, 0);
+    assert.equal(viewed.nextOffset, null);
+    assert.equal(viewed.totalBytes, 9);
     assert.equal(viewed.url, created.url);
     assert.equal(
       (await h.call("view", { artifactId: "artifact-1", revision: 1 })).content,
@@ -182,6 +196,295 @@ test("create confirms a private Radius publication; update retains identity and 
       ],
       "only verified publications leave small receipts; retries and views do not",
     );
+  } finally {
+    h.cleanup();
+  }
+});
+
+test("view reconstructs a large single line in bounded UTF-8 pages pinned across newer revisions", async () => {
+  const h = await harness();
+  try {
+    const created = await h.call("create", document);
+    const artifact = h.http.artifacts.get(created.artifactId!)!;
+    const original = "a".repeat(16383) + "🌍é中".repeat(20000);
+    artifact.versions[0].content = original;
+    const first = await h.call("view", { artifactId: created.artifactId });
+    assert.equal(first.status, "confirmed", first.message);
+    assert.equal(first.content, "a".repeat(16383), "the default page stops before a split emoji");
+    assert.equal(first.path, "index.md");
+    assert.equal(first.offset, 0);
+    assert.equal(first.nextOffset, 16383);
+    assert.equal(first.totalBytes, Buffer.byteLength(original));
+    artifact.versions.push({
+      note: "newer",
+      content: "New revision",
+      content_type: "text/markdown",
+    });
+    artifact.latest_version = 2;
+    const pieces = [first.content];
+    let offset: number | null = first.nextOffset;
+    while (offset !== null) {
+      assert.equal(typeof offset, "number");
+      const page = await h.call("view", {
+        artifactId: first.artifactId,
+        revision: first.revision,
+        path: first.path,
+        offset,
+        maxBytes: 32768,
+      });
+      assert.equal(page.status, "confirmed", page.message);
+      assert.equal(page.revision, 1);
+      assert.equal(page.latestRevision, 2);
+      assert.equal(page.path, first.path);
+      assert.equal(page.offset, offset);
+      assert.equal(page.totalBytes, first.totalBytes);
+      assert.equal(typeof page.content, "string");
+      const bytes = Buffer.byteLength(page.content!);
+      assert.ok(bytes > 0 && bytes <= 32768);
+      assert.ok(!page.content!.includes("�"));
+      if (page.nextOffset !== null) assert.equal(page.nextOffset, offset! + bytes);
+      else assert.equal(offset! + bytes, page.totalBytes);
+      pieces.push(page.content!);
+      offset = page.nextOffset;
+    }
+    assert.equal(pieces.join(""), original);
+    assert.equal((await h.call("view", { artifactId: first.artifactId })).content, "New revision");
+    assert.equal(h.http.writes.length, 1, "pages never publish or mutate the artifact");
+  } finally {
+    h.cleanup();
+  }
+});
+
+test("view defines UTF-8 byte boundaries, EOF and invalid page arguments", async () => {
+  const h = await harness();
+  try {
+    await h.call("create", document);
+    const version = h.http.artifacts.get("artifact-1")!.versions[0];
+    version.content = "é中🌍";
+    const args = { artifactId: "artifact-1", revision: 1, maxBytes: 4 };
+    for (const [offset, content, nextOffset] of [
+      [0, "é", 2],
+      [2, "中", 5],
+      [5, "🌍", null],
+      [9, "", null],
+    ] as const) {
+      const page = await h.call("view", { ...args, offset });
+      assert.equal(page.status, "confirmed", page.message);
+      assert.equal(page.content, content);
+      assert.equal(page.offset, offset);
+      assert.equal(page.nextOffset, nextOffset);
+      assert.equal(page.totalBytes, 9);
+    }
+    for (const [offset, message] of [
+      [1, /inside a UTF-8 codepoint/],
+      [10, /beyond the end/],
+    ] as const) {
+      const page = await h.call("view", { ...args, offset });
+      assert.equal(page.status, "error");
+      assert.match(page.message, message);
+      assert.equal(page.content, undefined);
+    }
+    const unpinned = await h.call("view", { artifactId: "artifact-1", offset: 2 });
+    assert.equal(unpinned.status, "error");
+    assert.match(unpinned.message, /requires revision/);
+    for (const invalid of [{ offset: -1 }, { maxBytes: 0 }, { maxBytes: 3 }, { maxBytes: 32769 }])
+      await assert.rejects(
+        h.call("view", { ...args, ...invalid }),
+        /Validation failed/,
+        JSON.stringify(invalid),
+      );
+    version.content = "";
+    const empty = await h.call("view", args);
+    assert.equal(empty.status, "confirmed");
+    assert.equal(empty.content, "");
+    assert.equal(empty.offset, 0);
+    assert.equal(empty.totalBytes, 0);
+    assert.equal(empty.nextOffset, null);
+  } finally {
+    h.cleanup();
+  }
+});
+
+test("view pages a 10 MiB session-sized file and bounds content even when JSON escaping expands it", async () => {
+  const h = await harness();
+  try {
+    await h.call("create", document);
+    const version = h.http.artifacts.get("artifact-1")!.versions[0];
+    version.content_type = "application/x-ndjson";
+    version.content = '{"message":"' + "s".repeat(10 * 1024 * 1024 - 15) + '"}\n';
+    assert.equal(Buffer.byteLength(version.content), 10 * 1024 * 1024);
+    for (const offset of [0, 5 * 1024 * 1024, 10 * 1024 * 1024 - 20]) {
+      const page = await h.call("view", { artifactId: "artifact-1", revision: 1, offset });
+      assert.equal(page.status, "confirmed", page.message);
+      assert.equal(page.content, version.content.slice(offset, offset + 16384));
+      assert.equal(page.totalBytes, 10 * 1024 * 1024);
+      assert.equal(page.nextOffset, offset + 16384 < page.totalBytes! ? offset + 16384 : null);
+      assert.ok(
+        Buffer.byteLength(JSON.stringify(page)) < 18000,
+        "the downloaded file is not returned wholesale",
+      );
+    }
+    version.content = "\u0000".repeat(65536);
+    const escaped = await h.call("view", { artifactId: "artifact-1", maxBytes: 32768 });
+    assert.equal(escaped.content, "\u0000".repeat(5461));
+    assert.equal(escaped.nextOffset, 5461);
+    assert.ok(
+      Buffer.byteLength(JSON.stringify(escaped)) < 32768 + 1024,
+      "JSON-escaped page text stays within 32 KiB, plus metadata",
+    );
+    version.content = "\n".repeat(16383) + "🌍tail";
+    const unicode = await h.call("view", { artifactId: "artifact-1", maxBytes: 32768 });
+    assert.equal(unicode.content, "\n".repeat(16383));
+    assert.equal(unicode.nextOffset, 16383, "the JSON budget also stops before a split codepoint");
+    const tail = await h.call("view", {
+      artifactId: "artifact-1",
+      revision: 1,
+      offset: unicode.nextOffset,
+    });
+    assert.equal(tail.content, "🌍tail");
+    assert.equal(tail.nextOffset, null);
+    assert.equal(h.http.writes.length, 1);
+  } finally {
+    h.cleanup();
+  }
+});
+
+test(
+  "view caps streamed downloads at 16 MiB, cancels oversized bodies and rejects invalid UTF-8",
+  { timeout: 10000 },
+  async () => {
+    const h = await harness();
+    try {
+      await h.call("create", document);
+      let bytes = 16 * 1024 * 1024;
+      let cancelled = false;
+      let invalidUtf8 = false;
+      globalThis.fetch = async (input, init) => {
+        if (new URL(String(input)).pathname !== "/transfer") return h.http.fetch(input, init);
+        let sent = 0;
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            pull(controller) {
+              if (invalidUtf8) {
+                controller.enqueue(new Uint8Array([0xff]));
+                controller.close();
+              } else if (sent < bytes) {
+                const size = Math.min(64 * 1024, bytes - sent);
+                controller.enqueue(Buffer.alloc(size, "x"));
+                sent += size;
+              } else if (bytes === 16 * 1024 * 1024) controller.close();
+            },
+            cancel() {
+              cancelled = true;
+            },
+          }),
+        );
+      };
+      const args = { artifactId: "artifact-1", revision: 1, offset: bytes - 4, maxBytes: 4 };
+      const boundary = await h.call("view", args);
+      assert.equal(boundary.status, "confirmed", boundary.message);
+      assert.equal(boundary.content, "xxxx");
+      assert.equal(boundary.nextOffset, null);
+      assert.equal(boundary.totalBytes, bytes, "actual streamed bytes, not manifest size");
+      bytes++;
+      const tooLarge = await h.call("view", args);
+      assert.equal(tooLarge.status, "error");
+      assert.match(tooLarge.message, /16 MiB download limit/);
+      assert.equal(tooLarge.content, undefined);
+      assert.equal(cancelled, true, "over-limit bodies stop downloading without waiting for EOF");
+      invalidUtf8 = true;
+      const invalid = await h.call("view", { artifactId: "artifact-1" });
+      assert.equal(invalid.status, "error");
+      assert.match(invalid.message, /not valid UTF-8/);
+    } finally {
+      h.cleanup();
+    }
+  },
+);
+
+test(
+  "view aborts an in-progress content download without returning partial text or credentials",
+  { timeout: 10000 },
+  async () => {
+    const h = await harness();
+    try {
+      await h.call("create", document);
+      const abort = new AbortController();
+      let started!: () => void;
+      const ready = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      let downloadSignal: AbortSignal | null | undefined;
+      globalThis.fetch = async (input, init) => {
+        if (new URL(String(input)).pathname !== "/transfer") return h.http.fetch(input, init);
+        downloadSignal = init?.signal;
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(Buffer.from("Partial content"));
+              downloadSignal!.addEventListener(
+                "abort",
+                () => controller.error(new Error(radiusCanary)),
+                { once: true },
+              );
+              started();
+            },
+          }),
+        );
+      };
+      const pending = h.call("view", { artifactId: "artifact-1" }, abort.signal);
+      await ready;
+      abort.abort();
+      const interrupted = await pending;
+      assert.equal(downloadSignal?.aborted, true);
+      assert.equal(interrupted.status, "error");
+      assert.equal(interrupted.content, undefined);
+      assert.match(interrupted.message, /interrupted/);
+    } finally {
+      h.cleanup();
+    }
+  },
+);
+
+test("view keeps manifest-only results and path selection; publication retains its 128 KiB limit", async () => {
+  const h = await harness();
+  try {
+    await h.call("create", document);
+    h.http.artifacts.get("artifact-1")!.versions[0].content_type = "image/png";
+    const view = await h.call("view", { artifactId: "artifact-1" });
+    assert.equal(view.status, "confirmed");
+    assert.equal(view.files?.length, 1);
+    assert.equal(view.content, undefined);
+    assert.equal(view.nextOffset, undefined, "manifest-only is not text EOF");
+    h.http.files = [];
+    const noFiles = await h.call("view", { artifactId: "artifact-1" });
+    assert.deepEqual(noFiles.files, []);
+    assert.equal(noFiles.content, undefined);
+    h.http.files = [
+      { path: "image.png", content_type: "image/png", stored_bytes: 10 },
+      { path: "report.md", content_type: "text/markdown", stored_bytes: 10 },
+    ];
+    const manifest = await h.call("view", { artifactId: "artifact-1" });
+    assert.deepEqual(manifest.files, h.http.files);
+    assert.equal(manifest.content, undefined);
+    const missing = await h.call("view", { artifactId: "artifact-1", path: "missing.md" });
+    assert.equal(missing.status, "error");
+    const selected = await h.call("view", {
+      artifactId: "artifact-1",
+      path: "report.md",
+      maxBytes: 4,
+    });
+    assert.equal(selected.content, "# Or");
+    assert.equal(selected.path, "report.md");
+    assert.equal(selected.nextOffset, 4);
+    const tooLarge = await h.call("create", {
+      ...document,
+      operationKey: "large",
+      content: "é".repeat(65537),
+    });
+    assert.equal(tooLarge.status, "error");
+    assert.match(tooLarge.message, /128 KiB publication limit/);
+    assert.equal(h.http.writes.length, 1);
   } finally {
     h.cleanup();
   }

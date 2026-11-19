@@ -29,6 +29,7 @@ export class RadiusHttp {
   unsafeDownload: string | undefined;
   unavailable = false;
   unadvertised = new Set<string>();
+  files: { path: string; content_type: string; stored_bytes: number }[] | undefined;
 
   fetch: typeof fetch = async (input, init) => {
     const url = new URL(String(input));
@@ -98,7 +99,7 @@ export class RadiusHttp {
       )
         throw new Error(radiusCanary);
       if (this.fail === "malformed-create") return tool({ ok: true, artifact: { id } });
-      return tool({ ok: true, artifact });
+      return tool({ ok: true, artifact: { ...artifact, versions: undefined } });
     }
     const artifact = this.artifacts.get(args.slug);
     if (!artifact) return rejected();
@@ -107,6 +108,7 @@ export class RadiusHttp {
         ok: true,
         artifact: {
           ...artifact,
+          versions: undefined,
           ...(this.wrongIdentity ? { id: "other-artifact" } : {}),
           ...(this.unsafeUrl ? { canonical_url: this.unsafeUrl } : {}),
         },
@@ -120,7 +122,7 @@ export class RadiusHttp {
         artifact_id: artifact.id,
         version,
         note: revision.note,
-        files: [
+        files: this.files ?? [
           {
             path: "index.md",
             content_type: revision.content_type,
