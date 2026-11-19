@@ -7,6 +7,20 @@ first. It includes the [transcript fidelity contract](../../../../docs/session-t
 three ordinary lines stay separate while settled, streaming and reloaded, token-like text stays
 original, and Copy response retains the source (clipboard observation on Linux).
 
+- `machine-shortcuts`
+  - Preconditions: an installed macOS PWA in standalone display mode; configured peers for
+    switching away from Local. Record `ab eval "({platform:navigator.platform,standalone:matchMedia('(display-mode: standalone)').matches})"`
+    before driving. An ordinary Linux/browser tab cannot prove native shortcut delivery.
+  - Action: in the installed PWA, `ab press Meta+1` selects Local, `ab press Meta+2` selects the
+    first peer, and `ab press Meta+0` selects the last machine in picker order. Capture the
+    machine and `ab get url` after each; the peer route is `/m/<peer-id>/…`. Returning to a
+    machine restores its remembered route and composer draft. Cmd+9 means the ninth item,
+    not the last; Ctrl is not a substitute.
+  - Boundary: repeat with a menu/dialog open and verify it keeps the key without switching.
+    Ordinary browser tabs retain their native number/zoom shortcuts. The remote-session
+    journey emulates macOS/standalone for its assertions; native installed-PWA delivery is
+    separate evidence. Without a configured peer, attempt `/m/<peer-id>/s/<session-id>` and
+    record Machine unavailable plus the missing peer prerequisite, not an isolation pass.
 - `phone-menu`
   - Action: `ab open "$WEB_URL/s/verify-plan"; ab wait --text "Answer 4.";
     ab set viewport 700 800;
