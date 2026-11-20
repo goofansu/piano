@@ -6,11 +6,9 @@ import {
 } from "./correlatedRequest.ts";
 import { branchLabel } from "./format.ts";
 
-export type WorktreeRequestKind = "create" | "select";
-
 export type WorktreeRequestStatus =
   | { status: "idle" }
-  | { status: "pending"; requestId: string; kind: WorktreeRequestKind }
+  | { status: "pending"; requestId: string }
   | { status: "failed"; detail: string; unconfirmed: boolean };
 
 export interface WorktreeOperationState {
@@ -30,13 +28,12 @@ export interface WorktreeOperation {
   start: () => () => void;
   open: (folder: string | undefined) => void;
   refresh: () => void;
-  create: (branch: string, hooks: boolean) => void;
   select: (path: string) => void;
   dismiss: () => void;
 }
 
 const NO_RECEIPT =
-  "No creation/selection receipt. Refresh discovery and inspect the checkout before retrying; it may already exist.";
+  "No selection receipt. Refresh discovery and inspect the checkout before retrying.";
 const CONNECTION_LOST =
   "Connection lost. Refresh discovery after reconnecting before retrying; the operation may have changed the checkout.";
 const NOT_SENT = "Request not sent. Retry when Piano reconnects.";
@@ -123,12 +120,12 @@ export function createWorktreeOperation({
     else sendDiscovery(folder);
   };
 
-  const begin = (kind: WorktreeRequestKind, command: (requestId: string) => ClientCommand) => {
+  const begin = (command: (requestId: string) => ClientCommand) => {
     if (pendingId() !== undefined || !client.getState().connected) return;
     active = requests.send({
       command,
       receipt,
-      pending: (requestId) => publish({ request: { status: "pending", requestId, kind } }),
+      pending: (requestId) => publish({ request: { status: "pending", requestId } }),
       settle: (outcome) => {
         active = undefined;
         if (outcome.status !== "confirmed") {
@@ -183,22 +180,10 @@ export function createWorktreeOperation({
       discover();
     },
     refresh: discover,
-    create: (branch, hooks) => {
-      const { folder } = state;
-      const name = branch.trim();
-      if (folder === undefined || !name) return;
-      begin("create", (requestId) => ({
-        _tag: "create_worktree",
-        requestId,
-        folder,
-        branch: name,
-        hooks,
-      }));
-    },
     select: (path) => {
       const { folder } = state;
       if (folder === undefined) return;
-      begin("select", (requestId) => ({ _tag: "add_worktree", requestId, folder, path }));
+      begin((requestId) => ({ _tag: "add_worktree", requestId, folder, path }));
     },
     dismiss: () => {
       if (state.request.status === "failed") publish({ request: IDLE });
@@ -221,18 +206,11 @@ export function filterWorktrees(
     : all;
 }
 
-export interface WorktreesForm {
-  creating: boolean;
-  branch: string;
-  hooks: boolean;
-  query: string;
-}
-
-export interface WorktreesViewInput<Folder extends { discovery: WorktreeDiscovery }> {
+export interface WorktreesViewInput {
   state: WorktreeOperationState;
-  folder: Folder | undefined;
+  folder: { discovery: WorktreeDiscovery } | undefined;
   connected: boolean;
-  form: WorktreesForm;
+  query: string;
 }
 
 export interface WorktreesFailure {
@@ -241,60 +219,43 @@ export interface WorktreesFailure {
   details?: string;
 }
 
-export interface WorktreesView<Folder> {
+export interface WorktreesView {
   discovery: WorktreeDiscovery | undefined;
-  target: Folder | undefined;
   visible: readonly WorktreeFacts[];
   pending: boolean;
   busy: boolean;
-  canStart: boolean;
-  canSubmit: boolean;
-  createFromQuery: string | undefined;
   emptyText: string;
   failure: WorktreesFailure | undefined;
   notices: { disconnected: string | undefined; discoveryError: string | undefined };
 }
 
-const HOOKS_HINT =
-  "For unapproved hooks, review and approve them in a terminal, or leave hooks off.";
-
-export function worktreesView<Folder extends { discovery: WorktreeDiscovery }>({
+export function worktreesView({
   state,
   folder,
   connected,
-  form,
-}: WorktreesViewInput<Folder>): WorktreesView<Folder> {
+  query,
+}: WorktreesViewInput): WorktreesView {
   const discovery = folder && (state.discovery ?? folder.discovery);
   const ready = discovery?.status === "ready" ? discovery : undefined;
-  const target = ready ? folder : undefined;
   const { request } = state;
   const pending = request.status === "pending";
-  const canStart = connected && !pending;
-  const needle = form.query.trim();
   let failure: WorktreesFailure | undefined;
   if (request.status === "failed")
     failure = request.unconfirmed
       ? {
           title: "Worktree operation not confirmed",
-          lines: [
-            "Refresh discovery before retrying.",
-            ...(form.creating && form.hooks ? [HOOKS_HINT] : []),
-          ],
+          lines: ["Refresh discovery before retrying."],
           details: request.detail,
         }
       : {
-          title: form.creating ? "Could not create the worktree" : "Could not open the worktree",
+          title: "Could not open the worktree",
           lines: [request.detail],
         };
   return {
     discovery,
-    target,
-    visible: filterWorktrees(ready?.worktrees ?? [], form.query),
+    visible: filterWorktrees(ready?.worktrees ?? [], query),
     pending,
     busy: pending || !connected || state.refreshing,
-    canStart,
-    canSubmit: canStart && target !== undefined && form.branch.trim() !== "",
-    createFromQuery: target && needle ? needle : undefined,
     emptyText: discovery?.status === "non-git" ? "Non-Git directory" : "No worktree matches.",
     failure,
     notices: {

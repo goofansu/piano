@@ -69,11 +69,6 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-      # The module suite includes a real Worktrunk lifecycle test, not just fake CLI tests.
-      # Piano supports the latest Worktrunk, so CI tests the latest release, checked against
-      # the checksum file published with it.
-      - name: Install the latest Worktrunk
-        uses: ./.github/actions/setup-worktrunk
       - name: Clean install
         run: npm ci
       # Same preload and file glob as npm test. Node partitions all files across the shards;
@@ -127,9 +122,6 @@ jobs:
           cache: npm
       - name: Clean install
         run: npm ci
-      - name: Install the latest Worktrunk
-        if: matrix.first == 'start-session'
-        uses: ./.github/actions/setup-worktrunk
       - name: Install agent-browser 0.43.0 and its browser
         id: browser-install
         run: |

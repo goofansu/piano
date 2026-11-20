@@ -28,13 +28,12 @@ const usage = `Usage: node scripts/dispatch-session.ts --json < request.json
 Options:
   --json               Start from one JSON object on stdin; no other arguments allowed.
                         Required: prompt, cwd, outFile, wsUrl, origin (nonblank strings).
-                        Optional: worktree { branch, hooks? }, parentSession, inheritProject.
+                        Optional: worktree { branch }, parentSession, inheritProject.
                         Unknown fields are rejected; prompt is literal data, not shell source.
   --ws-url URL          Override PIANO_SESSION_WS_URL (loopback ws[s]://host:port/ws)
   --origin ORIGIN       Override PIANO_SESSION_ORIGIN (allowed HTTP(S) origin, no trailing /)
   --worktree BRANCH     Create a new worktree on new branch BRANCH from <cwd>'s repository and
                         start the session there; a failure creates no session
-  --hooks               With --worktree, run approved Worktrunk hooks (default: off)
   --parent-session ID   Record the dispatching session and inherit its current Piano project
   --no-inherit-project  Start ungrouped, keeping the parent backlink if supplied
   --steer               With follow-up, steer the current run at Pi's next tool boundary instead
@@ -75,7 +74,6 @@ function argumentsFromCommandLine() {
         "ws-url": { type: "string" },
         origin: { type: "string" },
         worktree: { type: "string" },
-        hooks: { type: "boolean" },
         "parent-session": { type: "string" },
         "no-inherit-project": { type: "boolean" },
         steer: { type: "boolean" },
@@ -107,7 +105,6 @@ const startRequest = z.strictObject({
         .string()
         .trim()
         .refine((value) => value.length > 0 && !value.startsWith("-"), "must name a new branch"),
-      hooks: z.boolean().optional(),
     })
     .optional(),
   parentSession: z.string().trim().min(1, "must not be blank").optional(),
@@ -243,8 +240,6 @@ async function main() {
   }
   if (positionals.length < 2 || positionals.length > 3) throw new CliError(2, usage);
   if (values.project !== undefined) throw new CliError(2, "--project belongs to list");
-  if (values.hooks && values.worktree === undefined)
-    throw new CliError(2, "--hooks needs --worktree");
   const [promptFile, cwd, outFile] = positionals;
   const { parentSession, ...request } = parsed(
     startRequest,
@@ -253,9 +248,7 @@ async function main() {
       cwd,
       parentSession: values["parent-session"],
       inheritProject: values["no-inherit-project"] ? false : undefined,
-      ...(values.worktree !== undefined
-        ? { worktree: { branch: values.worktree, hooks: values.hooks } }
-        : {}),
+      ...(values.worktree !== undefined ? { worktree: { branch: values.worktree } } : {}),
     },
     flagNames,
   );

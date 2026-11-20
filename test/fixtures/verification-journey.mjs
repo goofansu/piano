@@ -2,10 +2,7 @@ import assert from "node:assert/strict";
 import { run } from "../browser/harness.mjs";
 
 const mode = process.argv[3];
-assert.ok(
-  ["setup", "failure", "cancel", "worktree"].includes(mode),
-  "choose setup, failure, cancel or worktree",
-);
+assert.ok(["setup", "failure", "cancel"].includes(mode), "choose setup, failure or cancel");
 await run(
   `verification-${mode}`,
   () => {
@@ -19,5 +16,4 @@ await run(
     process.kill(process.pid, "SIGTERM");
     await page.see("deliberately absent text");
   },
-  { requiresWorktrunk: mode === "worktree" },
 );

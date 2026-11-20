@@ -9,14 +9,12 @@ ssh exe.dev new --tag goofansu-piano --json
 ssh exe.dev share set-private <vm>
 ssh exe.dev share port <vm> 8000
 ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new <vm>.exe.xyz \
-  'whoami; ls /home/exedev/node/bin; command -v git wt; sudo -n true'
+  'whoami; ls /home/exedev/node/bin; command -v git; sudo -n true'
 ```
 
 Let exe.dev generate the VM name. Use the creation response's VM name for `<vm>` in subsequent commands, and its returned SSH destination and HTTPS URL thereafter.
 
 Exeuntu may already have Node 24 under `/home/exedev/node/bin` but omit it from noninteractive PATH. Set `PATH="$HOME/node/bin:$HOME/.local/bin:$PATH"`, verify `node --version`, and create the unit's expected entry with `ln -s /home/exedev/node/bin/node "$HOME/.local/bin/node"` if that entry is absent. Install Node only if the required version is absent. Adapt user and paths when the image differs.
-
-Install missing Worktrunk using its upstream release matching the VM architecture and Piano's README requirement. Discover the release and assets from the deploying machine; a fresh VM may receive GitHub API HTTP 403. Verify the archive against its published SHA256 before transferring it and installing `wt` into `.local/bin`. If downloading on the VM, use the same local fallback on HTTP 403. Reuse existing tools rather than reinstalling them.
 
 For an SSH/scp connection closed by the remote host, retry the failed transfer once to the same destination. Continue only after the transfer succeeds; keep its local source until then.
 

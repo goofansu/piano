@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import {
   chmodSync,
-  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -15,6 +14,7 @@ import { join } from "node:path";
 import { type TestContext, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
+import { FolderWorktrees } from "../server/FolderWorktrees.ts";
 import { worktreeInstance } from "../server/GitCheckout.ts";
 import { PianoCoreLive } from "../server/PianoServices.ts";
 import { Registry, RegistryDatabasePath } from "../server/Registry.ts";
@@ -22,13 +22,7 @@ import { SessionChanges, SessionChangesLive } from "../server/SessionChanges.ts"
 import { SidebarView } from "../server/SidebarView.ts";
 import { WorkspaceChangesLive } from "../server/WorkspaceChanges.ts";
 import { WorkspaceCommands } from "../server/WorkspaceCommands.ts";
-import {
-  checkoutHint,
-  createWorktree,
-  listWorktrees,
-  WorktrunkCommand,
-} from "../server/Worktrees.ts";
-import type { WorktreeResult } from "../shared/wire.ts";
+import { checkoutHint, createWorktree, listWorktrees } from "../server/Worktrees.ts";
 import { forkWorktree } from "./fixtures/forkWorktree.ts";
 
 const git = (cwd: string, ...args: string[]) =>
@@ -71,16 +65,13 @@ function fixture(t: TestContext) {
   });
   return { root, repo };
 }
-test("INV-06: discovery reads Git worktrees without Worktrunk and reports failures without healthy fallbacks", async (t) => {
+test("INV-06: discovery reads Git worktrees and reports failures without healthy fallbacks", async (t) => {
   const { root, repo } = fixture(t);
   git(repo, "worktree", "add", "--quiet", "-b", "feature", join(root, "feature"));
   git(repo, "worktree", "add", "--quiet", "--detach", join(root, "detached"));
   git(repo, "worktree", "add", "--quiet", "-b", "gone", join(root, "gone"));
   rmSync(join(root, "gone"), { recursive: true, force: true });
-  const observe = (path: string) =>
-    Effect.runPromise(
-      listWorktrees(path).pipe(Effect.provideService(WorktrunkCommand, join(root, "unavailable"))),
-    );
+  const observe = (path: string) => Effect.runPromise(listWorktrees(path));
   const result = await observe(repo);
   assert.equal(result.status, "ready");
   if (result.status !== "ready") return;
@@ -224,7 +215,7 @@ test("INV-06: inherited GIT_* state cannot redirect discovery or directory hints
   }
 });
 
-test("INV-06/INV-07: real Worktrunk creation ignores inherited Git redirection", async (t) => {
+test("INV-06/INV-07: creation ignores inherited Git redirection", async (t) => {
   const { root, repo } = fixture(t);
   const { repo: other } = fixture(t);
   for (const [path, identity] of [
@@ -249,8 +240,6 @@ test("INV-06/INV-07: real Worktrunk creation ignores inherited Git redirection",
     branches: git(other, "for-each-ref", "refs/heads"),
     worktrees: git(other, "worktree", "list", "--porcelain"),
   };
-  const config = join(root, "wt.toml");
-  writeFileSync(config, 'worktree-path = "../custom/{{ branch | sanitize }}"\n');
   const inherited = {
     GIT_DIR: join(other, ".git"),
     GIT_WORK_TREE: other,
@@ -262,7 +251,6 @@ test("INV-06/INV-07: real Worktrunk creation ignores inherited Git redirection",
     GIT_CONFIG_KEY_0: "core.bare",
     GIT_CONFIG_VALUE_0: "true",
     GIT_CONFIG_GLOBAL: join(root, "missing-config"),
-    WORKTRUNK_CONFIG_PATH: config,
   };
   const saved = Object.fromEntries(Object.keys(inherited).map((key) => [key, process.env[key]]));
   Object.assign(process.env, inherited);
@@ -274,7 +262,7 @@ test("INV-06/INV-07: real Worktrunk creation ignores inherited Git redirection",
     );
     assert.equal(git(created.path, "rev-parse", "HEAD"), git(repo, "rev-parse", "HEAD"));
     assert.equal(readFileSync(join(created.path, "identity"), "utf8"), "requested");
-    assert.equal(created.path, join(root, "custom", "requested-branch"));
+    assert.equal(created.path, `${repo}.requested-branch`);
     assert.equal(git(repo, "rev-parse", "requested-branch"), git(repo, "rev-parse", "HEAD"));
     assert.ok(git(repo, "worktree", "list", "--porcelain").includes(`worktree ${created.path}\n`));
     assert.deepEqual(
@@ -293,140 +281,82 @@ test("INV-06/INV-07: real Worktrunk creation ignores inherited Git redirection",
   }
 });
 
-test("INV-06: creation requires a complete structured new-branch result and never retries prose or bypasses approval", async (t) => {
-  const { root, repo } = fixture(t),
-    cli = join(root, "wt"),
-    config = join(root, "result.json"),
-    audit = join(root, "calls.jsonl");
-  writeFileSync(
-    cli,
-    `#!${process.execPath}\nimport {readFileSync,appendFileSync} from 'node:fs';
-const a=process.argv.slice(2);appendFileSync(${JSON.stringify(audit)},JSON.stringify(a)+'\\n');
-if(a.includes('--version')) console.log('wt v0.80.0');else{const f=JSON.parse(readFileSync(${JSON.stringify(config)},'utf8'));if(f.error){console.error(f.error);process.exit(1);}console.log(f.raw??JSON.stringify(f));}\n`,
-    { mode: 0o755 },
-  );
-  const create = (value: object, hooks = true) => {
-    writeFileSync(config, JSON.stringify(value));
-    return Effect.runPromise(
-      createWorktree(repo, "feature", { hooks }).pipe(
-        Effect.result,
-        Effect.provideService(WorktrunkCommand, cli),
-      ),
-    );
+test("INV-06: creation puts a new branch beside the main checkout on the default branch, and a refusal leaves no checkout or branch", async (t) => {
+  const { repo } = fixture(t);
+  const create = (folder: string, branch: string) =>
+    Effect.runPromise(createWorktree(folder, branch).pipe(Effect.result));
+  const made = async (folder: string, branch: string) => {
+    const result = await create(folder, branch);
+    assert.equal(result._tag, "Success", JSON.stringify(result));
+    if (result._tag !== "Success") throw new Error("Creation failed");
+    return result.success;
   };
-  const good = {
-    action: "created",
-    branch: "feature",
-    path: join(root, "custom-path"),
-    created_branch: true,
-    base_branch: "main",
-  };
-  const ok = await create(good, false);
-  assert.equal(ok._tag, "Success");
-  if (ok._tag === "Success")
-    assert.deepEqual(ok.success, {
-      branch: "feature",
-      path: good.path,
-      baseBranch: "main",
-      hooks: "skipped",
-    });
-  for (const bad of [
-    { ...good, action: "switched" },
-    { ...good, path: "relative" },
-    { ...good, base_branch: null },
-    { raw: `noise\n${JSON.stringify(good)}` },
-    { error: "Branch feature already exists" },
-  ]) {
-    const result = await create(bad);
-    assert.equal(result._tag, "Failure");
-    if (result._tag === "Failure")
-      assert.match(result.failure.detail, /Creation was not confirmed/);
-  }
-  const calls = readFileSync(audit, "utf8")
-    .trim()
-    .split("\n")
-    .map((s) => JSON.parse(s))
-    .filter((a) => a.includes("switch"));
-  assert.equal(calls.length, 6);
-  assert.ok(
-    calls.every((a) => !a.includes("-y") && !a.includes("--yes") && a.includes("--create")),
-  );
-  assert.ok(calls[0].includes("--no-hooks"));
-  assert.ok(!calls[1].includes("--no-hooks"));
-});
+  const identity = ["-c", "user.name=Test", "-c", "user.email=test@example.invalid"];
+  git(repo, "checkout", "--quiet", "-b", "release");
+  git(repo, ...identity, "commit", "--quiet", "--allow-empty", "-m", "release");
+  git(repo, "checkout", "--quiet", "-b", "elsewhere");
 
-test("INV-06: Worktrunk 0.80.0 and later create worktrees; older or unrecognized versions do not", async (t) => {
-  const { root, repo } = fixture(t),
-    cli = join(root, "wt"),
-    version = join(root, "version");
-  const created = JSON.stringify({
-    action: "created",
-    branch: "feature",
-    path: join(root, "feature"),
-    created_branch: true,
-    base_branch: "main",
-  });
-  writeFileSync(
-    cli,
-    `#!${process.execPath}\nimport {readFileSync} from 'node:fs';
-console.log(process.argv.includes('--version')?readFileSync(${JSON.stringify(version)},'utf8'):${JSON.stringify(created)});\n`,
-    { mode: 0o755 },
-  );
-  const create = (reported: string) => {
-    writeFileSync(version, reported);
-    return Effect.runPromise(
-      createWorktree(repo, "feature").pipe(
-        Effect.result,
-        Effect.provideService(WorktrunkCommand, cli),
-      ),
-    );
+  const first = await made(repo, "feat/one");
+  assert.deepEqual(first, { path: `${repo}.feat-one`, branch: "feat/one", baseBranch: "main" });
+  assert.equal(git(first.path, "rev-parse", "HEAD"), git(repo, "rev-parse", "main"));
+  assert.equal(git(first.path, "symbolic-ref", "--short", "HEAD"), "feat/one");
+
+  const nested = await made(first.path, "two");
+  assert.equal(nested.path, `${repo}.two`, "a linked checkout creates beside the main checkout");
+
+  git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/release");
+  const remote = await made(repo, "three");
+  assert.equal(remote.baseBranch, "release");
+  assert.equal(git(remote.path, "rev-parse", "HEAD"), git(repo, "rev-parse", "release"));
+
+  mkdirSync(`${repo}.taken`);
+  const before = {
+    branches: git(repo, "for-each-ref", "refs/heads"),
+    worktrees: git(repo, "worktree", "list", "--porcelain"),
   };
-  for (const reported of ["wt v0.80.0", "wt v0.81.0", "wt v0.80.1", "wt v1.0.0"])
-    assert.equal((await create(reported))._tag, "Success", reported);
-  for (const reported of ["wt v0.79.9", "wt v0.9.0", "worktrunk 0.81.0", ""]) {
-    const result = await create(reported);
-    assert.equal(result._tag, "Failure", reported);
+  for (const [branch, detail] of [
+    ["two", /already exists/],
+    ["taken", /already exists/],
+    ["-b", /valid new branch name/],
+    [" spaced", /valid new branch name/],
+    ["@", /literal new branch name/],
+  ] as const) {
+    const result = await create(repo, branch);
+    assert.equal(result._tag, "Failure", branch);
     if (result._tag === "Failure") {
-      assert.match(result.failure.detail, /0\.80\.0 or later/);
-      assert.doesNotMatch(result.failure.detail, /Creation was not confirmed/);
+      assert.match(result.failure.detail, detail, branch);
+      assert.notEqual(result.failure.unconfirmed, true, branch);
     }
   }
+  assert.deepEqual(
+    {
+      branches: git(repo, "for-each-ref", "refs/heads"),
+      worktrees: git(repo, "worktree", "list", "--porcelain"),
+    },
+    before,
+  );
+  git(repo, "checkout", "--quiet", "main");
 });
 
-test("INV-06: real Worktrunk custom paths, external edits/detachment, unapproved and failed hooks", async (t) => {
-  const { root, repo } = fixture(t),
-    cli = join(root, "wt"),
-    config = join(root, "config"),
-    home = join(root, "home");
-  mkdirSync(join(config, "worktrunk"), { recursive: true });
-  mkdirSync(home);
-  writeFileSync(join(home, ".gitconfig"), "[piano]\nmarker = user-config-loaded\n");
-  const env = {
-    ...process.env,
-    HOME: home,
-    XDG_CONFIG_HOME: config,
-    XDG_CACHE_HOME: join(root, "cache"),
-    XDG_STATE_HOME: join(root, "state"),
-    WORKTRUNK_CONFIG_PATH: join(config, "worktrunk", "config.toml"),
-  };
-  writeFileSync(
-    env.WORKTRUNK_CONFIG_PATH,
-    'worktree-path = "../custom/{{ branch | sanitize }}"\n[list]\njson-schema = 1\n',
-  );
-  const wtPath = execFileSync("which", ["wt"], { encoding: "utf8" }).trim();
-  writeFileSync(
-    cli,
-    `#!${process.execPath}\nimport {spawnSync} from 'node:child_process';const r=spawnSync(${JSON.stringify(wtPath)},process.argv.slice(2),{stdio:'inherit',env:{...process.env,...${JSON.stringify({ HOME: home, XDG_CONFIG_HOME: config, XDG_CACHE_HOME: env.XDG_CACHE_HOME, XDG_STATE_HOME: env.XDG_STATE_HOME, WORKTRUNK_CONFIG_PATH: env.WORKTRUNK_CONFIG_PATH })}}});process.exit(r.status??1);\n`,
-    { mode: 0o755 },
-  );
-  const run = <A, E>(e: Effect.Effect<A, E>) =>
-    Effect.runPromise(e.pipe(Effect.provideService(WorktrunkCommand, cli)));
-  assert.match(
-    execFileSync(wtPath, ["--version"], { encoding: "utf8", env }).trim(),
-    /^wt v\d+\.\d+\.\d+/,
-  );
+test("INV-06: creation without a remote default, main or master starts from the main checkout's branch", async (t) => {
+  const { repo } = fixture(t);
+  git(repo, "branch", "-m", "main", "trunk");
+  const created = await Effect.runPromise(createWorktree(repo, "topic"));
+  assert.equal(created.baseBranch, "trunk");
+  git(repo, "worktree", "remove", "--force", created.path);
+  git(repo, "branch", "-D", "topic");
+  git(repo, "checkout", "--quiet", "--detach");
+  const failed = await Effect.runPromise(createWorktree(repo, "topic").pipe(Effect.flip));
+  assert.match(failed.detail, /No base branch found/);
+  git(repo, "checkout", "--quiet", "trunk");
+  git(repo, "branch", "-m", "trunk", "main");
+});
+
+test("INV-06: a created worktree detached or removed outside Piano, and an unreadable repository, show as observed", async (t) => {
+  const { root, repo } = fixture(t);
+  const run = <A, E>(e: Effect.Effect<A, E>) => Effect.runPromise(e);
   const created = await run(createWorktree(repo, "feature"));
-  assert.equal(created.path, join(root, "custom", "feature"));
+  assert.equal(created.path, `${repo}.feature`);
   assert.equal(created.baseBranch, "main");
   writeFileSync(join(created.path, "new-source.ts"), "export const x = 1;\n");
   git(created.path, "checkout", "--quiet", "--detach");
@@ -437,42 +367,6 @@ test("INV-06: real Worktrunk custom paths, external edits/detachment, unapproved
     assert.equal(w.branch, null);
     assert.equal(w.detached, true);
   }
-  mkdirSync(join(repo, ".config"));
-  writeFileSync(
-    join(repo, ".config", "wt.toml"),
-    'pre-start = "git config piano.marker > hook-ran; exit 3"\n',
-  );
-  git(repo, "add", ".config");
-  git(
-    repo,
-    "-c",
-    "user.name=Test",
-    "-c",
-    "user.email=test@example.invalid",
-    "commit",
-    "--quiet",
-    "-m",
-    "hook",
-  );
-  const skipped = await run(createWorktree(repo, "hooks-off"));
-  assert.equal(skipped.hooks, "skipped");
-  assert.equal(existsSync(join(skipped.path, "hook-ran")), false);
-  const rejected = await run(createWorktree(repo, "unapproved", { hooks: true }).pipe(Effect.flip));
-  assert.match(rejected.detail, /approval/i);
-  assert.equal(existsSync(join(root, "custom", "unapproved")), false);
-  assert.equal(
-    spawnSync("git", ["-C", repo, "show-ref", "--verify", "--quiet", "refs/heads/unapproved"])
-      .status,
-    1,
-  );
-  execFileSync(wtPath, ["-C", repo, "config", "approvals", "add", "--yes"], { env, stdio: "pipe" });
-  const failed = await run(createWorktree(repo, "partial", { hooks: true }).pipe(Effect.flip));
-  assert.match(failed.detail, /Creation was not confirmed/);
-  const partial = join(root, "custom", "partial");
-  assert.equal(readFileSync(join(partial, "hook-ran"), "utf8"), "user-config-loaded\n");
-  observed = await run(listWorktrees(repo));
-  assert.ok(observed.status === "ready" && observed.worktrees.some((w) => w.path === partial));
-
   const layer = PianoCoreLive({ idleMs: 0 }).pipe(Layer.provide(NodeServices.layer));
   await Effect.runPromise(
     Effect.gen(function* () {
@@ -517,69 +411,12 @@ test("INV-06: real Worktrunk custom paths, external edits/detachment, unapproved
       Effect.scoped,
       Effect.provide(layer),
       Effect.provideService(RegistryDatabasePath, join(root, "registry.db")),
-      Effect.provideService(WorktrunkCommand, cli),
     ),
-  );
-});
-
-test("a Piano started inside a project member's session passes no launch variable to Worktrunk", async (t) => {
-  const { root, repo } = fixture(t),
-    cli = join(root, "wt"),
-    seen = join(root, "env.json");
-  writeFileSync(
-    cli,
-    `#!${process.execPath}\nimport {writeFileSync} from 'node:fs';
-if(process.argv.includes('--version')) console.log('wt v0.80.0');
-else{writeFileSync(${JSON.stringify(seen)},JSON.stringify(process.env));
-console.log(JSON.stringify({action:'created',branch:'feature',path:${JSON.stringify(join(root, "feature"))},created_branch:true,base_branch:'main'}));}\n`,
-    { mode: 0o755 },
-  );
-  const inherited = {
-    PIANO_PROJECT_INSTRUCTIONS: "Parent project's instructions",
-    PIANO_PREVIEW_OWNER: "http://127.0.0.1:1/parent-preview",
-    PIANO_SESSION_WS_URL: "ws://127.0.0.1:1/ws",
-    PIANO_SESSION_ORIGIN: "http://127.0.0.1:1",
-    PIANO_INHERITED_MARKER: "kept",
-  };
-  const saved = Object.fromEntries(Object.keys(inherited).map((key) => [key, process.env[key]]));
-  Object.assign(process.env, inherited);
-  try {
-    await Effect.runPromise(
-      createWorktree(repo, "feature").pipe(Effect.provideService(WorktrunkCommand, cli)),
-    );
-  } finally {
-    for (const [key, value] of Object.entries(saved)) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
-  }
-  const env = JSON.parse(readFileSync(seen, "utf8"));
-  assert.deepEqual(
-    Object.fromEntries(
-      Object.keys(inherited).flatMap((key) => (key in env ? [[key, env[key]]] : [])),
-    ),
-    { PIANO_INHERITED_MARKER: "kept" },
   );
 });
 
 function branchChangesHarness(t: TestContext) {
-  const { root, repo } = fixture(t),
-    cli = join(root, "wt"),
-    home = join(root, "home");
-  mkdirSync(home);
-  const wtPath = execFileSync("which", ["wt"], { encoding: "utf8" }).trim();
-  const isolated = {
-    HOME: home,
-    XDG_CONFIG_HOME: join(root, "config"),
-    XDG_CACHE_HOME: join(root, "cache"),
-    XDG_STATE_HOME: join(root, "state"),
-    WORKTRUNK_CONFIG_PATH: join(root, "config", "worktrunk", "config.toml"),
-  };
-  writeFileSync(
-    cli,
-    `#!${process.execPath}\nimport {spawnSync} from 'node:child_process';const r=spawnSync(${JSON.stringify(wtPath)},process.argv.slice(2),{stdio:'inherit',env:{...process.env,...${JSON.stringify(isolated)}}});process.exit(r.status??1);\n`,
-    { mode: 0o755 },
-  );
+  const { root, repo } = fixture(t);
   const commit = (cwd: string, message: string) =>
     git(
       cwd,
@@ -597,9 +434,7 @@ function branchChangesHarness(t: TestContext) {
   commit(repo, "release");
   git(repo, "checkout", "--quiet", "main");
   const setDefault = (branch: string) =>
-    execFileSync(cli, ["-C", repo, "config", "state", "default-branch", "set", branch], {
-      stdio: "pipe",
-    });
+    git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", `refs/remotes/origin/${branch}`);
 
   const layer = SessionChangesLive.pipe(
     Layer.provideMerge(WorkspaceChangesLive),
@@ -612,14 +447,10 @@ function branchChangesHarness(t: TestContext) {
         Effect.scoped,
         Effect.provide(layer),
         Effect.provideService(RegistryDatabasePath, join(root, "registry.db")),
-        Effect.provideService(WorktrunkCommand, cli),
       ),
     );
-  const created = (result: WorktreeResult) => {
-    assert.equal(result.status, "ready", JSON.stringify(result));
-    if (result.status !== "ready") throw new Error("Creation failed");
-    return result;
-  };
+  const create = (branch: string) =>
+    Effect.flatMap(FolderWorktrees, (worktrees) => worktrees.create(repo, branch));
   const branchChanges = (cwd: string, sessionId: string) =>
     Effect.gen(function* () {
       const data = yield* (yield* Registry).get;
@@ -641,18 +472,17 @@ function branchChangesHarness(t: TestContext) {
       (d) => d.worktrees.find((w) => w.path === path),
     );
 
-  return { root, repo, commit, setDefault, run, created, branchChanges, recorded };
+  return { root, repo, commit, setDefault, run, create, branchChanges, recorded };
 }
 
 test("INV-06: recreating a worktree at its old path from another base records the new base for Branch Changes, and a branch made outside Piano, even under the same name, does not use it", async (t) => {
-  const { repo, commit, setDefault, run, created, branchChanges, recorded } =
+  const { repo, commit, setDefault, run, create, branchChanges, recorded } =
     branchChangesHarness(t);
   const first = await run(
     Effect.gen(function* () {
-      const commands = yield* WorkspaceCommands;
       yield* (yield* Registry).addFolder(repo);
-      const first = created(yield* commands.createWorktree(repo, "topic", {}));
-      assert.equal(first.creation?.baseBranch, "main");
+      const first = yield* create("topic");
+      assert.equal(first.baseBranch, "main");
       yield* (yield* Registry).addSession(first.path, "before-recreation");
       return {
         path: first.path,
@@ -666,9 +496,9 @@ test("INV-06: recreating a worktree at its old path from another base records th
   setDefault("release");
   await run(
     Effect.gen(function* () {
-      const again = created(yield* (yield* WorkspaceCommands).createWorktree(repo, "topic", {}));
+      const again = yield* create("topic");
       assert.equal(again.path, first.path);
-      assert.equal(again.creation?.baseBranch, "release");
+      assert.equal(again.baseBranch, "release");
     }),
   );
   setDefault("main");
@@ -750,14 +580,14 @@ test("INV-06: recreating a worktree at its old path from another base records th
 });
 
 function createdFromRelease(harness: ReturnType<typeof branchChangesHarness>) {
-  const { repo, setDefault, run, created } = harness;
+  const { repo, setDefault, run, create } = harness;
   setDefault("release");
   return run(
     Effect.gen(function* () {
       const registry = yield* Registry;
       yield* registry.addFolder(repo);
-      const made = created(yield* (yield* WorkspaceCommands).createWorktree(repo, "topic", {}));
-      assert.equal(made.creation?.baseBranch, "release");
+      const made = yield* create("topic");
+      assert.equal(made.baseBranch, "release");
       yield* registry.addSession(made.path, "s");
       return made.path;
     }),

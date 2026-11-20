@@ -11,8 +11,8 @@ module boundary rather than reproducing implementation details.
 ## INV-01 — One authoritative owner per state
 
 Pi owns session history and agent semantics. Registry owns selected projects, workspace identity,
-session references and preferences. Git owns repository facts; Worktrunk is the initial backend for
-worktree lifecycle and structured observations. Piano owns workspace and integration policy. The evidence store owns
+session references and preferences. Git owns repository facts and worktree lifecycle. Piano owns
+workspace and integration policy. The evidence store owns
 executions and artifacts. Browser state and cached summaries are projections.
 
 **Verify:** reopening a session loads Pi's authoritative history; restarting Piano preserves workspace
@@ -95,9 +95,10 @@ Discover worktrees with Git (`git worktree list --porcelain -z` and `git rev-par
 picking a worktree needs only its path, branch, detached state and whether Git can prune it. Do not
 collect per-worktree status such as dirty or in-progress operations in discovery; it costs a
 `git status` per worktree on every refresh. A feature that needs it reads it for the one workspace it
-concerns. Create worktrees through Worktrunk so its configured paths and hooks apply: assert its
-version, consume complete structured output and use its returned identity and lifecycle results
-instead of synthesizing paths. Keep the adapter narrow and translate into Piano's domain types.
+concerns. Only a dispatched session start creates a worktree; the UI opens existing ones. Creation
+runs `git worktree add` for a new branch on the repository's default branch, beside the main
+checkout at `<main checkout>.<branch>`, and records the base it used. It runs no setup hooks and
+copies no ignored files.
 Direct Git reads/snapshots for exact revision capture and validation are allowed; summary observations
 are not authoritative proof that a particular candidate passed checks.
 
@@ -105,11 +106,9 @@ are not authoritative proof that a particular candidate passed checks.
 current path, malformed or failed Git output and failed creation. None of the failure cases becomes
 a healthy project-root-only list or a passing check.
 
-**Guardrail:** hooks, interactive approval and foreground completion follow Worktrunk's structured
-contract. Piano supports the latest Worktrunk release, with 0.80.0 as the oldest supported version;
-CI tests the latest release. Worktree removal coordinates running sessions/processes before destroying their checkout.
-Record and test the supported backend version. Do not build another backend until a concrete need
-justifies it; lifecycle implementation details must not become Piano's domain model.
+**Guardrail:** a creation that fails after Git started is reported as unconfirmed, because a
+checkout or branch may remain. Piano does not remove worktrees: removal would have to coordinate
+running sessions and processes before destroying their checkout.
 
 ## INV-07 — Every observation identifies its workspace
 
@@ -162,7 +161,7 @@ but affected verification conclusions must be reevaluated before acceptance.
 **Guardrail:** authoritative acceptance gates belong to the harness. Changes to tests or gates are
 visible and reviewed; the coding agent cannot weaken a gate and self-award verification. Acceptance
 criteria and required evidence are recorded proportionally to the task.
-Skill invocation and Worktrunk command success are not proof of required check execution. Record
+Skill invocation and a command's success are not proof of required check execution. Record
 actual results, including missing/skipped hooks. Enforce gates at Piano action boundaries; unrestricted
 shell access remains a potential bypass unless separately constrained.
 
@@ -172,15 +171,15 @@ Integration approval identifies workspace, candidate revision, target branch/rev
 acceptance-criteria/policy version, applicable hooks and expiry. Remove approval identifies the checkout and the consequences for dirty
 work, sessions and processes. Revalidate immediately before execution and report the actual outcome.
 
-**Verify:** edit after approval, advance the target, and rebase during Worktrunk merge. Any changed
+**Verify:** edit after approval, advance the target, and rebase during the merge. Any changed
 candidate loses approval and affected evidence. Serialize writers or operate on immutable state so
 revalidation is not followed by an unchecked mutation.
 
-**Guardrail:** Worktrunk pre-merge hooks run after rebase; pre-rebase evidence or approval cannot
+**Guardrail:** pre-merge hooks run after rebase; pre-rebase evidence or approval cannot
 silently cover changed post-rebase content. Establish a preparation/validation boundary before the
 irreversible integration step. External effects interrupted by a crash require reconciliation,
 not blind replay. Keep preparation, verification, approval, integration and cleanup separately
-observable. Choose tested Worktrunk options that preserve the prepared candidate; reconcile partial
+observable. Choose tested options that preserve the prepared candidate; reconcile partial
 failures from Git state. Local integration does not imply a forge PR was merged.
 
 Approval to integrate is not approval to discard the workspace immediately: coordinate cleanup

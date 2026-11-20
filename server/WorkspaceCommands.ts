@@ -7,7 +7,6 @@ import type {
 } from "../shared/wire.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 import { errorText } from "./ErrorText.ts";
-import { FolderWorktrees } from "./FolderWorktrees.ts";
 import type { ProjectTrustError } from "./ProjectTrust.ts";
 import { Registry } from "./Registry.ts";
 import { SidebarView } from "./SidebarView.ts";
@@ -34,11 +33,6 @@ export class WorkspaceCommands extends Context.Service<
   {
     readonly discoverWorktrees: (folder: string) => Effect.Effect<WorktreeDiscovery>;
     readonly addWorktree: (folder: string, path: string) => Effect.Effect<WorktreeResult>;
-    readonly createWorktree: (
-      folder: string,
-      branch: string,
-      options: { readonly hooks?: boolean },
-    ) => Effect.Effect<WorktreeResult>;
     readonly setTrust: (
       path: string,
       trusted: boolean,
@@ -52,7 +46,6 @@ export const WorkspaceCommandsLive = Layer.effect(
     const registry = yield* Registry;
     const facts = yield* DirectoryFacts;
     const sidebar = yield* SidebarView;
-    const worktrees = yield* FolderWorktrees;
 
     const registered = (folder: string) =>
       registry
@@ -123,21 +116,6 @@ export const WorkspaceCommandsLive = Layer.effect(
               "This checkout is absent or unavailable. Refresh discovery and inspect it before selecting.",
           });
         return yield* record({ status: "ready", folder, path: w.path, branch: w.branch });
-      }, settled),
-
-      createWorktree: Effect.fn("WorkspaceCommands.createWorktree")(function* (
-        folder,
-        branch,
-        options,
-      ) {
-        const w = yield* worktrees.create(folder, branch, options);
-        return {
-          status: "ready" as const,
-          folder,
-          path: w.path,
-          branch: w.branch,
-          creation: { baseBranch: w.baseBranch, hooks: w.hooks },
-        };
       }, settled),
     });
   }),

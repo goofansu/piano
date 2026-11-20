@@ -23,7 +23,7 @@ import { PiCli } from "../server/PiCli.ts";
 import { type PiSession, PiSessionsLive, PreviewOwnerOptions } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionHosts, SessionHostsLive } from "../server/SessionHosts.ts";
-import { WorktrunkCommand } from "../server/Worktrees.ts";
+import { GitCommand } from "../server/Subprocess.ts";
 import type { ServerMessage } from "../shared/wire.ts";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "piano-client-sessions-")));
@@ -613,27 +613,16 @@ test(
       "-m",
       "baseline",
     );
-    const config = join(root, "creating-wt", "config", "worktrunk");
-    mkdirSync(config, { recursive: true });
-    writeFileSync(join(config, "config.toml"), "");
-    const isolated = {
-      HOME: join(root, "creating-wt", "home"),
-      XDG_CONFIG_HOME: join(root, "creating-wt", "config"),
-      XDG_CACHE_HOME: join(root, "creating-wt", "cache"),
-      XDG_STATE_HOME: join(root, "creating-wt", "state"),
-      WORKTRUNK_CONFIG_PATH: join(config, "config.toml"),
-    };
-    mkdirSync(isolated.HOME);
-    const real = spawnSync("which", ["wt"], { encoding: "utf8" }).stdout.trim();
-    const waiting = join(root, "creating-wt", "waiting");
-    const release = join(root, "creating-wt", "release");
-    const wt = join(root, "creating-wt", "wt");
+    mkdirSync(join(root, "creating-git"));
+    const waiting = join(root, "creating-git", "waiting");
+    const release = join(root, "creating-git", "release");
+    const heldGit = join(root, "creating-git", "git");
     writeFileSync(
-      wt,
+      heldGit,
       `#!${process.execPath}\nimport {spawnSync} from 'node:child_process';import {existsSync,writeFileSync} from 'node:fs';
 const a=process.argv.slice(2);
-if(a.includes('switch')){writeFileSync(${JSON.stringify(waiting)},'');for(let n=0;n<1000&&!existsSync(${JSON.stringify(release)});n++)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20);}
-const r=spawnSync(${JSON.stringify(real)},a,{stdio:'inherit',env:{...process.env,...${JSON.stringify(isolated)}}});process.exit(r.status??1);\n`,
+if(a.includes('worktree')&&a.includes('add')){writeFileSync(${JSON.stringify(waiting)},'');for(let n=0;n<1000&&!existsSync(${JSON.stringify(release)});n++)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20);}
+const r=spawnSync('git',a,{stdio:'inherit'});process.exit(r.status??1);\n`,
       { mode: 0o755 },
     );
     await run(
@@ -647,14 +636,14 @@ const r=spawnSync(${JSON.stringify(real)},a,{stdio:'inherit',env:{...process.env
           worktree: { branch: "held" },
         })).pipe(Effect.forkChild);
         for (let n = 0; !existsSync(waiting); n++) {
-          if (n > 250) return yield* Effect.die(new Error("Worktrunk never started"));
+          if (n > 250) return yield* Effect.die(new Error("git worktree add never started"));
           yield* Effect.sleep("20 millis");
         }
         yield* yield* sessions.select({ cwd, sessionId: b.spec.sessionId, selectionId: "B" });
         const selected = yield* next((m) => m._tag === "selected");
         assert.ok(selected._tag === "selected");
         assert.deepEqual([selected.selectionId, selected.sessionId], ["B", b.spec.sessionId]);
-        assert.equal(existsSync(release), false, "B was shown while Worktrunk was still held");
+        assert.equal(existsSync(release), false, "B was shown while creation was still held");
         writeFileSync(release, "");
         yield* Fiber.join(creating);
         assert.ok((yield* (yield* Registry).get).sessions.some((s) => s.cwd !== cwd));
@@ -666,7 +655,7 @@ const r=spawnSync(${JSON.stringify(real)},a,{stdio:'inherit',env:{...process.env
         assert.deepEqual(resultFor(sent), [b.spec.sessionId]);
       }).pipe(
         Effect.ensuring(Effect.sync(() => writeFileSync(release, ""))),
-        Effect.provideService(WorktrunkCommand, wt),
+        Effect.provideService(GitCommand, heldGit),
       ),
     );
   },

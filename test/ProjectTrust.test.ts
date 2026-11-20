@@ -10,7 +10,6 @@ import { PianoCoreLive } from "../server/PianoServices.ts";
 import { setProjectTrust } from "../server/ProjectTrust.ts";
 import { RegistryDatabasePath } from "../server/Registry.ts";
 import { SidebarView } from "../server/SidebarView.ts";
-import { WorktrunkCommand } from "../server/Worktrees.ts";
 import { seedRegistry } from "./fixtures/registry.ts";
 
 const git = (cwd: string, ...args: string[]) =>
@@ -89,7 +88,6 @@ test("INV-01: project trust is read from and written to Pi's trust file, per dir
       Effect.scoped,
       Effect.provide(layer),
       Effect.provideService(RegistryDatabasePath, join(root, "registry.db")),
-      Effect.provideService(WorktrunkCommand, join(root, "unavailable")),
     ),
   );
 });

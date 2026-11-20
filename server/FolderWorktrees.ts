@@ -8,7 +8,6 @@ export interface CreatedWorktree {
   readonly path: string;
   readonly branch: string;
   readonly baseBranch: string;
-  readonly hooks: "enabled" | "skipped";
 }
 
 export class FolderWorktrees extends Context.Service<
@@ -17,7 +16,6 @@ export class FolderWorktrees extends Context.Service<
     readonly create: (
       folder: string,
       branch: string,
-      options: { readonly hooks?: boolean },
     ) => Effect.Effect<CreatedWorktree, WorktreeError>;
   }
 >()("piano/FolderWorktrees") {}
@@ -29,11 +27,11 @@ export const FolderWorktreesLive = Layer.effect(
     const layerScope = yield* Effect.scope;
 
     const create = Effect.fn("FolderWorktrees.create")(
-      function* (folder: string, branch: string, options: { readonly hooks?: boolean }) {
+      function* (folder: string, branch: string) {
         yield* registry
           .requireFolder(folder)
           .pipe(Effect.mapError((e) => new WorktreeError({ detail: e.detail })));
-        const created = yield* createWorktree(folder, branch.trim(), { hooks: options.hooks });
+        const created = yield* createWorktree(folder, branch.trim());
         const unconfirmed = (e: { readonly detail: string }) =>
           new WorktreeError({ detail: `${e.detail} ${created.path}`, unconfirmed: true });
         const commit = yield* gitText(created.path, [

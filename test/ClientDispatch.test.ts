@@ -1079,16 +1079,12 @@ test("INV-06: rejected worktree operations settle the picker immediately without
       assert.equal(discovery?.status, "error");
       if (discovery?.status === "error") assert.match(discovery.detail, /not started/);
 
-      operation.create("must-not-exist", false);
-      yield* exchange;
-      assert.match(failure(operation) ?? "", /not started/);
-      operation.dismiss();
       operation.select(cwd);
       yield* exchange;
       assert.match(failure(operation) ?? "", /not started/);
       assert.deepEqual(
         sentByPicker().map((m) => m._tag),
-        ["worktrees", "create_worktree", "add_worktree"],
+        ["worktrees", "add_worktree"],
         "mutations are never replayed",
       );
       for (const work of held) yield* work;
@@ -1131,14 +1127,6 @@ const refusals: {
       folder: cwd,
       requestId: "discovery1",
       discovery: { status: "error", observedAt: "OBSERVED", detail: "REFUSED" },
-    },
-  ],
-  create_worktree: [
-    { _tag: "create_worktree", requestId: "w1", folder: cwd, branch: "b", hooks: false },
-    {
-      _tag: "worktree_result",
-      requestId: "w1",
-      result: { status: "error", detail: "REFUSED", unconfirmed: false },
     },
   ],
   add_worktree: [
@@ -1268,11 +1256,10 @@ test("an admitted worktree request is answered with the command's result under i
       const { receive } = yield* client;
       const from = sent.length;
       yield* yield* receive({
-        _tag: "create_worktree",
+        _tag: "add_worktree",
         requestId: "r1",
         folder: join(root, "unregistered"),
-        branch: "feature",
-        hooks: false,
+        path: join(root, "unregistered-feature"),
       });
       assert.deepEqual(answers(from), [
         {

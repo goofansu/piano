@@ -34,16 +34,18 @@ operations or a prescribed development methodology. Use the [glossary](../glossa
    selected checkout, including project MCP overrides. Forward supported RPC extension UI and state.
    Document terminal-only limitations instead of promising arbitrary TUI rendering in a browser.
    Pi remains authoritative for session semantics and history.
-3. **Use Worktrunk as the initial worktree lifecycle backend.** Keep a narrow adapter, validate
-   supported versions/schemas and translate results into Piano's domain types. Delegate checkout
-   creation to it; discover worktrees with Git (INV-06). Piano does not remove worktrees. Piano
-   owns workspace identity, processes and integration policy.
+3. **Use Git for the worktree lifecycle.** Discover worktrees with Git, and create one only for a
+   dispatched session start, with `git worktree add` (INV-06). Piano does not remove worktrees.
+   Piano owns workspace identity, processes and integration policy.
    Direct Git operations for snapshots, revision identity and precise validation are complementary.
-   Do not build a second backend now; reconsider only for a concrete limitation. Herdr remains an
-   optional sibling interface.
+   Herdr remains an optional sibling interface.
+
+   Amended 2026-11-20: this decision first named Worktrunk as the lifecycle backend. Creation was
+   its only use, so the dependency, its hooks and the UI's creation form were removed; Piano no
+   longer needs a second tool installed to start a session in a new worktree.
 4. **Make the workspace the product context.** A project has workspaces; a workspace attaches
    sessions, a revision, processes, evidence and integration state. A workspace can refer to the
-   project root or a Worktrunk checkout. Retain the existing words `project`, `worktree`,
+   project root or a linked worktree. Retain the existing words `project`, `worktree`,
    `session` and `registry`; this decision does not require an immediate schema or UI rename.
 5. **Bind evidence to actual content.** A workspace revision includes base HEAD and a deterministic
    index/working-tree fingerprint, with explicit treatment of untracked files and relevant inputs.
@@ -67,20 +69,19 @@ operations or a prescribed development methodology. Use the [glossary](../glossa
    criteria and required checks; Piano evaluates recorded evidence and enforces configured gates at
    its action boundaries. Invoking a skill is not proof that its procedure was followed.
 
-## Worktrunk and integration policy
+## Integration policy
 
 Piano models prepare candidate → verify → approve → integrate → clean up as separate outcomes.
-Worktrunk may execute operations within that flow; its defaults must not silently move an approval
+A tool may execute operations within that flow; its defaults must not silently move an approval
 boundary. Local target-branch integration and merging a forge PR are distinct actions.
 
-The [merge contract](https://worktrunk.dev/merge/) includes commit/squash, rebase, hooks and cleanup.
-The adapter must use tested options to preserve the approved candidate and defer cleanup when needed,
-and reconcile actual Git state after partial failure. A command failure after integration must not
-be reported as though nothing changed.
+A merge that commits or squashes, rebases, runs hooks and cleans up must use tested options that
+preserve the approved candidate and defer cleanup when needed, and Piano reconciles actual Git state
+after partial failure. A command failure after integration must not be reported as though nothing
+changed.
 
-[Hooks](https://worktrunk.dev/hook/) can be skipped, and some run in the background. Therefore,
-Worktrunk command success alone cannot satisfy required checks. Piano records their actual execution,
-scope and outcomes. These are version-sensitive contracts; pin the supported backend and test it.
+Hooks can be skipped, and some run in the background. Therefore, a command's success alone cannot
+satisfy required checks. Piano records their actual execution, scope and outcomes.
 
 Skills and hooks are not security boundaries. With unrestricted shell access, an agent may bypass
 Piano's actions; do not claim universal policy enforcement without execution restrictions.

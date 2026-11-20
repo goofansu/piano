@@ -330,15 +330,6 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
       }),
       confirmed: null,
     },
-    create_worktree: {
-      admission: "ordinary",
-      run: ({ requestId, folder, branch, hooks }) =>
-        commands
-          .createWorktree(folder, branch, { hooks })
-          .pipe(Effect.flatMap((result) => send({ _tag: "worktree_result", requestId, result }))),
-      unanswered: worktreeUnanswered,
-      confirmed: null,
-    },
     add_worktree: {
       admission: "ordinary",
       run: ({ requestId, folder, path }) =>

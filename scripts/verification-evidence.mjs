@@ -115,7 +115,7 @@ export function captureRevision(cwd, { production = false } = {}) {
   }
 }
 
-export function executionEnvironment(cwd, commands = ["npm", "git", "wt"]) {
+export function executionEnvironment(cwd, commands = ["npm", "git"]) {
   const tools = Object.fromEntries(
     commands.map((command) => {
       try {
