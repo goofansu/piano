@@ -176,35 +176,38 @@ async function preview(
         files,
       };
     const limit = path === undefined ? CHANGES_INITIAL_PATCH_BYTES : CHANGES_FILE_PATCH_BYTES;
-    let excerpt = working.length
-      ? await git.excerpt(
-          [
-            ...diffArgs,
-            "--patch",
-            base,
-            "--",
-            ...pathArgs,
-            ...staged.map((file) => `:(top,glob,exclude)${exactGlob(file.path)}`),
-          ],
-          limit,
-        )
-      : { text: "", truncated: false };
+    const patches = async (
+      reader: typeof git,
+      args: readonly string[],
+      selections: Iterable<readonly string[]>,
+      rest: number,
+    ): Promise<{ text: string; truncated: boolean }> => {
+      let text = "";
+      for (const selection of selections) {
+        if (rest <= 0) return { text, truncated: true };
+        const part = await reader.excerpt(
+          [...diffArgs, ...args, "--patch", base, "--", ...selection],
+          rest,
+        );
+        text += part.text;
+        rest -= Buffer.byteLength(part.text);
+        if (part.truncated) return { text, truncated: true };
+      }
+      return { text, truncated: false };
+    };
+    let excerpt = await patches(
+      git,
+      [],
+      !working.length ? [] : staged.length ? exactBatches(working) : [pathArgs],
+      limit,
+    );
     if (staged.length && !excerpt.truncated) {
-      const rest = limit - Buffer.byteLength(excerpt.text);
-      const index =
-        rest > 0
-          ? await cachedGit.excerpt(
-              [
-                ...diffArgs,
-                "--cached",
-                "--patch",
-                base,
-                "--",
-                ...staged.map((file) => `:(top,literal)${file.path}`),
-              ],
-              rest,
-            )
-          : { text: "", truncated: true };
+      const index = await patches(
+        cachedGit,
+        ["--cached"],
+        exactBatches(staged),
+        limit - Buffer.byteLength(excerpt.text),
+      );
       excerpt = { text: excerpt.text + index.text, truncated: index.truncated };
     }
     return {
@@ -224,10 +227,32 @@ async function preview(
   }
 }
 
-// A literal or plain-glob pathspec also matches every path beneath it, so excluding a staged file
-// `dir` would hide a working `dir/child`. Escaping each character makes Git's glob matcher compare
-// the whole path, matching only the file itself.
-const exactGlob = (path: string): string => path.replace(/[^/]/gu, (char) => `\\${char}`);
+// A literal or plain-glob pathspec also matches every path beneath it, so selecting a file `dir`
+// would also pull in `dir/child`. Escaping each character makes Git's glob matcher compare the
+// whole path, matching only the file itself.
+const exactGlob = (path: string): string =>
+  `:(top,glob)${path.replace(/[^/]/gu, (char) => `\\${char}`)}`;
+
+// Thousands of long paths in one Git command exceed Linux's exec argument limit (spawn E2BIG), so
+// paths are selected in batches of bounded size.
+const PATHSPEC_BATCH_BYTES = 128 * 1024;
+
+function* exactBatches(files: readonly ChangeFile[]): Generator<string[]> {
+  let batch: string[] = [];
+  let bytes = 0;
+  for (const file of files) {
+    const spec = exactGlob(file.path);
+    const size = Buffer.byteLength(spec) + 1;
+    if (batch.length && bytes + size > PATHSPEC_BATCH_BYTES) {
+      yield batch;
+      batch = [];
+      bytes = 0;
+    }
+    batch.push(spec);
+    bytes += size;
+  }
+  if (batch.length) yield batch;
+}
 
 const bounded = (observation: Observation): Observation =>
   Buffer.byteLength(answerJson(observation)) <= CHANGES_ANSWER_BYTES
