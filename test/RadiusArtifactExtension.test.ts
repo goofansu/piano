@@ -3,11 +3,14 @@ import { execFileSync } from "node:child_process";
 import {
   appendFileSync,
   closeSync,
+  mkdirSync,
   constants,
   mkdtempSync,
   openSync,
+  readFileSync,
   statSync,
   rmSync,
+  symlinkSync,
   truncateSync,
   writeFileSync,
 } from "node:fs";
@@ -914,6 +917,62 @@ test("cancelling while a file is read publishes and records nothing", async () =
     assert.equal(JSON.stringify(cancelled).includes(h.root), false, "no local path in the result");
     assert.equal(h.http.writes.length, 0);
     assert.equal(intents(h).length, 0, "a cancelled read records no publication intent");
+  } finally {
+    h.cleanup();
+  }
+});
+
+test("a symlink before `..` in a path publishes the file the OS reads there, or nothing", async () => {
+  const h = await harness();
+  try {
+    mkdirSync(join(h.root, "archive/build-2"), { recursive: true });
+    symlinkSync(join(h.root, "archive/build-2"), join(h.root, "current"));
+    const target = join(h.root, "archive/report.md");
+    writeFileSync(join(h.root, "report.md"), "draft in working directory\n");
+    const { content: _content, ...byPath } = document;
+    const spellings = ["current/../report.md", `${h.root}/current/../report.md`];
+    const native = (path: string) =>
+      readFileSync(path.startsWith("/") ? path : `${h.root}/${path}`, "utf8");
+    let artifactId: string | undefined;
+    let revision = 0;
+    for (const [index, path] of spellings.entries()) {
+      writeFileSync(target, `report from build archive ${index}\n`);
+      assert.equal(native(path), `report from build archive ${index}\n`, path);
+      const created = await h.call("create", { ...byPath, operationKey: `create-${index}`, path });
+      assert.equal(created.status, "confirmed", created.message);
+      assert.equal(h.http.writes.at(-1)?.args.content, native(path), path);
+
+      writeFileSync(target, `revised build archive ${index}\n`);
+      const updated = await h.call("update", {
+        ...byPath,
+        operationKey: `update-${index}`,
+        path,
+        artifactId: created.artifactId,
+        expectedRevision: created.revision,
+      });
+      assert.equal(updated.status, "confirmed", updated.message);
+      assert.equal(h.http.writes.at(-1)?.args.content, native(path), path);
+      artifactId = updated.artifactId;
+      revision = updated.revision!;
+    }
+
+    rmSync(target);
+    for (const [index, path] of spellings.entries()) {
+      const writes = h.http.writes.length;
+      const created = await h.call("create", { ...byPath, operationKey: `gone-${index}`, path });
+      assert.equal(created.status, "error");
+      assert.match(created.message, /could not be read/);
+      const updated = await h.call("update", {
+        ...byPath,
+        operationKey: `gone-update-${index}`,
+        path,
+        artifactId,
+        expectedRevision: revision,
+      });
+      assert.equal(updated.status, "error");
+      assert.match(updated.message, /could not be read/);
+      assert.equal(h.http.writes.length, writes, "no artifact mutation for this attempt");
+    }
   } finally {
     h.cleanup();
   }
