@@ -10,24 +10,6 @@ Read where they are used: `grep -rn "process\.env\." server scripts web/vite.con
 installation, before the session arguments, so a repository cannot supply or shadow them and a
 `-e` in `PIANO_PI_ARGS` adds an extension instead of replacing Piano's.
 
-### Claude Code
-
-`@earendil-works/pi-claude-code` is pinned in `package.json` to a commit of the
-[goofansu/pi-claude-code](https://github.com/goofansu/pi-claude-code) fork.
-
-**Avoid duplicate installations.** If the same plugin is also installed in user or project Pi
-settings, Pi can load both copies: paths are deduplicated, not package identity across separate
-installations. Provider registrations can override each other, status commands get numbered
-suffixes, and initial model availability can be inconsistent. Piano does not suppress or remove
-the other copy. Use only the bundled copy in the Pi environment used by Piano; if standalone Pi
-needs a separate installation, keep that in a separate Pi environment.
-
-Claude Code installation and authentication remain external. Install Claude Code separately and
-run `claude auth login` in a terminal as the user running Piano. Its executable must be on the
-Piano backend's `PATH`, or set `PI_CLAUDE_CODE_COMMAND` to its absolute path. For a nondefault
-Claude configuration directory, set `PI_CLAUDE_CODE_CONFIG_DIR`; the plugin passes it to Claude
-as `CLAUDE_CONFIG_DIR`. Piano does not copy or manage Claude credentials.
-
 ## Session dispatch
 
 `server/SessionEndpoint.ts` gives each Pi child `PIANO_SESSION_WS_URL` and
