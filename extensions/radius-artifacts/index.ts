@@ -1,6 +1,6 @@
 import { isUtf8 } from "node:buffer";
 import { createHash, randomUUID } from "node:crypto";
-import { resolve } from "node:path";
+import { isAbsolute, resolve, sep } from "node:path";
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { int, obj, opt, type Static, str } from "@earendil-works/pi-schema";
@@ -74,7 +74,8 @@ const tooLarge = () =>
 async function fileText(cwd: string, path: string, signal: AbortSignal | undefined) {
   let bytes: Buffer;
   try {
-    bytes = await readLocalFile(resolve(cwd, path), { limit: RADIUS_ARTIFACT_FILE_BYTES, signal });
+    const spelled = isAbsolute(path) ? path : `${resolve(cwd)}${sep}${path}`;
+    bytes = await readLocalFile(spelled, { limit: RADIUS_ARTIFACT_FILE_BYTES, signal });
   } catch (error) {
     if (signal?.aborted) throw new RadiusError("Publication was cancelled; nothing was published.");
     if (error instanceof LocalFileRefusal && error.reason === "not-file")
