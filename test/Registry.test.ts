@@ -96,7 +96,7 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
   const upgraded = new DatabaseSync(f.dbPath, { readOnly: true }),
     backup = new DatabaseSync(`${f.dbPath}.v1-backup`, { readOnly: true });
   try {
-    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 19);
+    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 20);
     assert.deepEqual(
       upgraded
         .prepare("SELECT name FROM pragma_table_info('projects')")
@@ -393,7 +393,7 @@ test("version-16 retires session sharing: a saved Radius link is dropped and its
   assert.deepEqual((await f.get()).sessions, [before]);
   const upgraded = new DatabaseSync(f.dbPath, { readOnly: true });
   try {
-    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 19);
+    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 20);
     assert.equal(
       upgraded
         .prepare("SELECT name FROM pragma_table_info('sessions')")
@@ -482,24 +482,44 @@ test("PIN-152: version-16 migration preserves references and introduces durable 
   assert.equal((await f.get()).sessions[0]?.retentionVersion, 2);
 });
 
-test("version-17 migration keeps a worktree's recorded base for the branch it is on", async (t) => {
+test("PIN-167: an upgrade forgets every recorded base it cannot tie to a creation commit", async (t) => {
   const f = fixture(t),
     folder = join(f.root, "folder");
-  const created = { folder, path: join(f.root, "created"), branch: "feature" };
-  const added = { folder, path: join(f.root, "added"), branch: "other" };
-  seedRegistry(f.dbPath, { folders: [folder], worktrees: [created, added] });
-  const legacy = new DatabaseSync(f.dbPath);
+  const proven = {
+    folder,
+    path: join(f.root, "proven"),
+    branch: "elsewhere",
+    created: { branch: "feature", baseBranch: "release", commit: "0123456789abcdef" },
+  };
+  const backfilled = { folder, path: join(f.root, "backfilled"), branch: "other" };
+  const legacy = { folder, path: join(f.root, "legacy"), branch: "other" };
+  const added = { folder, path: join(f.root, "added"), branch: "plain" };
+  seedRegistry(f.dbPath, {
+    folders: [folder],
+    worktrees: [
+      proven,
+      { ...backfilled, created: { branch: "other", baseBranch: "release" } },
+      legacy,
+      added,
+    ],
+  });
+  const upgraded = new DatabaseSync(f.dbPath);
   try {
-    legacy.exec(
-      `ALTER TABLE worktrees DROP COLUMN created_branch; UPDATE worktrees SET base_branch = 'main' WHERE path = '${created.path}'; PRAGMA user_version = 17;`,
+    upgraded.exec(
+      `UPDATE worktrees SET base_branch = 'release' WHERE path = '${legacy.path}'; PRAGMA user_version = 19;`,
     );
   } finally {
-    legacy.close();
+    upgraded.close();
   }
-  assert.deepEqual((await f.get()).worktrees, [
-    { ...created, created: { branch: "feature", baseBranch: "main" } },
-    added,
-  ]);
+  const expected = [proven, backfilled, legacy, added];
+  assert.deepEqual((await f.get()).worktrees, expected);
+  assert.deepEqual((await f.get()).worktrees, expected);
+  const reopened = new DatabaseSync(f.dbPath);
+  try {
+    assert.equal(reopened.prepare("PRAGMA user_version").get()!.user_version, 20);
+  } finally {
+    reopened.close();
+  }
 });
 
 test("PIN-152: reversible archive preserves metadata and refuses stale writes after unarchive; bulk commits once", async (t) => {
@@ -627,7 +647,7 @@ for (const version of [4, 5, 6]) {
     assert.deepEqual(await f.get(), before, "reopening the upgraded database is idempotent");
     const stored = new DatabaseSync(f.dbPath, { readOnly: true });
     try {
-      assert.equal(stored.prepare("PRAGMA user_version").get()!.user_version, 19);
+      assert.equal(stored.prepare("PRAGMA user_version").get()!.user_version, 20);
       assert.deepEqual(
         stored
           .prepare(

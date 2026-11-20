@@ -349,7 +349,8 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
         version !== 16 &&
         version !== 17 &&
         version !== 18 &&
-        version !== 19
+        version !== 19 &&
+        version !== 20
       )
         throw new Error(
           `Unsupported registry database version ${version}; upgrade Piano rather than resetting the database.`,
@@ -440,9 +441,7 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
             .get()
         )
           db.exec("ALTER TABLE worktrees ADD COLUMN created_branch TEXT;");
-        db.exec(
-          "UPDATE worktrees SET created_branch = branch WHERE base_branch IS NOT NULL AND created_branch IS NULL; PRAGMA user_version = 18;",
-        );
+        db.exec("PRAGMA user_version = 18;");
       }
       if (Number(version) < 19) {
         if (
@@ -453,6 +452,13 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
           db.exec("ALTER TABLE worktrees ADD COLUMN created_commit TEXT;");
         db.exec("PRAGMA user_version = 19;");
       }
+      if (Number(version) < 20)
+        // Schema 18 backfilled created_branch from the last observed branch, which may not be
+        // the branch the base was recorded for. Without a creation commit, a recorded pair is
+        // indistinguishable from that backfill, so it becomes unknown (PIN-167).
+        db.exec(
+          "UPDATE worktrees SET created_branch = NULL WHERE created_commit IS NULL; PRAGMA user_version = 20;",
+        );
       db.exec("COMMIT");
     } catch (error) {
       db.exec("ROLLBACK");
