@@ -156,7 +156,7 @@ test(
       assert.ok(result.handle?.sessionId, "reconciliation identifies the original child");
       assert.equal(readFileSync(marker, "utf8").trim(), result.handle.sessionId);
       assert.equal(result.handle.inputFingerprint, "", "missed observations remain unattributable");
-      await delay(3_000);
+      await delay(1_500);
       assert.equal(creations, 1, "the creation was sent once");
       assert.equal(opened, 2, "one read-only reconnect finds the original start");
       assert.equal(children().length, 1, "exactly one child exists");

@@ -45,6 +45,15 @@ function run(args: string[], url: string, env: NodeJS.ProcessEnv = {}, input?: s
   });
 }
 
+async function eachAtOnce<T>(items: T[], check: (item: T) => Promise<void>) {
+  const queue = [...items];
+  await Promise.all(
+    Array.from({ length: 4 }, async () => {
+      while (queue.length > 0) await check(queue.shift()!);
+    }),
+  );
+}
+
 async function peer(t: TestContext) {
   const requests: ClientMessage[] = [];
   const origins: (string | undefined)[] = [];
@@ -319,24 +328,19 @@ test("JSON stdin validates the whole request before reserving output or connecti
     { ...valid, model: "provider/model" },
     { ...valid, promtp: "typo" },
   );
-  for (const input of [
-    "",
-    "{",
-    `${JSON.stringify(valid)}\n{}`,
-    ...invalid.map((v) => JSON.stringify(v)),
-  ]) {
-    const result = await run(["--json"], p.url, {}, input);
+  const cases: [string[], string][] = [
+    ...["", "{", `${JSON.stringify(valid)}\n{}`, ...invalid.map((v) => JSON.stringify(v))].map(
+      (input): [string[], string] => [["--json"], input],
+    ),
+    [["--json", f.prompt, f.cwd], JSON.stringify(valid)],
+    [["--json", "--origin", origin], JSON.stringify(valid)],
+  ];
+  await eachAtOnce(cases, async ([args, input]) => {
+    const result = await run(args, p.url, {}, input);
     assert.equal(result.code, 2, `${input}: ${result.stderr}`);
     assert.ok(result.stderr.length > 0);
-    assert.equal(existsSync(outFile), false);
-  }
-  for (const args of [
-    ["--json", f.prompt, f.cwd],
-    ["--json", "--origin", origin],
-  ]) {
-    const result = await run(args, p.url, {}, JSON.stringify(valid));
-    assert.equal(result.code, 2, result.stderr);
-  }
+  });
+  assert.equal(existsSync(outFile), false);
   assert.deepEqual(p.origins, [], "invalid input must not open a socket");
   assert.deepEqual(p.requests, []);
 });
@@ -431,18 +435,20 @@ test("invalid configuration and input fail before network side effects and reser
   const f = fixture(t);
   const p = await peer(t);
   const out = join(f.dir, "never.json");
-  for (const extra of [
-    ["--model", "provider/model"],
-    ["--thinkingLevel", "low"],
-    ["--ws-url", "wss://public.example/ws"],
-    ["--origin", `${origin}/`],
-    ["--unknown"],
-  ]) {
-    const result = await run([f.prompt, f.cwd, out, ...extra], p.url);
+  const rejected = [
+    ...[
+      ["--model", "provider/model"],
+      ["--thinkingLevel", "low"],
+      ["--ws-url", "wss://public.example/ws"],
+      ["--origin", `${origin}/`],
+      ["--unknown"],
+    ].map((extra) => [f.prompt, f.cwd, out, ...extra]),
+    ...[join(f.dir, "missing"), "", " \n"].map((cwd) => [f.prompt, cwd, out]),
+  ];
+  await eachAtOnce(rejected, async (args) => {
+    const result = await run(args, p.url);
     assert.equal(result.code, 2, result.stderr);
-  }
-  assert.equal((await run([f.prompt, join(f.dir, "missing"), out], p.url)).code, 2);
-  for (const cwd of ["", " \n"]) assert.equal((await run([f.prompt, cwd, out], p.url)).code, 2);
+  });
   writeFileSync(f.prompt, "  \n");
   assert.equal((await run([f.prompt, f.cwd, out], p.url)).code, 2);
   assert.equal(existsSync(out), false);

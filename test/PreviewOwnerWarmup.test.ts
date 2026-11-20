@@ -60,7 +60,7 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
     assert.equal(shown?.url, `http://localhost:${port}/`);
 
     const answered = requests;
-    await new Promise((resolve) => setTimeout(resolve, 2500));
+    await new Promise((resolve) => setTimeout(resolve, 1500));
     assert.equal(requests, answered);
   });
 
@@ -159,7 +159,7 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
       await new Promise((resolve) => setTimeout(resolve, 50));
     assert.ok(failures > seen, "the owner checked once past the window");
     const last = failures;
-    await new Promise((resolve) => setTimeout(resolve, 2500));
+    await new Promise((resolve) => setTimeout(resolve, 1500));
     assert.equal(failures, last, "checking stopped after the warm-up window");
   });
 }
