@@ -20,7 +20,11 @@ import {
   WorkspaceChangesLive,
 } from "../server/WorkspaceChanges.ts";
 import { answerJson } from "../shared/http.ts";
-import { CHANGES_ANSWER_BYTES, type WorkspaceChanges as Observation } from "../shared/wire.ts";
+import {
+  CHANGES_ANSWER_BYTES,
+  CHANGES_INITIAL_PATCH_BYTES,
+  type WorkspaceChanges as Observation,
+} from "../shared/wire.ts";
 import {
   askText,
   changedFile,
@@ -230,6 +234,80 @@ test("live changes: an answer past the answer budget is an error, never a partia
   const answer = await commitPaths(count).preview();
   assert.equal(ready(answer).files.length, count);
   assert.ok(Buffer.byteLength(answerJson(answer)) <= CHANGES_ANSWER_BYTES);
+});
+
+test("live changes: thousands of long staged-only paths keep the full list, a bounded excerpt and per-file reads", async (t) => {
+  const { repo, git, gitInput, preview } = fixture(t);
+  writeFileSync(join(repo, "work.txt"), "base\n");
+  git("add", ".");
+  git("commit", "-qm", "base");
+  const blob = gitInput("staged\n", "hash-object", "-w", "--stdin").trim();
+  const staged = Array.from({ length: 3_550 }, (_, i) =>
+    [
+      `${i % 10}`,
+      `${i % 7}${"e".repeat(190)}`,
+      `${i % 3}${"f".repeat(190)}`,
+      "g".repeat(190),
+      `${i}.txt`,
+    ].join("/"),
+  );
+  gitInput(
+    staged.map((path) => `100644 ${blob}\t${path}\0`).join(""),
+    "update-index",
+    "--add",
+    "-z",
+    "--index-info",
+  );
+  writeFileSync(join(repo, "work.txt"), "line of source\n".repeat(20_000));
+  const index = readFileSync(join(repo, ".git/index"));
+
+  const listed = await preview();
+  const result = ready(listed);
+  assert.equal(result.files.length, staged.length + 1);
+  assert.deepEqual(result.files[0], {
+    path: "work.txt",
+    additions: 20_000,
+    deletions: 1,
+    binary: false,
+  });
+  assert.deepEqual(
+    result.files.slice(1).map((f) => f.path),
+    [...staged].sort(),
+  );
+  assert.equal(result.truncated, true);
+  assert.ok(Buffer.byteLength(result.diff) <= CHANGES_INITIAL_PATCH_BYTES);
+  assert.deepEqual(
+    parseUnifiedDiff(result.diff).map((f) => f.path),
+    ["work.txt"],
+  );
+  assert.ok(Buffer.byteLength(answerJson(listed)) <= CHANGES_ANSWER_BYTES);
+
+  const one = ready(await preview(staged[42]));
+  assert.deepEqual(one.files, [
+    { path: staged[42], additions: 1, deletions: 0, binary: false, staged: true },
+  ]);
+  assert.deepEqual(
+    parseUnifiedDiff(one.diff).map((f) => f.path),
+    [staged[42]],
+  );
+  assert.match(one.diff, /\+staged/);
+  assert.equal(one.truncated, false);
+
+  writeFileSync(join(repo, "work.txt"), "base\n");
+  const cachedOnly = ready(await preview());
+  assert.deepEqual(
+    cachedOnly.files.map((f) => f.path),
+    [...staged].sort(),
+  );
+  assert.equal(cachedOnly.truncated, true);
+  assert.ok(Buffer.byteLength(cachedOnly.diff) <= CHANGES_INITIAL_PATCH_BYTES);
+  const patched = parseUnifiedDiff(cachedOnly.diff).map((f) => f.path);
+  assert.ok(patched.length > 20, "the excerpt spans many staged patches");
+  assert.deepEqual(
+    patched,
+    cachedOnly.files.slice(0, patched.length).map((f) => f.path),
+  );
+  assert.deepEqual(readFileSync(join(repo, ".git/index")), index);
 });
 
 test("live changes: local filters and diff programs never run and intent-to-add never modifies user index", async (t) => {
