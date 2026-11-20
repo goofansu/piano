@@ -66,7 +66,9 @@ export function directoryChoices(
             branchLabel: branchLabel(checkout.branch, checkout.facts?.detached ?? false),
           }),
         }
-      : { kind: "path", label: abbrevHome(cwd) };
+      : state.registryLoaded
+        ? { kind: "path", label: abbrevHome(cwd) }
+        : { kind: "checkout", folder: cwd.split(/[\\/]/).filter(Boolean).pop() ?? cwd };
   const roots = state.folders.flatMap((f) =>
     f.worktrees
       .filter((w) => w.root && startsSessionIn(state, w.path))
