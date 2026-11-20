@@ -1440,7 +1440,9 @@ await run(
           );
         const chooseRepo = async () => {
           await page.ab("click", '[aria-label="Directory"]');
-          await page.until(`!!document.querySelector('[aria-label="Choose a directory"]')`);
+          await page.until(
+            `[...document.querySelectorAll('[aria-label="Choose a directory"] [role="option"]')].some(o => o.textContent.trim() === 'repo')`,
+          );
           await page.ab("find", "role", "option", "click", "--name", "repo");
           await page.until(`!document.querySelector('[aria-label="Choose a directory"]')`);
         };

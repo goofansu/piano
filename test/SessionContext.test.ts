@@ -613,10 +613,27 @@ test("the New session directory picker names a root by folder, a worktree by fol
     "worktrees belong to the folder's repository",
   );
   assert.equal(feature.roots[0]?.selected, false);
-  const elsewhere = directoryChoices(base, "/Users/me/scratch", startsLocally);
+  const elsewhere = directoryChoices(
+    { ...base, registryLoaded: true },
+    "/Users/me/scratch",
+    startsLocally,
+  );
   assert.deepEqual(elsewhere.trigger, { kind: "path", label: "~/scratch" });
   assert.equal(elsewhere.worktreesFolder, undefined, "an unregistered directory has no Worktrees");
   assert.deepEqual(directoryChoices(base, "", startsLocally).trigger, { kind: "none" });
+});
+
+test("before the registry loads, the directory picker names a remembered directory by its folder, not its full path", () => {
+  const loading = { ...base, folders: [] };
+  assert.deepEqual(directoryChoices(loading, "/tmp/run/repo", startsLocally).trigger, {
+    kind: "checkout",
+    folder: "repo",
+  });
+  assert.deepEqual(
+    directoryChoices({ ...loading, registryLoaded: true }, "/tmp/run/repo", startsLocally).trigger,
+    { kind: "path", label: "/tmp/run/repo" },
+    "once loaded, an unregistered directory is named by path",
+  );
 });
 
 test("the New page names its place for voice input as the session it starts will", () => {
