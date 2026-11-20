@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
-import { Context, Effect, Fiber, Layer, Queue, type Scope, Stream } from "effect";
+import { Context, Effect, Fiber, Layer, type Scope, Stream } from "effect";
 import { DirectoryFacts } from "../server/DirectoryFacts.ts";
 import { FolderWorktrees, FolderWorktreesLive } from "../server/FolderWorktrees.ts";
 import { worktreeInstance } from "../server/GitCheckout.ts";
@@ -15,8 +15,7 @@ import { Registry, RegistryDatabasePath, RegistryError } from "../server/Registr
 import type { SessionHosts } from "../server/SessionHosts.ts";
 import { SidebarView } from "../server/SidebarView.ts";
 import { GitCommand } from "../server/Subprocess.ts";
-import { WorkspaceCommands, WorkspaceCommandsLive } from "../server/WorkspaceCommands.ts";
-import { listWorktrees } from "../server/Worktrees.ts";
+import { WorkspaceCommands } from "../server/WorkspaceCommands.ts";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "piano-commands-")));
 const cwd = join(root, "checkout");
@@ -30,7 +29,6 @@ const git = (dir: string, ...args: string[]) =>
   execFileSync("git", ["-C", dir, "-c", "user.name=t", "-c", "user.email=t@example.com", ...args], {
     stdio: "pipe",
   });
-let discovered: Queue.Queue<string> | undefined;
 let databases = 0;
 const run = <A, E>(
   effect: Effect.Effect<
@@ -46,13 +44,7 @@ const run = <A, E>(
   >,
   path = join(root, `registry-${++databases}.db`),
 ) => {
-  discovered = undefined;
-  const discover = (folder: string) =>
-    Effect.suspend(() => {
-      if (discovered) Queue.offerUnsafe(discovered, folder);
-      return listWorktrees(folder);
-    });
-  const layer = PianoCoreLive({ idleMs: 0, discover }).pipe(Layer.provide(NodeServices.layer));
+  const layer = PianoCoreLive({ idleMs: 0 }).pipe(Layer.provide(NodeServices.layer));
   return Effect.runPromise(
     effect.pipe(
       Effect.scoped,
@@ -67,98 +59,49 @@ const run = <A, E>(
     ),
   );
 };
-const listen = Effect.gen(function* () {
-  yield* (yield* SidebarView).fresh;
-  const queue = yield* Queue.unbounded<string>();
-  discovered = queue;
-  return queue;
-});
 
-test("INV-06: worktree commands require a registered folder, answer the refusal as confirmed, and record a discovered checkout", async () => {
-  const repo = join(root, "repo"),
-    linked = join(root, "linked");
+test("INV-06: creating a worktree requires a registered folder and leaves no branch when refused", async () => {
+  const repo = join(root, "repo");
   mkdirSync(repo);
   git(repo, "init", "--quiet");
   git(repo, "commit", "--quiet", "--allow-empty", "-m", "init");
-  git(repo, "worktree", "add", "--quiet", "-b", "feature", linked);
   await run(
     Effect.gen(function* () {
-      const commands = yield* WorkspaceCommands,
-        registry = yield* Registry;
+      const registry = yield* Registry;
       yield* registry.addFolder(cwd);
-      const discoveries = yield* listen;
-      assert.deepEqual(yield* commands.addWorktree(repo, linked), {
-        status: "error",
-        detail: "Select a registered folder first.",
-        unconfirmed: false,
-      });
-      yield* Queue.take(discoveries);
       const refused = yield* (yield* FolderWorktrees).create(repo, "other").pipe(Effect.flip);
       assert.equal(refused.detail, "Select a registered folder first.");
       assert.notEqual(refused.unconfirmed, true);
       assert.equal(git(repo, "branch", "--list", "other").toString(), "");
       assert.deepEqual((yield* registry.get).worktrees, []);
-      yield* registry.addFolder(repo);
-      assert.deepEqual(yield* commands.addWorktree(repo, linked), {
-        status: "ready",
-        folder: repo,
-        path: linked,
-        branch: "feature",
-      });
-      assert.deepEqual((yield* registry.get).worktrees, [
-        { folder: repo, path: linked, branch: "feature" },
-      ]);
     }),
   );
 });
 
-test("INV-06: a worktree request that may have left a checkout is answered unconfirmed, then rediscovered", async () => {
-  const repo = join(root, "unconfirmed"),
-    linked = join(root, "unconfirmed-linked");
+test("INV-06: a created checkout that could not be recorded is reported unconfirmed and kept", async () => {
+  const repo = join(root, "unconfirmed");
   mkdirSync(repo);
   git(repo, "init", "--quiet", "-b", "main");
   git(repo, "commit", "--quiet", "--allow-empty", "-m", "init");
-  git(repo, "worktree", "add", "--quiet", "-b", "feature", linked);
-  const failures = {
-    registry: {
-      record: Effect.fail(new RegistryError({ detail: "Registry write failed." })),
-      detail: /^Registry write failed\./,
-    },
-    defect: {
-      record: Effect.die(new Error("Unexpected failure.")),
-      detail: /^Unexpected failure\.$/,
-    },
-  };
-  for (const [kind, { record, detail }] of Object.entries(failures)) {
-    await run(
-      Effect.gen(function* () {
-        const registry = yield* Registry;
-        yield* registry.addFolder(repo);
-        const failing = {
+  await run(
+    Effect.gen(function* () {
+      const registry = yield* Registry;
+      yield* registry.addFolder(repo);
+      const built = yield* Layer.build(Layer.fresh(FolderWorktreesLive)).pipe(
+        Effect.provideService(Registry, {
           ...registry,
-          addWorktree: () => record,
-          recordCreatedWorktree: () => record,
-        };
-        const built = yield* Layer.build(
-          Layer.fresh(WorkspaceCommandsLive.pipe(Layer.provideMerge(FolderWorktreesLive))),
-        ).pipe(Effect.provideService(Registry, failing));
-        const discoveries = yield* listen;
-        const result = yield* Context.get(built, WorkspaceCommands).addWorktree(repo, linked);
-        assert.ok(result.status === "error", `${kind} add failed`);
-        assert.match(result.detail, detail);
-        assert.equal(result.unconfirmed, true, `${kind} add asks for rediscovery`);
-        assert.equal(yield* Queue.take(discoveries), repo);
-        if (kind !== "registry") return;
-        const branch = "kept";
-        const created = yield* Context.get(built, FolderWorktrees)
-          .create(repo, branch)
-          .pipe(Effect.flip);
-        assert.equal(created.unconfirmed, true, "a checkout left unrecorded is unconfirmed");
-        assert.equal(created.detail, `Registry write failed. ${repo}.${branch}`);
-        assert.ok(existsSync(`${repo}.${branch}`));
-      }),
-    );
-  }
+          recordCreatedWorktree: () =>
+            Effect.fail(new RegistryError({ detail: "Registry write failed." })),
+        }),
+      );
+      const created = yield* Context.get(built, FolderWorktrees)
+        .create(repo, "kept")
+        .pipe(Effect.flip);
+      assert.equal(created.unconfirmed, true);
+      assert.equal(created.detail, `Registry write failed. ${repo}.kept`);
+      assert.ok(existsSync(`${repo}.kept`));
+    }),
+  );
 });
 
 test("INV-02/06: a requester that leaves while Git creates the worktree still gets it registered", async () => {

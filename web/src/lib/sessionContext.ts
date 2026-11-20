@@ -34,7 +34,6 @@ export interface DirectoryRoot {
 export interface DirectoryChoices {
   trigger: DirectoryTrigger;
   roots: DirectoryRoot[];
-  worktreesFolder: FolderView | undefined;
 }
 
 export function startPlace(
@@ -78,7 +77,7 @@ export function directoryChoices(
         selected: w.path === cwd,
       })),
   );
-  return { trigger, roots, worktreesFolder: checkout ? folder : undefined };
+  return { trigger, roots };
 }
 
 export function workspaceFor(state: AppState, cwd: string | undefined): Workspace | undefined {

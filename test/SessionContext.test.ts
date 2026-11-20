@@ -603,15 +603,9 @@ test("slash completion uses one revision rule for the New page and a session", (
 test("the New session directory picker names a root by folder, a worktree by folder and branch, and anything else by path", () => {
   const root = directoryChoices(base, "/repo", startsLocally);
   assert.deepEqual(root.trigger, { kind: "checkout", folder: "repo" });
-  assert.equal(root.worktreesFolder?.path, "/repo");
   assert.deepEqual(root.roots, [{ path: "/repo", label: "repo", selected: true }]);
   const feature = directoryChoices(base, "/work/repo.feature", startsLocally);
   assert.deepEqual(feature.trigger, { kind: "checkout", folder: "repo", branchLabel: "feature" });
-  assert.equal(
-    feature.worktreesFolder?.path,
-    "/repo",
-    "worktrees belong to the folder's repository",
-  );
   assert.equal(feature.roots[0]?.selected, false);
   const elsewhere = directoryChoices(
     { ...base, registryLoaded: true },
@@ -619,7 +613,6 @@ test("the New session directory picker names a root by folder, a worktree by fol
     startsLocally,
   );
   assert.deepEqual(elsewhere.trigger, { kind: "path", label: "~/scratch" });
-  assert.equal(elsewhere.worktreesFolder, undefined, "an unregistered directory has no Worktrees");
   assert.deepEqual(directoryChoices(base, "", startsLocally).trigger, { kind: "none" });
 });
 

@@ -3,13 +3,12 @@ import {
   CircleOffIcon,
   FolderIcon,
   FolderOpenIcon,
-  GitBranchPlusIcon,
   ShieldCheckIcon,
   ShieldOffIcon,
   TargetIcon,
 } from "lucide-react";
 import { useRef, useState } from "react";
-import { Banner } from "@/components/Banner";
+import { AlertDetails, Banner } from "@/components/Banner";
 import { BranchLabel } from "@/components/BranchLabel";
 import { useCommands } from "@/components/CommandHost";
 import { ComposerSend, DraftEditor, useDraftEditor } from "@/components/DraftEditor";
@@ -39,7 +38,6 @@ import { ProjectDestinationItems } from "@/components/Projects";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { WorktreesPopover } from "@/components/Worktrees";
 import type { Client } from "@/lib/client";
 import { newSessionCommand, newSessionReady } from "@/lib/composerControl";
 import { type GlobalCommand, trustCommand } from "@/lib/globalCommands";
@@ -59,15 +57,13 @@ import { useOffers } from "@/lib/useMachine";
 import { useModelCatalog } from "@/lib/useModelCatalog";
 import { useModelChoice } from "@/lib/useModelChoice";
 import { useSidebarLayout } from "@/lib/useSidebarLayout";
-import { useWorktreeOperation } from "@/lib/useWorktreeOperation";
-import type { WorktreeOperationOptions } from "@/lib/worktreeOperation";
 import type { AppState } from "@/store";
 
-type WorktreeClient = WorktreeOperationOptions["client"] & Pick<Client, "captureSend" | "dispatch">;
+type StartClient = Pick<Client, "captureSend" | "dispatch">;
 
 interface Props {
   state: AppState;
-  client: WorktreeClient;
+  client: StartClient;
   chooseDirectory: (cwd: string) => void;
   onProjectChange?: (projectId?: string) => void;
 }
@@ -108,7 +104,7 @@ export function NewSessionComposer({
   className,
 }: {
   state: AppState;
-  client: WorktreeClient;
+  client: StartClient;
   chooseDirectory: (cwd: string) => void;
   onProjectChange?: (projectId?: string) => void;
   className?: string;
@@ -171,8 +167,6 @@ export function NewSessionComposer({
                 value={cwd}
                 onChange={chooseDirectory}
                 onBrowse={offers.browse ? () => setPickerOpen(true) : undefined}
-                client={client}
-                worktreesOffered={offers.worktrees}
               />
             </div>
             {trust && <TrustToggle command={trust} run={run} />}
@@ -239,7 +233,10 @@ export function NewSessionComposer({
         {offers.worktrees && !refusal && folder?.discovery.status === "error" && (
           <Alert data-motion="fade" variant="destructive" className="mt-2">
             <AlertDescription>
-              Git status unavailable. Open Worktrees to inspect and refresh.
+              Git status unavailable.
+              <AlertDetails label="Error details">
+                <p className="whitespace-pre-wrap break-words">{folder.discovery.detail}</p>
+              </AlertDetails>
             </AlertDescription>
           </Alert>
         )}
@@ -368,36 +365,17 @@ function DirectorySelect({
   value,
   onChange,
   onBrowse,
-  client,
-  worktreesOffered,
 }: {
   state: AppState;
   value: string;
   onChange: (cwd: string) => void;
   onBrowse?: () => void;
-  client: WorktreeClient;
-  worktreesOffered: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const [wtOpen, setWtOpen] = useState(false);
-  const worktrees = useWorktreeOperation(client, (cwd) => {
-    onChange(cwd);
-    setOpen(false);
-  });
-  const wtPending = worktrees.request.status === "pending";
   const search = useRef<HTMLInputElement>(null);
-  const choices = directoryChoices(state, value, useOffers().startsSessionIn);
-  const { trigger, roots } = choices;
-  const worktreesFolder = worktreesOffered ? choices.worktreesFolder : undefined;
+  const { trigger, roots } = directoryChoices(state, value, useOffers().startsSessionIn);
   return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        if (wtPending) return;
-        setOpen(next);
-        if (next) setWtOpen(false);
-      }}
-    >
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
           variant="ghost"
@@ -428,70 +406,53 @@ function DirectorySelect({
           )}
         </Button>
       </PopoverTrigger>
-      {wtOpen ? (
-        <WorktreesPopover operation={worktrees} state={state} currentCwd={value} />
-      ) : (
-        <PickerContent aria-label="Choose a directory" searchRef={search}>
-          <Command>
-            <PickerSearch
-              ref={search}
-              divider={false}
-              aria-label="Search folders"
-              placeholder="Search folders"
-            />
-            <CommandList className="max-h-[min(18rem,60dvh)]">
-              <CommandEmpty>No folder matches.</CommandEmpty>
-              {roots.length > 0 && (
-                <CommandGroup heading="Folders">
-                  {roots.map((root) => (
-                    <CommandItem
-                      key={root.path}
-                      value={root.path}
-                      keywords={[root.label]}
-                      onSelect={() => {
-                        onChange(root.path);
-                        setOpen(false);
-                      }}
-                    >
-                      <span className="min-w-0 flex-1 truncate">{root.label}</span>
-                      <PickerCheck selected={root.selected} />
-                    </CommandItem>
-                  ))}
+      <PickerContent aria-label="Choose a directory" searchRef={search}>
+        <Command>
+          <PickerSearch
+            ref={search}
+            divider={false}
+            aria-label="Search folders"
+            placeholder="Search folders"
+          />
+          <CommandList className="max-h-[min(18rem,60dvh)]">
+            <CommandEmpty>No folder matches.</CommandEmpty>
+            {roots.length > 0 && (
+              <CommandGroup heading="Folders">
+                {roots.map((root) => (
+                  <CommandItem
+                    key={root.path}
+                    value={root.path}
+                    keywords={[root.label]}
+                    onSelect={() => {
+                      onChange(root.path);
+                      setOpen(false);
+                    }}
+                  >
+                    <span className="min-w-0 flex-1 truncate">{root.label}</span>
+                    <PickerCheck selected={root.selected} />
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+            {onBrowse && (
+              <>
+                <CommandSeparator />
+                <CommandGroup>
+                  <CommandItem
+                    value="__browse"
+                    onSelect={() => {
+                      setOpen(false);
+                      onBrowse();
+                    }}
+                  >
+                    <FolderOpenIcon /> Browse…
+                  </CommandItem>
                 </CommandGroup>
-              )}
-              {(onBrowse || worktreesFolder) && (
-                <>
-                  <CommandSeparator />
-                  <CommandGroup>
-                    {onBrowse && (
-                      <CommandItem
-                        value="__browse"
-                        onSelect={() => {
-                          setOpen(false);
-                          onBrowse();
-                        }}
-                      >
-                        <FolderOpenIcon /> Browse…
-                      </CommandItem>
-                    )}
-                    {worktreesFolder && (
-                      <CommandItem
-                        value="__worktree"
-                        onSelect={() => {
-                          setWtOpen(true);
-                          worktrees.open(worktreesFolder.path);
-                        }}
-                      >
-                        <GitBranchPlusIcon /> Worktrees
-                      </CommandItem>
-                    )}
-                  </CommandGroup>
-                </>
-              )}
-            </CommandList>
-          </Command>
-        </PickerContent>
-      )}
+              </>
+            )}
+          </CommandList>
+        </Command>
+      </PickerContent>
     </Popover>
   );
 }

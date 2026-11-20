@@ -35,10 +35,6 @@ import { createDrafts, EMPTY_DRAFT, sessionDraftKey } from "../web/src/lib/messa
 import { createModelCatalogs } from "../web/src/lib/modelCatalogs.ts";
 import { createPreviewObservation, seenPreview } from "../web/src/lib/previewObservation.ts";
 import { sessionActivity, sessionPane } from "../web/src/lib/sessionContext.ts";
-import {
-  createWorktreeOperation,
-  type WorktreeOperation,
-} from "../web/src/lib/worktreeOperation.ts";
 import type { ConnectionHandlers } from "../web/src/lib/ws.ts";
 import { type AppState, initialState } from "../web/src/store.ts";
 
@@ -1022,81 +1018,6 @@ test("untrust reports the final outcome when a Pi extension remembers trust agai
   );
 });
 
-function worktreePicker(receive: (m: ClientRequest) => Effect.Effect<Effect.Effect<void>>) {
-  const commands: ClientRequest[] = [];
-  let handlers: ConnectionHandlers | undefined;
-  const page = createClient({
-    startsSessionIn: machineOffers(LOCAL).startsSessionIn,
-    initial: initialState,
-    connect: (h) => {
-      handlers = h;
-      return {
-        send: (m) => {
-          if (m._tag !== "ack") commands.push(m);
-          return "sent";
-        },
-        close: () => {},
-      };
-    },
-    notify: () => {},
-    lastDirectory: { read: () => null, write: () => {} },
-  });
-  page.start();
-  handlers!.onStatus(true);
-  let ids = 0;
-  const operation = createWorktreeOperation({ client: page, newRequestId: () => `r${++ids}` });
-  operation.start();
-  const sentByPicker = () => commands.filter((m) => m._tag !== "models" && m._tag !== "ping");
-  const exchange = Effect.gen(function* () {
-    const command = sentByPicker().at(-1);
-    assert.ok(command, "the picker sent a command");
-    const from = sent.length;
-    yield* yield* receive(command);
-    for (const message of answers(from)) handlers!.onMessage(message);
-  });
-  return { operation, sentByPicker, exchange };
-}
-
-const failure = (operation: WorktreeOperation) => {
-  const { request } = operation.getState();
-  return request.status === "failed" ? request.detail : undefined;
-};
-
-test("INV-06: rejected worktree operations settle the picker immediately without replay", async () => {
-  await run(
-    Effect.gen(function* () {
-      const { receive } = yield* client;
-      yield* (yield* SidebarView).fresh;
-      const held = [];
-      for (let n = 0; n < inboundLimits.client.messages; n++)
-        held.push(yield* receive({ _tag: "registry" }));
-      const { operation, sentByPicker, exchange } = worktreePicker(receive);
-
-      operation.open(cwd);
-      yield* exchange;
-      assert.equal(operation.getState().refreshing, false, "the rejected discovery answered");
-      const discovery = operation.getState().discovery;
-      assert.equal(discovery?.status, "error");
-      if (discovery?.status === "error") assert.match(discovery.detail, /not started/);
-
-      operation.select(cwd);
-      yield* exchange;
-      assert.match(failure(operation) ?? "", /not started/);
-      assert.deepEqual(
-        sentByPicker().map((m) => m._tag),
-        ["worktrees", "add_worktree"],
-        "mutations are never replayed",
-      );
-      for (const work of held) yield* work;
-      yield* (yield* Registry).addFolder(cwd);
-      operation.refresh();
-      yield* exchange;
-      assert.equal(operation.getState().refreshing, false, "accepted discovery is correlated too");
-      assert.equal(operation.getState().discovery?.status, "non-git");
-    }),
-  );
-});
-
 const refusals: {
   readonly [K in ClientRequest["_tag"]]: readonly [Extract<ClientRequest, { _tag: K }>, unknown];
 } = {
@@ -1119,23 +1040,6 @@ const refusals: {
   act: [
     { _tag: "act", selectionId: "s3", action: { _tag: "prompt", text: "hi" } },
     { _tag: "error", message: "REFUSED", selectionId: "s3" },
-  ],
-  worktrees: [
-    { _tag: "worktrees", folder: cwd, requestId: "discovery1" },
-    {
-      _tag: "worktrees",
-      folder: cwd,
-      requestId: "discovery1",
-      discovery: { status: "error", observedAt: "OBSERVED", detail: "REFUSED" },
-    },
-  ],
-  add_worktree: [
-    { _tag: "add_worktree", requestId: "w2", folder: cwd, path: join(root, "other") },
-    {
-      _tag: "worktree_result",
-      requestId: "w2",
-      result: { status: "error", detail: "REFUSED", unconfirmed: false },
-    },
   ],
   registry: [{ _tag: "registry" }, { _tag: "error", message: "REFUSED" }],
   directory: [
@@ -1246,32 +1150,6 @@ test("INV-05/06: every request kind refused at capacity gets its own correlated 
         "refused requests did not reach the registry",
       );
       for (const work of held) yield* work;
-    }),
-  );
-});
-
-test("an admitted worktree request is answered with the command's result under its request ID", async () => {
-  await run(
-    Effect.gen(function* () {
-      const { receive } = yield* client;
-      const from = sent.length;
-      yield* yield* receive({
-        _tag: "add_worktree",
-        requestId: "r1",
-        folder: join(root, "unregistered"),
-        path: join(root, "unregistered-feature"),
-      });
-      assert.deepEqual(answers(from), [
-        {
-          _tag: "worktree_result",
-          requestId: "r1",
-          result: {
-            status: "error",
-            detail: "Select a registered folder first.",
-            unconfirmed: false,
-          },
-        },
-      ]);
     }),
   );
 });
