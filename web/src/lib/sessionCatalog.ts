@@ -160,11 +160,12 @@ function entries(state: AppState): SessionEntry[] {
     const { folder, folderName } = directoryOf(ref.cwd);
     const project = findProject(state, ref.projectId);
     const host = hosts.get(key);
+    const starting = !!host?.starting && state.hostsCurrent;
     return {
       cwd: ref.cwd,
       sessionId: ref.sessionId,
       title: ref.title,
-      label: host?.starting ? "Starting" : sessionLabel(ref.title),
+      label: starting ? "Starting" : sessionLabel(ref.title),
       createdAt: ref.createdAt,
       updatedAt: ref.updatedAt,
       folderPath: folder?.path,
@@ -179,7 +180,7 @@ function entries(state: AppState): SessionEntry[] {
       selected: isSession(current, ref),
       unavailable: ref.unavailable,
       hint: ref.unavailable && HINTS[ref.unavailable],
-      disabled: !!host?.starting || !sessionOpenable(ref),
+      disabled: starting || !sessionOpenable(ref),
     };
   });
 }

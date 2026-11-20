@@ -375,6 +375,7 @@ test("sidebar navigation follows Pinned, expanded sections and Done in the chose
       ref("done", "Done", 7, { projectId: "done" }),
     ],
     hosts: [{ cwd: "/repo", sessionId: "starting", starting: true, working: false }],
+    hostsCurrent: true,
   };
   for (const key of ["/repo", "project:p1", "project:", "project:done"]) model.toggle(key, true);
   const walk = (list: SidebarList, direction: -1 | 1) => {
