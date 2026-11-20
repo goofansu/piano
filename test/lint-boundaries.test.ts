@@ -117,3 +117,28 @@ test("oxlint enforces layer edges, including types, aliases and a shared bridge"
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("oxlint rejects regex literals that CodeQL reads as an HTML tag filter", () => {
+  const root = mkdtempSync(join(tmpdir(), "piano-tag-regex-"));
+  try {
+    const cases: [string, boolean][] = [
+      ["export const a = /<SCRIPT>/;", false],
+      ["export const a = /<\\/script>/i;", false],
+      ["export const a = /<!--/;", false],
+      ['export const a = (s: string) => s.includes("<script>");', true],
+      ["export const a = /<div[^>]*>/;", true],
+    ];
+    for (const [source, passes] of cases) {
+      writeFileSync(join(root, "check.ts"), `${source}\n`);
+      const result = spawnSync(
+        join(ROOT, "node_modules/.bin/oxlint"),
+        ["--deny-warnings", "--config", join(ROOT, ".oxlintrc.json"), join(root, "check.ts")],
+        { cwd: ROOT, encoding: "utf8" },
+      );
+      assert.equal(result.status === 0, passes, `${source}\n${result.stdout}${result.stderr}`);
+      if (!passes) assert.match(result.stdout, /no-html-tag-regex/);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

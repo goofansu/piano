@@ -32,6 +32,26 @@ function canonical(path) {
 export default {
   meta: { name: "piano" },
   rules: {
+    // CodeQL js/bad-tag-filter reports any regex that matches a script tag or HTML comment as a
+    // weak sanitizer, even an assertion in a test.
+    "no-html-tag-regex": {
+      meta: {
+        type: "problem",
+        schema: [],
+        messages: {
+          tag: "Regex matching {{tag}} trips CodeQL js/bad-tag-filter; compare strings instead",
+        },
+      },
+      create(context) {
+        return {
+          Literal(node) {
+            const pattern = node.regex?.pattern.toLowerCase() ?? "";
+            const tag = ["<script", "<\\/script", "<!--"].find((t) => pattern.includes(t));
+            if (tag) context.report({ node, messageId: "tag", data: { tag } });
+          },
+        };
+      },
+    },
     "layer-imports": {
       meta: {
         type: "problem",
