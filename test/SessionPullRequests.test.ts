@@ -654,3 +654,76 @@ test("github.com: discovery searches a base remote named parent for a fork's pul
     ),
   );
 });
+
+for (const host of ["github.com", "github.int.exe.xyz"] as const) {
+  const forkCheckout = async (t: TestContext, remotes: [string, string][]) => {
+    const f = await fixture(t),
+      log = join(f.root, "gh.log");
+    f.git("remote", "set-url", "origin", `https://${host}/me/fork.git`);
+    for (const [name, url] of remotes) f.git("remote", "add", "--", name, url);
+    f.git("update-ref", "refs/remotes/origin/feature", "HEAD");
+    f.git("branch", "--set-upstream-to", "origin/feature");
+    const searched = () =>
+      readFileSync(log, "utf8")
+        .trim()
+        .split("\n")
+        .map((line) => (JSON.parse(line) as { args: string[] }).args.slice(0, -1).join(" "))
+        .toSorted();
+    const listed = (...repos: string[]) =>
+      repos.map(
+        (repo) => `pr list --head feature --state open --limit 100 --repo ${host}/${repo} --json`,
+      );
+    return { f, log, searched, listed };
+  };
+  const fromFork = (number: number, base: string) => ({
+    ...candidate(number, "feature", "me"),
+    url: `https://github.com/${base}/pull/${number}`,
+    headRepository: { name: "fork" },
+    baseRefName: "main",
+  });
+
+  test(`${host}: an upstream reached through its old and current names links its pull request once`, async (t) => {
+    const { f, log, searched, listed } = await forkCheckout(t, [
+      ["upstream", `https://${host}/up/repo.git`],
+      ["old", `https://${host}/up/old-name.git`],
+    ]);
+    f.control({
+      prs: [fromFork(42, "up/repo")],
+      expectedHost: host,
+      renamedRepos: { "up/old-name": "up/repo" },
+      log,
+    });
+    const found = await f.change({ action: "discover" });
+    assert.equal(found.error, undefined);
+    assert.equal(found.pullRequest?.number, 42, JSON.stringify(found));
+    assert.equal(found.link?.url, "https://github.com/up/repo/pull/42");
+    assert.deepEqual(searched(), listed("me/fork", "up/old-name", "up/repo"));
+  });
+
+  test(`${host}: equal pull request numbers in different base repositories stay ambiguous`, async (t) => {
+    const { f, log } = await forkCheckout(t, [
+      ["upstream", `https://${host}/up/repo.git`],
+      ["other", `https://${host}/other/base.git`],
+    ]);
+    f.control({
+      prs: [fromFork(42, "up/repo"), fromFork(42, "other/base")],
+      expectedHost: host,
+      log,
+    });
+    const found = await f.change({ action: "discover" });
+    assert.match(found.error!, /Several/);
+    assert.equal(found.link, null);
+  });
+
+  test(`${host}: a remote whose name starts with a dash neither stops discovery nor reaches gh`, async (t) => {
+    const { f, log, searched, listed } = await forkCheckout(t, [
+      ["upstream", `https://${host}/up/repo.git`],
+      ["-archive", "https://git.example/archive/repo.git"],
+    ]);
+    f.control({ prs: [fromFork(42, "up/repo")], expectedHost: host, log });
+    const found = await f.change({ action: "discover" });
+    assert.equal(found.error, undefined);
+    assert.equal(found.pullRequest?.number, 42, JSON.stringify(found));
+    assert.deepEqual(searched(), listed("me/fork", "up/repo"));
+  });
+}
