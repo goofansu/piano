@@ -26,6 +26,7 @@ import {
   changedFile,
   changesSheet,
   initialDisclosure,
+  type PatchSource,
   patchNote,
 } from "../web/src/lib/changesView.ts";
 import { parseUnifiedDiff } from "../web/src/lib/diff.ts";
@@ -701,6 +702,105 @@ const r=spawnSync('git',a,{stdio:'inherit'});process.exit(r.status??1);\n`,
   );
   agrees(changedFile(workspace, deferred, "notes.txt", listedReady.comparison));
   assert.deepEqual(readFileSync(join(repo, ".git/index")), index);
+});
+
+test("live changes: a staged file and a working path beneath it each keep their own patch from their own Git source", async (t) => {
+  const layouts = {
+    "staged file, untracked child": (git: (...args: string[]) => string, repo: string) => {
+      git("commit", "-q", "--allow-empty", "-m", "base");
+      writeFileSync(join(repo, "dir"), "staged file\n");
+      git("add", "dir");
+      rmSync(join(repo, "dir"));
+      mkdirSync(join(repo, "dir"));
+      writeFileSync(join(repo, "dir", "child"), "working child\n");
+      return { working: ["dir/child"], staged: ["dir"] };
+    },
+    "staged file replacing a directory, working tree at HEAD": (
+      git: (...args: string[]) => string,
+      repo: string,
+    ) => {
+      mkdirSync(join(repo, "dir"));
+      writeFileSync(join(repo, "dir", "child"), "committed child\n");
+      git("add", ".");
+      git("commit", "-qm", "base");
+      rmSync(join(repo, "dir"), { recursive: true });
+      writeFileSync(join(repo, "dir"), "staged file\n");
+      git("add", "-A", "dir");
+      rmSync(join(repo, "dir"));
+      git("restore", "--source=HEAD", "--worktree", "--", "dir/child");
+      return { working: [], staged: ["dir", "dir/child"] };
+    },
+  };
+  for (const [name, arrange] of Object.entries(layouts)) {
+    const { repo, git, preview } = fixture(t);
+    const workspace = { id: "scratch", path: repo };
+    const { working, staged } = arrange(git, repo);
+    const index = readFileSync(join(repo, ".git/index"));
+    const cached = (path: string) =>
+      parseUnifiedDiff(git("diff", "--cached", "--no-renames", "HEAD", "--", path))[0]!.raw;
+    const scratchIndex = join(repo, ".git", "scratch-index");
+    writeFileSync(scratchIndex, index);
+    const live = (path: string) =>
+      execFileSync(
+        "sh",
+        ["-c", `git add -N -- "$1" && git diff --no-renames HEAD -- "$1"`, "-", path],
+        {
+          cwd: repo,
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            GIT_INDEX_FILE: scratchIndex,
+            GIT_CONFIG_NOSYSTEM: "1",
+          },
+        },
+      );
+    const expected = new Map<string, { source: PatchSource; raw: string }>([
+      ...working.map(
+        (path) =>
+          [
+            path,
+            {
+              source: "working-tree",
+              raw: parseUnifiedDiff(live(path))[0]!.raw,
+            },
+          ] as const,
+      ),
+      ...staged.map((path) => [path, { source: "index", raw: cached(path) }] as const),
+    ]);
+
+    const listed = await preview();
+    const listedReady = ready(listed);
+    assert.deepEqual(
+      listedReady.files.map((f) => [f.path, f.staged === true]),
+      [...working.map((p) => [p, false]), ...staged.map((p) => [p, true])],
+      name,
+    );
+    assert.deepEqual(
+      parseUnifiedDiff(listedReady.diff).map((f) => f.path),
+      [...expected.keys()],
+      `${name}: each listed path has one patch in the full response`,
+    );
+    const sheet = changesSheet({
+      observation: listed,
+      busy: false,
+      disclosure: initialDisclosure,
+    });
+    if (sheet.body.kind !== "files") throw new Error("Changes did not list files");
+    for (const [path, { source, raw }] of expected) {
+      const seeded: ReturnType<typeof changedFile> | undefined = sheet.body.files.find(
+        (f) => f.metadata.path === path,
+      )?.initial;
+      assert.ok(seeded, `${name}: ${path} arrives with the list`);
+      assert.equal(seeded.source, source, `${name}: ${path}`);
+      assert.equal(seeded.file.raw, raw, `${name}: ${path} matches native Git`);
+      assert.ok(askText(seeded).includes(raw), `${name}: ${path} Ask payload`);
+      const loaded = changedFile(workspace, await preview(path), path, listedReady.comparison);
+      assert.equal(loaded.source, source, `${name}: ${path} on expansion`);
+      assert.equal(loaded.file.raw, raw, `${name}: ${path} on expansion matches native Git`);
+      assert.ok(askText(loaded).includes(raw), `${name}: ${path} Ask payload on expansion`);
+    }
+    assert.deepEqual(readFileSync(join(repo, ".git/index")), index, `${name}: user's index`);
+  }
 });
 
 test("local work: a branch or single-file read still reports staged-only and untracked edits elsewhere, leaving the index untouched", async (t) => {
