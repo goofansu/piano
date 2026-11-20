@@ -47,7 +47,8 @@ if (fixture.checksError && fields.includes("statusCheckRollup")) {
   process.exit(1);
 }
 const baseRepo = (pr) => new URL(pr.url).pathname.split("/").slice(1, 3).join("/").toLowerCase();
-const listedIn = (pr) => baseRepo(pr) === repo.split("/").slice(-2).join("/").toLowerCase();
+const named = repo?.split("/").slice(-2).join("/").toLowerCase();
+const listedIn = (pr) => baseRepo(pr) === (fixture.renamedRepos?.[named] ?? named);
 const selected = (pr) =>
   Object.fromEntries(Object.entries(pr).filter(([key]) => fields.includes(key)));
 if (list)

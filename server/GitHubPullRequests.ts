@@ -73,7 +73,7 @@ const searchRepos = Effect.fn("GitHubPullRequests.searchRepos")(function* (
   const read = (args: string[]) =>
     gitText(cwd, args, { userConfig: true }).pipe(Effect.mapError((e) => failure(e.detail)));
   const names = (yield* read(["remote"])).split("\n").filter(Boolean);
-  const urls = yield* Effect.forEach(names, (name) => read(["remote", "get-url", name]), {
+  const urls = yield* Effect.forEach(names, (name) => read(["remote", "get-url", "--", name]), {
     concurrency: "unbounded",
   });
   const repos = urls.flatMap((url) => {
@@ -380,15 +380,16 @@ export const GitHubPullRequestsLive = Layer.effect(
             ),
           { concurrency: "unbounded" },
         );
-        return lists
-          .flat()
-          .filter((p) =>
-            isFromBranch(
-              { head: p.head, headRepo: p.pullRequest.headRepo },
-              { name: branch, repo },
-            ),
-          )
-          .map(({ pullRequest }) => ({ link: linkFor(pullRequest.url, host), pullRequest }));
+        // GitHub follows repository renames, so a remote under an upstream's old name lists the
+        // same pull requests as one under its current name.
+        const matches = new Map<string, PullRequest>();
+        for (const { head, pullRequest } of lists.flat())
+          if (isFromBranch({ head, headRepo: pullRequest.headRepo }, { name: branch, repo }))
+            matches.set(pullRequestIdentity(pullRequest.url)?.url ?? pullRequest.url, pullRequest);
+        return [...matches.values()].map((pullRequest) => ({
+          link: linkFor(pullRequest.url, host),
+          pullRequest,
+        }));
       }),
     });
   }),
