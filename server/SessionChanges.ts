@@ -44,6 +44,7 @@ export const SessionChangesLive = Layer.effect(
                 branch: worktree.created.branch,
                 base: worktree.created.baseBranch,
                 ...(worktree.created.commit ? { commit: worktree.created.commit } : {}),
+                ...(worktree.created.instance ? { instance: worktree.created.instance } : {}),
               },
             }
           : {}),

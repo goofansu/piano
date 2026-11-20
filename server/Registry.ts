@@ -45,6 +45,7 @@ const WorktreeEntry = Schema.Struct({
       branch: Schema.String,
       baseBranch: Schema.String,
       commit: Schema.optional(Schema.String),
+      instance: Schema.optional(Schema.String),
     }),
   ),
 });
@@ -313,6 +314,7 @@ export class Registry extends Context.Service<
       readonly branch: string;
       readonly baseBranch: string;
       readonly commit: string;
+      readonly instance: string;
     }) => Effect.Effect<void, RegistryError>;
     readonly observeWorktreeBranches: (
       observed: ReadonlyArray<{ readonly path: string; readonly branch: string }>,
@@ -638,12 +640,12 @@ export const RegistryLive = Layer.effect(
             ? d
             : { ...d, worktrees: [...d.worktrees, entry] },
         ),
-      recordCreatedWorktree: ({ folder, path, branch, baseBranch, commit }) => {
+      recordCreatedWorktree: ({ folder, path, branch, baseBranch, commit, instance }) => {
         const entry: WorktreeEntry = {
           folder,
           path,
           branch,
-          created: { branch, baseBranch, commit },
+          created: { branch, baseBranch, commit, instance },
         };
         return update((d) =>
           d.worktrees.some((w) => w.path === entry.path)

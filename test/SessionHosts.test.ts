@@ -19,6 +19,7 @@ import { Deferred, Effect, Fiber, Layer, Option, type Scope, Stream } from "effe
 import { TestClock } from "effect/testing";
 import { PreviewAdapter, type PreviewOwnerIdentity } from "../scripts/PreviewAdapter.ts";
 import { ownerRequest } from "../scripts/PreviewClient.ts";
+import { worktreeInstance } from "../server/GitCheckout.ts";
 import { PiCli } from "../server/PiCli.ts";
 import {
   PiRequestTimeoutMs,
@@ -1909,6 +1910,9 @@ const r=spawnSync(${JSON.stringify(real)},a,{stdio:'inherit',env:{...process.env
               branch: "slow",
               baseBranch: "main",
               commit: git(repo, "rev-parse", "main"),
+              instance: yield* Effect.promise(() =>
+                worktreeInstance(git(entry.cwd, "rev-parse", "--absolute-git-dir")),
+              ),
             },
           },
         ]);

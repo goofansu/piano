@@ -1,5 +1,5 @@
 import { Context, Effect, Fiber, Layer } from "effect";
-import { gitText } from "./GitCheckout.ts";
+import { gitText, worktreeInstance } from "./GitCheckout.ts";
 import { Registry } from "./Registry.ts";
 import { createWorktree, WorktreeError } from "./Worktrees.ts";
 
@@ -44,6 +44,15 @@ export const FolderWorktreesLive = Layer.effect(
           Effect.map((out) => out.trim()),
           Effect.mapError(unconfirmed),
         );
+        const gitDir = yield* gitText(created.path, ["rev-parse", "--absolute-git-dir"]).pipe(
+          Effect.map((out) => out.trim()),
+          Effect.mapError(unconfirmed),
+        );
+        const instance = yield* Effect.tryPromise({
+          try: () => worktreeInstance(gitDir),
+          catch: (error) =>
+            unconfirmed({ detail: error instanceof Error ? error.message : String(error) }),
+        });
         yield* registry
           .recordCreatedWorktree({
             folder,
@@ -51,6 +60,7 @@ export const FolderWorktreesLive = Layer.effect(
             branch: created.branch,
             baseBranch: created.baseBranch,
             commit,
+            instance,
           })
           .pipe(Effect.mapError(unconfirmed));
         return { folder, ...created };

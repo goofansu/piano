@@ -22,7 +22,7 @@ const schema = `
   CREATE TABLE worktrees (
     path TEXT PRIMARY KEY NOT NULL REFERENCES workspaces(path), folder_path TEXT NOT NULL,
     branch TEXT NOT NULL, position INTEGER NOT NULL, created_branch TEXT, base_branch TEXT,
-    created_commit TEXT
+    created_commit TEXT, created_instance TEXT
   ) STRICT;
   CREATE TABLE sessions (
     cwd TEXT NOT NULL REFERENCES workspaces(path), session_id TEXT NOT NULL,
@@ -106,6 +106,7 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
       "created_branch",
       "base_branch",
       "created_commit",
+      "created_instance",
     ],
     keys: 1,
     key: (w) => [w.path],
@@ -117,6 +118,7 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
       w.created?.branch ?? null,
       w.created?.baseBranch ?? null,
       w.created?.commit ?? null,
+      w.created?.instance ?? null,
     ],
     decode: (r) => ({
       path: r.path as string,
@@ -129,6 +131,7 @@ const codecs: { readonly [K in Collection]: Table<K> } = {
               branch: r.created_branch as string,
               baseBranch: r.base_branch as string,
               ...(r.created_commit === null ? {} : { commit: r.created_commit as string }),
+              ...(r.created_instance === null ? {} : { instance: r.created_instance as string }),
             },
           }),
     }),
@@ -350,7 +353,8 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
         version !== 17 &&
         version !== 18 &&
         version !== 19 &&
-        version !== 20
+        version !== 20 &&
+        version !== 21
       )
         throw new Error(
           `Unsupported registry database version ${version}; upgrade Piano rather than resetting the database.`,
@@ -459,6 +463,15 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
         db.exec(
           "UPDATE worktrees SET created_branch = NULL WHERE created_commit IS NULL; PRAGMA user_version = 20;",
         );
+      if (Number(version) < 21) {
+        if (
+          !db
+            .prepare("SELECT 1 FROM pragma_table_info('worktrees') WHERE name = 'created_instance'")
+            .get()
+        )
+          db.exec("ALTER TABLE worktrees ADD COLUMN created_instance TEXT;");
+        db.exec("PRAGMA user_version = 21;");
+      }
       db.exec("COMMIT");
     } catch (error) {
       db.exec("ROLLBACK");

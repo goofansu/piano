@@ -81,6 +81,11 @@ export const gitText = Effect.fn("GitCheckout.gitText")(function* (
   return result.stdout.toString();
 });
 
+export async function worktreeInstance(gitDir: string): Promise<string> {
+  const { ino, birthtimeNs } = await stat(gitDir, { bigint: true });
+  return `${ino}:${birthtimeNs}`;
+}
+
 const BRANCH = ["branch", "--show-current"];
 
 export interface Upstream {
