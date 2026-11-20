@@ -1,5 +1,5 @@
 # Shared by the verify-piano scripts; sourced, never run on its own.
-# Puts exe.dev's Node and Worktrunk on PATH when present, and locates the skill and the repo.
+# Puts exe.dev's Node and user-installed tools on PATH when present, and locates the skill and the repo.
 for d in "$HOME/node/bin" "$HOME/.local/bin"; do
   if [ -d "$d" ]; then
     case ":$PATH:" in *":$d:"*) ;; *) PATH="$d:$PATH" ;; esac

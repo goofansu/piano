@@ -6,7 +6,7 @@
   "engines": {
     "node": ">=24"
   },
-  "description": "Web UI to start or continue pi threads across projects and worktrunk worktrees, each thread a long-lived pi RPC process.",
+  "description": "Web UI to start or continue pi threads across projects and Git worktrees, each thread a long-lived pi RPC process.",
   "scripts": {
     "start": "node server/main.ts",
     "dev": "concurrently -k -n server,web \"npm:dev:server\" \"npm:dev:web\"",

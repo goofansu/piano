@@ -44,25 +44,6 @@ test(
     const plain = join(root, "plain");
     mkdirSync(plain);
 
-    const config = join(root, "config");
-    mkdirSync(join(config, "worktrunk"), { recursive: true });
-    writeFileSync(join(config, "worktrunk", "config.toml"), "");
-    const wtPath = execFileSync("which", ["wt"], { encoding: "utf8" }).trim();
-    const wt = join(root, "wt");
-    const isolated = {
-      HOME: join(root, "home"),
-      XDG_CONFIG_HOME: config,
-      XDG_CACHE_HOME: join(root, "cache"),
-      XDG_STATE_HOME: join(root, "state"),
-      WORKTRUNK_CONFIG_PATH: join(config, "worktrunk", "config.toml"),
-    };
-    mkdirSync(isolated.HOME);
-    writeFileSync(
-      wt,
-      `#!${process.execPath}\nimport {spawnSync} from 'node:child_process';const r=spawnSync(${JSON.stringify(wtPath)},process.argv.slice(2),{stdio:'inherit',env:{...process.env,...${JSON.stringify(isolated)}}});process.exit(r.status??1);\n`,
-      { mode: 0o755 },
-    );
-
     const port = await freePort();
     const base = `http://127.0.0.1:${port}`;
     const env = {
@@ -74,7 +55,6 @@ test(
       PI_CODING_AGENT_SESSION_DIR: join(root, "sessions"),
       PIANO_ALLOWED_ORIGINS: base,
       PIANO_PI_CLI: fileURLToPath(new URL("fake-pi.mjs", import.meta.url)),
-      PIANO_WT_CLI: wt,
       PIANO_SESSION_WS_URL: `ws://127.0.0.1:${port}/ws`,
       PIANO_SESSION_ORIGIN: base,
     };
@@ -187,33 +167,6 @@ test(
         assert.match(refused.detail ?? "", detail);
       }
       assert.deepEqual(worktrees(), before);
-      mkdirSync(join(repo, ".config"));
-      writeFileSync(join(repo, ".config", "wt.toml"), 'pre-start = "touch hook-ran"\n');
-      git(repo, "add", ".config");
-      git(
-        repo,
-        "-c",
-        "user.name=T",
-        "-c",
-        "user.email=t@example.invalid",
-        "commit",
-        "-q",
-        "-m",
-        "hook",
-      );
-      const unapproved = await start(
-        "hook",
-        "should not start",
-        repo,
-        "--worktree",
-        "task-h",
-        "--hooks",
-      );
-      assert.equal(unapproved.creation, "refused", JSON.stringify(unapproved));
-      assert.match(unapproved.detail ?? "", /approv/i);
-      assert.equal(git(repo, "branch", "--list", "task-h"), "", "no branch was created");
-      assert.deepEqual(worktrees(), before);
-
       const settled = await statusUntil(echo.handle.sessionId, "settled");
       assert.equal(settled.lastAnswer, "echo: fix the parser");
       assert.deepEqual(settled.changes, { branch: "task-a", files: 0, pullRequest: null });

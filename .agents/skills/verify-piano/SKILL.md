@@ -141,8 +141,8 @@ Proof standards:
   that proves it (`wait --text`, the header, `get url`), not only a final screenshot.
 - Verify side effects beside the screen: the fake-Pi audit (`$AUDIT`: what Pi was started with and
   received), `git -C "$REPO" worktree list`, `GET /api/folders`, files in `$REPO`.
-- Fake Pi is the only mock: it stands at Piano's real process boundary (`PIANO_PI_CLI`). Git and
-  Worktrunk are real. A fake-Pi run proves Piano's handling, not a Pi release.
+- Fake Pi is the only mock: it stands at Piano's real process boundary (`PIANO_PI_CLI`). Git is
+  real. A fake-Pi run proves Piano's handling, not a Pi release.
 - Say plainly what came from a hand-written Pi history (fake Pi makes no tool calls) or only from a
   unit test. A skipped entry point is reported as skipped, not as verified through another one.
 
@@ -191,5 +191,4 @@ browser.
 ## Keeping it current
 
 When a journey fails because the app changed (a renamed button, a moved menu item, a new route),
-update the feature file in the same change, never the assertion's intent. After changing launch
-isolation, run `.agents/skills/verify-piano/scripts/test-launch-isolation.sh`.
+update the feature file in the same change, never the assertion's intent.

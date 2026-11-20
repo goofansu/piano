@@ -2,8 +2,7 @@
 
 ## Setup
 
-Use Node.js 24, npm and Git, with [Worktrunk](https://worktrunk.dev) (`wt`) on `PATH`; the
-oldest supported version is `MINIMUM_WORKTRUNK_VERSION` in `server/Worktrees.ts`. Browser checks also need `agent-browser` on `PATH` and its Chromium:
+Use Node.js 24, npm and Git. Browser checks also need `agent-browser` on `PATH` and its Chromium:
 `agent-browser install`.
 
 ## Node.js version
@@ -26,8 +25,6 @@ Node options go before the test path; `npm test -- --test-name-pattern=…` does
 ```sh
 node --test --test-name-pattern='<pattern>' --import ./test/setup.ts test/<name>.test.ts
 ```
-
-One module test drives a real Worktrunk and needs `wt` on `PATH`.
 
 ## CI and merging
 

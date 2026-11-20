@@ -398,7 +398,7 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
         const folder = yield* folderOf(main).pipe(
           Effect.mapError((e) => new WorktreeError({ detail: e.detail })),
         );
-        const created = yield* worktrees.create(folder, worktree.branch, { hooks: worktree.hooks });
+        const created = yield* worktrees.create(folder, worktree.branch);
         return created.path;
       });
 

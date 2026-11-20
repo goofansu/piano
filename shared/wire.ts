@@ -698,10 +698,7 @@ export const StartOptions = Schema.Struct({
 });
 export type StartOptions = typeof StartOptions.Type;
 
-export const WorktreeRequest = Schema.Struct({
-  branch: Schema.String,
-  hooks: Schema.optional(Schema.Boolean),
-});
+export const WorktreeRequest = Schema.Struct({ branch: Schema.String });
 export type WorktreeRequest = typeof WorktreeRequest.Type;
 export const WORKTREE_CREATION_MS = 60_000;
 
@@ -766,12 +763,6 @@ export const ClientMessage = Schema.Union([
     trusted: Schema.Boolean,
   }),
   Schema.TaggedStruct("directory", { cwd: Schema.String, requestId: Schema.String }),
-  Schema.TaggedStruct("create_worktree", {
-    requestId: Schema.String,
-    folder: Schema.String,
-    branch: Schema.String,
-    hooks: Schema.Boolean,
-  }),
   Schema.TaggedStruct("add_worktree", {
     requestId: Schema.String,
     folder: Schema.String,
@@ -843,9 +834,6 @@ export const WorktreeResult = Schema.Union([
     folder: Schema.String,
     path: Schema.String,
     branch: Schema.NullOr(Schema.String),
-    creation: Schema.optional(
-      Schema.Struct({ baseBranch: Schema.String, hooks: Schema.Literals(["enabled", "skipped"]) }),
-    ),
   }),
   Schema.Struct({
     status: Schema.Literal("error"),

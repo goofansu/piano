@@ -71,7 +71,6 @@ async function fixture(root, setup) {
   const sessions = join(root, "sessions");
   for (const dir of ["sessions", "agent", "home", "config", "cache", "state", "data"])
     mkdirSync(join(root, dir), { recursive: true });
-  writeFileSync(join(root, "config/worktrunk.toml"), "");
   const database = join(root, "piano.db");
   seedRegistry(
     database,
@@ -129,7 +128,7 @@ export async function run(name, setup, journey, options = {}) {
   let failure;
   try {
     record.revision = captureRevision(ROOT, { production });
-    record.environment = executionEnvironment(ROOT, ["npm", "git", "wt", "agent-browser"]);
+    record.environment = executionEnvironment(ROOT, ["npm", "git", "agent-browser"]);
     saveRun(evidence, record);
     if (production && !existsSync(join(ROOT, "web/dist/index.html"))) {
       record.outcome = "blocked";
@@ -240,7 +239,7 @@ async function runJourney(name, setup, journey, options, owned, record) {
   saveRun(evidence, record);
   const local = (owned.local = await fixture(root, setup));
   owned.check();
-  const requiredTools = ["git", "agent-browser", ...(options.requiresWorktrunk ? ["wt"] : [])];
+  const requiredTools = ["git", "agent-browser"];
   const missing = Object.entries(record.environment.tools).filter(
     ([tool, version]) => requiredTools.includes(tool) && typeof version !== "string",
   );
@@ -274,7 +273,7 @@ async function runJourney(name, setup, journey, options, owned, record) {
   if (peers.length)
     writeFileSync(peerConfig, JSON.stringify({ peers: peers.map((peer) => peer.config) }));
   const inherited = Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => !/^(PIANO_|WORKTRUNK_)/.test(key)),
+    Object.entries(process.env).filter(([key]) => !key.startsWith("PIANO_")),
   );
   const environment = (machine) => ({
     ...inherited,
@@ -284,8 +283,6 @@ async function runJourney(name, setup, journey, options, owned, record) {
     XDG_CACHE_HOME: join(machine.root, "cache"),
     XDG_STATE_HOME: join(machine.root, "state"),
     XDG_DATA_HOME: join(machine.root, "data"),
-    WORKTRUNK_CONFIG_PATH: join(machine.root, "config/worktrunk.toml"),
-    WORKTRUNK_SYSTEM_CONFIG_PATH: join(machine.root, "config/worktrunk.toml"),
     GIT_CONFIG_GLOBAL: "/dev/null",
     GIT_CONFIG_NOSYSTEM: "1",
     PIANO_TEST_AUDIT: machine.audit,

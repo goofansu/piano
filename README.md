@@ -5,8 +5,6 @@ A browser UI for [Pi](https://github.com/earendil-works/pi) sessions across fold
 ## Use
 
 Requires **Node.js 24 or later** (use the latest patch release), npm and Git.
-To create worktrees from Piano, also install
-[Worktrunk](https://worktrunk.dev) (`wt` 0.80.0 or later) on `PATH`.
 Pi is included; no separate Pi installation is needed.
 
 ```bash

@@ -1,6 +1,7 @@
+import { existsSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { isAbsolute } from "node:path";
-import { Context, Data, Effect, Schema } from "effect";
+import { Data, Effect } from "effect";
 import { cutText } from "../shared/cutText.ts";
 import {
   WORKTREE_CREATION_MS,
@@ -8,34 +9,12 @@ import {
   type WorktreeFacts,
 } from "../shared/wire.ts";
 import { type BranchHome, branchHomes, gitText, observeGit } from "./GitCheckout.ts";
-import { gitEnvironment } from "./GitEnvironment.ts";
 import { branchRemote, githubRemote } from "./GitHubPullRequests.ts";
-import { run as runProcess } from "./Subprocess.ts";
 
 export class WorktreeError extends Data.TaggedError("WorktreeError")<{
   readonly detail: string;
   readonly unconfirmed?: boolean;
 }> {}
-export const WorktrunkCommand = Context.Reference<string>("piano/WorktrunkCommand", {
-  defaultValue: () => process.env.PIANO_WT_CLI ?? "wt",
-});
-export const MINIMUM_WORKTRUNK_VERSION = "0.80.0";
-
-const run = (
-  command: string,
-  args: string[],
-  timeout = 20_000,
-): Effect.Effect<string, WorktreeError> =>
-  runProcess({
-    command,
-    args,
-    timeout,
-    limit: 8 * 1024 * 1024,
-    env: { ...gitEnvironment(), LC_ALL: "C" },
-  }).pipe(
-    Effect.map((result) => result.stdout.toString()),
-    Effect.mapError((e) => new WorktreeError({ detail: `${command}: ${e.message}` })),
-  );
 const git = (cwd: string, args: string[]): Effect.Effect<string, WorktreeError> =>
   gitText(cwd, args).pipe(Effect.mapError((e) => new WorktreeError({ detail: e.detail })));
 const checkoutOf = (path: string) =>
@@ -46,22 +25,6 @@ const checkoutOf = (path: string) =>
         : Effect.succeed(observed.status === "checkout" && observed),
     ),
   );
-const wt = Effect.fn("Worktrees.wt")(function* (folder: string, args: string[], timeout?: number) {
-  const command = yield* WorktrunkCommand;
-  return yield* run(command, ["-C", folder, ...args], timeout);
-});
-const compatible = Effect.gen(function* () {
-  const command = yield* WorktrunkCommand;
-  const version = (yield* run(command, ["--version"])).trim();
-  const found = /^wt v(\d+)\.(\d+)\.(\d+)\b/.exec(version)?.slice(1).map(Number);
-  const minimum = MINIMUM_WORKTRUNK_VERSION.split(".").map(Number);
-  const order = found && (found.map((n, i) => n - minimum[i]!).find((d) => d !== 0) ?? 0);
-  if (order === undefined || order < 0)
-    return yield* new WorktreeError({
-      detail: `Unsupported Worktrunk version: ${version}. Install Worktrunk ${MINIMUM_WORKTRUNK_VERSION} or later, then refresh.`,
-    });
-});
-
 export const checkoutHint = Effect.fn("Worktrees.checkoutHint")(function* (
   path: string,
   options: { readonly subjectOnly?: boolean } = {},
@@ -78,23 +41,6 @@ export const checkoutHint = Effect.fn("Worktrees.checkoutHint")(function* (
   );
   return { root, subject: subject || undefined };
 });
-
-const Created = Schema.Struct({
-  action: Schema.Literal("created"),
-  branch: Schema.String,
-  path: Schema.String,
-  created_branch: Schema.Literal(true),
-  base_branch: Schema.String,
-});
-const json = <T, E>(schema: Schema.Codec<T, E>, text: string) =>
-  Effect.try({
-    try: () => Schema.decodeUnknownSync(Schema.fromJsonString(schema))(text),
-    catch: () =>
-      new WorktreeError({
-        detail:
-          "Invalid Worktrunk output (expected the supported structured contract). Refresh after checking Worktrunk and its configuration.",
-      }),
-  });
 
 function parseWorktrees(out: string): WorktreeFacts[] | undefined {
   const worktrees: WorktreeFacts[] = [];
@@ -240,13 +186,39 @@ export const mainCheckoutOf = Effect.fn("Worktrees.mainCheckoutOf")(function* (
   return owner?.main ?? checkout.toplevel;
 });
 
+const localBranch = (folder: string, name: string) =>
+  git(folder, ["rev-parse", "--verify", "--quiet", `refs/heads/${name}^{commit}`]).pipe(
+    Effect.as(true),
+    Effect.orElseSucceed(() => false),
+  );
+const defaultBranch = Effect.fn("Worktrees.defaultBranch")(function* (main: string) {
+  const remoteHead = yield* git(main, [
+    "symbolic-ref",
+    "--quiet",
+    "--short",
+    "refs/remotes/origin/HEAD",
+  ]).pipe(
+    Effect.map((out) => out.trim().replace(/^origin\//, "")),
+    Effect.orElseSucceed(() => ""),
+  );
+  const current = yield* git(main, ["symbolic-ref", "--quiet", "--short", "HEAD"]).pipe(
+    Effect.map((out) => out.trim()),
+    Effect.orElseSucceed(() => ""),
+  );
+  for (const name of [remoteHead, "main", "master", current])
+    if (name && (yield* localBranch(main, name))) return name;
+  return yield* new WorktreeError({
+    detail:
+      "No base branch found: origin has no default branch here, and there is no local main or master. Check out the base branch in the main checkout, then try again.",
+  });
+});
+
 export const createWorktree = Effect.fn("Worktrees.createWorktree")(function* (
   folder: string,
   branch: string,
-  options: { hooks?: boolean } = {},
 ) {
-  yield* compatible;
-  if (!(yield* checkoutOf(folder)))
+  const main = yield* mainCheckoutOf(folder);
+  if (!main)
     return yield* new WorktreeError({
       detail: "This folder is non-Git. Create a Git repository before creating a worktree.",
     });
@@ -264,40 +236,22 @@ export const createWorktree = Effect.fn("Worktrees.createWorktree")(function* (
     return yield* new WorktreeError({
       detail: `Branch ${branch} already exists. Enter a new branch name.`,
     });
-  return yield* Effect.gen(function* () {
-    const result = yield* json(
-      Created,
-      yield* wt(
-        folder,
-        [
-          "switch",
-          "--create",
-          branch,
-          "--format=json",
-          "--no-cd",
-          ...(options.hooks ? [] : ["--no-hooks"]),
-        ],
-        WORKTREE_CREATION_MS,
-      ),
-    );
-    if (!isAbsolute(result.path) || result.branch !== branch || !result.base_branch)
-      return yield* new WorktreeError({
-        detail:
-          "Worktrunk returned an unexpected creation identity. Inspect discovery before retrying.",
-      });
-    return {
-      path: result.path,
-      branch: result.branch,
-      baseBranch: result.base_branch,
-      hooks: options.hooks ? ("enabled" as const) : ("skipped" as const),
-    };
+  const baseBranch = yield* defaultBranch(main);
+  const path = `${main}.${branch.replace(/[\\/]/g, "-")}`;
+  if (existsSync(path))
+    return yield* new WorktreeError({
+      detail: `${path} already exists. Remove it or choose another branch name.`,
+    });
+  yield* gitText(main, ["worktree", "add", "--quiet", "-b", branch, path, baseBranch], {
+    timeout: WORKTREE_CREATION_MS,
   }).pipe(
     Effect.mapError(
       (e) =>
         new WorktreeError({
           unconfirmed: true,
-          detail: `${e.detail}\nCreation was not confirmed; a checkout may remain after a hook or transport failure. Refresh discovery before retrying. For unapproved hooks, review and approve them with wt config approvals in a terminal, or explicitly leave hooks off.`,
+          detail: `${e.detail}\nCreation was not confirmed; a checkout or branch may remain. Check git worktree list before retrying.`,
         }),
     ),
   );
+  return { path, branch, baseBranch };
 });

@@ -31,7 +31,7 @@ import {
 } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionHosts, SessionHostsLive, SessionNotCreated } from "../server/SessionHosts.ts";
-import { WorktrunkCommand } from "../server/Worktrees.ts";
+import { GitCommand } from "../server/Subprocess.ts";
 import { closureNeedsAttention } from "../shared/sessionStatus.ts";
 import type { SessionEvent } from "../shared/wire.ts";
 
@@ -1827,7 +1827,7 @@ test("INV-01: a closed folder reached by another spelling reopens under its regi
 });
 
 test(
-  "INV-02/06: a requester that leaves while Worktrunk runs cannot interrupt creation into a half-made checkout",
+  "INV-02/06: a requester that leaves while Git creates the worktree cannot interrupt creation into a half-made checkout",
   {
     timeout: 30_000,
   },
@@ -1852,26 +1852,14 @@ test(
       "-m",
       "baseline",
     );
-    const config = join(root, "wt-config", "worktrunk");
-    mkdirSync(config, { recursive: true });
-    writeFileSync(join(config, "config.toml"), "");
-    const isolated = {
-      HOME: join(root, "wt-home"),
-      XDG_CONFIG_HOME: join(root, "wt-config"),
-      XDG_CACHE_HOME: join(root, "wt-cache"),
-      XDG_STATE_HOME: join(root, "wt-state"),
-      WORKTRUNK_CONFIG_PATH: join(config, "config.toml"),
-    };
-    mkdirSync(isolated.HOME);
-    const real = spawnSync("which", ["wt"], { encoding: "utf8" }).stdout.trim();
-    const started = join(root, "wt-started");
-    const wt = join(root, "slow-wt");
+    const started = join(root, "slow-git-started");
+    const slowGit = join(root, "slow-git");
     writeFileSync(
-      wt,
+      slowGit,
       `#!${process.execPath}\nimport {spawnSync} from 'node:child_process';import {writeFileSync} from 'node:fs';
 const a=process.argv.slice(2);
-if(a.includes('switch')){writeFileSync(${JSON.stringify(started)},'');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,500);}
-const r=spawnSync(${JSON.stringify(real)},a,{stdio:'inherit',env:{...process.env,...${JSON.stringify(isolated)}}});process.exit(r.status??1);\n`,
+if(a.includes('worktree')&&a.includes('add')){writeFileSync(${JSON.stringify(started)},'');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,500);}
+const r=spawnSync('git',a,{stdio:'inherit'});process.exit(r.status??1);\n`,
       { mode: 0o755 },
     );
     const until = <A>(read: Effect.Effect<A | undefined>, what: string) =>
@@ -1892,7 +1880,7 @@ const r=spawnSync(${JSON.stringify(real)},a,{stdio:'inherit',env:{...process.env
           .pipe(Effect.forkChild);
         yield* until(
           Effect.sync(() => (existsSync(started) ? true : undefined)),
-          "Worktrunk running",
+          "git worktree add running",
         );
         yield* Fiber.interrupt(requester);
         const entry = yield* until(
@@ -1923,7 +1911,7 @@ const r=spawnSync(${JSON.stringify(real)},a,{stdio:'inherit',env:{...process.env
           "the session's child running",
         );
         yield* hosts.release(entry.cwd, entry.sessionId);
-      }).pipe(Effect.provideService(WorktrunkCommand, wt)),
+      }).pipe(Effect.provideService(GitCommand, slowGit)),
       { fakePi: "slow-worktree" },
     );
   },

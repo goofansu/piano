@@ -252,7 +252,7 @@ test("JSON stdin preserves literal prompt data and dispatch targeting, with an e
     outFile,
     wsUrl: p.url,
     origin,
-    worktree: { branch: "literal-data", hooks: false },
+    worktree: { branch: "literal-data" },
     parentSession: "parent-session",
     inheritProject: false,
   });
@@ -268,7 +268,7 @@ test("JSON stdin preserves literal prompt data and dispatch targeting, with an e
   assert.equal(creates.length, 1);
   assert.equal(creates[0].text, prompt);
   assert.equal(creates[0].cwd, f.cwd);
-  assert.deepEqual(creates[0].worktree, { branch: "literal-data", hooks: false });
+  assert.deepEqual(creates[0].worktree, { branch: "literal-data" });
   assert.deepEqual(creates[0].options, { dispatchedFrom: "parent-session" });
   assert.equal(creates[0].inheritProject, false);
   assert.equal(existsSync(marker), false, "prompt content was never executed by a shell");
@@ -321,7 +321,7 @@ test("JSON stdin validates the whole request before reserving output or connecti
     { ...valid, origin: `${origin}/` },
     { ...valid, worktree: { branch: "" } },
     { ...valid, worktree: { branch: "-bad" } },
-    { ...valid, worktree: { branch: "new", hooks: "false" } },
+    { ...valid, worktree: { branch: "new", hooks: false } },
     { ...valid, worktree: { branch: "new", typo: true } },
     { ...valid, parentSession: "" },
     { ...valid, inheritProject: "false" },

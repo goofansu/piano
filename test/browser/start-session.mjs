@@ -182,7 +182,6 @@ await run(
     await page.capture("4-structured-dispatch");
   },
   {
-    requiresWorktrunk: true,
     // Headless Chromium can expose no pointer; force a mouse for this journey.
     browserArgs:
       "--blink-settings=primaryPointerType=4,availablePointerTypes=4,primaryHoverType=2,availableHoverTypes=2",

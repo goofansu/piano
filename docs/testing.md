@@ -74,7 +74,7 @@ rule, coverage target or requirement that every PR add tests applies.
 | Domain rule, translation or state transition | Focused unit/module test if the behavior is consequential and not already covered. |
 | Browser–server request or reply (`ClientMessage`/`ServerMessage` in `shared/wire.ts`, endpoints in `shared/http.ts`) | Module test through the handler: `test/ClientDispatch.test.ts` for socket messages, `test/Api.test.ts` for HTTP; `test/PeerScope.test.ts` when a remote may send it. |
 | RPC lifecycle, reconnect, dialog race | Deterministic fake-Pi contract test through PiSessions; browser observation when UI behavior changes. |
-| Git/Worktrunk lifecycle semantics | Integration check in a throwaway repository against the supported version; a mocked CLI alone cannot establish compatibility. |
+| Git lifecycle semantics | Integration check in a throwaway repository against real Git; a mocked CLI alone cannot establish compatibility. |
 | User interaction, rendering or preview identity | Observe the affected browser journey, including relevant error/empty states; retain a regression test when recurrence warrants it. |
 | Pi/runtime dependency upgrade | Existing suites/typechecks plus the compatibility and scratch-browser checks in INV-12. |
 | Refactor with unchanged behavior | Existing relevant tests and typecheck; add a test only for a meaningful uncovered risk. |
