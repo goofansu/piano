@@ -1,4 +1,4 @@
-import { copyFile, lstat, mkdtemp, rm } from "node:fs/promises";
+import { copyFile, lstat, mkdtemp, rm, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer, Semaphore } from "effect";
@@ -98,7 +98,12 @@ async function preview(
     ).trimEnd();
     const temporaryIndex = join(temp, "index");
     try {
+      // Git trusts cached stat data for entries older than the index file, so a fresh copy's mtime
+      // would hide a same-size edit made in the tick of the last index write. Stat before copying
+      // and round down, so the copy is never newer than what it holds.
+      const { atimeMs, mtimeMs } = await stat(index);
       await copyFile(index, temporaryIndex);
+      await utimes(temporaryIndex, new Date(Math.floor(atimeMs)), new Date(Math.floor(mtimeMs)));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
