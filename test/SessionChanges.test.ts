@@ -129,7 +129,14 @@ async function fixture(t: TestContext) {
         });
       }),
     );
-  return { repo, worktree, git, runtime, registry, read, setScope, resolve, serve, link };
+  const discover = () =>
+    runtime.runPromise(
+      Effect.gen(function* () {
+        const { session } = yield* resolve(worktree, "one");
+        return yield* (yield* SessionPullRequests).change(session, { action: "discover" });
+      }),
+    );
+  return { repo, worktree, git, runtime, registry, read, setScope, resolve, serve, link, discover };
 }
 
 function ready(value: Observation) {
@@ -342,6 +349,40 @@ test("INV-01/07: a fork PR uses only its base repository's locally held remote r
     ["a"],
   );
 });
+
+for (const host of ["github.com", "github.int.exe.xyz"] as const)
+  for (const [layout, fork, extra] of [
+    ["a fork tracked at a remote named -fork", "-fork", []],
+    ["a fork at origin beside a remote named -archive", "origin", ["-archive"]],
+  ] as const)
+    test(`${host}: with ${layout}, discovery and both Changes scopes reach the upstream base`, async (t) => {
+      const f = await fixture(t);
+      f.git(f.repo, "remote", "remove", "origin");
+      f.git(f.repo, "remote", "add", "--", fork, `https://${host}/me/fork.git`);
+      f.git(f.repo, "remote", "add", "parent", `https://${host}/up/repo.git`);
+      for (const name of extra)
+        f.git(f.repo, "remote", "add", "--", name, "https://git.example/archive/repo.git");
+      f.git(f.repo, "update-ref", `refs/remotes/${fork}/feature`, "feature");
+      f.git(f.worktree, "branch", `--set-upstream-to=${fork}/feature`);
+      f.git(f.repo, "update-ref", "refs/remotes/parent/release", "main");
+      f.serve("me/fork", "up/repo");
+      const found = await f.discover();
+      assert.equal(found.error, undefined);
+      assert.equal(found.pullRequest?.number, 7, JSON.stringify(found));
+      assert.deepEqual([found.link?.headRepo, found.link?.baseRepo], ["me/fork", "up/repo"]);
+      for (const scope of ["branch", "uncommitted"] as const) {
+        const changes = ready(await f.read(f.worktree, "one", { scope }));
+        assert.equal(changes.comparison.scope, scope);
+        if (scope === "branch") {
+          assert.equal(changes.comparison.target?.ref, "refs/remotes/parent/release");
+          assert.equal(changes.comparison.target?.from, "pull-request");
+          assert.deepEqual(
+            changes.files.map((file) => file.path),
+            ["a"],
+          );
+        }
+      }
+    });
 
 test("legacy links do not retarget until a successful refresh proves repository identities", async (t) => {
   const f = await fixture(t);
