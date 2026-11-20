@@ -88,6 +88,39 @@ test("baseline retains exact checks and diagnostics; failed and blocked are not 
   }
 });
 
+test("baseline reports lines changed under test/ since origin/main, uncommitted and new files included", () => {
+  const f = fixture();
+  try {
+    f.configure("node -e \"console.log('linted')\"");
+    f.run("no-base");
+    assert.match(f.record("no-base").testLines.unavailable, /origin\/main/);
+    mkdirSync(join(f.root, "test"));
+    writeFileSync(join(f.root, "test/kept.test.ts"), "one\ntwo\nthree\n");
+    writeFileSync(join(f.root, "source.ts"), "outside test\n");
+    for (const args of [
+      ["add", "."],
+      ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "main"],
+      ["update-ref", "refs/remotes/origin/main", "HEAD"],
+    ])
+      execFileSync("git", args, { cwd: f.root });
+    writeFileSync(join(f.root, "test/kept.test.ts"), "one\nthree\nfour\nfive\n");
+    writeFileSync(join(f.root, "test/committed.test.ts"), "a\nb\n");
+    writeFileSync(join(f.root, "source.ts"), "outside test\nmore\n");
+    for (const args of [
+      ["add", "test/committed.test.ts"],
+      ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "branch"],
+    ])
+      execFileSync("git", args, { cwd: f.root });
+    writeFileSync(join(f.root, "test/new.test.ts"), "x\ny\nz\n");
+    const result = f.run("changed");
+    const { added, removed, files } = f.record("changed").testLines;
+    assert.deepEqual({ added, removed, files }, { added: 7, removed: 1, files: 3 });
+    assert.match(result.stdout, /Test lines since origin\/main: \+7 −1/);
+  } finally {
+    rmSync(f.temp, { recursive: true, force: true });
+  }
+});
+
 test("cancelled baseline retains diagnostics and never runs remaining gates", async () => {
   const f = fixture();
   let child;

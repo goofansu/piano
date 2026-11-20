@@ -6,12 +6,14 @@ import {
   executionEnvironment,
   revisionOutcome,
   saveRun,
+  testLinesSince,
 } from "./verification-evidence.mjs";
 
 const cwd = resolve(import.meta.dirname, "..");
 if (process.argv.includes("--help")) {
   console.log(`Usage: npm run verify -- [evidence-directory]
 Runs npm run typecheck, npm run lint, npm test. No browser or model calls.
+Reports lines changed under test/ since origin/main, uncommitted and new files included.
 Fresh checkout: npm ci; install wt (see docs/development.md).
 Focused: node --test --import ./test/setup.ts test/<name>.test.ts
 Browser: npm run test:browser (or node test/browser/<journey>.mjs <evidence-directory>)
@@ -140,6 +142,7 @@ Evidence defaults to .scratch/verify/<timestamp>-<pid>; a pass covers only this 
     if (record.outcome === "passed" && record.contentObservation !== "endpoints-match")
       record.outcome = record.contentObservation;
     if (signal) record.outcome = "cancelled";
+    record.testLines = testLinesSince(cwd);
     record.finishedAt = new Date().toISOString();
     record.exitCode =
       record.outcome === "passed" ? 0 : signal === "SIGINT" ? 130 : signal === "SIGTERM" ? 143 : 1;
@@ -151,6 +154,12 @@ Evidence defaults to .scratch/verify/<timestamp>-<pid>; a pass covers only this 
     console.log(`${check.outcome.toUpperCase()}: ${check.command.join(" ")} — ${check.log}`);
   console.log(
     `${record.outcome.toUpperCase()}: baseline${record.reason ? ` — ${record.reason}` : ""}. Evidence: ${evidence}/run.json`,
+  );
+  const lines = record.testLines;
+  console.log(
+    lines.unavailable
+      ? `Test lines since ${lines.base}: unavailable — ${lines.unavailable}`
+      : `Test lines since ${lines.base}: +${lines.added} −${lines.removed} in ${lines.files} file(s) under test/.`,
   );
   console.log(
     "Pass means command exit 0; skipped subtests are not coverage (see logs). Browser journeys and acceptance claims are not evaluated here.",

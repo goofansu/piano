@@ -14,9 +14,21 @@ The goal is justified confidence in changed behavior, not more tests or a covera
 
 ## When to add a test
 
-Add or extend a durable test when it protects a meaningful behavior, boundary or regression that
-existing checks miss, at the smallest reliable boundary. Prefer extending a relevant case over
-duplicating it. Repeated manual verification of important behavior is a signal to automate it.
+A reproduction is PR evidence; a committed test is a contract kept for good. Take a meaningful
+behavior, boundary or regression that existing checks miss down this ladder and stop at the first
+rung that holds:
+
+1. **Close the class.** When the defect is one instance of a rule that a type, lint rule or shared
+   boundary can enforce, enforce it there and test the rule once.
+2. **Extend a case.** When an existing test states the contract, give it the failing input. Inputs
+   that differ only in shape or size, such as path names, counts or encodings, share one table.
+3. **Add a test** for a contract no existing test title states, at the smallest reliable boundary.
+
+`npm run verify` prints the lines changed under `test/` since `origin/main`. A behavior-preserving
+refactor adds no more test lines than it removes; when it adds more, name the uncovered risk each
+added test protects.
+
+Repeated manual verification of important behavior is a signal to automate it.
 
 Do not add tests solely for documentation, copy-only edits, trivial delegation, generated code,
 type-level guarantees or a reversible low-impact change already covered. No one-test-per-function
@@ -174,8 +186,9 @@ observation of the executed assertions; the PR still names the claim and any che
 
 In the PR, summarize what changed, what evidence supports it, the tested revision/environment and
 any material gaps. For new or substantially changed features, name the starting document from the
-[feature verification map](#feature-verification-map). Say whether a regression test was added or
-why existing coverage was sufficient.
+[feature verification map](#feature-verification-map). Give the test lines `npm run verify`
+reported and the [ladder](#when-to-add-a-test) rung each added test stands on, or say why existing
+coverage was sufficient.
 
 Evidence belongs to the PR, not the repository. Do not commit per-issue verification reports,
 captured output, screenshots or recordings, including under `docs/`. When a change settles a
