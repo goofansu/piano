@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type TestContext, test } from "node:test";
 import { Effect } from "effect";
+import { GitCommand } from "../server/Subprocess.ts";
 import {
   type PreviewOptions,
   WorkspaceChanges,
@@ -609,8 +610,8 @@ test("live changes: each loaded patch carries its own source, so its badge and A
   assert.ok(seeded, "the staged patch arrives with the list");
   assert.equal(seeded.source, "index");
   assert.match(seeded.file.raw, /\+index only/);
-  assert.equal(patchNote(seeded), "Staged; the working copy matches HEAD");
-  assert.match(askText(seeded), /^About `notes\.txt` \(staged diff of the index against HEAD/);
+  assert.equal(patchNote(seeded), "Staged changes");
+  assert.match(askText(seeded), /^About `notes\.txt` \(staged diff from the index,/);
   assert.doesNotMatch(askText(seeded), /working-tree/);
 
   writeFileSync(join(repo, "big.txt"), lines("edit"));
@@ -633,6 +634,72 @@ test("live changes: each loaded patch carries its own source, so its badge and A
   assert.doesNotMatch(loaded.file.raw, /index only/);
   assert.equal(patchNote(loaded), undefined);
   assert.match(askText(loaded), /^About `notes\.txt` \(live working-tree diff/);
+  assert.deepEqual(readFileSync(join(repo, ".git/index")), index);
+});
+
+test("live changes: a save between Git's file list and its patch never puts the working edit under the staged label", async (t) => {
+  const { repo, git } = fixture(t);
+  const workspace = { id: "scratch", folder: repo, path: repo };
+  writeFileSync(join(repo, "notes.txt"), "base\n");
+  writeFileSync(join(repo, "other.txt"), "base\n");
+  git("add", ".");
+  git("commit", "-qm", "base");
+  writeFileSync(join(repo, "notes.txt"), "staged version\n");
+  git("add", "notes.txt");
+  writeFileSync(join(repo, "notes.txt"), "base\n");
+  writeFileSync(join(repo, "other.txt"), "unstaged\n");
+  const index = readFileSync(join(repo, ".git/index"));
+  const saving = join(repo, ".git", "save-on-patch");
+  const savingGit = join(repo, ".git", "saving-git");
+  writeFileSync(
+    savingGit,
+    `#!${process.execPath}\nimport {spawnSync} from 'node:child_process';import {existsSync,rmSync,writeFileSync} from 'node:fs';
+const a=process.argv.slice(2);
+if(a.includes('--patch')&&existsSync(${JSON.stringify(saving)})){rmSync(${JSON.stringify(saving)});writeFileSync(${JSON.stringify(join(repo, "notes.txt"))},'working edit\\n');}
+const r=spawnSync('git',a,{stdio:'inherit'});process.exit(r.status??1);\n`,
+    { mode: 0o755 },
+  );
+  const read = (path?: string) => {
+    writeFileSync(join(repo, "notes.txt"), "base\n");
+    writeFileSync(saving, "");
+    return Effect.runPromise(
+      Effect.gen(function* () {
+        return yield* (yield* WorkspaceChanges).preview(workspace, { scope: "uncommitted", path });
+      }).pipe(Effect.provide(WorkspaceChangesLive), Effect.provideService(GitCommand, savingGit)),
+    );
+  };
+  const agrees = (loaded: ReturnType<typeof changedFile>) => {
+    assert.equal(loaded.source, "index");
+    assert.match(loaded.file.raw, /\+staged version/);
+    assert.doesNotMatch(loaded.file.raw, /working edit/);
+    assert.equal(patchNote(loaded), "Staged changes");
+    assert.match(askText(loaded), /\+staged version/);
+    assert.doesNotMatch(askText(loaded), /working edit|working-tree/);
+  };
+
+  const listed = await read();
+  assert.ok(!existsSync(saving), "the save landed during the initial read");
+  assert.equal(git("diff", "--cached", "--", "notes.txt").includes("+staged version"), true);
+  const listedReady = ready(listed);
+  assert.deepEqual(
+    parseUnifiedDiff(listedReady.diff).map((f) => f.path),
+    ["other.txt", "notes.txt"],
+    "each listed path has one patch, from its declared source",
+  );
+  const sheet = changesSheet({ observation: listed, busy: false, disclosure: initialDisclosure });
+  if (sheet.body.kind !== "files") throw new Error("Changes did not list files");
+  const seeded = sheet.body.files.find((f) => f.metadata.path === "notes.txt")?.initial;
+  assert.ok(seeded, "the staged patch arrives with the list");
+  agrees(seeded);
+
+  const deferred = await read("notes.txt");
+  assert.ok(!existsSync(saving), "the save landed during the per-file read");
+  const deferredReady = ready(deferred);
+  assert.deepEqual(
+    parseUnifiedDiff(deferredReady.diff).map((f) => f.path),
+    ["notes.txt"],
+  );
+  agrees(changedFile(workspace, deferred, "notes.txt", listedReady.comparison));
   assert.deepEqual(readFileSync(join(repo, ".git/index")), index);
 });
 

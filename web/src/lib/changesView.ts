@@ -125,7 +125,7 @@ export type PatchSource = "working-tree" | "index";
 export const patchSource = (stats: Pick<ChangeFile, "staged">): PatchSource =>
   stats.staged ? "index" : "working-tree";
 export const patchNote = ({ source }: Pick<LoadedFile, "source">) =>
-  source === "index" ? "Staged; the working copy matches HEAD" : undefined;
+  source === "index" ? "Staged changes" : undefined;
 
 export function changedFile(
   expected: Pick<Workspace, "id" | "path">,
@@ -322,7 +322,7 @@ const clock = (iso: string) =>
 
 const SOURCE_NAMES: Record<PatchSource, string> = {
   "working-tree": "live working-tree diff",
-  index: "staged diff of the index against HEAD; the working file matches HEAD;",
+  index: "staged diff from the index,",
 };
 
 export const askText = ({ file, observedAt, truncated, source }: LoadedFile) =>
