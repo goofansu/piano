@@ -123,7 +123,7 @@ type UserRead = (args: readonly string[]) => Promise<string>;
 
 const pushUrlOf = async (read: UserRead, remote: string) => {
   try {
-    return (await read(["remote", "get-url", "--push", remote])).trim() || null;
+    return (await read(["remote", "get-url", "--push", "--", remote])).trim() || null;
   } catch (error) {
     if (error instanceof Error && error.message.includes("No such remote")) return null;
     throw error;
@@ -414,7 +414,7 @@ async function openCheckout(path: string, options: CheckoutOptions): Promise<Che
           : path,
       head: () => optional(["rev-parse", "--verify", "--quiet", "HEAD"]),
       branch: async () => decode((await run(BRANCH)).stdout).trim() || null,
-      remoteUrl: (name) => url(["remote", "get-url", name]),
+      remoteUrl: (name) => url(["remote", "get-url", "--", name]),
       home: async (branch) =>
         (
           await homesOf(
