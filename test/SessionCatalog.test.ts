@@ -236,6 +236,55 @@ test("a starting session has no live activity, and a stale host snapshot shows n
   assert.deepEqual(activity(fresh), activity(current));
 });
 
+test("startup seen only in a stale host snapshot neither hides the saved title nor blocks opening", () => {
+  const memoized = createSessionCatalog();
+  const row = (s: AppState, id: string) => {
+    const entry = catalogEntry(s, id)!;
+    assert.deepEqual(
+      memoized(s).find((e) => e.sessionId === id),
+      entry,
+      "the memoized catalog gives the same answer",
+    );
+    const { label, activity, disabled } = entry;
+    return { label, activity, disabled, destination: sessionDestination(s, id) };
+  };
+  const startingHosts = hosts([
+    { cwd: "/work/repo.feature", sessionId: "open-member", working: false, starting: true },
+    { cwd: "/closed/app", sessionId: "lost", working: false, starting: true },
+  ]);
+  const starting = reduce(online, startingHosts);
+  const blocked = { label: "Starting", activity: "off", disabled: true, destination: "unlisted" };
+  assert.deepEqual(row(starting, "open-member"), blocked, "current startup blocks opening");
+
+  const saved = {
+    label: "Open member",
+    activity: "off",
+    disabled: false,
+    destination: { sessionId: "open-member", cwd: "/work/repo.feature", label: "Open member" },
+  };
+  const lost = reduce(starting, { type: "connected", connected: false, lost: true });
+  assert.deepEqual(row(lost, "open-member"), saved, "cached startup is not current while offline");
+  const reopened = reduce(lost, { type: "connected", connected: true });
+  assert.deepEqual(row(reopened, "open-member"), saved, "reconnecting alone observes no host");
+  assert.deepEqual(
+    row(reopened, "lost"),
+    { label: "Lost history", activity: "off", disabled: true, destination: "unlisted" },
+    "a session without history stays unopenable",
+  );
+
+  assert.deepEqual(row(reduce(reopened, startingHosts), "open-member"), blocked);
+  assert.deepEqual(
+    row(
+      reduce(
+        reopened,
+        hosts([{ cwd: "/work/repo.feature", sessionId: "open-member", working: false }]),
+      ),
+      "open-member",
+    ),
+    { ...saved, activity: "idle" },
+  );
+});
+
 test("archived rows share catalog formatting, include closed folders and sort newest updated first", () => {
   const archived: AppState = {
     ...state,

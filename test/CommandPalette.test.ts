@@ -791,6 +791,7 @@ test("a cached palette follows Pi starting and finishing for its sessions", () =
   const starting: AppState = {
     ...home,
     hosts: [{ cwd: "/repo", sessionId: "s8", working: false, starting: true }],
+    hostsCurrent: true,
   };
   const started: AppState = {
     ...starting,
