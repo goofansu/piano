@@ -7,10 +7,8 @@ Preconditions: a seeded launch. No credentials or receiver are needed.
 - `providers`
   - Action: `ab open "$WEB_URL/settings/providers"; ab wait '[aria-label="Sign in to Radius"]'`.
   - Result: Radius shows Account, Radius MCP and Web search; installation buttons are disabled
-    on the unsigned-in scratch instance. Capture `01-providers`; its header has no Machine
-    picker. Inspect the same header boundary on Webhooks at `ab set viewport 390 844`, then
-    widen to 1280×800. Without configured peers this proves the local header only; the remote
-    journey separately checks suppression when a peer picker would otherwise be available.
+    on the unsigned-in scratch instance. Capture `01-providers`. Inspect the same header on
+    Webhooks at `ab set viewport 390 844`, then widen to 1280×800.
     Do not install or sign in to
     turn this read-only setup check into an authenticated claim.
 - `api-key-setup` (no credentials)

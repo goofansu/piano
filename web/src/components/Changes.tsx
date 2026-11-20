@@ -34,7 +34,6 @@ import {
   toggleFile,
 } from "@/lib/changesView";
 import { type DiffFile, lineCount } from "@/lib/diff";
-import { useMachineId } from "@/lib/useMachine";
 import { useObservation } from "@/lib/useObservation";
 import type { SessionView } from "@/store";
 
@@ -46,7 +45,6 @@ function useSessionChanges(
   active: boolean,
   refreshKey: string,
 ) {
-  const machineId = useMachineId();
   const key =
     workspace && sessionId ? JSON.stringify([workspace.id, workspace.path, sessionId]) : null;
   const { value, failure, loading, mutating, refresh, mutate } = useObservation<ShownChanges>(
@@ -54,7 +52,7 @@ function useSessionChanges(
     async (signal) =>
       checkWorkspaceResponse(
         workspace!,
-        await sessionChanges(workspace!.id, sessionId!, undefined, { signal, machineId }),
+        await sessionChanges(workspace!.id, sessionId!, undefined, { signal }),
       ),
     { enabled: active, focus: true, trigger: refreshKey, debounce: 600 },
   );
@@ -62,7 +60,7 @@ function useSessionChanges(
     mutate(async (signal) =>
       checkWorkspaceResponse(
         workspace!,
-        await setSessionChangesScope(workspace!.id, sessionId!, scope, { signal, machineId }),
+        await setSessionChangesScope(workspace!.id, sessionId!, scope, { signal }),
       ),
     ).catch((error: unknown) => {
       toast.error(error instanceof Error ? error.message : "Could not save the comparison.");
@@ -76,7 +74,7 @@ function useSessionChanges(
           workspace!.id,
           sessionId!,
           { path, scope: comparison.scope },
-          { signal, machineId },
+          { signal },
         ),
         path,
         comparison,

@@ -24,10 +24,7 @@ const makeDisplayFrames = () => {
   };
 };
 
-export const handleSocket = Effect.fn("WsClient.handleSocket")(function* (
-  socket: Socket.Socket,
-  options: { readonly peer?: boolean } = {},
-) {
+export const handleSocket = Effect.fn("WsClient.handleSocket")(function* (socket: Socket.Socket) {
   const reader = yield* socket.reader;
   const writer = yield* socket.writer;
 
@@ -36,21 +33,15 @@ export const handleSocket = Effect.fn("WsClient.handleSocket")(function* (
     (m: ServerMessage, id) => encodeServerMessage(m, id),
   );
   const frames = makeDisplayFrames();
-  const client = yield* makeClientDispatch(
-    {
-      send: (message) =>
-        Effect.suspend(() => {
-          const shown = frames(message);
-          return shown ? delivery.offer(shown) : Effect.void;
-        }),
-      overflow: (error) =>
-        delivery.close(
-          error.detail,
-          error.oversized ? CloseCode.tooLarge : CloseCode.tryAgainLater,
-        ),
-    },
-    options,
-  );
+  const client = yield* makeClientDispatch({
+    send: (message) =>
+      Effect.suspend(() => {
+        const shown = frames(message);
+        return shown ? delivery.offer(shown) : Effect.void;
+      }),
+    overflow: (error) =>
+      delivery.close(error.detail, error.oversized ? CloseCode.tooLarge : CloseCode.tryAgainLater),
+  });
 
   const decoder = new TextDecoder();
   yield* Effect.gen(function* () {

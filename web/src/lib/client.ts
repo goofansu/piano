@@ -2,11 +2,10 @@ import type { ClientCommand, ServerMessage } from "@shared/wire";
 import { refusedAttempt } from "../../../shared/creationVerdict.ts";
 import { closureNeedsAttention } from "../../../shared/sessionStatus.ts";
 import { type Action, type AppState, reduce, sessionDelivery } from "../store.ts";
+import { browserMemory } from "./browserMemory.ts";
 import { browserTimers, type RequestTimers } from "./correlatedRequest.ts";
-import { machineMemory } from "./machineMemory.ts";
-import type { MachineOffers } from "./machineOffers.ts";
 import { projectStartDirectory } from "./projectHome.ts";
-import { focusedDirectory, sessionReady } from "./sessionContext.ts";
+import { checkoutMissingAt, focusedDirectory, sessionReady } from "./sessionContext.ts";
 import { startPage } from "./startPage.ts";
 import { createTrustDecisions, trustNotice } from "./trustDecision.ts";
 import type { Connection, ConnectionHandlers, DisconnectReason, SendDisposition } from "./ws.ts";
@@ -36,7 +35,7 @@ const disconnectNotices: Record<DisconnectReason, [string, NotifyLevel]> = {
 };
 
 const NOT_SENT = "Message not sent. Your draft is kept; retry when the session reconnects.";
-const TOO_LARGE = "Message too large to send to this machine. Your draft is kept.";
+const TOO_LARGE = "Message too large to send. Your draft is kept.";
 
 const firstMessage = (m: Extract<ClientCommand, { _tag: "create_session" }>) =>
   m.text?.trim() || m.attachments?.length
@@ -49,8 +48,8 @@ const firstMessage = (m: Extract<ClientCommand, { _tag: "create_session" }>) =>
       }
     : undefined;
 
-export function storedLastDirectory(machineId: string): LastDirectory {
-  const memory = machineMemory(machineId, "lastDir");
+export function storedLastDirectory(): LastDirectory {
+  const memory = browserMemory("lastDir");
   return { read: memory.read, write: memory.write };
 }
 
@@ -60,16 +59,10 @@ export interface ClientOptions {
   notify: Notify;
   newSelectionId?: () => string;
   lastDirectory?: LastDirectory;
-  startsSessionIn: MachineOffers["startsSessionIn"];
   timers?: RequestTimers;
 }
 
 export type ClientUpdate = "live" | "immediate";
-
-export interface CapturedSend {
-  send: (command: ClientCommand, preview?: ReturnType<typeof firstMessage>) => SendDisposition;
-  signal: AbortSignal;
-}
 
 export interface Client {
   getState: () => AppState;
@@ -77,7 +70,6 @@ export interface Client {
   start: () => () => void;
   send: (command: ClientCommand) => SendDisposition;
   decideTrust: (path: string, trusted: boolean) => void;
-  captureSend: () => CapturedSend;
   select: (cwd: string, sessionId: string | null) => void;
   dispatch: (action: LocalAction) => void;
   listen: (listener: (message: ServerMessage) => void) => () => void;
@@ -89,7 +81,6 @@ export function createClient({
   notify,
   newSelectionId = () => crypto.randomUUID(),
   lastDirectory = { read: () => null, write: () => {} },
-  startsSessionIn,
   timers = browserTimers,
 }: ClientOptions): Client {
   let unverifiedDefault: string | undefined;
@@ -98,7 +89,7 @@ export function createClient({
     const unverified = !!page?.cwd && page.cwd === unverifiedDefault;
     if (s.registryLoaded) unverifiedDefault = undefined;
     if (!page) return s;
-    const startable = (cwd: string) => !s.registryLoaded || startsSessionIn(s, cwd);
+    const startable = (cwd: string) => !s.registryLoaded || !checkoutMissingAt(s, cwd);
     if (page.cwd && !(unverified && !startable(page.cwd))) return s;
     const cwd =
       page.kind === "project"
@@ -115,11 +106,6 @@ export function createClient({
 
   let state = withNewPageDirectory(initial);
   let connection: Connection | null = null;
-  let epoch = new AbortController();
-  const advanceEpoch = () => {
-    epoch.abort();
-    epoch = new AbortController();
-  };
   let asked: string | null = null;
   let observing: string | null = null;
   const listeners = new Set<(update: ClientUpdate) => void>();
@@ -147,14 +133,6 @@ export function createClient({
   const apply = (action: Action) => {
     const next = withNewPageDirectory(reduce(state, action));
     if (next === state) return;
-    if (
-      next.selectionId !== state.selectionId ||
-      next.view.kind !== state.view.kind ||
-      focusedDirectory(next)?.cwd !== focusedDirectory(state)?.cwd ||
-      startPage(next.view)?.projectId !== startPage(state.view)?.projectId ||
-      next.connected !== state.connected
-    )
-      advanceEpoch();
     state = next;
     askAboutFocus();
     for (const listener of listeners) listener(action.type === "server" ? "live" : "immediate");
@@ -162,10 +140,10 @@ export function createClient({
 
   const notSent = () => (state.connected ? TOO_LARGE : NOT_SENT);
 
-  const send = (m: ClientCommand, preview?: ReturnType<typeof firstMessage>): SendDisposition => {
+  const send = (m: ClientCommand): SendDisposition => {
     if (m._tag === "select" || m._tag === "create_session") {
       const selectionId = newSelectionId();
-      const shown = m._tag === "create_session" ? (preview ?? firstMessage(m)) : undefined;
+      const shown = m._tag === "create_session" ? firstMessage(m) : undefined;
       const selecting = () =>
         apply({
           type: "selecting",
@@ -212,7 +190,7 @@ export function createClient({
   };
 
   const onStatus = (connected: boolean, reason?: DisconnectReason) => {
-    apply({ type: "connected", connected, lost: !connected });
+    apply({ type: "connected", connected });
     if (connected) {
       const pending = state.pendingCreate;
       if (pending && pending.outcome === "uncertain" && !state.session?.sessionId)
@@ -294,24 +272,13 @@ export function createClient({
     start: () => {
       const opened = connect({ onMessage, onStatus });
       connection = opened;
-      advanceEpoch();
       return () => {
         opened.close();
-        if (connection !== opened) return;
-        connection = null;
-        advanceEpoch();
+        if (connection === opened) connection = null;
       };
     },
     send,
     decideTrust,
-    captureSend: () => {
-      const { signal } = epoch;
-      return {
-        signal,
-        send: (command, preview) =>
-          !signal.aborted && state.connected ? send(command, preview) : "not-sent",
-      };
-    },
     select: (cwd, sessionId) => {
       const current = state.session ?? state.selecting;
       if (

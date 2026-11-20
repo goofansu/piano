@@ -113,8 +113,6 @@ export interface Draft {
   text: string;
   images: ImageDraft;
   quotes: readonly string[];
-  preparing?: DraftMessage;
-  prepareError?: string;
 }
 
 export interface DraftMessage {
@@ -159,10 +157,6 @@ export interface Drafts {
     deliver: (message: DraftMessage, inputId: string) => SendDisposition,
   ) => boolean;
   follow: (source: DraftSource, notify: DraftNotify) => () => void;
-  prepareSubmit: (
-    key: DraftKey | null,
-    deliver: (message: DraftMessage, inputId: string) => Promise<SendDisposition>,
-  ) => Promise<boolean>;
 }
 
 const restore = (submitted: Draft, now: Draft): Draft => {
@@ -171,8 +165,6 @@ const restore = (submitted: Draft, now: Draft): Draft => {
     text: now.text.trim() ? appendParagraph(submitted.text, now.text) : submitted.text,
     images: { ...now.images, items, error: overLimit(items) || now.images.error },
     quotes: [...submitted.quotes, ...now.quotes.filter((q) => !submitted.quotes.includes(q))],
-    preparing: now.preparing,
-    prepareError: now.prepareError,
   };
 };
 
@@ -193,14 +185,7 @@ export function createDrafts(): Drafts {
     const before = get(key);
     const next = change(before);
     if (next === before) return;
-    if (
-      next.text ||
-      next.quotes.length ||
-      next.images !== NO_IMAGES ||
-      next.preparing ||
-      next.prepareError
-    )
-      drafts.set(key, next);
+    if (next.text || next.quotes.length || next.images !== NO_IMAGES) drafts.set(key, next);
     else drafts.delete(key);
     for (const notify of listeners) notify();
   };
@@ -228,7 +213,7 @@ export function createDrafts(): Drafts {
       : undefined;
   };
   const isSendable = (draft: Draft) =>
-    !draft.preparing && sendable({ text: draftMessage(draft).text, images: draft.images });
+    sendable({ text: draftMessage(draft).text, images: draft.images });
   const paragraph = (key: DraftKey | null, text: string) =>
     update(key, (d) => ({ ...d, text: appendParagraph(d.text, text) }));
 
@@ -303,26 +288,6 @@ export function createDrafts(): Drafts {
       unconfirmed.set(inputId, { key, draft });
       update(key, () => EMPTY_DRAFT);
       return true;
-    },
-    async prepareSubmit(key, deliver) {
-      const draft = get(key);
-      if (!key || !isSendable(draft)) return false;
-      const inputId = `input-${prefix}-${++inputs}`;
-      const message = draftMessage(draft);
-      update(key, () => ({ ...EMPTY_DRAFT, preparing: message }));
-      let disposition: SendDisposition = "not-sent";
-      let error = "";
-      try {
-        disposition = await deliver(message, inputId);
-      } catch (e) {
-        error = e instanceof Error ? e.message : "Could not upload images. Try again.";
-      }
-      if (disposition !== "not-sent") unconfirmed.set(inputId, { key, draft });
-      update(key, (now) => {
-        const remaining = { ...now, preparing: undefined, prepareError: error };
-        return disposition === "not-sent" ? restore(draft, remaining) : remaining;
-      });
-      return disposition !== "not-sent";
     },
     follow: (source, notify) =>
       source.listen((m) => {

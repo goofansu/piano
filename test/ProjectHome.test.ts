@@ -2,14 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { FolderView, WorktreeView } from "../shared/wire.ts";
 import { globalCommands } from "../web/src/lib/globalCommands.ts";
-import { LOCAL } from "../web/src/lib/machine.ts";
-import { machineOffers } from "../web/src/lib/machineOffers.ts";
 import { projectCommands, projectMenu } from "../web/src/lib/projectCommands.ts";
 import { projectHome, stableOrder } from "../web/src/lib/projectHome.ts";
 import { type Action, type AppState, initialState, reduce } from "../web/src/store.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
-
-const local = machineOffers(LOCAL);
 
 const worktree = (path: string, branch: string, root: boolean): WorktreeView => ({
   workspace: { id: `ws:${path}`, folder: "/repo", path },
@@ -147,12 +143,10 @@ test("rows keep their place while the page is open: new ones append, gone ones d
 
 test("on a project's home, Mod+K offers its menu's Project settings and Delete project", () => {
   const ctx = {
-    machine: LOCAL,
-    machines: [LOCAL],
     settings: null,
     view: { groupBy: "date", sortBy: "recent", folderAndBranch: false },
   } as const;
-  const row = (s: AppState, id: string) => globalCommands(s, ctx, local).find((c) => c.id === id);
+  const row = (s: AppState, id: string) => globalCommands(s, ctx).find((c) => c.id === id);
   const home: AppState = { ...state, connected: true, view: { kind: "project", projectId: "p1" } };
   assert.equal(row(home, "project-settings")?.label, "Project settings");
   assert.deepEqual(row(home, "project-settings")?.intent, {
@@ -180,8 +174,6 @@ test("on a project's home, Mod+K offers its menu's Project settings and Delete p
 
 test("on a project's home, Mod+K offers exactly its header menu's rows, named as they are", () => {
   const ctx = {
-    machine: LOCAL,
-    machines: [LOCAL],
     settings: null,
     view: { groupBy: "date", sortBy: "recent", folderAndBranch: false },
   } as const;
@@ -193,13 +185,13 @@ test("on a project's home, Mod+K offers exactly its header menu's rows, named as
   });
   for (const connected of [true, false]) {
     const home: AppState = { ...state, connected, view: { kind: "project", projectId: "p1" } };
-    const elsewhere = globalCommands({ ...home, view: { kind: "session" } }, ctx, local).map(
+    const elsewhere = globalCommands({ ...home, view: { kind: "session" } }, ctx).map(
       (c) => c.label,
     );
-    const added = globalCommands(home, ctx, local).filter((c) => !elsewhere.includes(c.label));
+    const added = globalCommands(home, ctx).filter((c) => !elsewhere.includes(c.label));
     const project = home.projects.find((p) => p.id === "p1");
     assert.ok(project);
-    const menu = projectMenu(projectCommands(home, project, local));
+    const menu = projectMenu(projectCommands(home, project));
     assert.deepEqual(
       added.map(shown),
       [...menu.manage, ...menu.destructive].map(shown),

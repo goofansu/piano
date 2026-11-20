@@ -12,8 +12,6 @@ import {
   radioChoice,
   trustCommand,
 } from "../web/src/lib/globalCommands.ts";
-import { LOCAL } from "../web/src/lib/machine.ts";
-import { machineOffers } from "../web/src/lib/machineOffers.ts";
 import {
   type EditorPage,
   openPageEditor,
@@ -22,8 +20,6 @@ import {
 } from "../web/src/lib/pageEditor.ts";
 import { SETTINGS_SECTIONS, type SettingsSection } from "../web/src/lib/routes.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
-
-const local = machineOffers(LOCAL);
 
 const session = (cwd: string, state: Partial<SessionState> = {}): SessionView => ({
   cwd,
@@ -42,25 +38,23 @@ const onNewPage: AppState = {
   trusts: { "/repo": protectedDir, "/plain": { required: false, trusted: false } },
 };
 const ctx: GlobalCommandContext = {
-  machine: LOCAL,
-  machines: [LOCAL],
   settings: null,
   view: { groupBy: "date", sortBy: "recent", folderAndBranch: false },
 };
 const labels = (state: AppState, c = ctx) =>
-  globalCommands(state, c, local).map((command) => command.label);
+  globalCommands(state, c).map((command) => command.label);
 
 test("trust is offered only where Pi requires it, and waits for a connection", () => {
   assert.equal(
-    trustCommand(onNewPage, "/plain", local),
+    trustCommand(onNewPage, "/plain"),
     undefined,
     "no protected resources, nothing to trust",
   );
-  assert.equal(trustCommand(onNewPage, "/unknown", local), undefined, "trust not yet known");
-  assert.equal(trustCommand(onNewPage, "", local), undefined, "no directory chosen");
-  assert.equal(trustCommand(onNewPage, "/repo", local)?.enabled, true);
+  assert.equal(trustCommand(onNewPage, "/unknown"), undefined, "trust not yet known");
+  assert.equal(trustCommand(onNewPage, ""), undefined, "no directory chosen");
+  assert.equal(trustCommand(onNewPage, "/repo")?.enabled, true);
   assert.equal(
-    trustCommand({ ...onNewPage, connected: false }, "/repo", local)?.enabled,
+    trustCommand({ ...onNewPage, connected: false }, "/repo")?.enabled,
     false,
     "offline the change would be dropped",
   );
@@ -77,18 +71,18 @@ test("trust is never offered for a selected session's missing checkout", () => {
   const present: AppState = { ...onNewPage, view: { kind: "session" }, session: session("/repo") };
   assert.ok(labels(present).includes("Trust folder"), "the selected session's directory");
   const missing: AppState = { ...present, session: session("/repo", { checkoutMissing: true }) };
-  assert.equal(trustCommand(missing, "/repo", local), undefined);
+  assert.equal(trustCommand(missing, "/repo"), undefined);
   assert.ok(!labels(missing).some((l) => /trust/i.test(l)));
 });
 
 test("running trust flips the directory's trusted state", () => {
-  assert.deepEqual(trustCommand(onNewPage, "/repo", local)?.intent, {
+  assert.deepEqual(trustCommand(onNewPage, "/repo")?.intent, {
     kind: "trust",
     path: "/repo",
     trusted: true,
   });
   const trusted = { ...onNewPage, trusts: { "/repo": { required: true, trusted: true } } };
-  const untrust = trustCommand(trusted, "/repo", local);
+  const untrust = trustCommand(trusted, "/repo");
   assert.equal(untrust?.label, "Untrust folder");
   assert.equal(untrust?.pressed, true);
   assert.equal(untrust?.checked, undefined, "the palette marks no row as current");
@@ -103,7 +97,7 @@ test("the palette offers Settings, or Home while Settings is open", () => {
 });
 
 test("the palette offers Projects wherever the user is, named as the sidebar row is", () => {
-  const projects = globalCommands(onNewPage, ctx, local).find((c) => c.id === "projects");
+  const projects = globalCommands(onNewPage, ctx).find((c) => c.id === "projects");
   assert.equal(projects?.label, "Projects");
   assert.equal(projects?.group, "navigate");
   assert.deepEqual(projects?.intent, { kind: "projects" });
@@ -113,7 +107,7 @@ test("the palette offers Projects wherever the user is, named as the sidebar row
 
 test("exactly the current grouping and sort are checked", () => {
   const checked = (group: string, c: GlobalCommandContext) =>
-    globalCommands(onNewPage, c, local)
+    globalCommands(onNewPage, c)
       .filter((command) => command.group === group && command.checked)
       .map((command) => command.label);
   assert.deepEqual(checked("group-by", ctx), ["Group by date"]);
@@ -126,68 +120,8 @@ test("exactly the current grouping and sort are checked", () => {
   assert.deepEqual(checked("sort-by", other), ["Sort by name"]);
 });
 
-test("Switch to rows name each configured machine once there is more than one, the current one checked", () => {
-  const switches = (c: GlobalCommandContext, offers = local) =>
-    globalCommands(onNewPage, c, offers)
-      .filter((command) => command.intent.kind === "machine")
-      .map(({ id, label, icon, group, enabled, checked, intent }) => ({
-        id,
-        label,
-        icon,
-        group,
-        enabled,
-        checked,
-        intent,
-      }));
-  assert.deepEqual(switches(ctx), [], "a lone machine has nothing to switch to");
-  const eng = { id: "eng-1", name: "eng-1" };
-  const machines = [LOCAL, eng];
-  const row = (machine: typeof eng, current: boolean) => ({
-    id: `machine-${machine.id}`,
-    label: `Switch to ${machine.name}`,
-    icon: "machine",
-    group: "navigate",
-    enabled: !current,
-    checked: current,
-    intent: { kind: "machine", id: machine.id },
-  });
-  assert.deepEqual(switches({ ...ctx, machines }), [row(LOCAL, true), row(eng, false)]);
-  assert.deepEqual(
-    switches({ ...ctx, machine: eng, machines }, machineOffers(eng)),
-    [row(LOCAL, false), row(eng, true)],
-    "a remote offers switching back",
-  );
-});
-
-test("on a remote machine the View options, New session and Projects stay, and nothing else that manages the remote does", () => {
-  const remote = globalCommands(onNewPage, ctx, machineOffers({ id: "eng-1", name: "eng-1" }));
-  const groups = new Set<string>(remote.map((command) => command.group));
-  for (const group of ["group-by", "sort-by", "row-details", "appearance"])
-    assert.ok(groups.has(group), `${group} offered`);
-  const changes = remote
-    .filter((command) => command.intent.kind === "view")
-    .map((command) => command.label);
-  assert.deepEqual(changes, [
-    "Group by date",
-    "Group by folder",
-    "Group by project",
-    "Sort by activity",
-    "Sort by name",
-    "Show folder and branch",
-  ]);
-  assert.ok(
-    remote.some((command) => command.label === "New session"),
-    "New session offered",
-  );
-  assert.ok(
-    remote.some((command) => command.label === "Projects"),
-    "Projects offered",
-  );
-  assert.ok(!remote.some((command) => command.label === "Settings"), "Settings not offered");
-});
-
 test("one list of appearances serves the palette and the View menu", () => {
-  const appearances = globalCommands(onNewPage, { ...ctx, theme: "dark" }, local).filter(
+  const appearances = globalCommands(onNewPage, { ...ctx, theme: "dark" }).filter(
     (c) => c.group === "appearance",
   );
   assert.deepEqual(
@@ -214,7 +148,7 @@ test("each View-menu radio reports exactly one current choice, by its short labe
     view: { groupBy: "folder", sortBy: "name", folderAndBranch: false },
     theme: "light",
   } as const;
-  const commands = globalCommands(onNewPage, view, local);
+  const commands = globalCommands(onNewPage, view);
   const report = (group: "group-by" | "sort-by" | "appearance") => {
     const { value, currentLabel, items } = radioChoice(commands, group);
     assert.equal(items.filter((c) => c.checked).length, 1, group);
@@ -231,7 +165,7 @@ test("each View-menu radio reports exactly one current choice, by its short labe
 
 test("Settings commands offer pages, not nested sections such as Radius", () => {
   for (const settings of [null, ...SETTINGS_SECTIONS.map((s) => s.id)]) {
-    const commands = globalCommands(onNewPage, { ...ctx, settings }, local).filter((command) =>
+    const commands = globalCommands(onNewPage, { ...ctx, settings }).filter((command) =>
       command.id.startsWith("settings-"),
     );
     assert.deepEqual(
@@ -245,7 +179,7 @@ test("Settings commands offer pages, not nested sections such as Radius", () => 
 test("on the Projects index the palette offers New project, which opens the New project dialog", () => {
   const onProjects: AppState = { ...initialState, connected: true, view: { kind: "projects" } };
   const newProject = (state: AppState) =>
-    globalCommands(state, ctx, local).find((c) => c.label === "New project");
+    globalCommands(state, ctx).find((c) => c.label === "New project");
   const create = newProject(onProjects);
   assert.ok(create);
   const calls: unknown[][] = [];
@@ -301,7 +235,7 @@ test("each Settings page's header creation is a palette command that opens that 
     },
   });
   for (const { id: section } of SETTINGS_SECTIONS) {
-    const offered = globalCommands(onNewPage, { ...ctx, settings: section }, local).filter((c) =>
+    const offered = globalCommands(onNewPage, { ...ctx, settings: section }).filter((c) =>
       creations.has(c.label),
     );
     const expected = creation[section];
@@ -317,7 +251,7 @@ test("each Settings page's header creation is a palette command that opens that 
     const [command] = offered;
     assert.deepEqual(
       command,
-      pageCommands(onNewPage, section, local)[0],
+      pageCommands(onNewPage, section)[0],
       "the palette row is the header's",
     );
     const editor = PAGE_EDITORS[expected.page].editor;
@@ -339,7 +273,7 @@ test("each Settings page's header creation is a palette command that opens that 
   );
   const onProjects: AppState = { ...initialState, connected: true, view: { kind: "projects" } };
   assert.equal(
-    globalCommands(onProjects, { ...ctx, settings: "webhooks" }, local).some(
+    globalCommands(onProjects, { ...ctx, settings: "webhooks" }).some(
       (c) => c.label === "New project",
     ),
     false,
@@ -350,7 +284,7 @@ test("each Settings page's header creation is a palette command that opens that 
 test("every page's creation entry shares one icon, and New session keeps its own", () => {
   const onProjects: AppState = { ...initialState, connected: true, view: { kind: "projects" } };
   const icon = (label: string, state: AppState, settings: GlobalCommandContext["settings"]) =>
-    globalCommands(state, { ...ctx, settings }, local).find((c) => c.label === label)?.icon;
+    globalCommands(state, { ...ctx, settings }).find((c) => c.label === label)?.icon;
   const creation = [
     icon("New project", onProjects, null),
     icon("New webhook", onNewPage, "webhooks"),
@@ -365,7 +299,7 @@ test("every page's creation entry shares one icon, and New session keeps its own
 
 test("Show folder and branch is one command for the palette and the View menu, naming what it does", () => {
   const command = (folderAndBranch: boolean) =>
-    globalCommands(onNewPage, { ...ctx, view: { ...ctx.view, folderAndBranch } }, local).find(
+    globalCommands(onNewPage, { ...ctx, view: { ...ctx.view, folderAndBranch } }).find(
       (c) => c.menuLabel === "Folder and branch",
     );
   const off = command(false);
@@ -380,9 +314,7 @@ test("Show folder and branch is one command for the palette and the View menu, n
 
 test("the sidebar toggle is named as the button it stands for: Hide sidebar while shown, Show sidebar while hidden", () => {
   const toggle = (sidebarHidden: boolean) =>
-    globalCommands(onNewPage, { ...ctx, sidebarHidden }, local).find(
-      (c) => c.id === "toggle-sidebar",
-    );
+    globalCommands(onNewPage, { ...ctx, sidebarHidden }).find((c) => c.id === "toggle-sidebar");
   assert.deepEqual([toggle(false)?.label, toggle(false)?.icon], ["Hide sidebar", "hide-sidebar"]);
   assert.deepEqual([toggle(true)?.label, toggle(true)?.icon], ["Show sidebar", "show-sidebar"]);
   assert.deepEqual(toggle(true)?.intent, { kind: "toggle-sidebar" });
@@ -411,23 +343,18 @@ test("a page reporting its creation unavailable disables its row until the page 
     PAGE_EDITORS.mcp.editor.useAvailable(available);
     return null;
   }
-  const row = () => pageCommands(onNewPage, "mcp", local)[0]!;
+  const row = () => pageCommands(onNewPage, "mcp")[0]!;
   const root = createRoot(dom.window.document.getElementById("root")!);
   assert.equal(row().enabled, true);
   await act(() => root.render(createElement(McpPage, { available: false })));
   assert.equal(row().enabled, false, "the header's row, and so the palette's, is disabled");
   assert.equal(
-    globalCommands(onNewPage, { ...ctx, settings: "mcp" }, local).find(
-      (c) => c.label === "Add MCP server",
-    )?.enabled,
+    globalCommands(onNewPage, { ...ctx, settings: "mcp" }).find((c) => c.label === "Add MCP server")
+      ?.enabled,
     false,
     "the palette lists the same disabled row",
   );
-  assert.equal(
-    pageCommands(onNewPage, "skills", local)[0]!.enabled,
-    true,
-    "other pages are unaffected",
-  );
+  assert.equal(pageCommands(onNewPage, "skills")[0]!.enabled, true, "other pages are unaffected");
   await act(() => root.render(createElement(McpPage, { available: true })));
   assert.equal(row().enabled, true, "a usable config enables it again");
   await act(() => root.render(createElement(McpPage, { available: false })));

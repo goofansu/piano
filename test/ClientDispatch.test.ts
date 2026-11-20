@@ -12,7 +12,6 @@ import { GitHubPullRequestsLive } from "../server/GitHubPullRequests.ts";
 import { inboundLimits } from "../server/InboundCapacity.ts";
 import { PianoCoreLive } from "../server/PianoServices.ts";
 import { PiCli } from "../server/PiCli.ts";
-import type { PreparedImages } from "../server/PreparedImages.ts";
 import { Registry, RegistryDatabasePath } from "../server/Registry.ts";
 import { SessionHosts } from "../server/SessionHosts.ts";
 import { type SessionStatus, SessionStatusLive } from "../server/SessionStatus.ts";
@@ -29,8 +28,6 @@ import type {
 } from "../shared/wire.ts";
 import { createClient } from "../web/src/lib/client.ts";
 import { messageCommand } from "../web/src/lib/composerControl.ts";
-import { LOCAL } from "../web/src/lib/machine.ts";
-import { machineOffers } from "../web/src/lib/machineOffers.ts";
 import { createDrafts, EMPTY_DRAFT, sessionDraftKey } from "../web/src/lib/messageDraft.ts";
 import { createModelCatalogs } from "../web/src/lib/modelCatalogs.ts";
 import { createPreviewObservation, seenPreview } from "../web/src/lib/previewObservation.ts";
@@ -78,7 +75,6 @@ const run = <A, E>(
     A,
     E,
     | WorkspaceCommands
-    | PreparedImages
     | SidebarView
     | DirectoryFacts
     | SessionHosts
@@ -214,7 +210,6 @@ test("INV-02/05: cold cross-directory focus cannot fill admission while saved se
       const replies: ServerMessage[] = [];
       let handlers: ConnectionHandlers | undefined;
       const browser = createClient({
-        startsSessionIn: machineOffers(LOCAL).startsSessionIn,
         initial: initialState,
         connect: (h) => {
           handlers = h;
@@ -581,60 +576,6 @@ for (const control of ["answer", "abort"] as const) {
   });
 }
 
-test("INV-05: a peer selection refused at capacity leaves the peer acting on the session it selected", async () => {
-  await run(
-    Effect.gen(function* () {
-      const registry = yield* Registry;
-      yield* registry.addFolder(cwd);
-      const session = yield* registered("peer-current");
-      yield* registry.addSession(cwd, "peer-other");
-      const queue = yield* Queue.unbounded<ServerMessage>();
-      const { receive } = yield* makeClientDispatch(
-        { send: (m) => Queue.offer(queue, m).pipe(Effect.asVoid), overflow: (e) => Effect.die(e) },
-        { peer: true },
-      );
-      yield* yield* receive({
-        _tag: "select",
-        selectionId: "current",
-        cwd,
-        sessionId: session.spec.sessionId,
-      });
-      const held = [];
-      for (let n = 0; n < inboundLimits.client.messages; n++)
-        held.push(yield* receive({ _tag: "registry" }));
-      yield* yield* receive({
-        _tag: "select",
-        selectionId: "excess",
-        cwd,
-        sessionId: "peer-other",
-      });
-      for (;;) {
-        const m = yield* Queue.take(queue);
-        if (m._tag !== "selection_rejected") continue;
-        assert.equal(m.selectionId, "excess");
-        assert.match(m.message, /capacity.*not started/);
-        break;
-      }
-      for (const work of held) yield* work;
-      yield* yield* receive({
-        _tag: "act",
-        selectionId: "current",
-        action: { _tag: "set_thinking_level", level: "high" },
-      });
-      for (;;) {
-        const m = yield* Queue.take(queue);
-        if (m._tag === "error") assert.fail(m.message);
-        if (
-          m._tag === "session" &&
-          m.event._tag === "state" &&
-          m.event.state.thinkingLevel === "high"
-        )
-          break;
-      }
-    }),
-  );
-});
-
 test("INV-05: browser client recovers from dispatch saturation with a fresh explicit selection", async () => {
   await run(
     Effect.gen(function* () {
@@ -642,7 +583,6 @@ test("INV-05: browser client recovers from dispatch saturation with a fresh expl
       const requests: ClientMessage[] = [];
       let handlers: ConnectionHandlers | undefined;
       const browser = createClient({
-        startsSessionIn: machineOffers(LOCAL).startsSessionIn,
         initial: initialState,
         connect: (h) => {
           handlers = h;
@@ -826,7 +766,6 @@ for (const outcome of ["refused", "probe failure", "dispatch failure"] as const)
           saveDefaults: async () => {},
         });
         const browser = createClient({
-          startsSessionIn: machineOffers(LOCAL).startsSessionIn,
           initial: { ...initialState, catalogs: { ...catalogs.seed() } },
           connect: (h) => {
             handlers = h;
@@ -888,7 +827,6 @@ test("INV-05: an admitted selection failure settles the browser and permits expl
       const requests: ClientMessage[] = [];
       let handlers: ConnectionHandlers | undefined;
       const browser = createClient({
-        startsSessionIn: machineOffers(LOCAL).startsSessionIn,
         initial: initialState,
         connect: (h) => {
           handlers = h;
@@ -1553,7 +1491,6 @@ const archiveRace = (options: { startsClosingHost?: boolean } = {}) =>
     const requests: ClientMessage[] = [];
     let handlers: ConnectionHandlers | undefined;
     const browser = createClient({
-      startsSessionIn: machineOffers(LOCAL).startsSessionIn,
       initial: initialState,
       connect: (h) => {
         handlers = h;
@@ -1719,7 +1656,6 @@ test("INV-03: a first message its new session refuses before Pi sees it reads no
       const requests: ClientMessage[] = [];
       let handlers: ConnectionHandlers | undefined;
       const browser = createClient({
-        startsSessionIn: machineOffers(LOCAL).startsSessionIn,
         initial: initialState,
         connect: (h) => {
           handlers = h;

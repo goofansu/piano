@@ -15,7 +15,6 @@ import {
   IMAGE_PREVIEW_ROUTE,
   imagePreviewHash,
 } from "../shared/imagePreviews.ts";
-import { machineList } from "../shared/machine.ts";
 import type { Workspace } from "../shared/wire.ts";
 import { Directories } from "./Directories.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
@@ -23,15 +22,11 @@ import { projectDisplay } from "./DisplayProjection.ts";
 import { getImagePreview } from "./ImagePreviews.ts";
 import { McpSetup } from "./McpSetup.ts";
 import { AllowedOrigins, hostAllowed } from "./OriginPolicy.ts";
-import { ConfiguredPeers } from "./PeerConfig.ts";
-import { addPeerRoutes } from "./PeerGateway.ts";
-import { addPeerImageRoutes } from "./PeerImages.ts";
-import { registered } from "./PeerScope.ts";
 import { PiSettings } from "./PiSettings.ts";
 import { Prompts } from "./Prompts.ts";
 import { ProviderLogin } from "./ProviderLogin.ts";
 import { RadiusSetup } from "./RadiusSetup.ts";
-import { Registry, RegistryLookupError, type SessionEntry } from "./Registry.ts";
+import { Registry, type SessionEntry } from "./Registry.ts";
 import { SessionChanges } from "./SessionChanges.ts";
 import { SessionHosts } from "./SessionHosts.ts";
 import { SessionPullRequests } from "./SessionPullRequests.ts";
@@ -232,7 +227,6 @@ export const AppRouter = HttpRouter.use((router) =>
         const path = new URL(request.url, "http://localhost").pathname;
         if (
           path === "/ws" ||
-          path === "/ws/peer" ||
           request.headers.upgrade !== undefined ||
           !["GET", "HEAD", "OPTIONS"].includes(request.method)
         ) {
@@ -254,24 +248,8 @@ export const AppRouter = HttpRouter.use((router) =>
         return HttpServerResponse.empty();
       }).pipe(Effect.scoped),
     );
-    yield* router.add(
-      "GET",
-      "/ws/peer",
-      Effect.gen(function* () {
-        const request = yield* HttpServerRequest.HttpServerRequest;
-        const socket = yield* request.upgrade;
-        yield* handleSocket(socket, { peer: true });
-        return HttpServerResponse.empty();
-      }).pipe(Effect.scoped),
-    );
-
-    yield* addPeerRoutes(router);
-    yield* addPeerImageRoutes(router);
 
     const serve = route(router);
-
-    const machines = machineList(yield* ConfiguredPeers);
-    yield* serve(Endpoints.machines, () => Effect.succeed({ machines }));
 
     yield* serve(Endpoints.listDirectory, ({ body }) => Directories.list(body.path ?? "~"));
 
@@ -344,17 +322,6 @@ export const AppRouter = HttpRouter.use((router) =>
       Effect.flatMap(DirectoryFacts, (facts) => facts.commands(body.cwd)).pipe(
         Effect.map((commands) => ({ commands })),
       ),
-    );
-    yield* serve(Endpoints.peerSlashCommands, ({ body }) =>
-      Effect.gen(function* () {
-        if (!registered(yield* Effect.flatMap(Registry, (registry) => registry.get), body.cwd))
-          return yield* new RegistryLookupError({
-            subject: "workspace",
-            detail: "Not a registered folder on this machine.",
-          });
-        const commands = yield* Effect.flatMap(DirectoryFacts, (facts) => facts.commands(body.cwd));
-        return { commands };
-      }),
     );
     yield* serve(Endpoints.sessionCommands, ({ session }) =>
       Effect.flatMap(SessionHosts, (hosts) => hosts.commands(session.cwd, session.sessionId)).pipe(

@@ -1,6 +1,6 @@
+import { MAX_MESSAGE_BYTES } from "../../shared/attachments.ts";
 import { SESSION_ORIGIN, SESSION_WS_URL } from "../../shared/dispatch.ts";
 import { isLoopbackHostname } from "../../shared/loopback.ts";
-import { LOCAL, machineFrameBytes } from "../../shared/machine.ts";
 import type { SocketEnvironment } from "../../web/src/lib/ws.ts";
 
 export interface DispatchConfiguration {
@@ -38,7 +38,7 @@ export function dispatchConfiguration(
 export function nodeSocketEnvironment(config: DispatchConfiguration): SocketEnvironment {
   return {
     url: () => config.url,
-    frameBytes: machineFrameBytes(LOCAL.id),
+    frameBytes: MAX_MESSAGE_BYTES,
     nonce: () => crypto.randomUUID(),
     open: (url, events) => {
       // Node's WebSocket accepts Undici headers, but its DOM typings omit that overload.

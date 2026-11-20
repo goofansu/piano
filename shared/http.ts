@@ -1,12 +1,11 @@
 import { Schema } from "effect";
-import { FileDownload, FilePreview, LARGEST_PREVIEW_BYTES } from "./files.ts";
+import { FileDownload, FilePreview } from "./files.ts";
 import { LIBRARY_KINDS, type LibraryKind, type LibraryKindWords } from "./library.ts";
-import { Machines } from "./machine.ts";
 import { McpSetupChange, McpSetupRequest, McpSetupState } from "./mcp.ts";
 import { Prompt, PromptCreate, PromptProposal, PromptUpdate } from "./prompts.ts";
 import { ApiKeyProvider, ProviderApiKeyChange } from "./providerApiKeys.ts";
 import { RadiusSetupRequest, RadiusSetupState } from "./radius.ts";
-import { SessionShareResult, SHARE_UNCONFIRMED, SESSION_SHARE_TIMEOUT_MS } from "./share.ts";
+import { SessionShareResult, SHARE_UNCONFIRMED } from "./share.ts";
 import { UserSkill, UserSkillCreate, UserSkillProposal, UserSkillUpdate } from "./skills.ts";
 import {
   MAX_VOICE_REQUEST_BYTES,
@@ -18,18 +17,14 @@ import {
 } from "./voiceInput.ts";
 import { Webhook, WebhookDelivery, WebhookSave } from "./webhooks.ts";
 import {
-  CHANGES_ANSWER_BYTES,
-  CHECKOUT_TIMEOUT_MS,
   ChangesScope,
   DirListing,
   FolderView,
   OAuthProvider,
   ProviderLoginState,
-  PULL_REQUEST_TIMEOUT_MS,
   SessionDefaults,
   SessionPullRequest,
   SessionPullRequestAction,
-  SLASH_COMMANDS_TIMEOUT_MS,
   SlashCommand,
   WorkspaceChanges,
   WorkspaceWrittenFiles,
@@ -214,15 +209,6 @@ const libraryEndpoints = <E extends Json, C extends Json, U extends Json, P exte
 };
 
 export const Endpoints = {
-  machines: endpoint({
-    method: "GET",
-    path: "/api/machines",
-    response: Schema.Struct({ machines: Machines }),
-    noStore: true,
-    redact: false,
-    fallback: "Could not load machines.",
-  }),
-
   listDirectory: endpoint({
     method: "POST",
     path: "/api/ls",
@@ -347,15 +333,6 @@ export const Endpoints = {
     invalid: "Directory is required.",
     response: Schema.Struct({ commands: Schema.Array(SlashCommand) }),
     refused: 502,
-    fallback: "Could not load commands.",
-  }),
-  peerSlashCommands: endpoint({
-    method: "POST",
-    path: "/api/peer/commands",
-    body: Schema.Struct({ cwd: Schema.NonEmptyString }),
-    invalid: "Directory is required.",
-    response: Schema.Struct({ commands: Schema.Array(SlashCommand) }),
-    refused: 409,
     fallback: "Could not load commands.",
   }),
   sessionCommands: endpoint({
@@ -550,86 +527,4 @@ export const Endpoints = {
 
 export type Endpoints = typeof Endpoints;
 
-export interface RemoteRequest {
-  readonly browser: Endpoint;
-  readonly upstream: Endpoint;
-  readonly invalid: string;
-  readonly passRefusal: boolean;
-  readonly answer?: "bytes";
-  readonly bodyBytes?: number;
-  readonly answerBytes?: number;
-  readonly requestMs?: number;
-}
-
 export const answerJson = (body: unknown): string => JSON.stringify(body, null, 2);
-
-const MiB = 1024 * 1024;
-const changesAnswerBytes = CHANGES_ANSWER_BYTES + 64 * 1024;
-const REMOTE_MARGIN_MS = 5_000;
-const outlasting = (remoteMs: number) => remoteMs + REMOTE_MARGIN_MS;
-const checkoutRequestMs = outlasting(CHECKOUT_TIMEOUT_MS);
-const fileTransferMs = 60_000;
-const fileAnswerBytes = LARGEST_PREVIEW_BYTES + 2 * MiB;
-const sessionSurface = (
-  endpoint: Endpoint,
-  limits: Pick<RemoteRequest, "answer" | "bodyBytes" | "answerBytes" | "requestMs"> = {},
-): RemoteRequest => ({
-  browser: endpoint,
-  upstream: endpoint,
-  invalid: "Remote workspace or session ID, or the request itself, is invalid.",
-  passRefusal: endpoint.refused !== undefined,
-  ...limits,
-});
-
-export const RemoteRequests: ReadonlyArray<RemoteRequest> = [
-  {
-    browser: Endpoints.sessionCommands,
-    upstream: Endpoints.sessionCommands,
-    invalid: "Remote workspace and session IDs are required.",
-    passRefusal: true,
-    requestMs: outlasting(SLASH_COMMANDS_TIMEOUT_MS),
-  },
-  {
-    browser: Endpoints.slashCommands,
-    upstream: Endpoints.peerSlashCommands,
-    invalid: "A remote folder is required.",
-    passRefusal: true,
-    requestMs: outlasting(SLASH_COMMANDS_TIMEOUT_MS),
-  },
-  {
-    browser: Endpoints.saveDefaults,
-    upstream: Endpoints.saveDefaults,
-    invalid: Endpoints.saveDefaults.invalid,
-    passRefusal: true,
-  },
-  sessionSurface(Endpoints.shareSession, { requestMs: outlasting(SESSION_SHARE_TIMEOUT_MS) }),
-  sessionSurface(Endpoints.sessionChanges, {
-    answerBytes: changesAnswerBytes,
-    requestMs: checkoutRequestMs,
-  }),
-  sessionSurface(Endpoints.sessionChangedFile, {
-    answerBytes: changesAnswerBytes,
-    requestMs: checkoutRequestMs,
-  }),
-  sessionSurface(Endpoints.setSessionChangesScope, {
-    answerBytes: changesAnswerBytes,
-    requestMs: checkoutRequestMs,
-  }),
-  sessionSurface(Endpoints.workspaceWrittenFiles, { bodyBytes: MiB, requestMs: checkoutRequestMs }),
-  sessionSurface(Endpoints.sessionPullRequest, {
-    requestMs: outlasting(PULL_REQUEST_TIMEOUT_MS),
-  }),
-  sessionSurface(Endpoints.changeSessionPullRequest, {
-    requestMs: outlasting(PULL_REQUEST_TIMEOUT_MS),
-  }),
-  sessionSurface(Endpoints.workspaceFile, {
-    answer: "bytes",
-    answerBytes: fileAnswerBytes,
-    requestMs: fileTransferMs,
-  }),
-  sessionSurface(Endpoints.workspaceFileDownload, {
-    answer: "bytes",
-    answerBytes: fileAnswerBytes,
-    requestMs: fileTransferMs,
-  }),
-];

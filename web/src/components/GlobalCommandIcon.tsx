@@ -20,7 +20,6 @@ import type { ProjectCommandIcon } from "@/lib/projectCommands";
 import type { SettingsSectionIconName } from "@/lib/routes";
 
 const ICONS: Record<Exclude<IconId, SettingsSectionIconName | ProjectCommandIcon>, LucideIcon> = {
-  machine: MonitorIcon,
   home: HomeIcon,
   projects: TargetIcon,
   trusted: ShieldCheckIcon,

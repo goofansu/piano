@@ -7,20 +7,6 @@ first. It includes the [transcript fidelity contract](../../../../docs/session-t
 three ordinary lines stay separate while settled, streaming and reloaded, token-like text stays
 original, and Copy response retains the source (clipboard observation on Linux).
 
-- `machine-shortcuts`
-  - Preconditions: an installed macOS PWA in standalone display mode; configured peers for
-    switching away from Local. Record `ab eval "({platform:navigator.platform,standalone:matchMedia('(display-mode: standalone)').matches})"`
-    before driving. An ordinary Linux/browser tab cannot prove native shortcut delivery.
-  - Action: in the installed PWA, `ab press Meta+1` selects Local, `ab press Meta+2` selects the
-    first peer, and `ab press Meta+0` selects the last machine in picker order. Capture the
-    machine and `ab get url` after each; the peer route is `/m/<peer-id>/…`. Returning to a
-    machine restores its remembered route and composer draft. Cmd+9 means the ninth item,
-    not the last; Ctrl is not a substitute.
-  - Boundary: repeat with a menu/dialog open and verify it keeps the key without switching.
-    Ordinary browser tabs retain their native number/zoom shortcuts. The remote-session
-    journey emulates macOS/standalone for its assertions; native installed-PWA delivery is
-    separate evidence. Without a configured peer, attempt `/m/<peer-id>/s/<session-id>` and
-    record Machine unavailable plus the missing peer prerequisite, not an isolation pass.
 - `phone-menu`
   - Action: `ab open "$WEB_URL/s/verify-plan"; ab wait --text "Answer 4.";
     ab set viewport 700 800;
@@ -94,7 +80,7 @@ original, and Copy response retains the source (clipboard observation on Linux).
     ab press Backspace; ab wait '[aria-label="Stop"]'; ab find role button click --name Stop --exact;
     ab wait '[aria-label="Send"]'` (Meta+a on macOS). Capture `27-stopped`, then widen to 1280×800.
     An empty `ab fill` can clear the DOM value without updating the queued-action face; use the
-    keyboard sequence here. This checks text queues, not peer image or voice isolation.
+    keyboard sequence here.
 - `archive-delete`
   - Action: `ab find role button click --name "Session menu for Loose session" --exact;
     ab find role menuitem click --name "Archive" --exact`
@@ -154,12 +140,3 @@ original, and Copy response retains the source (clipboard observation on Linux).
     again and `ab wait --fn "document.querySelector('[role=menuitem][href=\"https://radius.example.test/a/verify-receipt\"]')?.textContent === 'Revised nested report'"`.
     Capture `16-receipt-update`: one entry, same URL, revised title. The palette path above opens
     this same menu. This proves handling of fake Pi publication receipts, not a Radius write.
-
-## Gotchas
-
-- Peer checks need another Piano with its own database/history and a configured peer connection:
-  run `test/browser/remote-session.mjs`, then `remote-inputs.mjs`, alone under the
-  [narrow run-limit exception](../SKILL.md#run-limits). An exe.dev peer additionally needs an
-  authorized peer integration or VM-scoped token ([Remote Pianos](../../../../docs/remote-piano.md#setup));
-  direct exe.dev UI/link access needs a signed-in browser. Record the route attempted and the unmet
-  prerequisite.

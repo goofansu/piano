@@ -10,8 +10,6 @@ SQLite, UI and documentation. Some describe the target model in
 | Folder | An added root directory together with the worktrees created from it. |
 | Directory | A filesystem path a session runs in: a repository root, one of its worktrees, or any other folder. |
 | Checkout | The directory on disk a session runs in: a folder root, one of its worktrees, or another directory. |
-| Machine | A Piano backend this browser is connected to: **Local**, or a configured remote Piano owned by the same user ([Remote Pianos](remote-piano.md)). It owns its sessions, files, history and database. |
-| Offers (machine) | What a machine offers in this browser, decided only in `machineOffers`. Name an offer by what the UI shows ("files", "worktrees"), not by "remote". |
 | Workspace | Piano's context around a folder root or worktree, attaching sessions, revision, processes, evidence and integration state. Each has a registry ID, which URLs carry in place of its path. |
 | Session | The Pi session, with Pi-owned history and identity. Use "session" for the entity and its lifecycle, never "thread". |
 | Running session | A session whose Pi is running or starting, including while idle, waiting for input or owning an app. Not merely the session selected on screen, and not only one that is Working. |

@@ -1,3 +1,4 @@
+import { MAX_MESSAGE_BYTES } from "../../../shared/attachments.ts";
 import {
   type ClientMessage,
   type DisconnectReason,
@@ -6,7 +7,6 @@ import {
   encodeClientMessage,
   type ServerMessage,
 } from "../../../shared/wire.ts";
-import { LOCAL, machineFrameBytes, machineSocketUrl } from "./machine.ts";
 
 export type SendDisposition = "not-sent" | "sent" | "uncertain";
 
@@ -59,8 +59,8 @@ export const browserSocketEnvironment: SocketEnvironment = {
       close: () => ws.close(),
     };
   },
-  url: () => machineSocketUrl(LOCAL.id),
-  frameBytes: machineFrameBytes(LOCAL.id),
+  url: () => `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws`,
+  frameBytes: MAX_MESSAGE_BYTES,
   nonce: () => crypto.randomUUID(),
   setTimeout: (run, ms) => globalThis.setTimeout(run, ms),
   clearTimeout: (timer) => globalThis.clearTimeout(timer as ReturnType<typeof setTimeout>),
@@ -186,7 +186,7 @@ export function openConnection(
         return "not-sent";
       }
       if (!fits(data, env.frameBytes)) {
-        console.warn("client message exceeds the machine's frame limit");
+        console.warn("client message exceeds the frame limit");
         return "not-sent";
       }
       try {

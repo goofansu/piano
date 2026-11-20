@@ -44,7 +44,7 @@ import {
   previewAccess,
   previewFace,
 } from "@/lib/sessionPreview";
-import { usePreviewObservation, usePreviews } from "@/lib/useMachine";
+import { usePreviewObservation, usePreviews } from "@/lib/usePageStores";
 import type { AppState } from "@/store";
 
 export const dotTone: Record<PreviewTone, StatusTone> = {
@@ -55,13 +55,11 @@ export const dotTone: Record<PreviewTone, StatusTone> = {
 };
 
 export function useSeenPreview(state: AppState) {
-  const observed = usePreviewObservation();
-  return observed && seenPreview(state, observed);
+  return seenPreview(state, usePreviewObservation());
 }
 
 export function useClaimedPreview(state: AppState, claim: PreviewClaim | null) {
-  const observed = usePreviewObservation();
-  return observed && claimedPreview(state, observed, claim);
+  return claimedPreview(state, usePreviewObservation(), claim);
 }
 
 function usePreviewCommands() {
@@ -131,7 +129,7 @@ export function PreviewRailRow({ preview }: { preview: SessionPreview }) {
             onOpenChange={(open) => {
               if (open) {
                 handOff.current = false;
-                previews?.refresh();
+                previews.refresh();
               }
             }}
           >
@@ -234,10 +232,10 @@ export function PreviewDetailsDialog({
   const openPreview = useOpenPreview();
   const previews = usePreviews();
   const observed = usePreviewObservation();
-  const refreshing = !!observed?.refreshing;
+  const refreshing = observed.refreshing;
   const openRef = useRef<HTMLAnchorElement>(null);
   const preview = useClaimedPreview(state, claim);
-  const details = observed && seenDetails(state, observed);
+  const details = seenDetails(state, observed);
   return (
     <Dialog open={!!preview} onOpenChange={(o) => !o && close()}>
       <DialogContent
@@ -267,7 +265,7 @@ export function PreviewDetailsDialog({
                   size="xs"
                   aria-busy={refreshing}
                   disabled={refreshing || !sessionReady(state)}
-                  onClick={previews?.refresh}
+                  onClick={previews.refresh}
                 >
                   <RefreshCwIcon
                     data-icon="inline-start"

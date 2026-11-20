@@ -1,17 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { LOCAL, machineFrameBytes, PEER_FRAME_BYTES } from "../shared/machine.ts";
+import { MAX_MESSAGE_BYTES } from "../shared/attachments.ts";
 import { type ClientMessage, encodeServerMessage } from "../shared/wire.ts";
 import { createClient } from "../web/src/lib/client.ts";
 import { messageCommand, newSessionCommand } from "../web/src/lib/composerControl.ts";
-import { createImageSender } from "../web/src/lib/imageSender.ts";
-import { machineOffers } from "../web/src/lib/machineOffers.ts";
 import { createDrafts, NEW_SESSION_DRAFT, sessionDraftKey } from "../web/src/lib/messageDraft.ts";
 import { emptyChoice, type ModelTarget, modelChoice } from "../web/src/lib/modelChoice.ts";
 import { openConnection, type SocketEnvironment, type SocketEvents } from "../web/src/lib/ws.ts";
 import { initialState } from "../web/src/store.ts";
 
-function harness({ select = true, frameBytes = machineFrameBytes(LOCAL.id) } = {}) {
+function harness({ select = true, frameBytes = MAX_MESSAGE_BYTES } = {}) {
   const sockets: Array<{
     events: SocketEvents;
     open: boolean;
@@ -48,7 +46,6 @@ function harness({ select = true, frameBytes = machineFrameBytes(LOCAL.id) } = {
   let ids = 0;
   const notices: string[] = [];
   const client = createClient({
-    startsSessionIn: machineOffers(LOCAL).startsSessionIn,
     initial: initialState,
     connect: (handlers) => openConnection(handlers, env),
     notify: (message) => notices.push(message),
@@ -155,76 +152,6 @@ test("failed creation restores text, quotes, images and options; reconnect only 
   assert.deepEqual(h.creations()[1].attachments, original.attachments);
 });
 
-test("async image preparation preserves newer typing and rejects a captured send after navigation", async (t) => {
-  const h = harness();
-  t.after(h.stop);
-  const drafts = createDrafts();
-  const other = createDrafts();
-  const key = sessionDraftKey({ cwd: "/scratch", sessionId: "existing" });
-  drafts.setText(key, "original");
-  other.setText(key, "other peer");
-  const { send: captured } = h.client.captureSend();
-  let finish!: () => void;
-  const prepared = new Promise<void>((resolve) => {
-    finish = resolve;
-  });
-  const pending = drafts.prepareSubmit(key, async (message, id) => {
-    await prepared;
-    return captured({
-      ...messageCommand("follow-up", { ...message, attachments: [] }, {}, id),
-      preparedImages: { id: "prepared" },
-    } as Parameters<typeof captured>[0]);
-  });
-  assert.equal(drafts.get(key).preparing?.text, "original");
-  assert.equal(
-    drafts.submit(key, () => "sent"),
-    false,
-    "one send per draft during preparation",
-  );
-  drafts.setText(key, "new typing");
-  h.client.select("/scratch", "other");
-  h.client.select("/scratch", "existing");
-  h.selected();
-  finish();
-  assert.equal(await pending, false);
-  assert.equal(drafts.get(key).text, "original\n\nnew typing");
-  assert.equal(other.get(key).text, "other peer");
-  assert.equal(
-    h.actions().length,
-    0,
-    "returning to the same identity cannot revive a cancelled send",
-  );
-});
-
-test("failed image preparation restores its draft; uncertain prepared input is never replayed", async (t) => {
-  const h = harness();
-  t.after(h.stop);
-  const drafts = createDrafts();
-  const key = sessionDraftKey({ cwd: "/scratch", sessionId: "existing" });
-  drafts.setText(key, "keep me");
-  assert.equal(
-    await drafts.prepareSubmit(key, async () => {
-      throw new Error("upload refused");
-    }),
-    false,
-  );
-  assert.equal(drafts.get(key).text, "keep me");
-  assert.equal(drafts.get(key).prepareError, "upload refused");
-  const { send: captured } = h.client.captureSend();
-  h.last().throws = true;
-  assert.equal(
-    await drafts.prepareSubmit(key, async (message) =>
-      captured(messageCommand("steering", message, {})),
-    ),
-    true,
-  );
-  assert.equal(drafts.get(key).text, "");
-  h.reconnect();
-  h.accept();
-  h.selected();
-  assert.equal(h.actions().length, 1);
-});
-
 test("PIN-61: CLOSING before onclose retains the full draft for explicit retry after selection", async (t) => {
   const h = harness();
   t.after(h.stop);
@@ -312,12 +239,13 @@ test("PIN-61: a throwing send is uncertain and reconnect never replays it", (t) 
   assert.equal(h.actions().length, 1);
 });
 
-test("a message larger than a remote admits keeps its draft and says why", (t) => {
-  const h = harness({ frameBytes: PEER_FRAME_BYTES });
+test("a message larger than the frame limit keeps its draft and says why", (t) => {
+  const frameBytes = 1024 * 1024;
+  const h = harness({ frameBytes });
   t.after(h.stop);
   const drafts = createDrafts();
   const key = sessionDraftKey({ cwd: "/scratch", sessionId: "existing" });
-  const log = "a pasted log line\n".repeat(PEER_FRAME_BYTES / 16);
+  const log = "a pasted log line\n".repeat(frameBytes / 16);
   drafts.setText(key, log);
   const before = drafts.get(key);
   const sent = drafts.submit(key, (message) =>
@@ -435,187 +363,4 @@ test("a new session's first message whose send throws opens the session as uncer
   h.reconnect();
   h.accept();
   assert.equal(h.creations().length, 1, "reconnect never replays the creation");
-});
-
-test("PIN-160: a new-session image send prepared for one project is discarded after the project changes", async (t) => {
-  const h = harness({ select: false });
-  t.after(h.stop);
-  const drafts = createDrafts();
-  const key = NEW_SESSION_DRAFT;
-  const bytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]);
-  const uploads: Array<(reference: { id: string }) => void> = [];
-  const discarded: string[] = [];
-  const sender = createImageSender({
-    prepare: () => new Promise((resolve) => uploads.push(resolve)),
-    discard: (_machine, reference) => discarded.push(reference.id),
-  });
-  const open = (projectId?: string) =>
-    h.client.dispatch({ type: "open", page: { kind: "new", cwd: "/scratch", projectId } });
-  const send = async (switches: Array<string | undefined>) => {
-    drafts.setText(key, "Reply with exactly: X");
-    await drafts.addImages(key, [new File([bytes], "shot.png", { type: "image/png" })], async () =>
-      Buffer.from(bytes).toString("base64"),
-    );
-    const done = sender.send(
-      {
-        machineId: "eng-1",
-        target: { cwd: "/scratch" },
-        editor: {
-          get attachments() {
-            return drafts.get(key).images;
-          },
-          get preparing() {
-            return drafts.get(key).preparing;
-          },
-          submit: (deliver) => drafts.submit(key, deliver),
-          prepareSubmit: (deliver) => drafts.prepareSubmit(key, deliver),
-        },
-        captureSend: h.client.captureSend,
-        choice: { start: {}, consume: () => {} },
-      },
-      (message, attemptId, start) => ({
-        ...newSessionCommand({ cwd: "/scratch", projectId: "a" }, message, start),
-        attemptId,
-      }),
-    );
-    assert.equal(drafts.get(key).preparing?.text, "Reply with exactly: X");
-    for (const projectId of switches) open(projectId);
-    uploads.at(-1)!({ id: `prepared-${uploads.length}` });
-    await done;
-  };
-  const restored = () => {
-    assert.equal(drafts.get(key).text, "Reply with exactly: X", "the unsent text returns");
-    assert.equal(drafts.get(key).images.items.length, 1, "the unsent image returns");
-  };
-  open("a");
-  await send(["b"]);
-  assert.equal(h.creations().length, 0, "switching from A to B refuses the A send");
-  assert.deepEqual(discarded, ["prepared-1"]);
-  restored();
-  assert.deepEqual(h.client.getState().view, { kind: "new", cwd: "/scratch", projectId: "b" });
-
-  open("a");
-  drafts.removeImage(key, 0);
-  await send(["b", "a"]);
-  assert.equal(h.creations().length, 0, "away and back still refuses the A send");
-  assert.deepEqual(discarded, ["prepared-1", "prepared-2"]);
-  restored();
-
-  drafts.removeImage(key, 0);
-  await send([]);
-  assert.equal(h.creations().length, 1, "an uninterrupted send starts one session");
-  assert.equal(h.creations()[0].projectId, "a");
-  assert.deepEqual(h.creations()[0].preparedImages, { id: "prepared-3" });
-  assert.deepEqual(discarded, ["prepared-1", "prepared-2"], "sent images are not discarded");
-});
-
-test("moving the client away from a pending remote image send aborts its upload", async (t) => {
-  const bytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]);
-  type Harness = ReturnType<typeof harness>;
-  const openNew = (h: Harness, projectId: string) =>
-    h.client.dispatch({ type: "open", page: { kind: "new", cwd: "/scratch", projectId } });
-  const moves: Record<string, { newPage?: true; move: (h: Harness) => void }> = {
-    "a project change": { newPage: true, move: (h) => openNew(h, "b") },
-    "a selection change": { move: (h) => h.client.select("/scratch", "other") },
-    "a disconnect": { move: (h) => h.last().events.close(1006) },
-  };
-  for (const [name, { newPage, move }] of Object.entries(moves)) {
-    await t.test(name, async (t) => {
-      const h = harness({ select: !newPage });
-      t.after(h.stop);
-      if (newPage) openNew(h, "a");
-      const drafts = createDrafts();
-      const target = newPage ? { cwd: "/scratch" } : { cwd: "/scratch", sessionId: "existing" };
-      const key = newPage
-        ? NEW_SESSION_DRAFT
-        : sessionDraftKey({ ...target, sessionId: "existing" });
-      drafts.setText(key, "Reply with exactly: X");
-      await drafts.addImages(
-        key,
-        [new File([bytes], "shot.png", { type: "image/png" })],
-        async () => Buffer.from(bytes).toString("base64"),
-      );
-      const uploads: AbortSignal[] = [];
-      const sender = createImageSender({
-        prepare: (_machine, _target, _images, signal) =>
-          new Promise((_resolve, reject) => {
-            uploads.push(signal);
-            signal.addEventListener("abort", () => reject(signal.reason));
-          }),
-        discard: () => {},
-      });
-      const done = sender.send(
-        {
-          machineId: "eng-1",
-          target,
-          editor: {
-            get attachments() {
-              return drafts.get(key).images;
-            },
-            get preparing() {
-              return drafts.get(key).preparing;
-            },
-            submit: (deliver) => drafts.submit(key, deliver),
-            prepareSubmit: (deliver) => drafts.prepareSubmit(key, deliver),
-          },
-          captureSend: h.client.captureSend,
-          choice: { start: {}, consume: () => {} },
-        },
-        (message, inputId, start) => messageCommand("follow-up", message, start, inputId),
-      );
-      assert.equal(uploads.length, 1);
-      assert.equal(uploads[0]!.aborted, false);
-      move(h);
-      assert.equal(uploads[0]!.aborted, true, `${name} aborts the upload, not only the send`);
-      await done;
-      assert.equal(drafts.get(key).text, "Reply with exactly: X", "the unsent text returns");
-      assert.equal(drafts.get(key).images.items.length, 1, "the unsent image returns");
-      assert.equal(h.actions().length, 0);
-    });
-  }
-});
-
-test("a remote new session's image-only first message that is known not sent says so", async (t) => {
-  const h = harness({ select: false });
-  t.after(h.stop);
-  h.client.dispatch({ type: "open", page: { kind: "new", cwd: "/scratch" } });
-  const drafts = createDrafts();
-  const key = NEW_SESSION_DRAFT;
-  const bytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]);
-  await drafts.addImages(key, [new File([bytes], "shot.png", { type: "image/png" })], async () =>
-    Buffer.from(bytes).toString("base64"),
-  );
-  const discarded: string[] = [];
-  const sender = createImageSender({
-    prepare: async () => ({ id: "prepared" }),
-    discard: (_machine, reference) => discarded.push(reference.id),
-  });
-  h.last().open = false;
-  await sender.send(
-    {
-      machineId: "eng-1",
-      target: { cwd: "/scratch" },
-      editor: {
-        get attachments() {
-          return drafts.get(key).images;
-        },
-        get preparing() {
-          return drafts.get(key).preparing;
-        },
-        submit: (deliver) => drafts.submit(key, deliver),
-        prepareSubmit: (deliver) => drafts.prepareSubmit(key, deliver),
-      },
-      captureSend: h.client.captureSend,
-      choice: { start: {}, consume: () => {} },
-    },
-    (message, attemptId, start) => ({
-      ...newSessionCommand({ cwd: "/scratch", projectId: undefined }, message, start),
-      attemptId,
-    }),
-  );
-  assert.equal(h.creations().length, 0);
-  assert.deepEqual(discarded, ["prepared"]);
-  assert.equal(drafts.get(key).images.items.length, 1, "the unsent image returns");
-  assert.equal(h.notices.length, 1, "the unsent first message is announced");
-  assert.match(h.notices[0]!, /Your draft is kept/);
 });

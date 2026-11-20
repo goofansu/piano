@@ -8,22 +8,18 @@ import {
   sidebarPreferences,
 } from "./sidebarList.ts";
 import type { SidebarView } from "./sidebarView.ts";
-import { useMachineId } from "./useMachine.ts";
 
-const preferences = new Map<string, SidebarPreferences>();
-function preferencesFor(machineId: string): SidebarPreferences {
-  let own = preferences.get(machineId);
-  if (!own) preferences.set(machineId, (own = sidebarPreferences(machineId)));
-  return own;
-}
+let preferences: SidebarPreferences | undefined;
 
 export function useSidebarList(
   state: AppState,
   view: SidebarView,
 ): { list: SidebarList; toggle: (key: string, open: boolean) => void } {
-  const machineId = useMachineId();
   const [model] = useState(() =>
-    createSidebarList({ clock: browserSidebarClock, preferences: preferencesFor(machineId) }),
+    createSidebarList({
+      clock: browserSidebarClock,
+      preferences: (preferences ??= sidebarPreferences()),
+    }),
   );
   useEffect(() => model.start(), [model]);
   useEffect(() => model.sync(state, view), [model, state, view]);

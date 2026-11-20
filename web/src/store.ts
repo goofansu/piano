@@ -35,7 +35,6 @@ export interface SessionView extends Snapshot {
 
 export interface AppState {
   connected: boolean;
-  unreachable: boolean;
   selectionId: string | null;
   resync: boolean;
   view: { kind: "session" } | Page;
@@ -76,7 +75,6 @@ export const isSession = (
 
 export const initialState: AppState = {
   connected: false,
-  unreachable: false,
   selectionId: null,
   resync: false,
   view: { kind: "new" },
@@ -100,7 +98,7 @@ export const initialState: AppState = {
 
 export type Action =
   | { type: "dismiss_creation" }
-  | { type: "connected"; connected: boolean; lost?: boolean }
+  | { type: "connected"; connected: boolean }
   | { type: "server"; message: ServerMessage }
   | TrustDecisionAction
   | {
@@ -135,7 +133,6 @@ function reduceAction(s: AppState, a: Action): AppState {
       return {
         ...s,
         connected: a.connected,
-        unreachable: a.connected ? false : (a.lost ?? s.unreachable),
         hostsCurrent: a.connected && s.connected && s.hostsCurrent,
         selectionId: a.connected ? s.selectionId : null,
         selecting: !a.connected && s.pendingCreate ? null : s.selecting,

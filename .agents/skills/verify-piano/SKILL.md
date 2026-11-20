@@ -20,11 +20,6 @@ either, finish teardown of the previous run-owned resource using [Cleanup](#clea
 its [evidence](#evidence). If teardown cannot be confirmed, stop and report the blocker rather than
 start a replacement.
 
-**Narrow exception:** `node test/browser/remote-session.mjs <evidence-directory>` and
-`node test/browser/remote-inputs.mjs <evidence-directory>` each own main plus two headless peers
-and one browser. Run them serially, with no other scratch instance alongside, and confirm each
-`run.json` cleanup result before continuing.
-
 ## Launch
 
 First allocate an [evidence run](../../../docs/testing.md#evidence-directories) in this shell and let
@@ -72,18 +67,13 @@ Run it first, and again whenever anything looks off. It changes nothing.
 1. **The repo harness first.** The committed critical paths (`npm run test:browser`,
    `package.json`) start their own scratch instance and browser and write evidence into the
    directory given as the first argument. Run them one at a time before Launch or after Cleanup,
-   and inspect `run.json`, not just the exit code. On macOS both remote portions skip with exit 0,
-   which is not a pass.
+   and inspect `run.json`, not just the exit code.
 
    For mapped Preview behavior, also run `node test/browser/preview.mjs <evidence-directory>`
    serially before Launch. It needs the native supervisor and free ports described in
    [the Preview journey](../../../docs/testing.md#managed-preview-host-journey). A scratch JSON
    `PIANO_PREVIEW_CONFIG` containing `{"origin":"http://127.0.0.1"}` enables external-tab
    interaction without exe.dev authentication; it does not prove authenticated HTTPS access.
-
-   `test/browser/voice-input.mjs` is only an imported helper: running it directly performs no
-   checks. The default manual launch has no configured peer; report that prerequisite honestly (see
-   [Open a session](features/open-session.md)).
 
 2. **Then launch once and reuse `agent-browser`** for anything the harness does not cover,
    through `ab.sh`, which runs `agent-browser --session "$AB_SESSION"` from `PATH`.

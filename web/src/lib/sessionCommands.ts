@@ -1,11 +1,11 @@
 import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
-import { type MachineOffers, START_REFUSAL_LABELS } from "./machineOffers.ts";
 import type { SessionLayout } from "./navigation.ts";
 import { type PreviewObservationState, seenPreview } from "./previewObservation.ts";
 import { pullRequestView } from "./pullRequestView.ts";
 import { sessionArtifacts } from "./sessionArtifacts.ts";
 import {
+  checkoutMissingAt,
   isSelectedSession,
   sessionCheckoutMissing,
   sessionContext,
@@ -180,7 +180,6 @@ export function sessionCommands(
   state: AppState,
   target: SessionTarget | undefined,
   options: {
-    offers: Pick<MachineOffers, "command" | "startRefusal">;
     messagesOnly?: boolean;
     codeWrap?: boolean;
     layout?: SessionLayout;
@@ -399,18 +398,18 @@ export function sessionCommands(
     );
   }
   if (selected && session) {
-    const refusal = options.offers.startRefusal(state, session.cwd);
+    const checkoutMissing = checkoutMissingAt(state, session.cwd);
     commands.push({
       id: "new-session-here",
       label: "New session here",
       icon: "new",
-      enabled: !refusal,
+      enabled: !checkoutMissing,
       keywords: ["directory"],
-      detail: refusal ? START_REFUSAL_LABELS[refusal] : session.cwd,
+      detail: checkoutMissing ? "Checkout removed" : session.cwd,
       intent: { kind: "new-session", cwd: session.cwd },
     });
   }
-  return commands.filter(options.offers.command);
+  return commands;
 }
 
 function previewCommands(

@@ -17,7 +17,7 @@ test("input bytes match JSON for image envelopes, omissions, arrays and escaped 
     { _tag: "prompt", text: '€\n\t"\\', attachments: undefined },
     {
       _tag: "act",
-      preparedImages: undefined,
+      start: undefined,
       action: {
         _tag: "prompt",
         attachments: [

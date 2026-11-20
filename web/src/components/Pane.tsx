@@ -1,5 +1,4 @@
 import { cn } from "cn";
-import { PaneMachineSwitcher } from "@/components/MachineSwitcher";
 import { ShowSidebarButton } from "@/components/ShowSidebarButton";
 import {
   Empty,
@@ -13,15 +12,7 @@ import { useSidebarLayoutState } from "@/lib/useSidebarLayout";
 export const paneHeaderRow =
   "flex h-12 shrink-0 items-center gap-3 border-b border-line px-(--gutter) py-0";
 
-export function HeaderLead({
-  toggle,
-  children,
-  className,
-}: {
-  toggle: React.ReactNode;
-  children?: React.ReactNode;
-  className?: string;
-}) {
+export function HeaderLead({ toggle, className }: { toggle: React.ReactNode; className?: string }) {
   return (
     <div
       className={cn(
@@ -30,38 +21,30 @@ export function HeaderLead({
       )}
     >
       {toggle}
-      {children}
     </div>
   );
 }
 
-function PaneLead({
-  className,
-  showMachineSwitcher = true,
-}: {
-  className?: string;
-  showMachineSwitcher?: boolean;
-}) {
+function PaneLead({ className }: { className?: string }) {
   const { collapsed } = useSidebarLayoutState();
   return (
-    <HeaderLead toggle={<ShowSidebarButton />} className={cn(!collapsed && "md:hidden", className)}>
-      {showMachineSwitcher && <PaneMachineSwitcher />}
-    </HeaderLead>
+    <HeaderLead
+      toggle={<ShowSidebarButton />}
+      className={cn(!collapsed && "md:hidden", className)}
+    />
   );
 }
 
 export function PaneHeader({
   children,
   actions,
-  showMachineSwitcher = true,
 }: {
   children: React.ReactNode;
   actions?: React.ReactNode;
-  showMachineSwitcher?: boolean;
 }) {
   return (
     <header className={paneHeaderRow}>
-      <PaneLead showMachineSwitcher={showMachineSwitcher} />
+      <PaneLead />
       {children}
       {actions}
     </header>

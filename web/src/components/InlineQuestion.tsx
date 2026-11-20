@@ -19,7 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { Client } from "@/lib/client";
 import { type PendingDialogs } from "@/lib/piDialogs";
 import { useDialogAnswer } from "@/lib/useDialogAnswer";
-import { useQuestionReplies } from "@/lib/useMachine";
+import { useQuestionReplies } from "@/lib/usePageStores";
 
 export function InlineQuestion({
   pending: { head, surface, more, attachment, session },

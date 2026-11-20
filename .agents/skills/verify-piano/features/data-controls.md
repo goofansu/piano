@@ -89,8 +89,6 @@ open.
 - “Running” includes Ready/idle Pi, not just Working. Archive all preserves execution owners,
   starting sessions and held locks; this fake-Pi recipe proves the Working and pinned cases,
   not app-runtime survival or stale-write races.
-- `test/PeerScope.test.ts` checks both mutations and the count through `/ws/peer`; label it
-  module-only evidence.
 - Closing the only seeded folder intentionally invalidates doctor's original one-folder check.
   Finish the closed-folder evidence, then Cleanup; do not treat that changed fixture as a server
   failure or continue unrelated recipes on the closed-folder baseline.

@@ -3,8 +3,6 @@ import { test } from "node:test";
 import type { ClientMessage, ServerMessage } from "../shared/wire.ts";
 import type { workspaceFile } from "../web/src/lib/api.ts";
 import { createClient } from "../web/src/lib/client.ts";
-import { LOCAL } from "../web/src/lib/machine.ts";
-import { machineOffers } from "../web/src/lib/machineOffers.ts";
 import {
   type AddressBar,
   activeTab,
@@ -64,18 +62,12 @@ function addressBar(start: string) {
   };
 }
 
-function page(
-  url: string,
-  memory?: SurfaceMemory,
-  rail?: Preference<boolean>,
-  { settings }: { settings?: boolean } = {},
-) {
+function page(url: string, memory?: SurfaceMemory, rail?: Preference<boolean>) {
   const address = addressBar(url);
   const sent: ClientMessage[] = [];
   let handlers: ConnectionHandlers | undefined;
   let ids = 0;
   const client = createClient({
-    startsSessionIn: machineOffers(LOCAL).startsSessionIn,
     initial: { ...initialState, view: initialView(parseRoute(address.bar.location())) },
     connect: (h) => {
       handlers = h;
@@ -133,7 +125,6 @@ function page(
     address: address.bar,
     memory,
     rail,
-    settings,
     moved: () => moves++,
   });
   client.start();
@@ -193,7 +184,7 @@ test("restoring a session address leaves navigation open; explicit selection and
   assert.equal(p.moves(), 1, "a user's selection dismisses the sidebar");
   p.back();
   p.selected("a");
-  assert.equal(p.moves(), 2, "history within the machine dismisses once");
+  assert.equal(p.moves(), 2, "history dismisses once");
 });
 
 test("100 transcript frames leave a 2k-session navigation catalog and title untouched", (t) => {
@@ -497,27 +488,6 @@ test("a direct Settings link closes to New before the registry arrives", () => {
   p.registry();
   assert.deepEqual(p.selects(), []);
   assert.equal(p.path(), "/new");
-});
-
-test("a machine without Settings opens a page for a Settings address and refuses Settings", () => {
-  const p = page("/settings/data-controls", undefined, undefined, { settings: false });
-  p.registry();
-  assert.equal(p.navigation.getState().settings, null);
-  assert.equal(p.client.getState().view.kind, "new");
-  assert.deepEqual(p.entries, ["/new"], "the Settings address is corrected in place");
-  assert.equal(p.title(), "New session - Piano");
-  p.navigation.openSettings("providers");
-  assert.equal(p.navigation.getState().settings, null);
-  assert.deepEqual(p.entries, ["/new"]);
-  assert.equal(p.moves(), 0, "a refused Settings request is not a move");
-  p.navigation.select("/scratch", "a");
-  p.selected("a");
-  p.entries.push("/settings/mcp");
-  p.forward();
-  assert.equal(p.navigation.getState().settings, null, "history onto a Settings address");
-  assert.equal(p.client.getState().view.kind, "new");
-  assert.deepEqual(p.entries, ["/new", "/s/a", "/new"]);
-  assert.equal(p.title(), "New session - Piano");
 });
 
 test("the Settings button opens the section /settings opens", () => {

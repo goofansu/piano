@@ -1,6 +1,5 @@
 import type { FolderView, Project, SessionReference, WorktreeView } from "@shared/wire";
 import { type AppState, isSession, sessionKey } from "../store.ts";
-import type { MachineOffers } from "./machineOffers.ts";
 import { findProject } from "./projectCommands.ts";
 
 export type SessionActivity = "working" | "done" | "idle" | "off";
@@ -80,10 +79,7 @@ export function unavailableSessionTitle(reason: UnavailableSessionReason): strin
   }
 }
 
-export function unavailableSessionPage(
-  reason: UnavailableSessionReason,
-  offers: Pick<MachineOffers, "settings">,
-): UnavailableSessionPage {
+export function unavailableSessionPage(reason: UnavailableSessionReason): UnavailableSessionPage {
   const title = unavailableSessionTitle(reason);
   switch (reason) {
     case "missing":
@@ -95,17 +91,11 @@ export function unavailableSessionPage(
     case "history":
       return { title, description: HISTORY_UNAVAILABLE.description, action: "new-session" };
     case "archived":
-      return offers.settings
-        ? {
-            title,
-            description: "Unarchive it in Settings → Data controls to open it.",
-            action: "data-controls",
-          }
-        : {
-            title,
-            description: "Unarchive it in that machine's own Piano to open it.",
-            action: "new-session",
-          };
+      return {
+        title,
+        description: "Unarchive it in Settings → Data controls to open it.",
+        action: "data-controls",
+      };
   }
 }
 

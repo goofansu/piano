@@ -11,12 +11,9 @@ import {
 } from "@/components/PianoDialog";
 import { Button } from "@/components/ui/button";
 import { ApiError, shareSession } from "@/lib/api";
-import { isLocalId, type Machine } from "@/lib/machine";
-import { machineOffers } from "@/lib/machineOffers";
 import { openLink } from "@/lib/openLink";
 
 export interface ShareTarget {
-  machine: Machine;
   workspaceId: string;
   sessionId: string;
   title: string;
@@ -25,12 +22,12 @@ export interface ShareTarget {
 export function ShareSessionDialog({
   target,
   close,
-  openMachine,
+  openSettings,
   onCloseAutoFocus,
 }: {
   target: ShareTarget;
   close: () => void;
-  openMachine: OpenMachine;
+  openSettings: OpenSettings;
   onCloseAutoFocus?: (event: Event) => void;
 }) {
   return (
@@ -52,7 +49,7 @@ export function ShareSessionDialog({
           <Button
             onClick={() => {
               close();
-              void share(target, openMachine);
+              void share(target, openSettings);
             }}
           >
             Share
@@ -63,18 +60,17 @@ export function ShareSessionDialog({
   );
 }
 
-type OpenMachine = (id: string, path: string) => void;
+type OpenSettings = (section: "providers") => void;
 
-async function share(target: ShareTarget, openMachine: OpenMachine) {
+async function share(target: ShareTarget, openSettings: OpenSettings) {
   const id = toast.loading("Sharing session", { description: target.title });
   const settled = { id, duration: Number.POSITIVE_INFINITY };
   try {
     const result = await shareSession(target.workspaceId, target.sessionId, {
-      machineId: target.machine.id,
       signal: AbortSignal.timeout(SESSION_SHARE_TIMEOUT_MS + 15_000),
     });
     if (result.status === "shared") shared(result.share, settled, false);
-    else signInRequired(target.machine, settled, openMachine);
+    else signInRequired(settled, openSettings);
   } catch (error) {
     toast.error(
       error instanceof ApiError && error.status > 0 && error.status < 500
@@ -86,28 +82,13 @@ async function share(target: ShareTarget, openMachine: OpenMachine) {
 }
 
 function signInRequired(
-  machine: Machine,
   settled: { id: string | number; duration: number },
-  openMachine: OpenMachine,
+  openSettings: OpenSettings,
 ) {
-  const path = "/settings/providers";
-  const peerUrl = machine.url;
-  const providers = machineOffers(machine).settings
-    ? () => {
-        // Sonner 2 finishes an action's dismissal in its Toaster, which a machine switch
-        // remounts, and the new Toaster replays the toast; dismiss through the store instead.
-        toast.dismiss(settled.id);
-        openMachine(machine.id, path);
-      }
-    : peerUrl
-      ? () => openLink(new URL(path, peerUrl).href)
-      : undefined;
   toast.warning("Cannot share", {
     ...settled,
-    description: isLocalId(machine.id)
-      ? "Sign in Radius to share."
-      : `Sign in Radius on ${machine.name} to share.`,
-    action: providers ? { label: "Providers", onClick: providers } : undefined,
+    description: "Sign in Radius to share.",
+    action: { label: "Providers", onClick: () => openSettings("providers") },
   });
 }
 

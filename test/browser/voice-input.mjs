@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { run } from "./harness.mjs";
+
+const sessionId = "voice-session";
+const title = "Voice session";
 
 async function voiceFixture(page, call, onEvent) {
   const requests = [];
@@ -29,7 +33,6 @@ async function voiceFixture(page, call, onEvent) {
       constructor(stream, options) { this.state = 'inactive'; this.mimeType = options.mimeType; window.voiceFixture.recorder = this; }
       start() { this.state = 'recording'; }
       stop() { this.state = 'inactive'; setTimeout(() => {
-        // Larger than the peer conversation gateway's 1 MiB cap, still main-origin HTTP only.
         this.ondataavailable?.({ data: new Blob([new Uint8Array(1100000)], { type: this.mimeType }) });
         this.onstop?.();
       }, 0); }
@@ -37,12 +40,6 @@ async function voiceFixture(page, call, onEvent) {
   })()`);
   const field = '[aria-label="Message"], [aria-label="First message"]';
   const value = () => page.evaluate(`document.querySelector('${field}')?.value`);
-  const clear = async () => {
-    await page.ab("click", field);
-    await page.press("Mod+A");
-    await page.press("Backspace");
-    await page.until(`document.querySelector('${field}')?.value === ''`);
-  };
   const ready = () =>
     page.until(`document.querySelector('[aria-label="Voice input"]')?.disabled === false`);
   const begin = async () => {
@@ -56,7 +53,7 @@ async function voiceFixture(page, call, onEvent) {
   };
   const requested = async () => {
     for (let n = 0; !pending.length; n++) {
-      assert.ok(n < 100, "transcription request reaches main-origin HTTP");
+      assert.ok(n < 100, "transcription request is sent");
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
   };
@@ -73,26 +70,10 @@ async function voiceFixture(page, call, onEvent) {
       if (status !== 499) throw error;
     });
   };
-  const dictate = async (text) => {
-    await call("Fetch.enable", {
-      patterns: [{ urlPattern: "*/api/voice/transcribe", requestStage: "Request" }],
-    });
-    try {
-      await clear();
-      await begin();
-      await stop();
-      await answer(text);
-      await page.until(`document.querySelector('${field}')?.value === ${JSON.stringify(text)}`);
-      await page.capture("voice-7-reviewed-text-with-image");
-    } finally {
-      await call("Fetch.disable");
-    }
-  };
-  return { requests, field, value, clear, ready, begin, stop, requested, answer, dictate };
+  return { requests, field, value, ready, begin, stop, requested, answer };
 }
 
-const preferences = async (page, switchMachine) => {
-  await switchMachine("Local");
+const preferences = async (page) => {
   await page.click("button", "Settings");
   await page.click("button", "Preferences");
   await page.until(`location.pathname === '/settings/preferences'`);
@@ -105,152 +86,124 @@ const preferences = async (page, switchMachine) => {
 
 const enableVoice = async (page) => {
   await page.click("switch", "Voice input");
-  await page.see(
-    "Voice input for every machine sends recordings and session context through this Piano to OpenAI.",
-  );
+  await page.see("Voice input sends recordings and session context through Piano to OpenAI.");
   await page.ab("fill", 'input[type="password"]', "sk-fixture-no-provider-call");
   await page.click("button", "Save");
   await page.see("Voice input turned on");
 };
 
-export async function prepareDictation(page, call, onEvent, switchMachine) {
-  const { dictate } = await voiceFixture(page, call, onEvent);
-  try {
-    await preferences(page, switchMachine);
-    await enableVoice(page);
-    await page.click("button", "Home");
-    await page.click("button", "Local collision session");
-    await page.see("Local collision session saved history");
-    return dictate;
-  } finally {
-    await call("Fetch.disable");
-  }
-}
+const openSession = async (page) => {
+  await page.click("button", title);
+  await page.see(`${title} saved history`);
+  await page.until(`document.querySelector('[aria-label^="Model:"]')?.disabled === false`);
+  await page.until(`!!document.querySelector('[aria-label="Message"]')`);
+};
 
-export async function voiceInputs(page, call, onEvent, switchMachine) {
-  const { requests, field, value, clear, ready, begin, stop, requested, answer } =
-    await voiceFixture(page, call, onEvent);
+const openNew = async (page) => {
+  await page.click("button", "New session");
+  await page.until(`!!document.querySelector('[aria-label="First message"]')`);
+};
+
+async function voiceInputs(page, call, onEvent) {
+  const { requests, field, value, ready, begin, stop, requested, answer } = await voiceFixture(
+    page,
+    call,
+    onEvent,
+  );
   const visibility = [];
-  const checkComposers = async (machine, title, enabled, step) => {
-    await switchMachine(machine);
-    await page.see(title);
-    await page.click("button", title);
-    await page.see(`${title} saved history`);
-    await page.until(`document.querySelector('[aria-label^="Model:"]')?.disabled === false`);
+  const checkComposers = async (enabled, step) => {
     for (const composer of ["existing", "new"]) {
-      if (composer === "new") await page.click("button", "New session");
-      const label = composer === "new" ? "First message" : "Message";
-      await page.until(`!!document.querySelector('[aria-label="${label}"]')`);
+      await (composer === "new" ? openNew(page) : openSession(page));
       if (enabled) await ready();
       assert.equal(
         await page.evaluate(`!!document.querySelector('[aria-label="Voice input"]')`),
         enabled,
-        `${step}: ${machine} ${composer} composer follows main Voice input preference`,
+        `${step}: the ${composer} composer follows the Voice input preference`,
       );
-      visibility.push({ step, machine, composer, enabled });
-      await page.capture(`voice-visibility-${step}-${machine}-${composer}`);
+      visibility.push({ step, composer, enabled });
+      await page.capture(`voice-visibility-${step}-${composer}`);
     }
   };
+  const fieldIs = (text) =>
+    page.until(`document.querySelector('${field}')?.value === ${JSON.stringify(text)}`);
   try {
-    await preferences(page, switchMachine);
+    await preferences(page);
     await page.until(
       `document.querySelector('[role="switch"]')?.getAttribute('aria-checked') === 'false'`,
     );
     await page.click("button", "Home");
-    await checkComposers("Local", "Local collision session", false, "initial-off");
-    await preferences(page, switchMachine);
+    await checkComposers(false, "initial-off");
+    await preferences(page);
     await enableVoice(page);
     await page.click("button", "Home");
-    await checkComposers("eng-2", "Second collision session", true, "on");
+    await checkComposers(true, "on");
+
+    await openSession(page);
     await begin();
     await stop();
     await requested();
-    await preferences(page, switchMachine);
+    await preferences(page);
     await page.click("switch", "Voice input");
     await page.see("Voice input turned off");
     await page.click("button", "Home");
-    await switchMachine("eng-2");
     await page.until(`!!document.querySelector('[aria-label="Cancel transcription"]')`);
     await page.capture("voice-off-active-cancel");
     await page.click("button", "Cancel transcription");
     await answer("cancelled-while-off", 499);
     await page.until(`!document.querySelector('[aria-label="Cancel transcription"]')`);
     assert.equal(await value(), "");
-    await checkComposers("eng-2", "Second collision session", false, "off-again");
-    await preferences(page, switchMachine);
+    await checkComposers(false, "off-again");
+    await preferences(page);
     await page.click("switch", "Voice input");
     await page.until(
       `document.querySelector('[role="switch"]')?.getAttribute('aria-checked') === 'true'`,
     );
     await page.click("button", "Home");
-    await page.click("button", "Local collision session");
-    await page.see("Local collision session saved history");
-    await page.ab("fill", field, "LOCAL-DRAFT");
 
-    await switchMachine("eng-1");
-    await page.see("Remote collision session");
-    await page.click("button", "Remote collision session");
-    await page.see("Remote collision session saved history");
-    await page.ab("fill", field, "REMOTE");
+    await openSession(page);
+    await page.ab("fill", field, "TYPED");
     await begin();
     await stop();
-    await switchMachine("eng-2");
-    await page.see("Second collision session");
-    await page.click("button", "Second collision session");
-    await page.see("Second collision session saved history");
-    await page.ab("fill", field, "SECOND");
+    await openNew(page);
+    await page.ab("fill", field, "NEW-DRAFT");
     await answer("spoken");
-    assert.equal(await value(), "SECOND");
-    await clear();
-    await switchMachine("eng-1");
-    await page.until(`document.querySelector('${field}')?.value === 'REMOTE spoken'`);
-    await page.capture("voice-4-peer-source-draft");
-    assert.equal(requests.at(-1).hints.session, "Remote collision session");
-    assert.deepEqual(page.remote.prompts(), [], "review is required before remote Send");
+    assert.equal(await value(), "NEW-DRAFT", "a result never lands in the draft on screen");
+    await openSession(page);
+    await fieldIs("TYPED spoken");
+    await page.capture("voice-session-draft");
+    assert.equal(requests.at(-1).hints.session, title);
 
     const before = requests.length;
     await begin();
-    await switchMachine("eng-2");
-    assert.equal(await page.evaluate(`window.voiceFixture.tracks.some(t => t.live)`), false);
-    await switchMachine("eng-1");
-    await page.until(
-      `location.pathname === '/m/eng-1/s/same-session' && document.querySelector('${field}')?.value === 'REMOTE spoken'`,
+    await openNew(page);
+    assert.equal(
+      await page.evaluate(`window.voiceFixture.tracks.some(t => t.live)`),
+      false,
+      "leaving a recording releases the microphone",
     );
-    assert.equal(requests.length, before);
-    assert.equal(await value(), "REMOTE spoken");
-    await clear();
+    await openSession(page);
+    await fieldIs("TYPED spoken");
+    assert.equal(requests.length, before, "an abandoned recording is not transcribed");
 
-    await page.click("button", "New session");
-    await page.until(`!!document.querySelector('[aria-label="First message"]')`);
+    await openNew(page);
     await begin();
     await stop();
-    await switchMachine("Local");
-    await page.click("button", "New session");
-    await page.until(`!!document.querySelector('[aria-label="First message"]')`);
-    await page.ab("fill", field, "LOCAL-NEW");
-    await answer("REMOTE-NEW-VOICE");
-    assert.equal(await value(), "LOCAL-NEW");
-    await clear();
-    await page.click("button", "Local collision session");
-    await switchMachine("eng-1");
-    await page.until(`document.querySelector('${field}')?.value === 'REMOTE-NEW-VOICE'`);
+    await openSession(page);
+    await answer("NEW-VOICE");
+    assert.equal(await value(), "TYPED spoken");
+    await openNew(page);
+    await fieldIs("NEW-DRAFT NEW-VOICE");
     await page.ab("set", "viewport", "390", "844");
-    await page.capture("voice-6-peer-new-mobile");
+    await page.capture("voice-new-mobile");
     await page.ab("set", "viewport", "1280", "900");
-    await clear();
-    await switchMachine("Local");
-    await page.see("Local collision session saved history");
-    assert.equal(await value(), "LOCAL-DRAFT");
     assert.equal(await page.evaluate(`window.voiceFixture.tracks.some(t => t.live)`), false);
     assert.deepEqual(page.prompts(), [], "dictation never sends itself");
-    assert.deepEqual(page.remote.prompts(), []);
-    assert.deepEqual(page.peers["eng-2"].prompts(), []);
     writeFileSync(
       join(page.evidence, "voice-result.json"),
       JSON.stringify(
         {
           boundary:
-            "fake browser microphone/MediaRecorder; CDP transcription response stub; real main settings and peer backends; no real microphone or provider",
+            "fake browser microphone/MediaRecorder; CDP transcription response stub; real settings backend; no real microphone or provider",
           visibility,
           requests: requests.map(({ url, mimeType, hints, audio }) => ({
             url,
@@ -258,8 +211,7 @@ export async function voiceInputs(page, call, onEvent, switchMachine) {
             hints,
             encodedBytes: audio.length,
           })),
-          localPrompts: page.prompts(),
-          remotePrompts: page.remote.prompts(),
+          prompts: page.prompts(),
         },
         null,
         2,
@@ -269,3 +221,32 @@ export async function voiceInputs(page, call, onEvent, switchMachine) {
     await call("Fetch.disable");
   }
 }
+
+await run(
+  "voice-input",
+  ({ repository, history }) => {
+    const cwd = repository("repo");
+    const now = new Date().toISOString();
+    history({
+      sessionId,
+      cwd,
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "text", text: `${title} saved history` }],
+          timestamp: Date.now(),
+        },
+      ],
+    });
+    return {
+      folders: [cwd],
+      workspaces: [{ id: "voice-workspace", path: cwd, folder: cwd }],
+      sessions: [{ sessionId, cwd, title, createdAt: now, updatedAt: now }],
+    };
+  },
+  async (page) => {
+    await page.open("/");
+    await page.see(title);
+    await page.cdp((call, onEvent) => voiceInputs(page, call, onEvent));
+  },
+);

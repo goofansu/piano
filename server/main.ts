@@ -11,7 +11,6 @@ import {
   SessionLinkOrigin,
   sessionLinkOrigin,
 } from "./OriginPolicy.ts";
-import { ConfiguredPeers, loadPeerConfigs } from "./PeerConfig.ts";
 import { ensurePianoFolders, pianoFolder } from "./PianoFolders.ts";
 import { PianoAdaptersLive, PianoServicesLive } from "./PianoServices.ts";
 import { defaultPiCli, PiCli } from "./PiCli.ts";
@@ -25,9 +24,6 @@ const PORT = Number(process.env.PORT ?? 7070);
 const HOST = process.env.HOST ?? "127.0.0.1";
 const listener = { host: HOST, port: PORT };
 const origins = configuredOrigins(PORT, process.env.PIANO_ALLOWED_ORIGINS);
-const peers = loadPeerConfigs(process.env.PIANO_PEER_CONFIG, {
-  allowHttpLoopbackForTests: process.env.PIANO_TEST_HTTP_LOOPBACK_PEERS === "1",
-});
 const IDLE_MS = Number(process.env.PIANO_IDLE_MINUTES ?? 30) * 60_000;
 const WEB_DIST = fileURLToPath(new URL("../web/dist", import.meta.url));
 const endpoint = sessionEndpoint(listener, origins);
@@ -80,7 +76,6 @@ const Server = HttpRouter.serve(Routes, { disableLogger: true, disableListenLog:
   Layer.provide(
     Layer.mergeAll(
       Layer.succeed(AllowedOrigins, origins),
-      Layer.succeed(ConfiguredPeers, peers),
       Layer.succeed(SessionLinkOrigin, sessionLinkOrigin(origins, listener)),
     ),
   ),

@@ -49,17 +49,20 @@ import {
   projectDestinations,
 } from "@/lib/projectCommands";
 import { folderFor } from "@/lib/sessionCatalog";
-import { completionTarget, directoryChoices, startPlace } from "@/lib/sessionContext";
+import {
+  checkoutMissingAt,
+  completionTarget,
+  directoryChoices,
+  startPlace,
+} from "@/lib/sessionContext";
 import { startPage } from "@/lib/startPage";
 import { composerInput, picker } from "@/lib/styles";
-import { useImageSend } from "@/lib/useImageSend";
-import { useOffers } from "@/lib/useMachine";
 import { useModelCatalog } from "@/lib/useModelCatalog";
 import { useModelChoice } from "@/lib/useModelChoice";
 import { useSidebarLayout } from "@/lib/useSidebarLayout";
 import type { AppState } from "@/store";
 
-type StartClient = Pick<Client, "captureSend" | "dispatch">;
+type StartClient = Pick<Client, "send" | "dispatch">;
 
 interface Props {
   state: AppState;
@@ -110,7 +113,6 @@ export function NewSessionComposer({
   className?: string;
 }) {
   const { run } = useCommands();
-  const offers = useOffers();
   const sidebarLayout = useSidebarLayout();
   const page = startPage(state.view);
   const cwd = page?.cwd ?? "";
@@ -120,7 +122,7 @@ export function NewSessionComposer({
 
   const folder = folderFor(state, cwd);
   const place = startPlace(state, cwd, projectId);
-  const trust = trustCommand(state, cwd, offers);
+  const trust = trustCommand(state, cwd);
   const models = useModelCatalog(cwd || undefined);
   const { catalog } = models;
   const choice = useModelChoice(
@@ -132,12 +134,9 @@ export function NewSessionComposer({
       ? state.pendingCreate.options
       : undefined,
   );
-  const imageSend = useImageSend(editor, client.captureSend, { cwd }, choice);
-  const refusal = cwd ? offers.startRefusal(state, cwd) : undefined;
-  const checkoutMissing = refusal === "checkout-missing";
+  const checkoutMissing = !!cwd && checkoutMissingAt(state, cwd);
   const ready =
-    !editor.preparing &&
-    !refusal &&
+    !checkoutMissing &&
     newSessionReady({
       text: editor.message,
       images: editor.attachments,
@@ -150,10 +149,13 @@ export function NewSessionComposer({
   const submit = () => {
     if (!ready) return;
     const join = findProject(state, projectId)?.id;
-    imageSend.send((message, attemptId, start) => ({
-      ...newSessionCommand({ cwd, projectId: join }, message, start),
-      attemptId,
-    }));
+    const { start } = choice;
+    if (
+      editor.submit((message, attemptId) =>
+        client.send({ ...newSessionCommand({ cwd, projectId: join }, message, start), attemptId }),
+      )
+    )
+      choice.consume();
   };
 
   return (
@@ -166,7 +168,7 @@ export function NewSessionComposer({
                 state={state}
                 value={cwd}
                 onChange={chooseDirectory}
-                onBrowse={offers.browse ? () => setPickerOpen(true) : undefined}
+                onBrowse={() => setPickerOpen(true)}
               />
             </div>
             {trust && <TrustToggle command={trust} run={run} />}
@@ -199,7 +201,6 @@ export function NewSessionComposer({
         )}
         <DraftEditor
           editor={editor}
-          cancelUpload={imageSend.cancel}
           completion={completionTarget(state)}
           attachmentsDisabled={!state.connected}
           autoFocus={
@@ -223,14 +224,7 @@ export function NewSessionComposer({
             </AlertDescription>
           </Alert>
         )}
-        {refusal === "folder-closed" && state.registryLoaded && (
-          <Alert data-motion="fade" className="mt-2">
-            <AlertDescription>
-              Folder closed. Reopen it in this machine's Piano or choose another directory.
-            </AlertDescription>
-          </Alert>
-        )}
-        {offers.worktrees && !refusal && folder?.discovery.status === "error" && (
+        {!checkoutMissing && folder?.discovery.status === "error" && (
           <Alert data-motion="fade" variant="destructive" className="mt-2">
             <AlertDescription>
               Git status unavailable.
@@ -241,14 +235,12 @@ export function NewSessionComposer({
           </Alert>
         )}
       </div>
-      {offers.browse && (
-        <FolderPicker
-          open={pickerOpen}
-          onOpenChange={setPickerOpen}
-          onPick={chooseDirectory}
-          initialPath={cwd || undefined}
-        />
-      )}
+      <FolderPicker
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        onPick={chooseDirectory}
+        initialPath={cwd || undefined}
+      />
     </>
   );
 }
@@ -264,7 +256,7 @@ function ProjectSelect({
 }) {
   const { run } = useCommands();
   const [open, setOpen] = useState(false);
-  const create = newProjectCommand(state, { newPage: true }, useOffers());
+  const create = newProjectCommand(state, { newPage: true });
   const onCreate = (command: ProjectCommand) => {
     setOpen(false);
     run(command);
@@ -373,7 +365,7 @@ function DirectorySelect({
 }) {
   const [open, setOpen] = useState(false);
   const search = useRef<HTMLInputElement>(null);
-  const { trigger, roots } = directoryChoices(state, value, useOffers().startsSessionIn);
+  const { trigger, roots } = directoryChoices(state, value);
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>

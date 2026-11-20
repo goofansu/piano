@@ -49,11 +49,7 @@ export function startPlace(
   };
 }
 
-export function directoryChoices(
-  state: AppState,
-  cwd: string,
-  startsSessionIn: (state: AppState, cwd: string) => boolean,
-): DirectoryChoices {
+export function directoryChoices(state: AppState, cwd: string): DirectoryChoices {
   const { folder, checkout } = sessionDirectories(state)(cwd || undefined);
   const trigger: DirectoryTrigger = !cwd
     ? { kind: "none" }
@@ -70,7 +66,7 @@ export function directoryChoices(
         : { kind: "checkout", folder: cwd.split(/[\\/]/).filter(Boolean).pop() ?? cwd };
   const roots = state.folders.flatMap((f) =>
     f.worktrees
-      .filter((w) => w.root && startsSessionIn(state, w.path))
+      .filter((w) => w.root && !checkoutMissingAt(state, w.path))
       .map((w) => ({
         path: w.path,
         label: f.name,

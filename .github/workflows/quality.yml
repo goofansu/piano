@@ -103,15 +103,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: remote-session
-            first: remote-session
-            second: ''
           - name: open-session + transcript-rows
             first: open-session
             second: transcript-rows
-          - name: start-session + remote-inputs
+          - name: start-session + session-sharing
             first: start-session
-            second: remote-inputs
+            second: session-sharing
+          - name: voice-input
+            first: voice-input
+            second: ''
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

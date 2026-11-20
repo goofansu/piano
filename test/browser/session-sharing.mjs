@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
+import { run } from "./harness.mjs";
 
-export async function openShare(page, palette = false) {
+const sessionId = "shared-session";
+const title = "Shared session";
+
+async function openShare(page, palette = false) {
   if (palette) {
     await page.press("Mod+k");
     await page.ab("fill", "[cmdk-input]", "Share");
@@ -37,59 +41,30 @@ async function closeToast(page) {
   await page.until("!document.querySelector('[data-sonner-toast]')");
 }
 
-const LOCAL_PROVIDERS =
-  "location.pathname === '/settings/providers' && !!document.getElementById('settings-providers-title')";
+const ready = (page) =>
+  page.until(`document.querySelector('[aria-label^="Model:"]')?.disabled === false`);
 
-export async function shareSignIn(page, machine, { away, reopen } = {}) {
-  const local = machine === "Local";
+async function shareSignIn(page) {
   await openShare(page);
-  await page.capture(`share-${machine}-confirm`);
+  await page.capture("share-confirm");
   await page.click("button", "Cancel");
   await page.until("!document.querySelector('[role=dialog]')");
   await openShare(page, true);
   await page.click("button", "Share");
   await page.until("!document.querySelector('[role=dialog]')");
   await page.see("Cannot share");
+  await page.see("Sign in Radius to share.");
   await page.until(TOAST_AT_REST);
-  if (local) {
-    await page.see("Sign in Radius to share.");
-    await page.capture("share-local-sign-in");
-    await toastButton(page, "Providers");
-    await page.until(LOCAL_PROVIDERS);
-    await reopen();
-    await openShare(page, true);
-    await page.click("button", "Share");
-    await page.until("!document.querySelector('[role=dialog]')");
-    await page.see("Sign in Radius to share.");
-    await page.until(TOAST_AT_REST);
-    await away();
-    await page.see("Sign in Radius to share.");
-    await toastButton(page, "Providers");
-    await page.until(LOCAL_PROVIDERS);
-    await page.capture("share-local-providers-from-peer");
-    await page.click("button", "Home");
-    await page.until(
-      "document.querySelector('[aria-label=\"Machine\"]')?.getAttribute('aria-description') === 'Local'",
-    );
-  } else {
-    await page.see(`Sign in Radius on ${machine} to share.`);
-    await page.capture(`share-${machine}-sign-in`);
-    const path = await page.evaluate("location.pathname");
-    await page.evaluate(
-      "window.sharedOpens = []; window.open = (url) => { window.sharedOpens.push(url); return null; }",
-    );
-    await toastButton(page, "Providers");
-    assert.deepEqual(
-      await page.evaluate("window.sharedOpens"),
-      [`${page.remote.origin}/settings/providers`],
-      "Providers opens the peer's own Providers settings",
-    );
-    assert.equal(await page.evaluate("location.pathname"), path, "main stays where it was");
-  }
+  await page.capture("share-sign-in");
+  await toastButton(page, "Providers");
+  await page.until(
+    "location.pathname === '/settings/providers' && !!document.getElementById('settings-providers-title')",
+  );
   await page.until("!document.querySelector('[data-sonner-toast]')");
+  await page.capture("share-providers");
 }
 
-export async function shareResultView(page, call, onEvent) {
+async function shareResultView(page, call, onEvent) {
   let held;
   const requests = [];
   onEvent(({ method, params }) => {
@@ -118,8 +93,8 @@ export async function shareResultView(page, call, onEvent) {
         "loading",
         "the upload continues behind other work",
       );
-      await page.capture(`share-peer-${status}-pending`);
-      assert.match(held.request.url, /\/peer\/eng-1\/api\/session\/share\?/);
+      await page.capture(`share-${status}-pending`);
+      assert.equal(new URL(held.request.url).pathname, "/api/session/share");
       assert.deepEqual(JSON.parse(held.request.postData), { confirmed: true });
       const share = {
         url: "https://radius.pi.dev/artifacts/synthetic-share",
@@ -132,7 +107,7 @@ export async function shareResultView(page, call, onEvent) {
         responseHeaders: [{ name: "content-type", value: "application/json" }],
         body: Buffer.from(
           JSON.stringify(
-            status === "shared" ? { status, share } : { error: "Remote machine unavailable." },
+            status === "shared" ? { status, share } : { error: "Radius did not answer." },
           ),
         ).toString("base64"),
       });
@@ -155,7 +130,7 @@ export async function shareResultView(page, call, onEvent) {
         await page.evaluate(
           "window.sharedOpens = []; window.open = (url) => { window.sharedOpens.push(url); return null; }",
         );
-        await page.capture(`share-peer-${status}`);
+        await page.capture(`share-${status}`);
         await toastButton(page, "Open link");
         assert.deepEqual(await page.evaluate("window.sharedOpens"), [share.url]);
         assert.equal(
@@ -175,7 +150,7 @@ export async function shareResultView(page, call, onEvent) {
           false,
           "uncertainty offers no immediate retry",
         );
-        await page.capture(`share-peer-${status}`);
+        await page.capture(`share-${status}`);
         await closeToast(page);
       }
       await page.until("!document.querySelector('[data-sonner-toast]')");
@@ -185,3 +160,38 @@ export async function shareResultView(page, call, onEvent) {
     await call("Fetch.disable");
   }
 }
+
+await run(
+  "session-sharing",
+  ({ repository, history }) => {
+    const cwd = repository("repo");
+    const now = new Date().toISOString();
+    history({
+      sessionId,
+      cwd,
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "text", text: `${title} saved history` }],
+          timestamp: Date.now(),
+        },
+      ],
+    });
+    return {
+      folders: [cwd],
+      workspaces: [{ id: "shared-workspace", path: cwd, folder: cwd }],
+      sessions: [{ sessionId, cwd, title, createdAt: now, updatedAt: now }],
+    };
+  },
+  async (page) => {
+    await page.open(`/s/${sessionId}`);
+    await page.see(`${title} saved history`);
+    await ready(page);
+    await shareSignIn(page);
+    await page.open(`/s/${sessionId}`);
+    await page.see(`${title} saved history`);
+    await ready(page);
+    await page.cdp((call, onEvent) => shareResultView(page, call, onEvent));
+  },
+  { backendEnv: { RADIUS_API_KEY: "" } },
+);

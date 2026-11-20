@@ -20,7 +20,6 @@ import { sessionProjectMenu } from "@/lib/projectCommands";
 import type { SessionEntry } from "@/lib/sessionCatalog";
 import { sessionRowMenu } from "@/lib/sessionCommands";
 import type { SessionRowDetails } from "@/lib/sidebarList";
-import { useOffers } from "@/lib/useMachine";
 import { useSidebarWindow } from "@/lib/useSidebarWindow";
 import { sessionKey } from "@/store";
 
@@ -188,7 +187,6 @@ export function SessionMenu({
   target: { cwd: string; sessionId: string; title: string | undefined; hint?: string | undefined };
 }) {
   const { state } = useCommands();
-  const offers = useOffers();
   const { commands, run } = useSessionCommands(target);
   const { sections } = sessionRowMenu(commands);
   return (
@@ -206,7 +204,7 @@ export function SessionMenu({
           {i > 0 && <DropdownMenuSeparator />}
           <DropdownMenuGroup>
             {section === "project" ? (
-              <ProjectMenu menu={sessionProjectMenu(state, target, offers)} run={run} />
+              <ProjectMenu menu={sessionProjectMenu(state, target)} run={run} />
             ) : (
               section.map((c) => <SessionCommandMenuItem key={c.id} command={c} run={run} />)
             )}

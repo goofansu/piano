@@ -8,14 +8,12 @@ import { act, createElement, type ComponentType, type Context } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { createServer } from "vite";
-import { LOCAL } from "../shared/machine.ts";
 import { workspaceFile } from "../web/src/lib/api.ts";
 import { createClient } from "../web/src/lib/client.ts";
-import { machineOffers } from "../web/src/lib/machineOffers.ts";
 import { createNavigation, type Navigation } from "../web/src/lib/navigation.ts";
-import type { MachineScope } from "../web/src/lib/useMachine.ts";
+import type { PageStores } from "../web/src/lib/pageStores.ts";
 import { initialState, type AppState } from "../web/src/store.ts";
-import { localMachineScope } from "./fixtures/machineScope.ts";
+import { pageStores } from "./fixtures/pageStores.ts";
 
 test("retained HTML viewer stops admitting links under Settings and resumes without rereading", async (t) => {
   const dom = new JSDOM("<div id='root'></div>", { url: "http://piano.test/s/session" });
@@ -99,8 +97,8 @@ test("retained HTML viewer stops admitting links under Settings and resumes with
   const { NavigationContext } = (await vite.ssrLoadModule("/src/lib/useNavigation.ts")) as {
     NavigationContext: Context<Navigation | null>;
   };
-  const { MachineContext } = (await vite.ssrLoadModule("/src/lib/useMachine.ts")) as {
-    MachineContext: Context<MachineScope | null>;
+  const { PageStoresContext } = (await vite.ssrLoadModule("/src/lib/usePageStores.ts")) as {
+    PageStoresContext: Context<PageStores | null>;
   };
   const state: AppState = {
     ...initialState,
@@ -117,7 +115,6 @@ test("retained HTML viewer stops admitting links under Settings and resumes with
     },
   };
   const client = createClient({
-    startsSessionIn: machineOffers(LOCAL).startsSessionIn,
     initial: state,
     notify: () => {},
     connect: () => {
@@ -126,8 +123,7 @@ test("retained HTML viewer stops admitting links under Settings and resumes with
   });
   const navigation = createNavigation({
     client,
-    readFile: (workspaceId, path, options) =>
-      workspaceFile(workspaceId, path, { ...options, machineId: LOCAL.id }),
+    readFile: workspaceFile,
     address: {
       location: () => ({ pathname: "/s/session", search: "" }),
       push: () => {},
@@ -141,8 +137,8 @@ test("retained HTML viewer stops admitting links under Settings and resumes with
   await act(async () => {
     root!.render(
       createElement(
-        MachineContext.Provider,
-        { value: localMachineScope() },
+        PageStoresContext.Provider,
+        { value: pageStores() },
         createElement(
           NavigationContext.Provider,
           { value: navigation },

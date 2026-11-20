@@ -14,7 +14,6 @@ import { useCommands, useGlobalCommands } from "@/components/CommandHost";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { GlobalCommandIcon } from "@/components/GlobalCommandIcon";
 import { IconButton } from "@/components/IconButton";
-import { MachineSwitcher } from "@/components/MachineSwitcher";
 import { PianoButton as Button } from "@/components/PianoButton";
 import {
   DropdownMenu,
@@ -59,7 +58,6 @@ import type {
   SidebarListModel,
   SidebarSection,
 } from "@/lib/sidebarList";
-import { useOffers } from "@/lib/useMachine";
 import { useNarrowViewport } from "@/lib/useNarrowViewport";
 import { useNavigation } from "@/lib/useNavigation";
 import type { AppState } from "@/store";
@@ -83,10 +81,9 @@ const groupTrigger =
 
 export function Sidebar({ state, list, toggle }: SessionsProps) {
   const { openNew, openProjects, openSettings, setPalette } = useNavigation();
-  const offers = useOffers();
   return (
     <div data-slot="session-sidebar" className="flex h-full flex-col">
-      <LayoutHeader title={<MachineSwitcher />}>
+      <LayoutHeader>
         <IconButton
           size="header"
           label={PALETTE_NAME}
@@ -121,22 +118,18 @@ export function Sidebar({ state, list, toggle }: SessionsProps) {
           <SidebarSessions state={state} list={list} toggle={toggle} />
         </nav>
       </ScrollArea>
-      {offers.settings && (
-        <LayoutFooter>
-          <Button variant="ghost" leading className="flex-1" onClick={() => openSettings()}>
-            <SettingsIcon data-icon="inline-start" />
-            Settings
-          </Button>
-        </LayoutFooter>
-      )}
+      <LayoutFooter>
+        <Button variant="ghost" leading className="flex-1" onClick={() => openSettings()}>
+          <SettingsIcon data-icon="inline-start" />
+          Settings
+        </Button>
+      </LayoutFooter>
     </div>
   );
 }
 
 function SidebarSessions({ state, list: { pinned, body }, toggle }: SessionsProps) {
   const { select } = useNavigation();
-  const offers = useOffers();
-  const unavailable = state.unreachable ? "Machine unavailable" : undefined;
 
   const groupProps = { state, select };
   const section = (s: SidebarSection) => {
@@ -195,9 +188,9 @@ function SidebarSessions({ state, list: { pinned, body }, toggle }: SessionsProp
       case undefined:
         return null;
       case "loading":
-        return unavailable ? empty(unavailable) : <SidebarSkeleton />;
+        return <SidebarSkeleton />;
       case "empty":
-        return empty(unavailable ?? (offers.browse ? body.text : "No sessions yet"));
+        return empty(body.text);
       case "sections": {
         return (
           <div className="flex flex-col gap-1">
@@ -487,8 +480,7 @@ function ProjectGroup({
   sessions: readonly SessionEntry[];
 }) {
   const { run } = useCommands();
-  const offers = useOffers();
-  const commands = project ? projectCommands(state, project, offers) : [];
+  const commands = project ? projectCommands(state, project) : [];
   const create = commands.find((c) => c.id === "new-session");
   return (
     <SidebarGroup
@@ -537,7 +529,7 @@ function FolderGroup({
   select,
 }: GroupProps & { folder: FolderView; sessions: readonly SessionEntry[] }) {
   const { run } = useCommands();
-  const { create, close } = folderCommands(state, folder, useOffers());
+  const { create, close } = folderCommands(state, folder);
 
   return (
     <SidebarGroup
@@ -550,7 +542,7 @@ function FolderGroup({
       details={details}
       select={select}
       actions={[
-        create?.enabled && (
+        create.enabled && (
           <IconButton
             key="new"
             size="row"
@@ -561,22 +553,20 @@ function FolderGroup({
             <SquarePenIcon />
           </IconButton>
         ),
-        close && (
-          <DropdownMenu key="menu">
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="row" aria-label={`Folder menu for ${folder.name}`}>
-                <MoreHorizontalIcon />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuGroup>
-                <DropdownMenuItem disabled={!close.enabled} onSelect={() => run(close)}>
-                  <XIcon /> {close.label}
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ),
+        <DropdownMenu key="menu">
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="row" aria-label={`Folder menu for ${folder.name}`}>
+              <MoreHorizontalIcon />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuGroup>
+              <DropdownMenuItem disabled={!close.enabled} onSelect={() => run(close)}>
+                <XIcon /> {close.label}
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>,
       ]}
       notice={
         folder.discovery.status === "error" && (

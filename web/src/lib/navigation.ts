@@ -1,7 +1,7 @@
 import { type AppState, type Page, sessionKey } from "../store.ts";
 import type { RequestOptions, workspaceFile } from "./api.ts";
+import { browserMemory } from "./browserMemory.ts";
 import type { Client } from "./client.ts";
-import { machineMemory } from "./machineMemory.ts";
 import type { Preference } from "./preference.ts";
 import { findProject } from "./projectCommands.ts";
 import {
@@ -130,7 +130,6 @@ export interface NavigationOptions {
   ) => ReturnType<typeof workspaceFile>;
   memory?: SurfaceMemory;
   rail?: Preference<boolean>;
-  settings?: boolean;
   moved?: () => void;
 }
 
@@ -336,14 +335,9 @@ export function createNavigation({
   readFile,
   memory,
   rail: railPreference,
-  settings: offersSettings = true,
   moved = () => {},
 }: NavigationOptions): Navigation {
-  const refused = (route: Route) => route.kind === "settings" && !offersSettings;
-  const routeAt = (): Route => {
-    const route = parseRoute(address.location());
-    return refused(route) ? { kind: "new" } : route;
-  };
+  const routeAt = (): Route => parseRoute(address.location());
   let wanted: Route | null = routeAt();
   const fields = {
     surface: null,
@@ -541,7 +535,7 @@ export function createNavigation({
       const { pathname, search } = address.location();
       const target = addressFor(c, state.settings, pathname);
       if (target) {
-        const replace = target.mode === "replace" || refused(parseRoute({ pathname }));
+        const replace = target.mode === "replace";
         if (target.path !== pathname + search)
           (replace ? address.replace : address.push)(target.path);
         if (target.title !== syncedTitle) {
@@ -737,7 +731,6 @@ export function createNavigation({
     openProjects: () => open({ kind: "projects" }),
     openProject: (projectId) => open({ kind: "project", projectId }),
     openSettings: (section = DEFAULT_SETTINGS_SECTION) => {
-      if (!offersSettings) return;
       batch(() => {
         wanted = null;
         set({ settings: section });
@@ -791,8 +784,8 @@ export function createNavigation({
   };
 }
 
-export function browserSurfaceMemory(machineId: string): SurfaceMemory {
-  const memory = machineMemory(machineId, "surface");
+export function browserSurfaceMemory(): SurfaceMemory {
+  const memory = browserMemory("surface");
   return {
     read: memory.read,
     write: (value) => (value === null ? memory.remove() : memory.write(value)),

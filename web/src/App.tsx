@@ -3,7 +3,6 @@ import { AppLayout, LayoutView } from "@/components/AppLayout";
 import { CommandHost } from "@/components/CommandHost";
 import { CommandPalette } from "@/components/CommandPalette";
 import { DialogHost } from "@/components/DialogHost";
-import { MachineHost } from "@/components/MachineHost";
 import { NewSession } from "@/components/NewSession";
 import { PaneNotFound } from "@/components/Pane";
 import { ProjectHome } from "@/components/ProjectHome";
@@ -14,10 +13,11 @@ import { SidebarActivityContext } from "@/components/ShowSidebarButton";
 import { Sidebar } from "@/components/Sidebar";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
+import { observeDictationPage } from "@/lib/browserDictation";
 import { checkoutRefresh } from "@/lib/checkoutRefresh";
 import { storedLastDirectory } from "@/lib/client";
-import { machineFrameBytes, machineLocation, machineSocketUrl } from "@/lib/machine";
 import { initialView } from "@/lib/navigation";
+import { createPageStores } from "@/lib/pageStores";
 import { pendingDialogs } from "@/lib/piDialogs";
 import { parseRoute } from "@/lib/routes";
 import {
@@ -27,8 +27,8 @@ import {
 } from "@/lib/sessionCatalog";
 import { toastNotify as notify } from "@/lib/toastNotify";
 import { useClient } from "@/lib/useClient";
-import { useMachineScope, useOffers, usePreviews } from "@/lib/useMachine";
 import { NavigationContext, useNavigationController } from "@/lib/useNavigation";
+import { PageStoresContext } from "@/lib/usePageStores";
 import { providerAccounts } from "@/lib/useProviderAccounts";
 import { SessionFilesContext, useSessionFilesController } from "@/lib/useSessionFiles";
 import {
@@ -40,59 +40,40 @@ import {
 import { useSidebarList } from "@/lib/useSidebarList";
 import { useSidebarSessionNavigation } from "@/lib/useSidebarSessionNavigation";
 import { useSidebarView } from "@/lib/useSidebarView";
-import { browserSocketEnvironment, type ConnectionHandlers, openConnection } from "@/lib/ws";
 import { type AppState, initialState } from "@/store";
+
+const stores = createPageStores(notify);
 
 export default function App() {
   const layout = useSidebarLayoutController();
   return (
     <SidebarLayoutContext.Provider value={layout}>
-      <MachineHost>
-        <MachineApp />
-      </MachineHost>
+      <PageStoresContext value={stores}>
+        <PianoApp />
+      </PageStoresContext>
     </SidebarLayoutContext.Provider>
   );
 }
 
-function MachineApp() {
-  const scope = useMachineScope();
-  const { machine, catalogs: modelCatalogs, drafts, questions: questionReplies } = scope;
-  const offers = useOffers();
-  const previews = usePreviews();
+function PianoApp() {
+  const { catalogs: modelCatalogs, drafts, questions: questionReplies, previews } = stores;
+  useEffect(observeDictationPage, []);
   const { state, client } = useClient(
-    (): AppState => {
-      const catalogs = { ...modelCatalogs.seed() };
-      return {
-        ...initialState,
-        catalogs,
-        view: initialView(parseRoute(machineLocation(location.pathname))),
-      };
-    },
+    (): AppState => ({
+      ...initialState,
+      catalogs: { ...modelCatalogs.seed() },
+      view: initialView(parseRoute(location)),
+    }),
     notify,
-    {
-      connect: (handlers: ConnectionHandlers) =>
-        openConnection(handlers, {
-          ...browserSocketEnvironment,
-          url: () => machineSocketUrl(machine.id),
-          frameBytes: machineFrameBytes(machine.id),
-        }),
-      lastDirectory: storedLastDirectory(machine.id),
-      startsSessionIn: offers.startsSessionIn,
-    },
+    { lastDirectory: storedLastDirectory() },
   );
   const { dispatch, send } = client;
-  useEffect(
-    () => (offers.providerAccounts ? providerAccounts.follow(client) : undefined),
-    [client, offers],
-  );
+  useEffect(() => providerAccounts.follow(client), [client]);
   useEffect(() => modelCatalogs.follow(client), [client, modelCatalogs]);
-  useEffect(
-    () => (offers.worktrees ? checkoutRefresh.follow(client) : undefined),
-    [client, offers],
-  );
+  useEffect(() => checkoutRefresh.follow(client), [client]);
   useEffect(() => drafts.follow(client, notify), [client, drafts]);
   useEffect(() => questionReplies.follow(client), [client, questionReplies]);
-  useEffect(() => previews?.follow(client, notify), [client, previews]);
+  useEffect(() => previews.follow(client, notify), [client, previews]);
   const layout = useSidebarLayout();
   useSidebarShortcut();
   const sessionFiles = useSessionFilesController(state);
@@ -154,12 +135,12 @@ function MachineApp() {
                       />
                     ) : state.view.kind === "missing-session" ? (
                       <UnavailableSession
-                        page={unavailableSessionPage(state.view.reason, offers)}
+                        page={unavailableSessionPage(state.view.reason)}
                         openDataControls={() => openSettings("data-controls")}
                         openNew={() => openNew()}
                       />
                     ) : (
-                      <SessionView state={state} send={send} captureSend={client.captureSend} />
+                      <SessionView state={state} send={send} />
                     )}
                   </LayoutView>
                   {settings && (

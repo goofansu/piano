@@ -11,7 +11,6 @@ import {
 } from "../shared/wire.ts";
 import type { DeliveryOverflow } from "./BoundedDelivery.ts";
 import { CreationAttempts } from "./CreationAttempts.ts";
-import { bindSessionEvent } from "./ImagePreviews.ts";
 import { type PiSession, PiSessionError, sessionActionPolicy } from "./PiSessions.ts";
 import { type CreateSpec, SessionHosts, type SessionNotCreated } from "./SessionHosts.ts";
 
@@ -138,7 +137,6 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     yield* session.events.pipe(
       Stream.runForEach((event) =>
         Effect.gen(function* () {
-          bindSessionEvent(session.spec.cwd, session.spec.sessionId, event);
           if (current(selection))
             yield* event._tag === "snapshot"
               ? send({
@@ -218,11 +216,6 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
               checkoutMissing: !!view.snapshot.state.checkoutMissing,
             }
           : null;
-        if (sessionId)
-          bindSessionEvent(view.cwd, sessionId, {
-            _tag: "snapshot",
-            snapshot: view.snapshot,
-          });
         yield* send({
           _tag: "selected",
           selectionId,
