@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve as resolvePath } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { type TestContext, test } from "node:test";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { GitHubPullRequestsLive } from "../server/GitHubPullRequests.ts";
@@ -12,6 +13,7 @@ import { SessionPullRequests, SessionPullRequestsLive } from "../server/SessionP
 import { GhCommand } from "../server/Subprocess.ts";
 import { WorkspaceChangesLive } from "../server/WorkspaceChanges.ts";
 import type { WorkspaceChanges as Observation } from "../shared/wire.ts";
+import { seedRegistry } from "./fixtures/registry.ts";
 
 async function fixture(t: TestContext) {
   const root = mkdtempSync(join(tmpdir(), "piano-session-changes-")),
@@ -190,6 +192,88 @@ test("a worktree's recorded base applies only while the checkout is on the branc
   assert.deepEqual(await target(), ["main", "worktree"]);
   await observe("feature");
   assert.deepEqual(await target(), ["main", "worktree"]);
+});
+
+test("PIN-167: a schema-17 base observed on another branch is not assigned to that branch on upgrade", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "piano-legacy-base-")),
+    repo = join(root, "repo"),
+    worktree = join(root, "repo.feature"),
+    database = join(root, "registry.db");
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync(
+      "git",
+      ["-C", cwd, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", ...args],
+      {
+        encoding: "utf8",
+        env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" },
+      },
+    ).trim();
+  const commitFile = (cwd: string, name: string) => {
+    writeFileSync(join(cwd, name), `${name}\n`);
+    git(cwd, "add", name);
+    git(cwd, "commit", "-qm", name);
+  };
+  execFileSync("git", ["init", "-q", "-b", "main", repo]);
+  commitFile(repo, "base");
+  git(repo, "branch", "-q", "release");
+  commitFile(repo, "main-only");
+  git(repo, "switch", "-q", "release");
+  commitFile(repo, "release-only");
+  git(repo, "switch", "-q", "main");
+  git(repo, "worktree", "add", "-q", "-b", "feature", worktree, "release");
+  commitFile(worktree, "feature-work");
+  git(worktree, "switch", "-q", "-c", "other", "main");
+  commitFile(worktree, "other-work");
+
+  seedRegistry(database, {
+    folders: [repo],
+    worktrees: [{ folder: repo, path: worktree, branch: "other" }],
+    sessions: [{ cwd: worktree, sessionId: "s", createdAt: "then", updatedAt: "now" }],
+  });
+  const legacy = new DatabaseSync(database);
+  try {
+    legacy.exec(
+      `ALTER TABLE worktrees DROP COLUMN created_commit; ALTER TABLE worktrees DROP COLUMN created_branch; UPDATE worktrees SET base_branch = 'release'; PRAGMA user_version = 17;`,
+    );
+  } finally {
+    legacy.close();
+  }
+
+  const open = (t: TestContext) => {
+    const runtime = ManagedRuntime.make(
+      SessionChangesLive.pipe(
+        Layer.provide(WorkspaceChangesLive),
+        Layer.provideMerge(RegistryLive),
+        Layer.provide(Layer.succeed(RegistryDatabasePath, database)),
+      ),
+    );
+    t.after(() => runtime.dispose());
+    return () =>
+      runtime.runPromise(
+        Effect.gen(function* () {
+          const data = yield* (yield* Registry).get;
+          const workspace = data.workspaces.find((w) => w.path === worktree)!;
+          const session = data.sessions.find((s) => s.cwd === worktree)!;
+          const { comparison, files } = ready(
+            yield* (yield* SessionChanges).read(workspace, session, { scope: "branch" }),
+          );
+          return {
+            target: [comparison.target?.name, comparison.target?.from],
+            files: files.map((file) => file.path).sort(),
+          };
+        }),
+      );
+  };
+  const read = open(t);
+  assert.deepEqual(await read(), { target: ["main", "assumed"], files: ["other-work"] });
+  git(worktree, "switch", "-q", "feature");
+  assert.deepEqual(await read(), {
+    target: ["main", "assumed"],
+    files: ["feature-work", "release-only"],
+  });
+  git(worktree, "switch", "-q", "other");
+  assert.deepEqual(await open(t)(), { target: ["main", "assumed"], files: ["other-work"] });
 });
 
 test("INV-01/07: a manual foreign PR with the same head name stays linked without hiding branch changes", async (t) => {
