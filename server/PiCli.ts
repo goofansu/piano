@@ -35,7 +35,6 @@ export const defaultPiCli = (): PiCliConfig => ({
     pianoAskUserExtension,
     pianoLibraryExtension,
     radiusArtifactsExtension,
-    join(ROOT, "node_modules/@earendil-works/pi-claude-code/src/index.ts"),
   ],
 });
 

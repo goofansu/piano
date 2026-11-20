@@ -22,9 +22,6 @@ test("Piano's extensions are resolved from the installation, never from the sess
     installed("piano-ask-user"),
     installed("piano-library"),
     installed("radius-artifacts"),
-    fileURLToPath(
-      new URL("../node_modules/@earendil-works/pi-claude-code/src/index.ts", import.meta.url),
-    ),
   ];
   assert.deepEqual(defaultPiCli().extensions, expected);
   const installation = process.cwd();
