@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { PROJECT_INSTRUCTIONS_MAX, PROJECT_NAME_MAX, type Project } from "../shared/wire.ts";
-import { LOCAL } from "../web/src/lib/machine.ts";
-import { machineOffers } from "../web/src/lib/machineOffers.ts";
 import {
   checkProjectDraft,
   openProjectCommand,
@@ -16,15 +14,13 @@ import {
 import { type AppState, initialState } from "../web/src/store.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
 
-const local = machineOffers(LOCAL);
-
 const launch: Project = { id: "p1", name: "Launch" };
 const billing: Project = { id: "p2", name: "Billing" };
 const state: AppState = { ...initialState, connected: true, projects: [launch, billing] };
 
 const names = (projects: readonly Project[]) => projects.map((p) => p.name);
 const byId = (project: Project, s = state) =>
-  Object.fromEntries(projectCommands(s, project, local).map((c) => [c.id, c]));
+  Object.fromEntries(projectCommands(s, project).map((c) => [c.id, c]));
 
 test("pickers offer projects by name, numbers by value, as the sidebar lists them", () => {
   const q10: Project = { id: "q10", name: "Q10 launch" };
@@ -68,7 +64,7 @@ test("pickers leave out done projects, except the New page's current choice", ()
 
 test("a project offers New session in project, Project settings, Mark project done and Delete; New session opens its home", () => {
   assert.deepEqual(
-    projectCommands(state, launch, local).map((c) => c.label),
+    projectCommands(state, launch).map((c) => c.label),
     ["New session in project", "Project settings", "Mark project done", "Delete project"],
   );
   assert.deepEqual(byId(launch)["new-session"]?.intent, { kind: "open-project", projectId: "p1" });
@@ -90,7 +86,7 @@ test("a done project offers Reopen project in the same row, sending the reverse 
     command: { _tag: "set_project_done", id: "p1", done: false },
   });
   assert.deepEqual(
-    projectCommands(state, done, local).map((c) => c.label),
+    projectCommands(state, done).map((c) => c.label),
     ["New session in project", "Project settings", "Reopen project", "Delete project"],
     "the rest of the row is unchanged",
   );
@@ -98,7 +94,7 @@ test("a done project offers Reopen project in the same row, sending the reverse 
 
 test("a project's menu holds Project settings and Mark project done, with Delete project set apart as its one destructive row", () => {
   const labels = (commands: readonly { label: string }[]) => commands.map((c) => c.label);
-  const menu = projectMenu(projectCommands(state, launch, local));
+  const menu = projectMenu(projectCommands(state, launch));
   assert.deepEqual(
     labels(menu.manage),
     ["Project settings", "Mark project done"],
@@ -112,7 +108,7 @@ test("a project's menu holds Project settings and Mark project done, with Delete
   assert.ok(menu.destructive.every((c) => c.destructive));
   assert.equal(menu.destructive[0]?.enabled, true);
 
-  const offline = projectMenu(projectCommands({ ...state, connected: false }, launch, local));
+  const offline = projectMenu(projectCommands({ ...state, connected: false }, launch));
   assert.equal(offline.destructive[0]?.enabled, false, "deleting waits for a connection");
   assert.equal(offline.manage[0]?.enabled, true, "settings opens a dialog without one");
   assert.equal(offline.manage[1]?.enabled, false, "marking done changes the registry, so it waits");
@@ -212,7 +208,7 @@ test("a session's project menu: Move for a member, Add otherwise, one connection
       sessionReference("/repo", "s2"),
     ],
   };
-  const moving = sessionProjectMenu(s, member, local);
+  const moving = sessionProjectMenu(s, member);
   assert.equal(moving.current?.name, "Launch");
   assert.deepEqual(moving.entry, { label: "Move to project", enabled: true });
   assert.deepEqual(names(moving.destinations.map((d) => d.project)), ["Billing"]);
@@ -230,13 +226,13 @@ test("a session's project menu: Move for a member, Add otherwise, one connection
     dialog: { assign: member },
   });
 
-  const adding = sessionProjectMenu(s, loose, local);
+  const adding = sessionProjectMenu(s, loose);
   assert.equal(adding.current, undefined);
   assert.deepEqual(adding.entry, { label: "Add to project", enabled: true });
   assert.equal(adding.remove, undefined, "a session in no project has nothing to remove");
   assert.deepEqual(names(adding.destinations.map((d) => d.project)), ["Billing", "Launch"]);
 
-  const offline = sessionProjectMenu({ ...s, connected: false }, member, local);
+  const offline = sessionProjectMenu({ ...s, connected: false }, member);
   assert.deepEqual(
     offline.entry,
     { label: "Move to project", enabled: false },
@@ -255,10 +251,10 @@ test("a member session opens its project's home", () => {
       sessionReference("/repo", "s2"),
     ],
   };
-  const open = sessionProjectMenu(s, { cwd: "/repo", sessionId: "s1" }, local).open;
+  const open = sessionProjectMenu(s, { cwd: "/repo", sessionId: "s1" }).open;
   assert.deepEqual(open, openProjectCommand(billing));
   assert.equal(open?.label, "Open project: Billing");
   assert.equal(open?.enabled, true, "navigation needs no connection");
   assert.deepEqual(open?.intent, { kind: "open-project", projectId: "p2" });
-  assert.equal(sessionProjectMenu(s, { cwd: "/repo", sessionId: "s2" }, local).open, undefined);
+  assert.equal(sessionProjectMenu(s, { cwd: "/repo", sessionId: "s2" }).open, undefined);
 });

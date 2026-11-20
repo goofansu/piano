@@ -6,8 +6,8 @@ import { JSDOM } from "jsdom";
 import { act, createElement, type Context } from "react";
 import { createRoot } from "react-dom/client";
 import { createServer } from "vite";
-import type { MachineScope } from "../web/src/lib/useMachine.ts";
-import { localMachineScope } from "./fixtures/machineScope.ts";
+import type { PageStores } from "../web/src/lib/pageStores.ts";
+import { pageStores } from "./fixtures/pageStores.ts";
 
 test("unchanged prose loads images only when a workspace owns it, and releases them on removal", async (t) => {
   const dom = new JSDOM("<div id='root'></div>");
@@ -43,8 +43,8 @@ test("unchanged prose loads images only when a workspace owns it, and releases t
       text: string,
     ) => ReadonlyMap<string, string>;
   };
-  const { MachineContext } = (await vite.ssrLoadModule("/src/lib/useMachine.ts")) as {
-    MachineContext: Context<MachineScope | null>;
+  const { PageStoresContext } = (await vite.ssrLoadModule("/src/lib/usePageStores.ts")) as {
+    PageStoresContext: Context<PageStores | null>;
   };
   const reads: Array<{ workspaceId: string | null; path: string }> = [];
   const signals: AbortSignal[] = [];
@@ -82,8 +82,8 @@ test("unchanged prose loads images only when a workspace owns it, and releases t
     await act(() => {
       root.render(
         createElement(
-          MachineContext.Provider,
-          { value: localMachineScope() },
+          PageStoresContext.Provider,
+          { value: pageStores() },
           createElement(Prose, { workspaceId }),
         ),
       );

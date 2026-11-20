@@ -8,7 +8,6 @@ export const PREVIEW_LIMIT_BYTES = {
   video: 32 * MiB,
   pdf: 20 * MiB,
 } as const;
-export const LARGEST_PREVIEW_BYTES = Math.max(...Object.values(PREVIEW_LIMIT_BYTES));
 
 const identity = { workspaceId: Schema.String, path: Schema.String };
 export const FilePreview = Schema.Union([

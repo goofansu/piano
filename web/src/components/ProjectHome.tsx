@@ -24,7 +24,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { timeAgo } from "@/lib/format";
 import { isProjectDone, projectCommands } from "@/lib/projectCommands";
 import { type ProjectHomeCue, projectHome, stableOrder } from "@/lib/projectHome";
-import { useOffers } from "@/lib/useMachine";
 import { useNavigation } from "@/lib/useNavigation";
 import { type AppState, sessionKey } from "@/store";
 
@@ -88,7 +87,6 @@ export function ProjectHome({
 }) {
   const { select, openProjects } = useNavigation();
   const { run } = useCommands();
-  const offers = useOffers();
   const home = projectHome(state, projectId);
   const order = useStableOrder(home.kind === "home" ? home.sessions.map(sessionKey) : []);
 
@@ -117,7 +115,7 @@ export function ProjectHome({
         actions={
           <ProjectCommandsMenu
             project={project}
-            commands={projectCommands(state, project, offers)}
+            commands={projectCommands(state, project)}
             run={run}
             size="header"
             trailing

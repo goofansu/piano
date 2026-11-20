@@ -1,11 +1,6 @@
 import { createHash } from "node:crypto";
 import { imageType } from "../shared/attachments.ts";
-import {
-  IMAGE_PREVIEW_BYTES as limit,
-  imagePreviewAddress,
-  imagePreviewHash,
-} from "../shared/imagePreviews.ts";
-import { type RenderMsg, type SessionEvent, sessionKey } from "../shared/wire.ts";
+import { IMAGE_PREVIEW_BYTES as limit, imagePreviewAddress } from "../shared/imagePreviews.ts";
 
 export interface ImagePreview {
   readonly id: string;
@@ -15,16 +10,9 @@ export interface ImagePreview {
 interface CachedImage {
   bytes: Buffer;
   mimeType: string;
-  sessions: Map<string, Membership>;
-}
-interface Membership {
-  key: string;
-  image: CachedImage;
 }
 const previews = new Map<string, CachedImage>();
-const memberships = new Set<Membership>();
 const entryLimit = 4096;
-const membershipLimit = 4096;
 let size = 0;
 export function imagePreview(data: string, mimeType: string): string | undefined {
   if (data.length > 4 * Math.ceil(limit / 3)) return undefined;
@@ -42,65 +30,14 @@ export function retainImagePreview({ id, bytes, mimeType }: ImagePreview) {
       const oldest = previews.keys().next().value!;
       const image = previews.get(oldest)!;
       size -= image.bytes.length;
-      for (const membership of image.sessions.values()) memberships.delete(membership);
       previews.delete(oldest);
     }
     previews.set(id, {
       bytes: Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
       mimeType,
-      sessions: new Map(),
     });
     size += bytes.length;
   }
-}
-export function bindImagePreviews(cwd: string, sessionId: string, messages: readonly RenderMsg[]) {
-  const key = sessionKey(cwd, sessionId);
-  for (const message of messages)
-    for (const attachment of message.attachments ?? []) {
-      const hash = imagePreviewHash(attachment.url);
-      const image = hash && previews.get(hash);
-      if (!image || image.sessions.has(key)) continue;
-      if (memberships.size >= membershipLimit) {
-        const oldest = memberships.values().next().value!;
-        oldest.image.sessions.delete(oldest.key);
-        memberships.delete(oldest);
-      }
-      const membership = { key, image };
-      image.sessions.set(key, membership);
-      memberships.add(membership);
-    }
-}
-function eventMessages(event: SessionEvent): readonly RenderMsg[] {
-  switch (event._tag) {
-    case "snapshot":
-      return event.snapshot.pending
-        ? [...event.snapshot.messages, event.snapshot.pending]
-        : event.snapshot.messages;
-    case "message_update":
-    case "message_end":
-      return [event.message];
-    case "context":
-      return event.messages;
-    case "state":
-    case "response_completed":
-    case "response_failed":
-    case "queue_update":
-    case "submission":
-    case "tool_update":
-    case "dialog":
-    case "dialog_resolved":
-    case "notice":
-    case "closed":
-      return [];
-  }
-}
-export function bindSessionEvent(cwd: string, sessionId: string, event: SessionEvent) {
-  bindImagePreviews(cwd, sessionId, eventMessages(event));
-}
-export function sessionImagePreview(cwd: string, sessionId: string, id: string) {
-  return previews.get(id)?.sessions.has(sessionKey(cwd, sessionId))
-    ? getImagePreview(id)
-    : undefined;
 }
 export function getImagePreview(id: string) {
   const image = previews.get(id);

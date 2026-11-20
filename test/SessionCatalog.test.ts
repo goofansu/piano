@@ -217,7 +217,7 @@ test("a starting session has no live activity, and a stale host snapshot shows n
     sessions: ["working", "idle", "done"],
     anyWorking: true,
   });
-  const lost = reduce(current, { type: "connected", connected: false, lost: true });
+  const lost = reduce(current, { type: "connected", connected: false });
   assert.deepEqual(
     activity(lost),
     { sessions: ["off", "off", "done"], anyWorking: false },
@@ -262,7 +262,7 @@ test("startup seen only in a stale host snapshot neither hides the saved title n
     disabled: false,
     destination: { sessionId: "open-member", cwd: "/work/repo.feature", label: "Open member" },
   };
-  const lost = reduce(starting, { type: "connected", connected: false, lost: true });
+  const lost = reduce(starting, { type: "connected", connected: false });
   assert.deepEqual(row(lost, "open-member"), saved, "cached startup is not current while offline");
   const reopened = reduce(lost, { type: "connected", connected: true });
   assert.deepEqual(row(reopened, "open-member"), saved, "reconnecting alone observes no host");
@@ -387,7 +387,7 @@ test("a session's address selects it only while it is registered, unarchived and
   );
 });
 
-test("an unavailable session's page and browser tab agree on why, and only Settings offers Data controls", () => {
+test("an unavailable session's page and browser tab agree on why, and an archived one points to Data controls", () => {
   const loaded: AppState = { ...state, registryLoaded: true };
   const pages = (["missing", "lost", "archived"] as const).map((sessionId) => {
     const address = sessionAddress(loaded, sessionId);
@@ -397,27 +397,19 @@ test("an unavailable session's page and browser tab agree on why, and only Setti
     const shown: AppState = { ...loaded, view: decision.page };
     const tab = addressFor(shown, null, `/s/${sessionId}`)?.title;
     const reason = address.kind === "unavailable" ? address.reason : "missing";
-    for (const settings of [true, false]) {
-      const page = unavailableSessionPage(reason, { settings });
-      assert.equal(tab, `${page.title} - Piano`, `${reason} with settings ${settings}`);
-    }
-    return {
-      reason,
-      local: unavailableSessionPage(reason, { settings: true }),
-      remote: unavailableSessionPage(reason, { settings: false }),
-    };
+    const page = unavailableSessionPage(reason);
+    assert.equal(tab, `${page.title} - Piano`, reason);
+    return { reason, page };
   });
   assert.deepEqual(
-    pages.map(({ reason, local, remote }) => [reason, local.action, remote.action]),
+    pages.map(({ reason, page }) => [reason, page.action]),
     [
-      ["missing", "new-session", "new-session"],
-      ["history", "new-session", "new-session"],
-      ["archived", "data-controls", "new-session"],
+      ["missing", "new-session"],
+      ["history", "new-session"],
+      ["archived", "data-controls"],
     ],
   );
-  const archived = pages[2]!;
-  assert.match(archived.local.description, /Settings → Data controls/);
-  assert.doesNotMatch(archived.remote.description, /Settings/);
+  assert.match(pages[2]!.page.description, /Settings → Data controls/);
 });
 
 test("an untitled session is called Untitled in the sidebar, its header and the browser tab", () => {

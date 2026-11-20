@@ -56,11 +56,9 @@ Preconditions: a seeded launch. Make the workspace dirty through the files, as P
 
 ## Gotchas
 
-- Peer Changes reads allow the remote's Git timeout plus a transport margin. Oversized lists
-  report "Changes are too large to list; no partial file list is shown." rather than a partial
-  list. A small local diff proves neither boundary: remote deadline/size recovery needs a
-  configured peer and controlled slow-Git/oversized scratch fixtures, separately from the
-  ordinary Changes recipe.
+- Oversized lists report "Changes are too large to list; no partial file list is shown." rather
+  than a partial list. A small diff does not prove that boundary: it needs a controlled oversized
+  scratch fixture, separately from the ordinary Changes recipe.
 - Fake Pi makes no tool calls, so Outputs is only reachable through the seeded, hand-written
   history; report it as such. A real Pi write is not exercised.
 - The Surface area is `[data-slot=surface-area]`; hidden, it stays mounted but `inert` (so its

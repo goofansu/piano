@@ -25,7 +25,6 @@ import {
   slashOpen,
   slashUpdate,
 } from "@/lib/slashCompletion";
-import { useMachineId } from "@/lib/useMachine";
 import { useObservation } from "@/lib/useObservation";
 
 export interface CompletionContext {
@@ -113,14 +112,13 @@ export function SlashTextarea({
       window.removeEventListener("resize", sync);
     };
   }, [ref, value, props.className, props.style]);
-  const machineId = useMachineId();
   const open = slashOpen(state, view);
   const cwd = completion?.cwd;
   const session = completion?.session;
   const catalog = useObservation(open && cwd ? key : null, (signal) =>
     session
-      ? sessionCommands(session.workspaceId, session.sessionId, { signal, machineId })
-      : slashCommands(cwd!, { signal, machineId }),
+      ? sessionCommands(session.workspaceId, session.sessionId, { signal })
+      : slashCommands(cwd!, { signal }),
   );
   const current = catalog.value
     ? { commands: catalog.value }

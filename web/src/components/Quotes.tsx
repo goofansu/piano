@@ -5,7 +5,7 @@ import { Popover, PopoverAnchor, PopoverContent } from "@/components/PianoPopove
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
 import { Button } from "@/components/ui/button";
 import { type DraftKey } from "@/lib/messageDraft";
-import { useDrafts } from "@/lib/useMachine";
+import { useDrafts } from "@/lib/usePageStores";
 
 export interface QuoteDraft {
   items: readonly string[];

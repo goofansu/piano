@@ -1,6 +1,6 @@
 import type { FolderView, Project } from "@shared/wire";
 import type { AppState } from "../store.ts";
-import { machineMemory } from "./machineMemory.ts";
+import { browserMemory } from "./browserMemory.ts";
 import {
   createPreference,
   type Preference,
@@ -99,12 +99,9 @@ const keyList = (raw: string | null): readonly string[] => {
   return Array.isArray(stored) ? stored.filter((key) => typeof key === "string") : [];
 };
 
-export function sidebarPreferences(
-  machineId: string,
-  storage?: PreferenceStorage,
-): SidebarPreferences {
+export function sidebarPreferences(storage?: PreferenceStorage): SidebarPreferences {
   return {
-    openGroups: machineMemory(machineId, "openGroups", storage).preference<readonly string[]>({
+    openGroups: browserMemory("openGroups", storage).preference<readonly string[]>({
       decode: keyList,
     }),
     closedGroups: createPreference<readonly string[]>({

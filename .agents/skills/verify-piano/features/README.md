@@ -46,28 +46,23 @@ the [feature verification mapping policy](../../../../docs/testing.md#feature-ve
 
 - [Start a session](./start-session.md).
   Docs: [Session creation and recovery](../../../../docs/runtime-ownership.md#developer-navigation-session-creation-and-recovery),
-  [Image attachments](../../../../docs/image-attachments.md),
-  [Remote Pianos](../../../../docs/remote-piano.md#developer-navigation).
+  [Image attachments](../../../../docs/image-attachments.md).
 - [Open and continue a session](./open-session.md).
   Docs: [Session navigation](../../../../docs/sidebar-session-navigation.md#developer-navigation),
   [Transcript performance](../../../../docs/session-performance.md),
-  [Radius artifacts](../../../../docs/radius-artifacts.md),
-  [Remote Pianos](../../../../docs/remote-piano.md#developer-navigation).
+  [Radius artifacts](../../../../docs/radius-artifacts.md).
 - [Share a session](./session-sharing.md).
   Docs: [Session sharing](../../../../docs/session-sharing.md).
 - [Projects index](./projects-index.md).
-  Docs: [Projects UX](../../../../docs/project-centered-ux.md),
-  [Remote Pianos](../../../../docs/remote-piano.md#developer-navigation).
+  Docs: [Projects UX](../../../../docs/project-centered-ux.md).
 - [Project home](./project-home.md).
-  Docs: [Project grouping](../../../../docs/outcome-projects.md),
-  [Remote Pianos](../../../../docs/remote-piano.md#developer-navigation).
+  Docs: [Project grouping](../../../../docs/outcome-projects.md).
 - [Session dispatch](./session-dispatch.md).
   Docs: [Session dispatch](../../../../docs/session-dispatch.md),
   [Session creation and recovery](../../../../docs/runtime-ownership.md#developer-navigation-session-creation-and-recovery).
 - [Changes and files](./changes-and-files.md).
   Docs: [File previews](../../../../docs/file-previews.md),
-  [Managed live previews](../../../../docs/live-previews.md),
-  [Remote Pianos](../../../../docs/remote-piano.md#developer-navigation).
+  [Managed live previews](../../../../docs/live-previews.md).
 - [Settings › Skills and Prompts](./settings-skills-prompts.md).
   Docs: [Prompts](../../../../docs/prompts.md).
 - [Settings › Providers, Webhooks and Preferences](./settings-other.md).
@@ -93,13 +88,9 @@ Keep these prerequisites visible when using the default launch:
   evidence; the CLI recipe proves creation, inheritance and status, not those UI paths.
 - Voice input requires the setup described in
   [Providers and Preferences](./settings-other.md#gotchas). A fake echo or an unsigned-in page
-  does not establish transcription or secret checking.
-- Remote sessions, projects, session actions, Changes/files/rail, directory trust, machine-memory
-  isolation, image preparation/preview isolation and peer voice checks need configured, reachable
-  peers. The default launch has none; use the explicit prerequisite routes in the feature files and
-  [Open a session](./open-session.md). The committed `remote-session.mjs` and `remote-inputs.mjs`
-  portions each own three isolated instances under the [narrow run-limit exception](../SKILL.md#run-limits),
-  serially with other checks. Their voice helper is not independently runnable.
+  does not establish transcription or secret checking. The committed
+  `node test/browser/voice-input.mjs <evidence-directory>` journey covers composer visibility and
+  draft ownership with a fake microphone and a stubbed transcription reply.
 - Managed Preview (external tabs, rail actions and the same-sheet Preview pane) needs the isolated real-Pi/native
   supervisor journey in [`docs/testing.md`](../../../../docs/testing.md#managed-preview-host-journey),
   `node test/browser/preview.mjs <evidence-directory>`. The default fake's Changes/rail checks

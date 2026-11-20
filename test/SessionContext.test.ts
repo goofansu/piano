@@ -4,8 +4,6 @@ import type { FolderView, SessionState, WorktreeView } from "../shared/wire.ts";
 import { directoryTrust } from "../web/src/lib/directoryTrust.ts";
 import { folderCommands } from "../web/src/lib/folderCommands.ts";
 import { trustCommand } from "../web/src/lib/globalCommands.ts";
-import { LOCAL } from "../web/src/lib/machine.ts";
-import { type MachineOffers, machineOffers } from "../web/src/lib/machineOffers.ts";
 import { sessionDraftKey } from "../web/src/lib/messageDraft.ts";
 import { sessionProjectMenu } from "../web/src/lib/projectCommands.ts";
 import { catalogEntry, sessionDirectories } from "../web/src/lib/sessionCatalog.ts";
@@ -30,8 +28,6 @@ import {
 import { sessionHasPreview } from "../web/src/lib/sessionPreview.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
-
-const local = machineOffers(LOCAL);
 
 const ws = (path: string) => ({ id: `ws:${path}`, folder: "/repo", path });
 const worktree = (
@@ -67,7 +63,6 @@ const session = (
   dialogs: [],
   ...extra,
 });
-const { startsSessionIn: startsLocally } = local;
 const base: AppState = {
   ...initialState,
   connected: true,
@@ -240,7 +235,7 @@ test("the session's context and its catalog row agree on its branch, project and
     assert.deepEqual(
       {
         branch: ctx.branch ?? "",
-        project: sessionProjectMenu(selected, { cwd, sessionId: "s1" }, local).current,
+        project: sessionProjectMenu(selected, { cwd, sessionId: "s1" }).current,
         title: ctx.title,
       },
       {
@@ -601,29 +596,25 @@ test("slash completion uses one revision rule for the New page and a session", (
 });
 
 test("the New session directory picker names a root by folder, a worktree by folder and branch, and anything else by path", () => {
-  const root = directoryChoices(base, "/repo", startsLocally);
+  const root = directoryChoices(base, "/repo");
   assert.deepEqual(root.trigger, { kind: "checkout", folder: "repo" });
   assert.deepEqual(root.roots, [{ path: "/repo", label: "repo", selected: true }]);
-  const feature = directoryChoices(base, "/work/repo.feature", startsLocally);
+  const feature = directoryChoices(base, "/work/repo.feature");
   assert.deepEqual(feature.trigger, { kind: "checkout", folder: "repo", branchLabel: "feature" });
   assert.equal(feature.roots[0]?.selected, false);
-  const elsewhere = directoryChoices(
-    { ...base, registryLoaded: true },
-    "/Users/me/scratch",
-    startsLocally,
-  );
+  const elsewhere = directoryChoices({ ...base, registryLoaded: true }, "/Users/me/scratch");
   assert.deepEqual(elsewhere.trigger, { kind: "path", label: "~/scratch" });
-  assert.deepEqual(directoryChoices(base, "", startsLocally).trigger, { kind: "none" });
+  assert.deepEqual(directoryChoices(base, "").trigger, { kind: "none" });
 });
 
 test("before the registry loads, the directory picker names a remembered directory by its folder, not its full path", () => {
   const loading = { ...base, folders: [] };
-  assert.deepEqual(directoryChoices(loading, "/tmp/run/repo", startsLocally).trigger, {
+  assert.deepEqual(directoryChoices(loading, "/tmp/run/repo").trigger, {
     kind: "checkout",
     folder: "repo",
   });
   assert.deepEqual(
-    directoryChoices({ ...loading, registryLoaded: true }, "/tmp/run/repo", startsLocally).trigger,
+    directoryChoices({ ...loading, registryLoaded: true }, "/tmp/run/repo").trigger,
     { kind: "path", label: "/tmp/run/repo" },
     "once loaded, an unregistered directory is named by path",
   );
@@ -668,11 +659,11 @@ test("the New session directory picker offers only folders whose root is on disk
     ],
   });
   const labels = (state: AppState, cwd: string) =>
-    directoryChoices(state, cwd, startsLocally).roots.map((r) => r.label);
+    directoryChoices(state, cwd).roots.map((r) => r.label);
   const gone = withResearch("missing");
   assert.deepEqual(labels(gone, "/repo"), ["repo", "notes", "probe"]);
   assert.deepEqual(
-    directoryChoices(gone, "/research", startsLocally).trigger,
+    directoryChoices(gone, "/research").trigger,
     { kind: "checkout", folder: "research" },
     "a selected directory stays selected when its root goes missing",
   );
@@ -701,23 +692,16 @@ test("one rule answers whether a folder with no sessions can start one when its 
   const gone = state("missing");
   assert.equal(checkoutMissingAt(gone, "/research"), true);
   assert.deepEqual(
-    directoryChoices(gone, "/research", startsLocally).roots.map((r) => r.label),
+    directoryChoices(gone, "/research").roots.map((r) => r.label),
     ["repo"],
     "the picker leaves the missing root out",
   );
-  assert.equal(
-    folderCommands(gone, research("missing"), machineOffers(LOCAL)).create?.enabled,
-    false,
-  );
+  assert.equal(folderCommands(gone, research("missing")).create.enabled, false);
   assert.deepEqual(focusedDirectory(gone), { cwd: "/research", checkoutMissing: true });
-  assert.equal(
-    trustCommand(gone, "/research", local),
-    undefined,
-    "Pi cannot be asked about its trust",
-  );
+  assert.equal(trustCommand(gone, "/research"), undefined, "Pi cannot be asked about its trust");
 
   assert.equal(checkoutMissingAt(gone, "/repo"), false, "a current folder beside it is unaffected");
-  assert.equal(folderCommands(gone, folder, machineOffers(LOCAL)).create?.enabled, true);
+  assert.equal(folderCommands(gone, folder).create.enabled, true);
   assert.deepEqual(focusedDirectory({ ...gone, view: { kind: "new", cwd: "/repo" } }), {
     cwd: "/repo",
     checkoutMissing: false,
@@ -726,7 +710,7 @@ test("one rule answers whether a folder with no sessions can start one when its 
   for (const status of ["current", "unknown", "non-git"] as const) {
     const s = state(status);
     assert.equal(checkoutMissingAt(s, "/research"), false, `${status} is not evidence of absence`);
-    assert.equal(folderCommands(s, research(status), machineOffers(LOCAL)).create?.enabled, true);
+    assert.equal(folderCommands(s, research(status)).create.enabled, true);
     assert.equal(focusedDirectory(s)?.checkoutMissing, false);
   }
 
@@ -742,8 +726,7 @@ test("one rule answers whether a folder with no sessions can start one when its 
   );
 });
 
-test("New session here, from a folder row or a session, asks the machine's one rule where a session may start", () => {
-  const remote = machineOffers({ id: "eng-1", name: "eng-1" });
+test("New session here, from a folder row or a session, starts wherever the checkout is on disk", () => {
   const research = (status: WorktreeView["status"]): FolderView => ({
     ...folder,
     path: "/research",
@@ -756,50 +739,18 @@ test("New session here, from a folder row or a session, asks the machine's one r
     selectionId: "sel",
     folders: [folder, research(status)],
   });
-  const here = (state: AppState, offers: MachineOffers) =>
-    sessionCommands(state, undefined, { offers }).find((c) => c.id === "new-session-here");
   const cases = [
-    { name: "a folder root on disk", cwd: "/research", status: "current", local: true, far: true },
-    {
-      name: "a missing folder root",
-      cwd: "/research",
-      status: "missing",
-      local: "checkout-missing",
-      far: "checkout-missing",
-    },
-    {
-      name: "a directory no folder holds",
-      cwd: "/scratch",
-      status: "current",
-      local: true,
-      far: "folder-closed",
-    },
+    { name: "a folder root on disk", cwd: "/research", status: "current", starts: true },
+    { name: "a missing folder root", cwd: "/research", status: "missing", starts: false },
+    { name: "a directory no folder holds", cwd: "/scratch", status: "current", starts: true },
   ] as const;
-  const details = { "checkout-missing": "Checkout removed", "folder-closed": "Folder closed" };
   for (const c of cases) {
     const state = at(c.cwd, c.status);
     const row = { path: c.cwd, name: c.cwd.slice(1) };
-    for (const [machine, offers, expected] of [
-      ["Local", machineOffers(LOCAL), c.local],
-      ["remote", remote, c.far],
-    ] as const) {
-      const starts = expected === true;
-      const refusal = starts ? undefined : expected;
-      assert.equal(offers.startsSessionIn(state, c.cwd), starts, `${machine}: ${c.name}`);
-      assert.equal(offers.startRefusal(state, c.cwd), refusal, `${machine} refusal: ${c.name}`);
-      assert.equal(
-        folderCommands(state, row, offers).create?.enabled,
-        starts,
-        `${machine} row: ${c.name}`,
-      );
-      const command = here(state, offers);
-      assert.equal(command?.enabled, starts, `${machine} session: ${c.name}`);
-      assert.equal(
-        command?.detail,
-        refusal ? details[refusal] : c.cwd,
-        `${machine} session detail: ${c.name}`,
-      );
-    }
+    assert.equal(folderCommands(state, row).create.enabled, c.starts, `row: ${c.name}`);
+    const command = sessionCommands(state, undefined, {}).find((x) => x.id === "new-session-here");
+    assert.equal(command?.enabled, c.starts, `session: ${c.name}`);
+    assert.equal(command?.detail, c.starts ? c.cwd : "Checkout removed", `detail: ${c.name}`);
   }
 });
 
@@ -815,13 +766,13 @@ test("the New session directory picker labels a branchless worktree", () => {
     folders: [{ ...folder, worktrees: [worktree("/repo", "main"), w] }],
   });
   const detached = withWorktree(worktree("/work/repo.x", null, { facts: facts(true) }));
-  assert.deepEqual(directoryChoices(detached, "/work/repo.x", startsLocally).trigger, {
+  assert.deepEqual(directoryChoices(detached, "/work/repo.x").trigger, {
     kind: "checkout",
     folder: "repo",
     branchLabel: "Detached HEAD",
   });
   const unknown = withWorktree(worktree("/work/repo.x", null, { facts: facts(false) }));
-  assert.deepEqual(directoryChoices(unknown, "/work/repo.x", startsLocally).trigger, {
+  assert.deepEqual(directoryChoices(unknown, "/work/repo.x").trigger, {
     kind: "checkout",
     folder: "repo",
     branchLabel: "Unknown branch",
@@ -890,10 +841,10 @@ test("a missing checkout is decided once: Trust, New session here, Rename, the f
   ];
   for (const c of cases) {
     const target = { cwd: c.cwd, sessionId: c.state.session?.sessionId ?? "s1" };
-    const commands = sessionCommands(c.state, target, { offers: local });
+    const commands = sessionCommands(c.state, target, {});
     const enabled = (id: string) => commands.find((x) => x.id === id)?.enabled;
     assert.equal(checkoutMissingAt(c.state, c.cwd), c.missing, c.name);
-    assert.equal(trustCommand(c.state, c.cwd, local) === undefined, c.missing, `${c.name}: Trust`);
+    assert.equal(trustCommand(c.state, c.cwd) === undefined, c.missing, `${c.name}: Trust`);
     assert.equal(enabled("new-session-here"), !c.missing, `${c.name}: New session here`);
     assert.equal(enabled("rename"), !c.missing, `${c.name}: Rename`);
     assert.equal(focusedDirectory(c.state)?.checkoutMissing, c.missing, `${c.name}: focus`);

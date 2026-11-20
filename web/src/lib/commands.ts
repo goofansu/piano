@@ -37,7 +37,6 @@ export type CommandForm =
   | { kind: "delete-project"; project: Project };
 
 export interface CommandEffects {
-  switchMachine?: (id: string) => void;
   send: (message: ClientCommand) => void;
   decideTrust: (path: string, trusted: boolean) => void;
   closeSettings: () => void;
@@ -67,10 +66,6 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
   if (!command.enabled) return false;
   const intent = command.intent;
   switch (intent.kind) {
-    case "machine":
-      if (!effects.switchMachine) return false;
-      effects.switchMachine(intent.id);
-      break;
     case "send":
       effects.send(intent.command);
       break;

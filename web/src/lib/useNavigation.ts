@@ -1,6 +1,5 @@
 import { createContext, useContext, useEffect, useState, useSyncExternalStore } from "react";
 import { workspaceFile } from "./api.ts";
-import { machineAddress } from "./machine.ts";
 import {
   browserAddressBar,
   browserSurfaceMemory,
@@ -10,7 +9,6 @@ import {
   type NavigationState,
 } from "./navigation.ts";
 import { createPreference } from "./preference.ts";
-import { useMachineId, useOffers } from "./useMachine.ts";
 
 const railPreference = createPreference<boolean>({
   key: "piano.details",
@@ -23,17 +21,13 @@ export function useNavigationController(
   client: NavigationOptions["client"],
   moved: () => void,
 ): Navigation {
-  const machineId = useMachineId();
-  const offers = useOffers();
   const [navigation] = useState(() =>
     createNavigation({
       client,
-      address: machineAddress(machineId, browserAddressBar),
-      readFile: (workspaceId, path, options) =>
-        workspaceFile(workspaceId, path, { ...options, machineId }),
-      memory: browserSurfaceMemory(machineId),
+      address: browserAddressBar,
+      readFile: workspaceFile,
+      memory: browserSurfaceMemory(),
       rail: railPreference,
-      settings: offers.settings,
       moved,
     }),
   );

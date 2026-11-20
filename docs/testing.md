@@ -72,7 +72,7 @@ rule, coverage target or requirement that every PR add tests applies.
 | Change or risk | Useful evidence |
 | --- | --- |
 | Domain rule, translation or state transition | Focused unit/module test if the behavior is consequential and not already covered. |
-| Browser–server request or reply (`ClientMessage`/`ServerMessage` in `shared/wire.ts`, endpoints in `shared/http.ts`) | Module test through the handler: `test/ClientDispatch.test.ts` for socket messages, `test/Api.test.ts` for HTTP; `test/PeerScope.test.ts` when a remote may send it. |
+| Browser–server request or reply (`ClientMessage`/`ServerMessage` in `shared/wire.ts`, endpoints in `shared/http.ts`) | Module test through the handler: `test/ClientDispatch.test.ts` for socket messages, `test/Api.test.ts` for HTTP. |
 | RPC lifecycle, reconnect, dialog race | Deterministic fake-Pi contract test through PiSessions; browser observation when UI behavior changes. |
 | Git lifecycle semantics | Integration check in a throwaway repository against real Git; a mocked CLI alone cannot establish compatibility. |
 | User interaction, rendering or preview identity | Observe the affected browser journey, including relevant error/empty states; retain a regression test when recurrence warrants it. |
@@ -126,8 +126,7 @@ Browser evidence for a change is an observation through `agent-browser` on a scr
 kept in the PR. It becomes committed only as a step in an existing journey, when a regression is
 likely to recur. The committed journeys in `test/browser/` are the critical paths and run in CI.
 
-On macOS `remote-session.mjs` and `remote-inputs.mjs` skip (exit 0, no `run.json`) and
-`open-session.mjs` skips its copied-content check, so only a Linux run or CI covers them.
+On macOS `open-session.mjs` skips its copied-content check, so only a Linux run or CI covers it.
 
 For production startup observations, run `npm run build` first, then prefix a journey with
 `PIANO_BROWSER_PRODUCTION=1`: the harness serves the existing `web/dist` and does not rebuild.

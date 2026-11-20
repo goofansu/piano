@@ -39,7 +39,7 @@ import { pullRequestView } from "@/lib/pullRequestView";
 import { type SessionCommand, sessionHeaderMenu } from "@/lib/sessionCommands";
 import { sessionContext } from "@/lib/sessionContext";
 import { type PreviewClaim, previewClaim, previewFace, previewHost } from "@/lib/sessionPreview";
-import { usePreviews } from "@/lib/useMachine";
+import { usePreviews } from "@/lib/usePageStores";
 
 type Page = "actions" | "projects" | "preview";
 
@@ -302,7 +302,7 @@ export function SessionMenuSheet({
                 onShow={() => {
                   setPreviewPage(previewClaim(state) ?? null);
                   setPage("preview");
-                  previews?.refresh();
+                  previews.refresh();
                 }}
               />
             )}

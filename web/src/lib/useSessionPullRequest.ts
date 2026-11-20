@@ -5,7 +5,6 @@ import { sessionPullRequest } from "@/lib/api";
 import { pullRequestTrigger } from "@/lib/changesView";
 import type { PullRequestTarget } from "@/lib/sessionContext";
 import { createSessionPullRequest, pullRequestKey } from "@/lib/sessionPullRequest";
-import { useMachineId } from "@/lib/useMachine";
 
 export function useSessionPullRequest(
   target: PullRequestTarget | undefined,
@@ -21,13 +20,11 @@ export function useSessionPullRequest(
     changeable: boolean;
   },
 ) {
-  const machineId = useMachineId();
   const latest = useRef(dialog);
   latest.current = dialog;
   const [pr] = useState(() =>
     createSessionPullRequest({
-      api: (workspaceId, sessionId, action, options) =>
-        sessionPullRequest(workspaceId, sessionId, action, { ...options, machineId }),
+      api: sessionPullRequest,
       notify: {
         error: (message) => toast.error(message),
         info: (message) => toast(message),

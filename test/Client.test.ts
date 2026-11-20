@@ -3,15 +3,11 @@ import { test } from "node:test";
 import type { ClientMessage, Dialog, ServerMessage, SessionClosure } from "../shared/wire.ts";
 import { createClient, type NotifyLevel } from "../web/src/lib/client.ts";
 import { trustCommand } from "../web/src/lib/globalCommands.ts";
-import { LOCAL } from "../web/src/lib/machine.ts";
-import { machineOffers } from "../web/src/lib/machineOffers.ts";
 import { createModelCatalogs } from "../web/src/lib/modelCatalogs.ts";
 import { createDialogAnswer, pendingDialogs } from "../web/src/lib/piDialogs.ts";
 import type { ConnectionHandlers, DisconnectReason, SendDisposition } from "../web/src/lib/ws.ts";
 import { initialState } from "../web/src/store.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
-
-const local = machineOffers(LOCAL);
 
 function harness() {
   const sent: ClientMessage[] = [];
@@ -22,7 +18,6 @@ function harness() {
   const timers = manualTimers();
   const client = createClient({
     timers,
-    startsSessionIn: machineOffers(LOCAL).startsSessionIn,
     initial: initialState,
     connect: (h) => {
       handlers = h;
@@ -256,18 +251,6 @@ test("live state is current before paint, while local actions and disconnect not
   paint?.();
   assert.equal(rendered, h.client.getState(), "a later paint cannot restore stale state");
   unsubscribe();
-});
-
-test("still connecting is not unreachable; a failed or closed socket is, until one opens", () => {
-  const h = harness();
-  h.client.select("/scratch", "a");
-  assert.equal(h.client.getState().unreachable, false, "a selection before the first socket");
-  h.status(false);
-  assert.equal(h.client.getState().unreachable, true, "the first attempt failed");
-  h.status(true);
-  assert.equal(h.client.getState().unreachable, false);
-  h.status(false);
-  assert.equal(h.client.getState().unreachable, true, "an open socket closed");
 });
 
 test("INV-02/05: a dropped connection re-selects the session exactly once and keeps its transcript", () => {
@@ -531,7 +514,7 @@ test("a reversed manual decision settles without duplicate or permanently suppre
   h.client.decideTrust("/a", false);
   h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: false } });
   assert.equal(
-    trustCommand(h.client.getState(), "/a", local)?.pressed,
+    trustCommand(h.client.getState(), "/a")?.pressed,
     true,
     "a temporary probe must not change the pending label",
   );
@@ -550,8 +533,8 @@ test("a reversed manual decision settles without duplicate or permanently suppre
   });
   h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: true } });
   assert.deepEqual(h.notes, [["Pi changed this folder back to trusted.", "warning"]]);
-  assert.equal(trustCommand(h.client.getState(), "/a", local)?.pressed, true);
-  assert.equal(trustCommand(h.client.getState(), "/a", local)?.pending, false);
+  assert.equal(trustCommand(h.client.getState(), "/a")?.pressed, true);
+  assert.equal(trustCommand(h.client.getState(), "/a")?.pending, false);
   h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: false } });
   assert.deepEqual(h.notes.at(-1), ["Pi marked this folder as untrusted.", "info"]);
 });
@@ -569,14 +552,10 @@ test("trust decisions disable every command surface immediately and reject repea
   const request = () => h.client.decideTrust("/a", true);
   request();
   assert.equal(updated, true, "pending feedback does not wait for a server frame or paint");
-  assert.equal(trustCommand(h.client.getState(), "/a", local)?.pending, true);
-  assert.equal(trustCommand(h.client.getState(), "/a", local)?.enabled, false);
-  assert.equal(
-    trustCommand(h.client.getState(), "/a", local)?.pressed,
-    false,
-    "no optimistic trust",
-  );
-  assert.equal(trustCommand(h.client.getState(), "/b", local)?.enabled, true);
+  assert.equal(trustCommand(h.client.getState(), "/a")?.pending, true);
+  assert.equal(trustCommand(h.client.getState(), "/a")?.enabled, false);
+  assert.equal(trustCommand(h.client.getState(), "/a")?.pressed, false, "no optimistic trust");
+  assert.equal(trustCommand(h.client.getState(), "/b")?.enabled, true);
   h.client.dispatch({ type: "new_directory", cwd: "/b" });
   h.client.dispatch({ type: "new_directory", cwd: "/a" });
   request();
@@ -584,13 +563,9 @@ test("trust decisions disable every command surface immediately and reject repea
   h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: true } });
   request();
   assert.equal(h.sent.filter((m) => m._tag === "set_trust").length, 1);
+  assert.equal(trustCommand(h.client.getState(), "/a")?.pending, true, "a probe is not a receipt");
   assert.equal(
-    trustCommand(h.client.getState(), "/a", local)?.pending,
-    true,
-    "a probe is not a receipt",
-  );
-  assert.equal(
-    trustCommand(h.client.getState(), "/a", local)?.pressed,
+    trustCommand(h.client.getState(), "/a")?.pressed,
     false,
     "keep the pre-click label until the decision reply",
   );
@@ -601,7 +576,7 @@ test("trust decisions disable every command surface immediately and reject repea
     requestId: "another request",
   });
   assert.equal(
-    trustCommand(h.client.getState(), "/a", local)?.pending,
+    trustCommand(h.client.getState(), "/a")?.pending,
     true,
     "another directory cannot settle it",
   );
@@ -612,11 +587,11 @@ test("trust decisions disable every command surface immediately and reject repea
     requestId: h.trustId(),
   });
   assert.equal(
-    trustCommand(h.client.getState(), "/a", local)?.pending,
+    trustCommand(h.client.getState(), "/a")?.pending,
     false,
     "even a reversed decision settles",
   );
-  assert.equal(trustCommand(h.client.getState(), "/a", local)?.enabled, true);
+  assert.equal(trustCommand(h.client.getState(), "/a")?.enabled, true);
   request();
   assert.equal(h.sent.filter((m) => m._tag === "set_trust").length, 2);
   h.server({
@@ -626,11 +601,11 @@ test("trust decisions disable every command surface immediately and reject repea
     requestId: h.trustId(),
   });
   assert.equal(
-    trustCommand(h.client.getState(), "/a", local)?.pressed,
+    trustCommand(h.client.getState(), "/a")?.pressed,
     true,
     "a successful decision replaces the snapshot",
   );
-  assert.equal(trustCommand(h.client.getState(), "/a", local)?.pending, false);
+  assert.equal(trustCommand(h.client.getState(), "/a")?.pending, false);
 });
 
 for (const ending of ["error", "disconnect"] as const) {
@@ -642,7 +617,7 @@ for (const ending of ["error", "disconnect"] as const) {
     const request = () => h.client.decideTrust("/a", false);
     request();
     h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: false } });
-    assert.equal(trustCommand(h.client.getState(), "/a", local)?.pressed, true);
+    assert.equal(trustCommand(h.client.getState(), "/a")?.pressed, true);
     h.server({ _tag: "error", selectionId: "unrelated", message: "Session error" });
     h.server({ _tag: "error", message: "Could not rename session" });
     h.server({
@@ -652,7 +627,7 @@ for (const ending of ["error", "disconnect"] as const) {
       message: "Could not save trust",
     });
     assert.equal(
-      trustCommand(h.client.getState(), "/a", local)?.pending,
+      trustCommand(h.client.getState(), "/a")?.pending,
       true,
       "only this decision's own failure settles it",
     );
@@ -666,7 +641,7 @@ for (const ending of ["error", "disconnect"] as const) {
       assert.deepEqual(h.notes.at(-1), ["Could not untrust folder: Could not save trust", "error"]);
     } else {
       h.status(false);
-      assert.equal(trustCommand(h.client.getState(), "/a", local)?.pending, false);
+      assert.equal(trustCommand(h.client.getState(), "/a")?.pending, false);
       request();
       assert.equal(
         h.sent.filter((m) => m._tag === "set_trust").length,
@@ -675,13 +650,13 @@ for (const ending of ["error", "disconnect"] as const) {
       );
       h.status(true);
     }
-    assert.equal(trustCommand(h.client.getState(), "/a", local)?.pending, false);
+    assert.equal(trustCommand(h.client.getState(), "/a")?.pending, false);
     assert.equal(
-      trustCommand(h.client.getState(), "/a", local)?.pressed,
+      trustCommand(h.client.getState(), "/a")?.pressed,
       false,
       "ending pending reveals the latest observation",
     );
-    assert.equal(trustCommand(h.client.getState(), "/a", local)?.enabled, true);
+    assert.equal(trustCommand(h.client.getState(), "/a")?.enabled, true);
     assert.equal(h.sent.filter((m) => m._tag === "set_trust").length, 1);
     request();
     assert.equal(h.sent.filter((m) => m._tag === "set_trust").length, 2);
@@ -708,7 +683,7 @@ test("an unconfirmed trust decision says so and is never credited to Pi after re
     ],
     "the decision may land after the reconnect's first observation",
   );
-  assert.equal(trustCommand(h.client.getState(), "/a", local)?.pressed, false);
+  assert.equal(trustCommand(h.client.getState(), "/a")?.pressed, false);
   h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: true } });
   assert.deepEqual(
     h.notes.at(-1),
@@ -728,10 +703,10 @@ test("a trust decision without a reply says so; its late answer is still not cre
   assert.deepEqual(h.notes, [
     ["No reply. Trust folder may have finished; check the folder's trust.", "warning"],
   ]);
-  assert.equal(trustCommand(h.client.getState(), "/a", local)?.pending, false);
+  assert.equal(trustCommand(h.client.getState(), "/a")?.pending, false);
   h.server({ _tag: "trust", cwd: "/a", trust: { required: true, trusted: true }, requestId });
   assert.equal(h.notes.length, 1, "the late answer is the user's own decision");
-  assert.equal(trustCommand(h.client.getState(), "/a", local)?.pressed, true);
+  assert.equal(trustCommand(h.client.getState(), "/a")?.pressed, true);
 });
 
 test("INV-02: a closure notifies by its kind, never by its wording", () => {
@@ -860,7 +835,6 @@ function focusHarness(
   options: {
     remembered?: string | null;
     initial?: typeof initialState;
-    startsSessionIn?: (state: typeof initialState, cwd: string) => boolean;
     pending?: boolean;
     unregistered?: boolean;
   } = {},
@@ -897,7 +871,6 @@ function focusHarness(
     notify: (message) => notes.push(message),
     newSelectionId: () => `sel${++ids}`,
     lastDirectory: { read: () => options.remembered ?? null, write: (cwd) => written.push(cwd) },
-    startsSessionIn: options.startsSessionIn ?? machineOffers(LOCAL).startsSessionIn,
   });
   client.start();
   let seen = 0;
@@ -1042,7 +1015,7 @@ test("INV-05: invalidation during a slow observation is retained; refusal releas
   assert.ok(h.client.getState().trusts["/c"]);
 });
 
-test("INV-02/05: reconnect and separate machines cannot settle each other's directory observations", () => {
+test("INV-02/05: reconnect and separate clients cannot settle each other's directory observations", () => {
   const a = focusHarness({ pending: true });
   const b = focusHarness({ pending: true });
   for (const h of [a, b]) {
@@ -1159,50 +1132,9 @@ test("a fresh New page starts in the last directory used, else the first folder,
   );
 });
 
-test("on a remote, which starts only in open folders, a remembered directory no longer open gives way to the first folder", () => {
-  const { startsSessionIn } = machineOffers({ id: "eng-1", name: "Eng" });
-  const open = (path: string) =>
-    ({
-      path,
-      name: path.slice(1),
-      worktrees: [{ path }],
-      discovery: { status: "ready", observedAt: "", currentPath: path, worktrees: [] },
-    }) as never;
-  const registry = { _tag: "registry", folders: [open("/one"), open("/two")] } as const;
-
-  const closed = focusHarness({ remembered: "/closed", startsSessionIn });
-  assert.deepEqual(
-    closed.client.getState().view,
-    { kind: "new", cwd: "/closed" },
-    "until the folders are known, the remembered directory stands",
-  );
-  closed.server(registry);
-  assert.deepEqual(closed.client.getState().view, { kind: "new", cwd: "/one" });
-
-  const still = focusHarness({ remembered: "/two", startsSessionIn });
-  still.server(registry);
-  assert.deepEqual(still.client.getState().view, { kind: "new", cwd: "/two" });
-
-  const anywhere = focusHarness({ remembered: "/closed" });
-  anywhere.server(registry);
-  assert.deepEqual(anywhere.client.getState().view, { kind: "new", cwd: "/closed" });
-});
-
 test("INV-05: a focus is observed only once the registry says which directories exist", () => {
-  const { startsSessionIn } = machineOffers({ id: "eng-1", name: "Eng" });
-  const h = focusHarness({
-    remembered: "/closed",
-    startsSessionIn,
-    pending: true,
-    unregistered: true,
-  });
+  const h = focusHarness({ remembered: "/elsewhere", pending: true, unregistered: true });
   h.status(true);
-  const refuse = (request: Extract<ClientMessage, { _tag: "directory" }>) =>
-    h.server({
-      ...request,
-      result: { status: "error", message: "Not available from another machine" },
-    });
-  for (const request of h.observations()) if (request.cwd === "/closed") refuse(request);
   assert.deepEqual(h.asked(), [], "nothing is asked before the registry arrives");
   h.server({
     _tag: "registry",
@@ -1215,9 +1147,9 @@ test("INV-05: a focus is observed only once the registry says which directories 
       } as never,
     ],
   });
-  assert.deepEqual(h.asked(), ["directory /one"]);
+  assert.deepEqual(h.asked(), ["directory /elsewhere"]);
   h.complete();
-  assert.deepEqual(h.notes, [], "no error for a directory the person never asked about");
+  assert.deepEqual(h.notes, []);
 });
 
 test("a project's home starts in its most recent member's folder, at the folder's own checkout", () => {
@@ -1313,11 +1245,6 @@ test("a New page or project home never lands on a folder whose root checkout is 
     { kind: "new", cwd: "/two" },
     "a remembered directory whose root is gone is not used",
   );
-
-  const { startsSessionIn } = machineOffers({ id: "eng-1", name: "Eng" });
-  const remote = focusHarness({ remembered: "/gone", startsSessionIn });
-  remote.server({ _tag: "registry", folders });
-  assert.deepEqual(remote.client.getState().view, { kind: "new", cwd: "/two" });
 
   const at = (minute: number) => `2026-10-21T08:0${minute}:00Z`;
   const registry = (refs: ReturnType<typeof sessionReference>[]): ServerMessage => ({

@@ -137,7 +137,7 @@ export function LayoutView({ active = true, children }: { active?: boolean; chil
   );
 }
 
-export function LayoutHeader({ title, children }: { title?: ReactNode; children?: ReactNode }) {
+export function LayoutHeader({ children }: { children?: ReactNode }) {
   const { hide } = useSidebarLayout();
   return (
     <SidebarHeader className={cn(paneHeaderRow, "flex-row gap-1 border-b-0")}>
@@ -148,9 +148,7 @@ export function LayoutHeader({ title, children }: { title?: ReactNode; children?
             <PanelLeftCloseIcon />
           </IconButton>
         }
-      >
-        {title}
-      </HeaderLead>
+      />
       {children}
     </SidebarHeader>
   );

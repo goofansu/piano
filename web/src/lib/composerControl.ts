@@ -44,7 +44,6 @@ export interface ComposerSituation {
   streaming: boolean;
   compacting: boolean;
   stopping: boolean;
-  preparing?: boolean;
   queued: number;
   mode: DeliveryMode;
 }
@@ -89,7 +88,7 @@ export function composerControl(s: ComposerSituation): ComposerControl {
       delivery: () => null,
     };
   }
-  const enabled = idle && !s.preparing && sendable(draft);
+  const enabled = idle && sendable(draft);
   return {
     primary: s.streaming ? "queue" : "send",
     enabled,

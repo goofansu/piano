@@ -62,9 +62,9 @@ import { workspaceFor } from "@/lib/sessionContext";
 import { type PreviewClaim, previewClaim } from "@/lib/sessionPreview";
 import { useCodeWrap } from "@/lib/useCodeWrap";
 import { useCommandForms } from "@/lib/useCommandForms";
-import { useMachineScope, useOffers, usePreviewObservation } from "@/lib/useMachine";
 import { useMessagesOnly } from "@/lib/useMessagesOnly";
 import { useNavigation } from "@/lib/useNavigation";
+import { usePreviewObservation, usePreviews } from "@/lib/usePageStores";
 import { useSidebarLayout } from "@/lib/useSidebarLayout";
 import { useSidebarView } from "@/lib/useSidebarView";
 import type { SendDisposition } from "@/lib/ws";
@@ -127,12 +127,10 @@ export function useCommands() {
 }
 
 export function useSessionCommands(target?: SessionTarget) {
-  const offers = useOffers();
   const { state, run, messagesOnly, codeWrap, layout } = useCommands();
   const observed = usePreviewObservation();
   return {
     commands: sessionCommands(state, target, {
-      offers,
       messagesOnly,
       codeWrap,
       layout,
@@ -145,17 +143,15 @@ export function useSessionCommands(target?: SessionTarget) {
 
 export function useSessionProjectMenu() {
   const { state } = useCommands();
-  const offers = useOffers();
   const session = state.session;
   return session?.sessionId
-    ? sessionProjectMenu(state, { cwd: session.cwd, sessionId: session.sessionId }, offers)
+    ? sessionProjectMenu(state, { cwd: session.cwd, sessionId: session.sessionId })
     : undefined;
 }
 
 export function useGlobalCommands() {
   const { state, run, global } = useCommands();
-  const offers = useOffers();
-  return { commands: globalCommands(state, global, offers), run };
+  return { commands: globalCommands(state, global), run };
 }
 
 export function SessionCommandMenuItem({
@@ -225,8 +221,7 @@ export function CommandHost({
     settings,
     layout,
   } = useNavigation();
-  const machineScope = useMachineScope();
-  const previews = machineScope.previews;
+  const previews = usePreviews();
   const [messagesOnly, setMessagesOnly] = useMessagesOnly();
   const [codeWrap, setCodeWrap] = useCodeWrap();
   const { view, setView } = useSidebarView();
@@ -257,7 +252,6 @@ export function CommandHost({
   const returnFocus = useRef<((event: Event) => void) | undefined>(undefined);
 
   const effects: CommandEffects = {
-    switchMachine: machineScope.switchMachine,
     send,
     decideTrust,
     closeSettings,
@@ -279,7 +273,7 @@ export function CommandHost({
     openForm: (form) => {
       returnFocus.current = focusReturn(formFocusFallback(form));
       forms.open(form);
-      if (form.kind === "stop-preview") previews?.refresh();
+      if (form.kind === "stop-preview") previews.refresh();
     },
     shareSession: (target) => {
       const workspace = workspaceFor(state, target.cwd);
@@ -289,7 +283,6 @@ export function CommandHost({
       }
       returnFocus.current = focusReturn(SESSION_MENU);
       setSharing({
-        machine: machineScope.machine,
         workspaceId: workspace.id,
         sessionId: target.sessionId,
         title: sessionLabel(target.title),
@@ -299,7 +292,7 @@ export function CommandHost({
     openPreviewDetails: () => {
       returnFocus.current = focusReturn(SESSION_MENU);
       setPreviewDetails(previewClaim(state) ?? null);
-      previews?.refresh();
+      previews.refresh();
     },
     openPageEditor,
   };
@@ -314,8 +307,6 @@ export function CommandHost({
         codeWrap,
         state,
         global: {
-          machine: machineScope.machine,
-          machines: machineScope.machines,
           settings,
           view,
           theme: theme ?? "system",
@@ -328,7 +319,7 @@ export function CommandHost({
         <ShareSessionDialog
           target={sharing}
           close={() => setSharing(null)}
-          openMachine={machineScope.openMachine}
+          openSettings={openSettings}
           onCloseAutoFocus={returnFocus.current}
         />
       )}

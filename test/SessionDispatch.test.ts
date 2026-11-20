@@ -10,7 +10,7 @@ import {
 } from "../extensions/piano-dispatch/SessionDispatch.ts";
 import { PiCli } from "../server/PiCli.ts";
 import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
-import { LOCAL, machineFrameBytes } from "../shared/machine.ts";
+import { MAX_MESSAGE_BYTES } from "../shared/attachments.ts";
 import { dispositionOf, lastAnswerOf } from "../shared/sessionStatus.ts";
 import {
   type ClientMessage,
@@ -163,7 +163,7 @@ function world() {
       };
     },
     url: () => "ws://piano.test/ws",
-    frameBytes: machineFrameBytes(LOCAL.id),
+    frameBytes: MAX_MESSAGE_BYTES,
     nonce: () => `n${++nonces}`,
     setTimeout: (run, ms) => {
       const id = ++ids;

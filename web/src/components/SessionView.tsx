@@ -5,7 +5,6 @@ import { MessagesSquareIcon } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AnsweredQuestion } from "@/components/AnsweredQuestion";
-import { ImageSessionContext } from "@/components/Attachments";
 import { Banner } from "@/components/Banner";
 import { useSessionCommands } from "@/components/CommandHost";
 import { Composer } from "@/components/Composer";
@@ -42,9 +41,9 @@ import {
 } from "@/lib/sessionContext";
 import { type SessionNotice, sessionNotices } from "@/lib/sessionNotices";
 import { useLibraryToasts } from "@/lib/useLibraryToasts";
-import { useDrafts } from "@/lib/useMachine";
 import { useMessagesOnly } from "@/lib/useMessagesOnly";
 import { useNavigation } from "@/lib/useNavigation";
+import { useDrafts } from "@/lib/usePageStores";
 import { useSessionPullRequest } from "@/lib/useSessionPullRequest";
 import { TranscriptViewportContext, useNewTranscriptViewport } from "@/lib/useTranscriptViewport";
 import { type AppState, sessionKey } from "@/store";
@@ -52,13 +51,12 @@ import { type AppState, sessionKey } from "@/store";
 interface Props {
   state: AppState;
   send: Client["send"];
-  captureSend: Client["captureSend"];
 }
 
 const AREA_ID = { agent: "session-agent-area", surface: "session-surface-area" } as const;
 const tabId = (value: string) => `session-area-tab-${encodeURIComponent(value)}`;
 
-export function SessionView({ state, send, captureSend }: Props) {
+export function SessionView({ state, send }: Props) {
   const drafts = useDrafts();
   const navigation = useNavigation();
   const {
@@ -206,27 +204,19 @@ export function SessionView({ state, send, captureSend }: Props) {
               {pane.list && (
                 <LocalFileContext value={(path) => openFile(path, "agent")}>
                   <SessionDestinationContext value={destination}>
-                    <ImageSessionContext
-                      value={
-                        workspace && t?.sessionId
-                          ? { workspaceId: workspace.id, sessionId: t.sessionId }
-                          : undefined
-                      }
-                    >
-                      <MessageList
-                        key={t ? sessionKey(t) : draftKey}
-                        workspaceId={workspace?.id}
-                        showTools={!messagesOnly}
-                        messages={t?.messages ?? []}
-                        pending={t?.pending ?? null}
-                        submittedInput={input}
-                        tools={tools}
-                        activity={replyActivity}
-                        working={!!t && isWorking(t.state)}
-                        placeholder={pane.placeholder}
-                        dispatchedFrom={dispatchedFrom}
-                      />
-                    </ImageSessionContext>
+                    <MessageList
+                      key={t ? sessionKey(t) : draftKey}
+                      workspaceId={workspace?.id}
+                      showTools={!messagesOnly}
+                      messages={t?.messages ?? []}
+                      pending={t?.pending ?? null}
+                      submittedInput={input}
+                      tools={tools}
+                      activity={replyActivity}
+                      working={!!t && isWorking(t.state)}
+                      placeholder={pane.placeholder}
+                      dispatchedFrom={dispatchedFrom}
+                    />
                   </SessionDestinationContext>
                 </LocalFileContext>
               )}
@@ -277,7 +267,6 @@ export function SessionView({ state, send, captureSend }: Props) {
                 actionsDisabled={pane.composerDisabled}
                 readOnly={readOnly}
                 send={send}
-                captureSend={captureSend}
               />
             </div>
             {railInside && <SessionRail state={state} />}

@@ -1,8 +1,6 @@
 import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import { type RadioChoice, radioChoiceOf } from "./commands.ts";
-import type { Machine } from "./machine.ts";
-import type { MachineOffers } from "./machineOffers.ts";
 import { type EditorPage, isEditorPage, PAGE_EDITORS } from "./pageEditor.ts";
 import {
   findProject,
@@ -15,7 +13,7 @@ import {
   projectMenu,
 } from "./projectCommands.ts";
 import { SETTINGS_SECTIONS, type SettingsSection, type SettingsSectionIconName } from "./routes.ts";
-import { focusedDirectory } from "./sessionContext.ts";
+import { checkoutMissingAt, focusedDirectory } from "./sessionContext.ts";
 import { GROUP_BY, type GroupBy, type SidebarView, SORT_BY, type SortBy } from "./sidebarView.ts";
 import { canDecideTrust, displayedTrust, pendingTrust } from "./trustDecision.ts";
 
@@ -27,7 +25,6 @@ export const APPEARANCES = [
 ] as const satisfies readonly { value: Appearance; label: string }[];
 
 export type GlobalCommandId =
-  | `machine-${string}`
   | "home"
   | "settings"
   | `settings-${SettingsSection}`
@@ -55,7 +52,6 @@ export type GlobalCommandGroup =
   | "row-details";
 
 export type GlobalCommandIcon =
-  | "machine"
   | "home"
   | "settings"
   | SettingsSectionIconName
@@ -72,7 +68,6 @@ export type GlobalCommandIcon =
   | ProjectCommandIcon;
 
 export type GlobalCommandIntent =
-  | { kind: "machine"; id: string }
   | { kind: "home" }
   | { kind: "settings"; section?: SettingsSection }
   | { kind: "new-session" }
@@ -100,8 +95,6 @@ export interface GlobalCommand {
 }
 
 export interface GlobalCommandContext {
-  machine: Machine;
-  machines: readonly Machine[];
   settings: SettingsSection | null;
   view: SidebarView;
   theme?: string;
@@ -115,19 +108,13 @@ export function radioChoice(
   return radioChoiceOf(commands.filter((c) => c.group === group));
 }
 
-type Offers = Pick<MachineOffers, "command" | "startRefusal">;
-
-export function trustCommand(
-  state: AppState,
-  cwd: string | undefined,
-  offers: Offers,
-): GlobalCommand | undefined {
+export function trustCommand(state: AppState, cwd: string | undefined): GlobalCommand | undefined {
   if (!cwd) return undefined;
-  if (offers.startRefusal(state, cwd) === "checkout-missing") return undefined;
+  if (checkoutMissingAt(state, cwd)) return undefined;
   const pending = !!pendingTrust(state, cwd);
   const trust = displayedTrust(state, cwd);
   if (!trust?.required) return undefined;
-  const command: GlobalCommand = {
+  return {
     id: "trust",
     label: trust.trusted ? "Untrust folder" : "Trust folder",
     icon: trust.trusted ? "untrusted" : "trusted",
@@ -137,7 +124,6 @@ export function trustCommand(
     pressed: trust.trusted,
     intent: { kind: "trust", path: cwd, trusted: !trust.trusted },
   };
-  return offers.command(command) ? command : undefined;
 }
 
 const PROJECT_MENU_IDS = {
@@ -146,23 +132,20 @@ const PROJECT_MENU_IDS = {
   delete: "delete-project",
 } as const satisfies Record<ProjectMenuCommandId, GlobalCommandId>;
 
-export function pageCommands(
-  state: AppState,
-  settings: SettingsSection | null,
-  offers: Offers,
-): GlobalCommand[] {
+export function pageCommands(state: AppState, settings: SettingsSection | null): GlobalCommand[] {
   if (settings) {
     if (!isEditorPage(settings)) return [];
     const { id, label, editor } = PAGE_EDITORS[settings];
-    const command: GlobalCommand = {
-      id,
-      label,
-      icon: "create",
-      group: "navigate",
-      enabled: editor.available(),
-      intent: { kind: "page-editor", page: settings },
-    };
-    return [command].filter(offers.command);
+    return [
+      {
+        id,
+        label,
+        icon: "create",
+        group: "navigate",
+        enabled: editor.available(),
+        intent: { kind: "page-editor", page: settings },
+      },
+    ];
   }
   const row = (id: GlobalCommandId, c: ProjectCommand): GlobalCommand => ({
     id,
@@ -174,23 +157,18 @@ export function pageCommands(
   });
   const view = state.view;
   if (view.kind === "projects") {
-    const create = newProjectCommand(state, {}, offers);
-    return create ? [row("new-project", create)] : [];
+    return [row("new-project", newProjectCommand(state, {}))];
   }
   const project = view.kind === "project" ? findProject(state, view.projectId) : undefined;
   if (!project) return [];
-  const menu = projectMenu(projectCommands(state, project, offers));
+  const menu = projectMenu(projectCommands(state, project));
   return [...menu.manage, ...menu.destructive].map((c) => row(PROJECT_MENU_IDS[c.id], c));
 }
 
-export function globalCommands(
-  state: AppState,
-  ctx: GlobalCommandContext,
-  offers: Offers,
-): GlobalCommand[] {
-  const trust = trustCommand(state, focusedDirectory(state)?.cwd, offers);
+export function globalCommands(state: AppState, ctx: GlobalCommandContext): GlobalCommand[] {
+  const trust = trustCommand(state, focusedDirectory(state)?.cwd);
   const theme = ctx.theme;
-  const commands: GlobalCommand[] = [
+  return [
     ctx.settings
       ? {
           id: "home",
@@ -233,7 +211,7 @@ export function globalCommands(
       enabled: true,
       intent: { kind: "projects" },
     },
-    ...pageCommands(state, ctx.settings, offers),
+    ...pageCommands(state, ctx.settings),
     ...(trust ? [trust] : []),
     {
       id: "toggle-sidebar",
@@ -285,15 +263,5 @@ export function globalCommands(
       pressed: ctx.view.folderAndBranch,
       intent: { kind: "view", change: { folderAndBranch: !ctx.view.folderAndBranch } },
     },
-    ...(ctx.machines.length > 1 ? ctx.machines : []).map((machine): GlobalCommand => ({
-      id: `machine-${machine.id}`,
-      label: `Switch to ${machine.name}`,
-      icon: "machine",
-      group: "navigate",
-      enabled: machine.id !== ctx.machine.id,
-      checked: machine.id === ctx.machine.id,
-      intent: { kind: "machine", id: machine.id },
-    })),
   ];
-  return commands.filter(offers.command);
 }

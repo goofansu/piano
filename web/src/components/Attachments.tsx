@@ -1,7 +1,7 @@
 import { base64Bytes, IMAGE_TYPE_NAMES, IMAGE_TYPES, imageLabel } from "@shared/attachments";
 import type { RenderMsg } from "@shared/wire";
 import { ImageOffIcon, PaperclipIcon, XIcon } from "lucide-react";
-import { createContext, useContext, useId, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { IconButton } from "@/components/IconButton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -18,13 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import type { DraftKey, Drafts, ImageDraft } from "@/lib/messageDraft";
-import { remoteImageUrl } from "@/lib/remoteImages";
 import { composerIcon } from "@/lib/styles";
-import { useMachineId } from "@/lib/useMachine";
-
-export const ImageSessionContext = createContext<
-  { workspaceId: string; sessionId: string } | undefined
->(undefined);
 import { wheelSideways } from "@/lib/wheelSideways";
 
 const encode = (file: File) =>
@@ -194,22 +188,11 @@ function ImagePreview({ url }: { url: string }) {
     </Attachment>
   );
 }
-export function MessageAttachments({
-  items,
-  draft = false,
-}: {
-  items: RenderMsg["attachments"];
-  draft?: boolean;
-}) {
-  const machineId = useMachineId();
-  const target = useContext(ImageSessionContext);
+export function MessageAttachments({ items }: { items: RenderMsg["attachments"] }) {
   return items?.length ? (
     <AttachmentGroup className="scroll-fade-none -mx-1 mt-2 px-1" ref={wheelSideways}>
       {items.map((a, i) => (
-        <ImagePreview
-          key={`${a.url}-${i}`}
-          url={draft ? a.url : remoteImageUrl(machineId, a.url, target)}
-        />
+        <ImagePreview key={`${a.url}-${i}`} url={a.url} />
       ))}
     </AttachmentGroup>
   ) : null;

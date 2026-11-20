@@ -38,7 +38,6 @@ import type { DraftKey } from "@/lib/messageDraft";
 import { createPreference } from "@/lib/preference";
 import type { SessionNotice } from "@/lib/sessionNotices";
 import { composerInput, footerPicker, footerPickerMenu } from "@/lib/styles";
-import { useImageSend } from "@/lib/useImageSend";
 import { useModelCatalog } from "@/lib/useModelCatalog";
 import { useModelChoice } from "@/lib/useModelChoice";
 import { usePreference } from "@/lib/usePreference";
@@ -53,7 +52,6 @@ interface Props {
   actionsDisabled: boolean;
   readOnly?: SessionNotice;
   send: Client["send"];
-  captureSend: Client["captureSend"];
 }
 
 const queueModePreference = createPreference<DeliveryMode>({
@@ -71,7 +69,6 @@ export function Composer({
   actionsDisabled,
   readOnly,
   send: sendCommand,
-  captureSend,
 }: Props) {
   const directoryModels = useModelCatalog(t?.cwd);
   const models = actionsDisabled ? { ...directoryModels, refresh: undefined } : directoryModels;
@@ -94,12 +91,6 @@ export function Composer({
   const messages = t?.messages ?? [];
   const queuedMessages = t?.state.queuedMessages ?? [];
   const editor = useDraftEditor(draftKey);
-  const imageSend = useImageSend(
-    editor,
-    captureSend,
-    { cwd: t?.cwd ?? "", sessionId: t?.sessionId },
-    choice,
-  );
   const [queueMode, setQueueMode] = usePreference(queueModePreference);
   const control = composerControl({
     text: editor.message,
@@ -108,7 +99,6 @@ export function Composer({
     streaming,
     compacting: !!t?.state.isCompacting,
     stopping: !!t?.state.isStopping,
-    preparing: !!editor.preparing,
     queued: queuedMessages.length,
     mode: queueMode,
   });
@@ -117,12 +107,15 @@ export function Composer({
   const send = (alt: boolean) => {
     const kind = control.delivery(alt);
     if (!kind) return;
-    imageSend.send((message, inputId, start) => messageCommand(kind, message, start, inputId));
+    const { start } = choice;
+    if (
+      editor.submit((message, inputId) =>
+        sendCommand(messageCommand(kind, message, start, inputId)),
+      )
+    )
+      choice.consume();
   };
-  const stop = () => {
-    imageSend.cancel();
-    sendCommand(STOP);
-  };
+  const stop = () => sendCommand(STOP);
   const figures = contextFigures(usage?.context, catalog, choice.model);
   const queue = queuePanel(queuedMessages, streaming);
   const queueHintId = useId();
@@ -143,7 +136,6 @@ export function Composer({
     >
       <DraftEditor
         editor={editor}
-        cancelUpload={imageSend.cancel}
         completion={completion}
         disabled={disabled}
         label="Message"

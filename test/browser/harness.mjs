@@ -103,7 +103,7 @@ export async function run(name, setup, journey, options = {}) {
     phase: "setup",
   };
   saveRun(evidence, record);
-  const owned = { children: [], commands: new Set(), peers: [], logs: {}, evidence, production };
+  const owned = { children: [], commands: new Set(), logs: {}, evidence, production };
   let interrupted;
   let rejectCancellation;
   const cancellation = new Promise((_, reject) => {
@@ -190,13 +190,8 @@ export async function run(name, setup, journey, options = {}) {
     );
     for (const [label, content] of Object.entries(owned.logs))
       writeFileSync(join(evidence, `${label}.log`), content);
-    for (const [label, machine] of [
-      ["local", owned.local],
-      ...owned.peers.map((peer) => [peer.config.id, peer.machine]),
-    ]) {
-      if (machine && existsSync(machine.audit))
-        writeFileSync(join(evidence, `${label}-audit.jsonl`), readFileSync(machine.audit));
-    }
+    if (owned.local && existsSync(owned.local.audit))
+      writeFileSync(join(evidence, "local-audit.jsonl"), readFileSync(owned.local.audit));
     if (owned.root && !cleanupErrors.length) rmSync(owned.root, { recursive: true, force: true });
     record.cleanup = { outcome: cleanupErrors.length ? "error" : "passed", errors: cleanupErrors };
     record.revisionAfter = captureRevision(ROOT, { production });
@@ -249,48 +244,27 @@ async function runJourney(name, setup, journey, options, owned, record) {
       `Missing prerequisites: ${missing.map(([name]) => name).join(", ")}; see docs/development.md#setup`,
     );
   }
-  const peers = owned.peers;
-  const specs = options.peers ?? (options.remote ? [options.remote] : []);
-  const [backendPort, vitePort, ...peerPorts] = await freePorts(2 + specs.length);
+  const [backendPort, vitePort] = await freePorts(2);
   const webPort = production ? backendPort : vitePort;
-  for (const [index, spec] of specs.entries()) {
-    const machine = await fixture(join(root, `peer-${index}`), spec.setup);
-    const port = peerPorts[index];
-    peers.push({
-      machine,
-      port,
-      backendEnv: spec.backendEnv,
-      config: {
-        id: spec.id,
-        name: spec.name ?? spec.id,
-        endpoint: `http://127.0.0.1:${port}`,
-        origin: `http://127.0.0.1:${port}`,
-      },
-    });
-  }
   const web = `http://127.0.0.1:${webPort}`;
-  const peerConfig = join(root, "peers.json");
-  if (peers.length)
-    writeFileSync(peerConfig, JSON.stringify({ peers: peers.map((peer) => peer.config) }));
   const inherited = Object.fromEntries(
     Object.entries(process.env).filter(([key]) => !key.startsWith("PIANO_")),
   );
-  const environment = (machine) => ({
+  const env = {
     ...inherited,
-    HOME: join(machine.root, "home"),
-    XDG_CONFIG_HOME: join(machine.root, "config"),
-    XDG_CONFIG_DIRS: join(machine.root, "config"),
-    XDG_CACHE_HOME: join(machine.root, "cache"),
-    XDG_STATE_HOME: join(machine.root, "state"),
-    XDG_DATA_HOME: join(machine.root, "data"),
+    HOME: join(local.root, "home"),
+    XDG_CONFIG_HOME: join(local.root, "config"),
+    XDG_CONFIG_DIRS: join(local.root, "config"),
+    XDG_CACHE_HOME: join(local.root, "cache"),
+    XDG_STATE_HOME: join(local.root, "state"),
+    XDG_DATA_HOME: join(local.root, "data"),
     GIT_CONFIG_GLOBAL: "/dev/null",
     GIT_CONFIG_NOSYSTEM: "1",
-    PIANO_TEST_AUDIT: machine.audit,
+    PIANO_TEST_AUDIT: local.audit,
     PI_OFFLINE: "1",
-    PI_CODING_AGENT_DIR: join(machine.root, "agent"),
-    PI_CODING_AGENT_SESSION_DIR: machine.sessions,
-  });
-  const env = environment(local);
+    PI_CODING_AGENT_DIR: join(local.root, "agent"),
+    PI_CODING_AGENT_SESSION_DIR: local.sessions,
+  };
   let log = "";
   const logs = owned.logs;
   const relaunch = new WeakMap();
@@ -331,26 +305,19 @@ async function runJourney(name, setup, journey, options, owned, record) {
     relaunch.set(child, () => start(label, args, options));
     return child;
   };
-  const backend = (label, machine, port, extra) =>
-    start(label, [join(ROOT, "server/main.ts")], {
+  const children = [
+    start("backend", [join(ROOT, "server/main.ts")], {
       cwd: ROOT,
       env: {
-        ...environment(machine),
+        ...env,
         HOST: "127.0.0.1",
-        PORT: String(port),
-        PIANO_ALLOWED_ORIGINS: `${web},http://localhost:${webPort},http://127.0.0.1:${port}`,
-        PIANO_DB_PATH: machine.database,
+        PORT: String(backendPort),
+        PIANO_ALLOWED_ORIGINS: `${web},http://localhost:${webPort},http://127.0.0.1:${backendPort}`,
+        PIANO_DB_PATH: local.database,
         PIANO_PI_CLI: join(ROOT, "test/browser/fake-pi.mjs"),
         PIANO_PI_ARGS: "",
-        ...extra,
+        ...options.backendEnv,
       },
-    });
-  const children = [
-    backend("backend", local, backendPort, {
-      ...options.backendEnv,
-      ...(peers.length
-        ? { PIANO_PEER_CONFIG: peerConfig, PIANO_TEST_HTTP_LOOPBACK_PEERS: "1" }
-        : {}),
     }),
     ...(!production
       ? [
@@ -372,30 +339,6 @@ async function runJourney(name, setup, journey, options, owned, record) {
         ]
       : []),
   ];
-  for (const peer of peers) {
-    peer.child = backend(`${peer.config.id}-backend`, peer.machine, peer.port, peer.backendEnv);
-    children.push(peer.child);
-  }
-  const peerViews = Object.fromEntries(
-    peers.map((peer) => [
-      peer.config.id,
-      {
-        ...peer.config,
-        received: peer.machine.received,
-        prompts: () =>
-          peer.machine
-            .received()
-            .filter((r) => r.command === "prompt")
-            .map((r) => r.text),
-        stop: async () => {
-          if (peer.child.exitCode !== null || peer.child.signalCode !== null) return;
-          const exited = new Promise((done) => peer.child.once("exit", done));
-          peer.child.kill("SIGTERM");
-          await exited;
-        },
-      },
-    ]),
-  );
 
   const browser = `piano-${name}-${process.pid}`;
   record.browserSession = browser;
@@ -437,8 +380,6 @@ async function runJourney(name, setup, journey, options, owned, record) {
   const page = (owned.page = {
     ab,
     evidence,
-    peers: peerViews,
-    remote: peers.length ? peerViews[peers[0].config.id] : undefined,
     restartBackend: async ({ signal = "SIGTERM", beforeRestart = async () => {} } = {}) => {
       const previous = children[0];
       const exited =
@@ -546,7 +487,6 @@ async function runJourney(name, setup, journey, options, owned, record) {
   Object.assign(record, {
     web,
     backend: `http://127.0.0.1:${backendPort}`,
-    peers: peers.map((peer) => peer.config),
     pids: owned.children.map((child) => child.pid),
     scratch: root,
     phase: "readiness",
@@ -554,7 +494,7 @@ async function runJourney(name, setup, journey, options, owned, record) {
       browserArgs: options.browserArgs,
       backendOverrideKeys: Object.keys(options.backendEnv ?? {}),
       overridesSha256: createHash("sha256")
-        .update(JSON.stringify([options.backendEnv, peers.map((peer) => peer.backendEnv)]))
+        .update(JSON.stringify([options.backendEnv]))
         .digest("hex"),
       limitation:
         "Override values are not published; the journey constructs them. External config bytes are not snapshotted.",
@@ -572,11 +512,6 @@ async function runJourney(name, setup, journey, options, owned, record) {
       try {
         if (
           (await fetch(`http://127.0.0.1:${backendPort}/api/folders`)).ok &&
-          (
-            await Promise.all(
-              peers.map(async (peer) => (await fetch(`${peer.config.endpoint}/api/folders`)).ok),
-            )
-          ).every(Boolean) &&
           (await fetch(web)).ok
         )
           break;

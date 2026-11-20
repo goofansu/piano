@@ -5,7 +5,6 @@ import { GitHubPullRequestsLive } from "./GitHubPullRequests.ts";
 import { McpSetupLive } from "./McpSetup.ts";
 import { PiSessionsLive } from "./PiSessions.ts";
 import { PiSettingsLive } from "./PiSettings.ts";
-import { PreparedImagesLive } from "./PreparedImages.ts";
 import { PromptsLive } from "./Prompts.ts";
 import { ProviderLoginLive } from "./ProviderLogin.ts";
 import { RadiusSetupLive } from "./RadiusSetup.ts";
@@ -33,7 +32,6 @@ export const PianoCoreLive = (options: PianoServicesOptions) =>
     Layer.provideMerge(CreationAttemptsLive),
     Layer.provideMerge(RegistryLive),
     Layer.provideMerge(PiSessionsLive),
-    Layer.provideMerge(PreparedImagesLive),
   );
 
 export const PianoAdaptersLive = GitHubPullRequestsLive;

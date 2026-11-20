@@ -8,7 +8,6 @@ import {
   MAX_IMAGE_BYTES,
 } from "./attachments.ts";
 import { DISPOSITIONS } from "./dispatch.ts";
-import { PreparedImages } from "./remoteImages.ts";
 
 export const Attachment = Schema.Struct({
   kind: Schema.Literal("image"),
@@ -775,7 +774,6 @@ export const ClientMessage = Schema.Union([
     worktree: Schema.optional(WorktreeRequest),
     text: Schema.optional(Schema.String),
     attachments: attachmentInput,
-    preparedImages: Schema.optional(PreparedImages),
   }),
   Schema.TaggedStruct("session_status", {
     requestId: Schema.String,
@@ -788,7 +786,6 @@ export const ClientMessage = Schema.Union([
     selectionId: Schema.String,
     action: SessionAction,
     start: Schema.optional(StartOptions),
-    preparedImages: Schema.optional(PreparedImages),
   }),
   Schema.TaggedStruct("ping", { nonce: Schema.String }),
   Schema.TaggedStruct("ack", { deliveryId: Schema.Number }),

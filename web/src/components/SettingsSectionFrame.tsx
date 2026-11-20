@@ -61,7 +61,7 @@ export function SettingsSectionFrame({
   const titleId = `settings-${section}-title`;
   return (
     <section aria-label="Settings" className="flex min-h-0 flex-1 flex-col">
-      <PaneHeader actions={actions} showMachineSwitcher={false}>
+      <PaneHeader actions={actions}>
         <h1 id={titleId} className="min-w-0 flex-1 truncate text-sm font-medium">
           {title}
         </h1>

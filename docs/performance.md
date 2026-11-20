@@ -17,4 +17,3 @@ from the module suite and browser journeys.
 | New-session startup stages | `node scripts/bench/start-session.mjs <directory>` | agent-browser; the locked real Pi | [`scripts/bench`](../scripts/bench/README.md) |
 | Folder picker and registry latency | `node test/performance-folder-registry.mjs <file>.json` | Linux `ss` |  |
 | Saved-history peeks | `node test/performance-saved-history.mjs <file>.json` | |  |
-| Peer gateway attachment | `PIANO_BENCH_SAMPLES=200 node test/performance-peer-gateway.ts <directory>` | Linux `/proc` | `PIANO_BENCH_PROFILE=1` adds CPU and heap profiles |

@@ -3,21 +3,21 @@ import { test } from "node:test";
 import { Layer } from "effect";
 import { TranscriptionFetch } from "../server/VoiceInput.ts";
 import { MAX_VOICE_REQUEST_BYTES } from "../shared/voiceInput.ts";
-import { gatewayFixture } from "./fixtures/peer-gateway.ts";
 import { startRouter } from "./fixtures/router.ts";
 
 test(
-  "main voice ingestion bounds actual chunked bytes before parsing; peers never proxy voice",
+  "voice ingestion bounds actual chunked bytes before parsing",
   { timeout: 45_000 },
   async (t) => {
-    const { base, state } = await gatewayFixture(t);
+    const router = await startRouter("piano-voice-bytes-");
+    t.after(() => router.dispose());
     const path = "/api/voice/transcribe";
     const json = JSON.stringify({ audio: "YQ==", mimeType: "audio/webm", hints: {} });
     const post = (bytes: number, extra: Record<string, string> = {}) => {
       let remaining = bytes - json.length;
-      return fetch(`${base}${path}`, {
+      return router.handle(path, {
         method: "POST",
-        headers: { origin: base, "content-type": "application/json", ...extra },
+        headers: { "content-type": "application/json", ...extra },
         body: new ReadableStream({
           pull(controller) {
             if (remaining > 0) {
@@ -49,25 +49,11 @@ test(
     const crossSite = await post(json.length, { origin: "https://other.invalid" });
     assert.equal(crossSite.status, 403);
     await crossSite.body?.cancel();
-    const before = state.requests.length;
-    for (const [method, endpoint] of [
-      ["GET", "/api/settings/voice-input"],
-      ["POST", path],
-    ]) {
-      const answer = await fetch(`${base}/peer/eng-1${endpoint}`, {
-        method,
-        headers: { origin: base, "content-type": "application/json" },
-        ...(method === "POST" ? { body: json } : {}),
-      });
-      assert.equal(answer.status, 404);
-      await answer.body?.cancel();
-    }
-    assert.equal(state.requests.length, before, "no voice request reaches the peer");
   },
 );
 
 test(
-  "main HTTP admission rejects a third upload before parsing, and disconnect aborts provider work",
+  "HTTP admission rejects a third upload before parsing, and disconnect aborts provider work",
   { timeout: 15_000 },
   async () => {
     let called = 0,

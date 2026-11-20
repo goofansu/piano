@@ -19,28 +19,22 @@ import {
   type WorkspaceWrittenFiles,
   type WrittenFile,
 } from "../../../shared/wire.ts";
-import { LOCAL, peerApiPath } from "./machine.ts";
 
 export type { RadiusSetupAction };
-export const listWebhooks = (options?: RequestOptions) =>
-  call(Endpoints.webhooks, {}, local(options));
+export const listWebhooks = (options?: RequestOptions) => call(Endpoints.webhooks, {}, options);
 export const saveWebhook = (body: import("../../../shared/webhooks.ts").WebhookSave) =>
-  call(Endpoints.saveWebhook, { body }, local());
-export const removeWebhook = (id: string) =>
-  call(Endpoints.removeWebhook, { body: { id } }, local());
+  call(Endpoints.saveWebhook, { body });
+export const removeWebhook = (id: string) => call(Endpoints.removeWebhook, { body: { id } });
 export const listUserSkills = (options?: RequestOptions) =>
-  call(Endpoints.skills.list, {}, local(options));
+  call(Endpoints.skills.list, {}, options);
 export const createUserSkill = (body: import("../../../shared/skills.ts").UserSkillCreate) =>
-  call(Endpoints.skills.create, { body }, local());
-export const removeUserSkill = (name: string) =>
-  call(Endpoints.skills.remove, { body: { name } }, local());
-export const testWebhook = (id: string) => call(Endpoints.testWebhook, { body: { id } }, local());
-export const listPrompts = (options?: RequestOptions) =>
-  call(Endpoints.prompts.list, {}, local(options));
+  call(Endpoints.skills.create, { body });
+export const removeUserSkill = (name: string) => call(Endpoints.skills.remove, { body: { name } });
+export const testWebhook = (id: string) => call(Endpoints.testWebhook, { body: { id } });
+export const listPrompts = (options?: RequestOptions) => call(Endpoints.prompts.list, {}, options);
 export const createPrompt = (body: import("../../../shared/prompts.ts").PromptCreate) =>
-  call(Endpoints.prompts.create, { body }, local());
-export const removePrompt = (name: string) =>
-  call(Endpoints.prompts.remove, { body: { name } }, local());
+  call(Endpoints.prompts.create, { body });
+export const removePrompt = (name: string) => call(Endpoints.prompts.remove, { body: { name } });
 
 export class ApiError extends Error {
   readonly status: number;
@@ -57,12 +51,6 @@ export interface RequestOptions {
   signal?: AbortSignal;
 }
 
-export interface MachineRequest extends RequestOptions {
-  machineId: string;
-}
-
-const local = (options?: RequestOptions): MachineRequest => ({ ...options, machineId: LOCAL.id });
-
 type Input<Q extends IdParam, B extends Json | undefined> = ([Q] extends [never]
   ? unknown
   : { readonly query: Readonly<Record<Q, string>> }) &
@@ -71,11 +59,10 @@ type Input<Q extends IdParam, B extends Json | undefined> = ([Q] extends [never]
 async function call<Q extends IdParam, B extends Json | undefined, R extends Json>(
   endpoint: Endpoint<Q, B, R>,
   input: Input<Q, B>,
-  { signal, machineId }: MachineRequest,
+  { signal }: RequestOptions = {},
   readSuccess?: (response: Response) => Promise<unknown>,
 ): Promise<R["Type"]> {
-  const { method, noStore, fallback } = endpoint;
-  const path = peerApiPath(machineId, endpoint.path);
+  const { method, noStore, fallback, path } = endpoint;
   const { query, body } = input as { query?: Record<string, string>; body?: unknown };
   const failure = (status: number) => (typeof fallback === "string" ? fallback : fallback(status));
   let response: Response;
@@ -107,16 +94,13 @@ async function call<Q extends IdParam, B extends Json | undefined, R extends Jso
   return decoded.value;
 }
 
-export const listMachines = (signal?: AbortSignal) =>
-  call(Endpoints.machines, {}, local({ signal })).then(({ machines }) => machines);
-
 export const listDirectory = (path: string, options?: RequestOptions) =>
-  call(Endpoints.listDirectory, { body: { path } }, local(options));
+  call(Endpoints.listDirectory, { body: { path } }, options);
 
 export const makeDirectory = async (path: string, options?: RequestOptions) =>
-  (await call(Endpoints.makeDirectory, { body: { path } }, local(options))).path;
+  (await call(Endpoints.makeDirectory, { body: { path } }, options)).path;
 
-export const workspaceFile = (workspaceId: string, path: string, options: MachineRequest) =>
+export const workspaceFile = (workspaceId: string, path: string, options?: RequestOptions) =>
   call(
     Endpoints.workspaceFile,
     { query: { workspaceId }, body: { path } },
@@ -133,7 +117,11 @@ export const workspaceFile = (workspaceId: string, path: string, options: Machin
     },
   );
 
-export const workspaceFileDownload = (workspaceId: string, path: string, options: MachineRequest) =>
+export const workspaceFileDownload = (
+  workspaceId: string,
+  path: string,
+  options?: RequestOptions,
+) =>
   call(
     Endpoints.workspaceFileDownload,
     { query: { workspaceId }, body: { path } },
@@ -162,7 +150,7 @@ export const sessionChanges = (
   workspaceId: string,
   sessionId: string,
   scope: ChangesScope | undefined,
-  options: MachineRequest,
+  options?: RequestOptions,
 ) =>
   call(
     Endpoints.sessionChanges,
@@ -174,14 +162,14 @@ export const sessionChangedFile = (
   workspaceId: string,
   sessionId: string,
   body: { path: string; scope: ChangesScope },
-  options: MachineRequest,
+  options?: RequestOptions,
 ) => call(Endpoints.sessionChangedFile, { query: { workspaceId, sessionId }, body }, options);
 
 export const setSessionChangesScope = (
   workspaceId: string,
   sessionId: string,
   scope: ChangesScope | null,
-  options: MachineRequest,
+  options?: RequestOptions,
 ) =>
   call(
     Endpoints.setSessionChangesScope,
@@ -192,7 +180,7 @@ export const setSessionChangesScope = (
 export const workspaceWrittenFiles = async (
   workspace: Workspace,
   paths: readonly string[],
-  options: MachineRequest,
+  options?: RequestOptions,
 ): Promise<WorkspaceWrittenFiles> => {
   const files: WrittenFile[] = [];
   let first: WorkspaceWrittenFiles | undefined;
@@ -218,7 +206,7 @@ export const workspaceWrittenFiles = async (
   return { workspace, observedAt: first!.observedAt, result: { status: "ready", files } };
 };
 
-export const shareSession = (workspaceId: string, sessionId: string, options: MachineRequest) =>
+export const shareSession = (workspaceId: string, sessionId: string, options?: RequestOptions) =>
   call(
     Endpoints.shareSession,
     { query: { workspaceId, sessionId }, body: { confirmed: true } },
@@ -229,7 +217,7 @@ export const sessionPullRequest = (
   workspaceId: string,
   sessionId: string,
   action: SessionPullRequestAction | undefined,
-  options: MachineRequest,
+  options?: RequestOptions,
 ) =>
   action
     ? call(
@@ -239,29 +227,29 @@ export const sessionPullRequest = (
       )
     : call(Endpoints.sessionPullRequest, { query: { workspaceId, sessionId } }, options);
 
-export const slashCommands = async (cwd: string, options: MachineRequest) =>
+export const slashCommands = async (cwd: string, options?: RequestOptions) =>
   (await call(Endpoints.slashCommands, { body: { cwd } }, options)).commands;
 
 export const sessionCommands = async (
   workspaceId: string,
   sessionId: string,
-  options: MachineRequest,
+  options?: RequestOptions,
 ) =>
   (await call(Endpoints.sessionCommands, { query: { workspaceId, sessionId } }, options)).commands;
 
 export const saveDefaults = async (
   model: string | undefined,
   thinkingLevel: ThinkingLevel,
-  options: MachineRequest,
+  options?: RequestOptions,
 ): Promise<void> => {
   await call(Endpoints.saveDefaults, { body: { model, thinkingLevel } }, options);
 };
 
 export const oauthProviders = async (options?: RequestOptions) =>
-  (await call(Endpoints.oauthProviders, {}, local(options))).providers;
+  (await call(Endpoints.oauthProviders, {}, options)).providers;
 
 export const providerLogout = async (provider: string, options?: RequestOptions) => {
-  await call(Endpoints.providerLogout, { body: { provider } }, local(options));
+  await call(Endpoints.providerLogout, { body: { provider } }, options);
 };
 
 export type SignInRequest =
@@ -275,39 +263,38 @@ export const signInApi =
   async (request: SignInRequest = { method: "GET" }, options?: RequestOptions) => {
     switch (request.method) {
       case "GET":
-        return (await call(endpoints.state, {}, local(options))).state;
+        return (await call(endpoints.state, {}, options)).state;
       case "POST":
-        return (await call(endpoints.start, request, local(options))).state;
+        return (await call(endpoints.start, request, options)).state;
       case "PUT":
-        return (await call(endpoints.answer, request, local(options))).state;
+        return (await call(endpoints.answer, request, options)).state;
       case "DELETE":
-        return (await call(endpoints.cancel, request, local(options))).state;
+        return (await call(endpoints.cancel, request, options)).state;
     }
   };
 
 export const providerApiKeys = async (options?: RequestOptions) =>
-  (await call(Endpoints.providerApiKeys, {}, local(options))).providers;
+  (await call(Endpoints.providerApiKeys, {}, options)).providers;
 
 export const changeProviderApiKey = async (
   body: typeof Endpoints.changeProviderApiKey.body.Type,
 ) => {
-  await call(Endpoints.changeProviderApiKey, { body }, local());
+  await call(Endpoints.changeProviderApiKey, { body });
 };
 
-export const voiceInput = (options?: RequestOptions) =>
-  call(Endpoints.voiceInput, {}, local(options));
+export const voiceInput = (options?: RequestOptions) => call(Endpoints.voiceInput, {}, options);
 export const saveVoiceInput = (body: typeof Endpoints.saveVoiceInput.body.Type) =>
-  call(Endpoints.saveVoiceInput, { body }, local());
+  call(Endpoints.saveVoiceInput, { body });
 export const transcribe = (body: typeof Endpoints.transcribe.body.Type, options?: RequestOptions) =>
-  call(Endpoints.transcribe, { body }, local(options));
+  call(Endpoints.transcribe, { body }, options);
 
 export const providerLogin = signInApi(Endpoints.providerLogin);
 export const mcpLogin = signInApi(Endpoints.mcpLogin);
 
 export const mcpSetup = async (options?: RequestOptions) =>
-  (await call(Endpoints.mcpSetup, {}, local(options))).state;
+  (await call(Endpoints.mcpSetup, {}, options)).state;
 export const changeMcpSetup = (request: McpSetupRequest) =>
-  call(Endpoints.changeMcpSetup, { body: request }, local());
+  call(Endpoints.changeMcpSetup, { body: request });
 
 export const radiusSetup = async (
   action?: { action: RadiusSetupAction; removalKey?: string },
@@ -317,7 +304,7 @@ export const radiusSetup = async (
     ? await call(
         Endpoints.changeRadiusSetup,
         { body: action as typeof Endpoints.changeRadiusSetup.body.Type },
-        local(options),
+        options,
       )
-    : await call(Endpoints.radiusSetup, {}, local(options))
+    : await call(Endpoints.radiusSetup, {}, options)
   ).state;

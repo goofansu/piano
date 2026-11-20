@@ -6,8 +6,7 @@ import { openConnection } from "./ws.ts";
 export function useClient(
   initial: () => AppState,
   notify: Notify,
-  options: Partial<Pick<ClientOptions, "connect" | "lastDirectory">> &
-    Pick<ClientOptions, "startsSessionIn">,
+  options: Partial<Pick<ClientOptions, "connect" | "lastDirectory">> = {},
 ): { state: AppState; client: Client } {
   const [client] = useState(() =>
     createClient({ initial: initial(), connect: openConnection, notify, ...options }),

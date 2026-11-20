@@ -5,9 +5,9 @@ import { type ComponentType, type Context, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createServer } from "vite";
 import type { RenderMsg, ToolExecution } from "../shared/wire.ts";
+import type { PageStores } from "../web/src/lib/pageStores.ts";
 import { jumpEntries, transcriptRows } from "../web/src/lib/transcript.ts";
-import type { MachineScope } from "../web/src/lib/useMachine.ts";
-import { localMachineScope } from "./fixtures/machineScope.ts";
+import { pageStores } from "./fixtures/pageStores.ts";
 
 const vite = await createServer({
   root: path.resolve("web"),
@@ -26,8 +26,8 @@ const { MessageList } = (await vite.ssrLoadModule("/src/components/MessageList.t
     working?: boolean;
   }>;
 };
-const { MachineContext } = (await vite.ssrLoadModule("/src/lib/useMachine.ts")) as {
-  MachineContext: Context<MachineScope | null>;
+const { PageStoresContext } = (await vite.ssrLoadModule("/src/lib/usePageStores.ts")) as {
+  PageStoresContext: Context<PageStores | null>;
 };
 const render = (
   messages: RenderMsg[],
@@ -37,8 +37,8 @@ const render = (
 ) =>
   renderToStaticMarkup(
     createElement(
-      MachineContext.Provider,
-      { value: localMachineScope() },
+      PageStoresContext.Provider,
+      { value: pageStores() },
       createElement(MessageList, { messages, tools, pending, showTools }),
     ),
   );
@@ -138,8 +138,8 @@ test("messages-only never flashes a completed intermediate message while the age
   const working = (messages: RenderMsg[], pending: RenderMsg | null = null, showTools = false) =>
     renderToStaticMarkup(
       createElement(
-        MachineContext.Provider,
-        { value: localMachineScope() },
+        PageStoresContext.Provider,
+        { value: pageStores() },
         createElement(MessageList, {
           messages,
           pending,

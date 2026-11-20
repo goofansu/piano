@@ -1,7 +1,6 @@
 import { defaultFilter } from "cmdk";
 import { type AppState, sessionKey } from "../store.ts";
 import type { GlobalCommand } from "./globalCommands.ts";
-import type { MachineOffers } from "./machineOffers.ts";
 import {
   openProjectCommands,
   type ProjectCommand,
@@ -118,7 +117,6 @@ export type PaletteGroup =
     };
 
 export interface PaletteInput {
-  offers: Pick<MachineOffers, "command">;
   globalCommands: readonly GlobalCommand[];
   sessionCommands: readonly SessionCommand[];
   sessionProject?: SessionProjectMenu;
@@ -209,7 +207,7 @@ function commandPalette(
       heading: "Sessions",
       rows: sessions,
     });
-  const projects = openProjectCommands(state, input.offers);
+  const projects = openProjectCommands(state);
   if (projects.length > 0)
     groups.push({
       id: "projects",

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { LOCAL, machineFrameBytes, PEER_FRAME_BYTES } from "../shared/machine.ts";
+import { MAX_MESSAGE_BYTES } from "../shared/attachments.ts";
 import { type ClientMessage, encodeServerMessage, type ServerMessage } from "../shared/wire.ts";
 import {
   type DisconnectReason,
@@ -58,7 +58,7 @@ function harness(onDisconnect?: () => void, overrides: Partial<SocketEnvironment
       };
     },
     url: () => "ws://piano.test/ws",
-    frameBytes: machineFrameBytes(LOCAL.id),
+    frameBytes: MAX_MESSAGE_BYTES,
     nonce: () => `n${++nonces}`,
     setTimeout: (run, ms) => {
       const id = ++ids;
@@ -339,8 +339,9 @@ test("PIN-132: a message the wire cannot encode is not sent and keeps the socket
   assert.equal(h.connection.send(act(10)), "sent", "the same message within the limit goes");
 });
 
-test("a message larger than its machine admits is not sent and keeps the socket", () => {
-  const h = harness(undefined, { frameBytes: PEER_FRAME_BYTES });
+test("a message whose encoded bytes exceed the frame limit is not sent and keeps the socket", () => {
+  const frameBytes = 1024 * 1024;
+  const h = harness(undefined, { frameBytes });
   h.last().accept();
   const prompt = (text: string) =>
     ({
@@ -348,7 +349,7 @@ test("a message larger than its machine admits is not sent and keeps the socket"
       selectionId: "s",
       action: { _tag: "prompt", text, attachments: [], inputId: "a-1" },
     }) as ClientMessage;
-  assert.equal(h.connection.send(prompt("é".repeat(PEER_FRAME_BYTES / 2))), "not-sent");
+  assert.equal(h.connection.send(prompt("é".repeat(frameBytes / 2))), "not-sent");
   assert.ok(!h.last().sent.some((m) => m._tag === "act"));
   assert.ok(!h.last().closed, "the socket stays up");
   assert.equal(h.connection.send(prompt("é".repeat(1000))), "sent");

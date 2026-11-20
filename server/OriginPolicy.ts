@@ -79,14 +79,3 @@ export function sessionLinkOrigin(
     allowed[0]
   );
 }
-
-export function fromOwnPage(
-  headers: Readonly<Record<string, string | undefined>>,
-  origins: ReadonlySet<string>,
-): boolean {
-  const site = headers["sec-fetch-site"];
-  const origin = headers.origin;
-  return (
-    (site === undefined || site === "same-origin") && (origin === undefined || origins.has(origin))
-  );
-}

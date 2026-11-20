@@ -1,6 +1,6 @@
 import type { ClientCommand, ModelCatalog, ServerMessage, ThinkingLevel } from "@shared/wire";
+import { browserMemory } from "./browserMemory.ts";
 import type { Notify } from "./client.ts";
-import { machineMemory } from "./machineMemory.ts";
 import { parseJson } from "./preference.ts";
 
 export type Catalogs = Readonly<Record<string, ModelCatalog>>;
@@ -10,8 +10,8 @@ export interface CatalogStorage {
   write: (catalogs: Catalogs) => void;
 }
 
-export function browserCatalogStorage(machineId: string): CatalogStorage {
-  const memory = machineMemory(machineId, "catalogs");
+export function browserCatalogStorage(): CatalogStorage {
+  const memory = browserMemory("catalogs");
   return {
     read: () => (parseJson(memory.read()) ?? {}) as Catalogs,
     write: (catalogs) => memory.write(JSON.stringify(catalogs)),

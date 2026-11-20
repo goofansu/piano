@@ -19,10 +19,7 @@ import { ComposerActionButton, type ComposerActionFace } from "@/components/Comp
 import { ModelSelect } from "@/components/ModelSelect";
 import { QuoteChips, type QuoteDraft } from "@/components/Quotes";
 import { type CompletionContext, SlashTextarea } from "@/components/SlashTextarea";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
-import { Spinner } from "@/components/ui/spinner";
 import { VoiceInputButton } from "@/components/VoiceInputButton";
 import type { ControlHint } from "@/lib/composerControl";
 import { isModelPickerKey, isSendKey } from "@/lib/keys";
@@ -31,8 +28,8 @@ import { modelPickerEnabled } from "@/lib/modelPicker";
 import { composerCard, composerToolbar } from "@/lib/styles";
 import { useTypeToFocus } from "@/lib/typeToFocus";
 import { useAutoGrow } from "@/lib/useAutoGrow";
-import { useDrafts } from "@/lib/useMachine";
 import type { ModelControl } from "@/lib/useModelChoice";
+import { useDrafts } from "@/lib/usePageStores";
 import type { SendDisposition } from "@/lib/ws";
 
 export function useDraftEditor(key: DraftKey | null) {
@@ -43,11 +40,6 @@ export function useDraftEditor(key: DraftKey | null) {
   return {
     key,
     text: draft.text,
-    preparing: draft.preparing,
-    prepareError: draft.prepareError,
-    prepareSubmit: (
-      deliver: (message: DraftMessage, inputId: string) => Promise<SendDisposition>,
-    ) => drafts.prepareSubmit(key, deliver),
     message: draftMessage(draft).text,
     attachments: attachmentDraft(key, draft.images, drafts),
     quotes: {
@@ -80,7 +72,6 @@ interface Props {
   above?: ReactNode;
   delivery?: ReactNode;
   actions: ReactNode;
-  cancelUpload?: () => void;
   voice?: () => VoiceHints;
 }
 
@@ -104,7 +95,6 @@ export function DraftEditor({
   actions,
   delivery,
   voice,
-  cancelUpload,
 }: Props) {
   const { ref, text, attachments, quotes } = editor;
   const [modelOpen, setModelOpen] = useState(false);
@@ -127,39 +117,6 @@ export function DraftEditor({
       className={cn(composerCard, className)}
       {...attachmentEvents(attachments, attachmentsDisabled)}
     >
-      {editor.preparing && (
-        <>
-          <AttachmentDraftView
-            draft={{
-              items: editor.preparing.attachments,
-              busy: false,
-              error: "",
-              add: async () => {},
-              remove: () => {},
-            }}
-            disabled
-          />
-          <div
-            role="status"
-            className="flex items-center gap-2 px-3 pt-2 text-sm text-muted-foreground"
-          >
-            <Spinner /> Uploading images…
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={cancelUpload}
-              aria-label="Cancel image upload"
-            >
-              Cancel
-            </Button>
-          </div>
-        </>
-      )}
-      {editor.prepareError && (
-        <Alert variant="destructive" className="mx-3 mt-3 w-auto">
-          <AlertDescription>{editor.prepareError}</AlertDescription>
-        </Alert>
-      )}
       <AttachmentDraftView draft={attachments} disabled={attachmentsDisabled} />
       <QuoteChips draft={quotes} disabled={disabled} />
       {above}

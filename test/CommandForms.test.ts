@@ -12,15 +12,11 @@ import {
 } from "../shared/wire.ts";
 import { answerForm, confirmation, createCommandForms } from "../web/src/lib/commandForms.ts";
 import type { CommandForm } from "../web/src/lib/commands.ts";
-import { LOCAL } from "../web/src/lib/machine.ts";
-import { machineOffers } from "../web/src/lib/machineOffers.ts";
 import { type SessionTarget, sessionCommands } from "../web/src/lib/sessionCommands.ts";
 import { previewClaim, previewClaimHolds } from "../web/src/lib/sessionPreview.ts";
 import type { SendDisposition } from "../web/src/lib/ws.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
-
-const local = machineOffers(LOCAL);
 
 const selected = { cwd: "/repo", sessionId: "s1", title: "Selected" };
 const other = { cwd: "/repo", sessionId: "s2", title: "Other" };
@@ -89,7 +85,6 @@ test("preview confirmation stays on its exact attachment, generation and instanc
   };
   let current = { ...online, session: { ...session, state: { ...session.state, preview } } };
   const form = sessionCommands(current, undefined, {
-    offers: local,
     previewObservation: { unconfirmed: null },
   }).find((c) => c.id === "stop-preview")!.intent;
   assert.equal(form.kind, "stop-preview");
@@ -234,9 +229,7 @@ test("rename's form follows the descriptor's rule when the checkout is gone", ()
     ...online,
     sessionReferences: [sessionReference("/repo", "s2", { unavailable: "checkout" })],
   };
-  const descriptor = sessionCommands(unavailable, other, { offers: local }).find(
-    (c) => c.id === "rename",
-  )!;
+  const descriptor = sessionCommands(unavailable, other, {}).find((c) => c.id === "rename")!;
   assert.equal(descriptor.enabled, false);
   assert.equal(answerForm(unavailable, rename(), "Renamed").allowed, false);
 });
@@ -566,7 +559,7 @@ test("rename starts from the session's title, and a new project from nothing", (
 
 test("an untitled selected session renames from the same empty title in the header and its sidebar row", () => {
   const renameTarget = (target?: SessionTarget) => {
-    const intent = sessionCommands(withWorkspace, target, { offers: local }).find(
+    const intent = sessionCommands(withWorkspace, target, {}).find(
       (c) => c.id === "rename",
     )?.intent;
     assert.equal(intent?.kind, "rename");

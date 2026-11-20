@@ -18,7 +18,7 @@ models, not the seed's.
     ab wait --fn "document.querySelector('[aria-label=\"Directory trust\"]').getAttribute('aria-pressed') === 'true'"`.
   - Result: Trusted replaces Untrusted. Capture `15-trusted`; click again and wait for
     `aria-pressed=false` to return to Untrusted. The seed without resources need not show this
-    control. Cross-machine trust isolation requires the peer prerequisite below.
+    control.
 - `model-defaults` (before sending, with the seed's default browser fake)
   - Action: `ab click '[aria-label^="Model:"]'; ab wait '[aria-label="Model and effort"]';
     ab find role option click --name "fake/gamma" --exact`;
@@ -85,9 +85,7 @@ models, not the seed's.
   - Refusal/removal: upload the PNG again, then
     `ab upload 'input[aria-label="Image files"]' "$RUN/invalid.txt";
     ab wait --text "Other files aren't supported yet."`. The PNG remains; capture `11-image-refusal`.
-    `ab find role button click --name 'Remove pixel.png' --exact` removes it. This local recipe
-    does not prove peer image preparation, cancellation or isolation; see
-    [Open a session](./open-session.md#gotchas).
+    `ab find role button click --name 'Remove pixel.png' --exact` removes it.
 - `not-sent` (last drive before Cleanup; ends this run)
   - Action: `ab open "$WEB_URL/new"; ab wait --text "What should we work on?";
     ab fill '[aria-label="First message"]' "keep this draft";

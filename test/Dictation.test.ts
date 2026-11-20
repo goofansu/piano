@@ -120,7 +120,7 @@ test("Stop commits source hints before navigation and final recorder events", as
   assert.equal(p.dictation.phase(p.a), "idle");
 });
 
-test("Local and two peers with identical session and New keys never share a result", async () => {
+test("draft stores with identical session and New keys never share a result", async () => {
   for (const key of [A, NEW_SESSION_DRAFT]) {
     const p = browser();
     const owners = [p.drafts, createDrafts(), createDrafts()];
@@ -190,7 +190,7 @@ test("a transcript arriving after Send is a new unsent addition", async () => {
   assert.equal(sends, 1);
 });
 
-test("late permission is released and a second machine cancels the first microphone", async () => {
+test("late permission is released and a second draft store cancels the first microphone", async () => {
   const p = browser();
   void p.dictation.start(p.a, context);
   const other = { drafts: createDrafts(), key: A };

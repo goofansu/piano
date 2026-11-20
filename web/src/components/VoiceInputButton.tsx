@@ -5,7 +5,7 @@ import { ComposerActionButton } from "@/components/ComposerActionButton";
 import type { DraftEditorState } from "@/components/DraftEditor";
 import { Spinner } from "@/components/ui/spinner";
 import { dictation } from "@/lib/browserDictation";
-import { useDrafts } from "@/lib/useMachine";
+import { useDrafts } from "@/lib/usePageStores";
 import { useVoiceInput } from "@/lib/useVoiceInput";
 
 export function VoiceInputButton({

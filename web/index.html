@@ -20,6 +20,9 @@
           ["theme", "piano.theme"],
           ["piano:messages-only", "piano.messagesOnly"],
           ["piano:changes-wrap", "piano.codeWrap"],
+          ["piano.machine.local.catalogs", "piano.catalogs"],
+          ["piano.machine.local.lastDir", "piano.lastDir"],
+          ["piano.machine.local.openGroups", "piano.openGroups"],
         ]) {
           const saved = localStorage.getItem(former);
           if (saved === null) continue;
@@ -32,6 +35,15 @@
         const dark = stored === "dark" || (stored !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
         document.documentElement.classList.add(dark ? "dark" : "light");
         document.documentElement.style.colorScheme = dark ? "dark" : "light";
+      } catch {}
+      try {
+        const surface = sessionStorage.getItem("piano.machine.local.surface");
+        if (surface !== null && sessionStorage.getItem("piano.surface") === null)
+          sessionStorage.setItem("piano.surface", surface);
+        // Read by nothing since Piano stopped connecting to other machines.
+        for (const store of [localStorage, sessionStorage])
+          for (const key of Object.keys(store))
+            if (key.startsWith("piano.machine.")) store.removeItem(key);
       } catch {}
     </script>
   </head>
