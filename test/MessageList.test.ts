@@ -13,6 +13,7 @@ const vite = await createServer({
   root: path.resolve("web"),
   server: { middlewareMode: true, watch: null },
   appType: "custom",
+  optimizeDeps: { noDiscovery: true, include: [] },
 });
 after(() => vite.close());
 const { MessageList } = (await vite.ssrLoadModule("/src/components/MessageList.tsx")) as {

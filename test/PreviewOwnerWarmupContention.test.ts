@@ -54,7 +54,7 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
     const other = await f.open("elsewhere", elsewhere);
     let otherDone = false;
     const waiting = f
-      .call(other, { command: [process.execPath, "-e", "process.exit(0)"], timeoutSeconds: 8 })
+      .call(other, { command: [process.execPath, "-e", "process.exit(0)"], timeoutSeconds: 5 })
       .finally(() => (otherDone = true));
 
     await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -102,7 +102,7 @@ for (const platform of ["linux", "darwin"] as Platform[]) {
 
     const holder = new DatabaseSync(join(f.state, "lock.sqlite"));
     holder.exec("BEGIN EXCLUSIVE");
-    await new Promise((resolve) => setTimeout(resolve, 3000));
+    await new Promise((resolve) => setTimeout(resolve, 2000));
     assert.equal(shown?.warming, true, "a busy lock says nothing about the app");
     await assert.rejects(f.call(f.owner, { action: "status" }), /busy/);
     assert.equal(shown?.ready, false);
