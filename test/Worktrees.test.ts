@@ -561,7 +561,7 @@ console.log(JSON.stringify({action:'created',branch:'feature',path:${JSON.string
   );
 });
 
-test("INV-06: recreating a worktree at its old path from another base records the new base for Branch Changes, and a branch made outside Piano does not use it", async (t) => {
+test("INV-06: recreating a worktree at its old path from another base records the new base for Branch Changes, and a branch made outside Piano, even under the same name, does not use it", async (t) => {
   const { root, repo } = fixture(t),
     cli = join(root, "wt"),
     home = join(root, "home");
@@ -678,7 +678,11 @@ test("INV-06: recreating a worktree at its old path from another base records th
         folder: repo,
         path: first.path,
         branch: "topic",
-        created: { branch: "topic", baseBranch: "release" },
+        created: {
+          branch: "topic",
+          baseBranch: "release",
+          commit: git(repo, "rev-parse", "release"),
+        },
       });
 
       const commands = yield* WorkspaceCommands;
@@ -708,8 +712,29 @@ test("INV-06: recreating a worktree at its old path from another base records th
         folder: repo,
         path: first.path,
         branch: "elsewhere",
-        created: { branch: "topic", baseBranch: "release" },
+        created: {
+          branch: "topic",
+          baseBranch: "release",
+          commit: git(repo, "rev-parse", "release"),
+        },
       });
+    }),
+  );
+
+  git(repo, "worktree", "remove", "--force", first.path);
+  git(repo, "branch", "-D", "topic", "elsewhere");
+  git(repo, "worktree", "add", "-q", "-b", "topic", first.path, "main");
+  writeFileSync(join(first.path, "replacement-only.txt"), "replacement\n");
+  git(first.path, "add", ".");
+  commit(first.path, "replacement");
+  await run(
+    Effect.gen(function* () {
+      yield* (yield* SidebarView).fresh;
+      assert.deepEqual(yield* branchChanges(first.path, "fresh"), {
+        target: ["main", "assumed"],
+        files: ["replacement-only.txt"],
+      });
+      assert.equal((yield* recorded(first.path))?.branch, "topic");
     }),
   );
 });

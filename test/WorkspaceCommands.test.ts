@@ -114,6 +114,7 @@ test("INV-06: a worktree request that may have left a checkout is answered uncon
   git(repo, "init", "--quiet");
   git(repo, "commit", "--quiet", "--allow-empty", "-m", "init");
   git(repo, "worktree", "add", "--quiet", "-b", "feature", linked);
+  git(repo, "worktree", "add", "--quiet", "--detach", join(root, "next"));
   writeFileSync(
     wt,
     `#!${process.execPath}\nimport {readFileSync} from 'node:fs';
@@ -188,10 +189,11 @@ test("INV-02/06: a requester that leaves while Worktrunk runs still gets the wor
   git(repo, "commit", "--quiet", "--allow-empty", "-m", "init");
   writeFileSync(
     wt,
-    `#!${process.execPath}\nimport {existsSync,writeFileSync} from 'node:fs';
+    `#!${process.execPath}\nimport {execFileSync} from 'node:child_process';import {existsSync,writeFileSync} from 'node:fs';
 if(process.argv.includes('--version')) console.log('wt v0.80.0');
 else{writeFileSync(${JSON.stringify(started)},'');
 while(!existsSync(${JSON.stringify(release)}))Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20);
+execFileSync('git',['-C',${JSON.stringify(repo)},'worktree','add','--quiet','-b','next',${JSON.stringify(path)}]);
 console.log(${JSON.stringify(JSON.stringify({ action: "created", branch: "next", path, created_branch: true, base_branch: "main" }))});}\n`,
     { mode: 0o755 },
   );
@@ -226,7 +228,11 @@ console.log(${JSON.stringify(JSON.stringify({ action: "created", branch: "next",
         folder: repo,
         path,
         branch: "next",
-        created: { branch: "next", baseBranch: "main" },
+        created: {
+          branch: "next",
+          baseBranch: "main",
+          commit: git(repo, "rev-parse", "HEAD").toString().trim(),
+        },
       });
     }).pipe(Effect.provideService(WorktrunkCommand, wt)),
   );

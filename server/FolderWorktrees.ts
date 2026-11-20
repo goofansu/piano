@@ -1,4 +1,5 @@
 import { Context, Effect, Fiber, Layer } from "effect";
+import { gitText } from "./GitCheckout.ts";
 import { Registry } from "./Registry.ts";
 import { createWorktree, WorktreeError } from "./Worktrees.ts";
 
@@ -33,19 +34,25 @@ export const FolderWorktreesLive = Layer.effect(
           .requireFolder(folder)
           .pipe(Effect.mapError((e) => new WorktreeError({ detail: e.detail })));
         const created = yield* createWorktree(folder, branch.trim(), { hooks: options.hooks });
+        const unconfirmed = (e: { readonly detail: string }) =>
+          new WorktreeError({ detail: `${e.detail} ${created.path}`, unconfirmed: true });
+        const commit = yield* gitText(created.path, [
+          "rev-parse",
+          "--verify",
+          "HEAD^{commit}",
+        ]).pipe(
+          Effect.map((out) => out.trim()),
+          Effect.mapError(unconfirmed),
+        );
         yield* registry
           .recordCreatedWorktree({
             folder,
             path: created.path,
             branch: created.branch,
             baseBranch: created.baseBranch,
+            commit,
           })
-          .pipe(
-            Effect.mapError(
-              (e) =>
-                new WorktreeError({ detail: `${e.detail} ${created.path}`, unconfirmed: true }),
-            ),
-          );
+          .pipe(Effect.mapError(unconfirmed));
         return { folder, ...created };
       },
       (work) => work.pipe(Effect.forkIn(layerScope), Effect.flatMap(Fiber.join)),

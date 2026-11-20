@@ -39,7 +39,13 @@ export const SessionChangesLive = Layer.effect(
       const hints: TargetHints = {
         ...(link ? { pullRequest: pullRequestBranches(link) } : {}),
         ...(worktree?.created
-          ? { worktreeBase: { branch: worktree.created.branch, base: worktree.created.baseBranch } }
+          ? {
+              worktreeBase: {
+                branch: worktree.created.branch,
+                base: worktree.created.baseBranch,
+                ...(worktree.created.commit ? { commit: worktree.created.commit } : {}),
+              },
+            }
           : {}),
       };
       return hints;
