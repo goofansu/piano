@@ -130,7 +130,7 @@ jobs:
       # A scratch Piano with a fake Pi: no model credentials, no paid calls.
       - name: Browser journey (${{ matrix.first }})
         run: node test/browser/${{ matrix.first }}.mjs
-      - name: Browser journey (${{ matrix.second }})
+      - name: Browser journey (${{ matrix.second || 'none in this job' }})
         if: ${{ !cancelled() && steps.browser-install.outcome == 'success' && matrix.second != '' }}
         run: node test/browser/${{ matrix.second }}.mjs
       - name: Keep journey screenshots
