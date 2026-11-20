@@ -91,6 +91,7 @@ test("retained HTML viewer stops admitting links under Settings and resumes with
     root: path.resolve("web"),
     server: { middlewareMode: true, watch: null },
     appType: "custom",
+    optimizeDeps: { noDiscovery: true, include: [] },
   });
   const { SessionPanel } = (await vite.ssrLoadModule("/src/components/SessionPanel.tsx")) as {
     SessionPanel: ComponentType<Record<string, unknown>>;

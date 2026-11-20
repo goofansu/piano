@@ -26,6 +26,7 @@ test("unchanged prose loads images only when a workspace owns it, and releases t
     root: path.resolve("web"),
     server: { middlewareMode: true, watch: null, ws: false },
     appType: "custom",
+    optimizeDeps: { noDiscovery: true, include: [] },
   });
   t.after(async () => {
     await act(() => root.unmount());

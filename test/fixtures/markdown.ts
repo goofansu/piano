@@ -9,6 +9,7 @@ const vite = await createServer({
   root: path.resolve("web"),
   server: { middlewareMode: true, watch: null, ws: false },
   appType: "custom",
+  optimizeDeps: { noDiscovery: true, include: [] },
 });
 after(() => vite.close());
 const { Markdown } = (await vite.ssrLoadModule("/src/components/Markdown.tsx")) as {
