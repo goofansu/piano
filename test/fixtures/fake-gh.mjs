@@ -3,8 +3,13 @@ import { setTimeout as delay } from "node:timers/promises";
 
 const fixture = JSON.parse(readFileSync(process.env.PIANO_TEST_GH_FIXTURE, "utf8"));
 const args = process.argv.slice(2),
-  list = args[1] === "list";
-const repo = args.includes("--repo") ? args[args.indexOf("--repo") + 1] : undefined;
+  list = args[1] === "list",
+  repoView = args[0] === "repo";
+const repo = repoView
+  ? args[2]
+  : args.includes("--repo")
+    ? args[args.indexOf("--repo") + 1]
+    : undefined;
 if (fixture.log)
   appendFileSync(fixture.log, `${JSON.stringify({ GH_HOST: process.env.GH_HOST, args })}\n`);
 if (list && !repo) {
@@ -51,7 +56,9 @@ const named = repo?.split("/").slice(-2).join("/").toLowerCase();
 const listedIn = (pr) => baseRepo(pr) === (fixture.renamedRepos?.[named] ?? named);
 const selected = (pr) =>
   Object.fromEntries(Object.entries(pr).filter(([key]) => fields.includes(key)));
-if (list)
+if (repoView)
+  console.log(JSON.stringify({ nameWithOwner: fixture.renamedRepos?.[named] ?? named }));
+else if (list)
   console.log(
     JSON.stringify(
       fixture.prs

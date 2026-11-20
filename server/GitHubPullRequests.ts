@@ -131,6 +131,7 @@ export const GitHubPullRequest = Schema.Struct({
   closedAt: Schema.optional(Schema.NullOr(Schema.String)),
 });
 export type GitHubPullRequest = typeof GitHubPullRequest.Type;
+const RepositoryName = Schema.Struct({ nameWithOwner: Schema.String });
 const fieldsWithoutChecks =
   "url,number,title,state,isDraft,reviewDecision,author,headRefName,baseRefName,headRepository,headRepositoryOwner,additions,deletions,changedFiles,updatedAt,closedAt";
 const fields = `${fieldsWithoutChecks},statusCheckRollup`;
@@ -328,6 +329,19 @@ export const GitHubPullRequestsLive = Layer.effect(
       ghJsonOutput(cwd, args, host).pipe(
         Effect.mapError((error) => failure(ghFailureDetail(error, host))),
       );
+    const currentName = (cwd: string, repo: string, host: GitHubHost) =>
+      gh(cwd, ["repo", "view", `${host}/${repo}`, "--json", "nameWithOwner"], host).pipe(
+        Effect.mapError((error) => failure(ghFailureDetail(error, host))),
+        Effect.flatMap((output) =>
+          Effect.try({
+            try: () =>
+              githubRemote(
+                `https://github.com/${Schema.decodeUnknownSync(Schema.fromJsonString(RepositoryName))(output).nameWithOwner}`,
+              )!.repo,
+            catch: () => failure("GitHub returned an invalid repository response."),
+          }),
+        ),
+      );
     return GitHubPullRequests.of({
       link: Effect.fn("GitHubPullRequests.link")(function* (url, cwd) {
         const identity = yield* parse(url);
@@ -393,10 +407,20 @@ export const GitHubPullRequestsLive = Layer.effect(
           { concurrency: "unbounded" },
         );
         // GitHub follows repository renames, so a remote under an upstream's old name lists the
-        // same pull requests as one under its current name.
+        // same pull requests as one under its current name, and names a head fork by its current
+        // name even when the checkout tracks the fork's old one.
+        const listed = lists.flat();
+        const headRepo = listed.some(
+          ({ head, pullRequest }) =>
+            head === branch && pullRequest.headRepo && pullRequest.headRepo !== repo,
+        )
+          ? yield* currentName(cwd, repo, host)
+          : repo;
         const matches = new Map<string, PullRequest>();
-        for (const { head, pullRequest } of lists.flat())
-          if (isFromBranch({ head, headRepo: pullRequest.headRepo }, { name: branch, repo }))
+        for (const { head, pullRequest } of listed)
+          if (
+            isFromBranch({ head, headRepo: pullRequest.headRepo }, { name: branch, repo: headRepo })
+          )
             matches.set(pullRequestIdentity(pullRequest.url)?.url ?? pullRequest.url, pullRequest);
         return [...matches.values()].map((pullRequest) => ({
           link: linkFor(pullRequest.url, host),

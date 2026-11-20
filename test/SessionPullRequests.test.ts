@@ -510,7 +510,11 @@ test("exe.dev: discovery searches the upstream repository for a fork's pull requ
     headRepo: "me/fork",
     baseRepo: "up/repo",
   });
-  assert.deepEqual(calls(), [listed("me/fork"), listed("up/repo")]);
+  assert.deepEqual(calls(), [
+    listed("me/fork"),
+    listed("up/repo"),
+    `${host} repo view ${host}/me/fork --json`,
+  ]);
 
   await serve([otherFork, elsewhere]);
   const none = await f.change({ action: "discover" });
@@ -583,6 +587,7 @@ for (const [label, base] of [
       .trim()
       .split("\n")
       .map((line) => (JSON.parse(line) as { args: string[] }).args.slice(0, -1).join(" "))
+      .filter((call) => call.startsWith("pr list "))
       .toSorted();
     assert.deepEqual(
       searched,
@@ -646,6 +651,7 @@ test("github.com: discovery searches a base remote named parent for a fork's pul
     .trim()
     .split("\n")
     .map((line) => (JSON.parse(line) as { args: string[] }).args.slice(0, -1).join(" "))
+    .filter((call) => call.startsWith("pr list "))
     .toSorted();
   assert.deepEqual(
     searched,
@@ -668,6 +674,7 @@ for (const host of ["github.com", "github.int.exe.xyz"] as const) {
         .trim()
         .split("\n")
         .map((line) => (JSON.parse(line) as { args: string[] }).args.slice(0, -1).join(" "))
+        .filter((call) => call.startsWith("pr list "))
         .toSorted();
     const listed = (...repos: string[]) =>
       repos.map(
@@ -699,6 +706,25 @@ for (const host of ["github.com", "github.int.exe.xyz"] as const) {
     assert.equal(found.link?.url, "https://github.com/up/repo/pull/42");
     assert.deepEqual(searched(), listed("me/fork", "up/old-name", "up/repo"));
   });
+
+  for (const [label, url, owner, found] of [
+    ["its current URL", "me/fork", "me", 42],
+    ["its pre-rename URL", "me/old-fork", "me", 42],
+    ["another fork's URL", "other/fork", "me", undefined],
+  ] as const)
+    test(`${host}: a checkout tracking ${label} matches only that fork's pull request`, async (t) => {
+      const { f, log } = await forkCheckout(t, [["upstream", `https://${host}/up/repo.git`]]);
+      f.git("remote", "set-url", "origin", `https://${host}/${url}.git`);
+      f.control({
+        prs: [{ ...fromFork(42, "up/repo"), headRepositoryOwner: { login: owner } }],
+        expectedHost: host,
+        renamedRepos: { "me/old-fork": "me/fork" },
+        log,
+      });
+      const result = await f.change({ action: "discover" });
+      assert.equal(result.error, undefined);
+      assert.equal(result.pullRequest?.number, found, JSON.stringify(result));
+    });
 
   test(`${host}: equal pull request numbers in different base repositories stay ambiguous`, async (t) => {
     const { f, log } = await forkCheckout(t, [
