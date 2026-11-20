@@ -64,21 +64,33 @@ export const observeBranchRemote = Effect.fn("GitHubPullRequests.observeBranchRe
 
 // A fork's pull request is listed only in its base repository. Without --repo, gh 2.101 lists one
 // repository it picks from the remotes (origin over a base remote named parent), so search every
-// repository a remote on the same host names.
+// repository a remote on the same host names, and the default `gh repo set-default` records on a
+// remote: "base" for that remote's repository, or owner/repo for one no remote names.
 const searchRepos = Effect.fn("GitHubPullRequests.searchRepos")(function* (
   cwd: string,
   host: GitHubHost,
   headRepo: string,
 ): Effect.fn.Return<string[], PullRequestError> {
   const read = (args: string[]) =>
-    gitText(cwd, args, { userConfig: true }).pipe(Effect.mapError((e) => failure(e.detail)));
+    gitText(cwd, args, { userConfig: true }).pipe(
+      Effect.map((text) => text.trim()),
+      Effect.mapError((e) => failure(e.detail)),
+    );
   const names = (yield* read(["remote"])).split("\n").filter(Boolean);
-  const urls = yield* Effect.forEach(names, (name) => read(["remote", "get-url", "--", name]), {
-    concurrency: "unbounded",
-  });
-  const repos = urls.flatMap((url) => {
-    const github = githubRemote(url.trim());
-    return github?.apiHost === host ? [github.repo] : [];
+  const remotes = yield* Effect.forEach(
+    names,
+    (name) =>
+      Effect.all([
+        read(["remote", "get-url", "--", name]),
+        read(["config", "--default", "", "--get", `remote.${name}.gh-resolved`]),
+      ]),
+    { concurrency: "unbounded" },
+  );
+  const repos = remotes.flatMap(([url, resolved]) => {
+    const github = githubRemote(url);
+    if (github?.apiHost !== host) return [];
+    const chosen = /^[\w.-]+\/[\w.-]+$/.test(resolved) ? resolved.toLowerCase() : null;
+    return chosen ? [github.repo, chosen] : [github.repo];
   });
   return [...new Set([headRepo, ...repos])];
 });

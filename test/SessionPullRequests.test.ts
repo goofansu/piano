@@ -715,6 +715,46 @@ for (const host of ["github.com", "github.int.exe.xyz"] as const) {
     assert.equal(found.link, null);
   });
 
+  test(`${host}: discovery searches the GitHub CLI default when no remote names it`, async (t) => {
+    const { f, log, searched, listed } = await forkCheckout(t, []);
+    f.control({
+      prs: [
+        fromFork(42, "up/repo"),
+        { ...fromFork(99, "up/repo"), headRepositoryOwner: { login: "other" } },
+      ],
+      expectedHost: host,
+      log,
+    });
+    const before = await f.change({ action: "discover" });
+    assert.equal(before.error, undefined);
+    assert.equal(before.link, null);
+    assert.deepEqual(searched(), listed("me/fork"));
+
+    f.git("config", "remote.origin.gh-resolved", "up/repo");
+    writeFileSync(log, "");
+    const found = await f.change({ action: "discover" });
+    assert.equal(found.error, undefined);
+    assert.equal(found.pullRequest?.number, 42, JSON.stringify(found));
+    assert.deepEqual([found.link?.headRepo, found.link?.baseRepo], ["me/fork", "up/repo"]);
+    assert.deepEqual(searched(), listed("me/fork", "up/repo"));
+  });
+
+  for (const [label, key, value] of [
+    ["recorded as base on its remote", "remote.upstream.gh-resolved", "base"],
+    ["recorded by name on origin", "remote.origin.gh-resolved", "Up/Repo"],
+  ] as const)
+    test(`${host}: a GitHub CLI default ${label} that a remote also names is searched once`, async (t) => {
+      const { f, log, searched, listed } = await forkCheckout(t, [
+        ["upstream", `https://${host}/up/repo.git`],
+      ]);
+      f.git("config", key, value);
+      f.control({ prs: [fromFork(42, "up/repo")], expectedHost: host, log });
+      const found = await f.change({ action: "discover" });
+      assert.equal(found.error, undefined);
+      assert.equal(found.pullRequest?.number, 42, JSON.stringify(found));
+      assert.deepEqual(searched(), listed("me/fork", "up/repo"));
+    });
+
   test(`${host}: a remote whose name starts with a dash neither stops discovery nor reaches gh`, async (t) => {
     const { f, log, searched, listed } = await forkCheckout(t, [
       ["upstream", `https://${host}/up/repo.git`],
