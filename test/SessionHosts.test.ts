@@ -1905,7 +1905,11 @@ const r=spawnSync(${JSON.stringify(real)},a,{stdio:'inherit',env:{...process.env
             folder: realpathSync(repo),
             path: entry.cwd,
             branch: "slow",
-            created: { branch: "slow", baseBranch: "main" },
+            created: {
+              branch: "slow",
+              baseBranch: "main",
+              commit: git(repo, "rev-parse", "main"),
+            },
           },
         ]);
         yield* until(

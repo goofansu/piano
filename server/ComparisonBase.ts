@@ -10,7 +10,11 @@ import { type BranchHead, branchRemote, githubRemote, isFromBranch } from "./Git
 
 export interface TargetHints {
   readonly pullRequest?: PullRequestBranches;
-  readonly worktreeBase?: { readonly branch: string; readonly base: string };
+  readonly worktreeBase?: {
+    readonly branch: string;
+    readonly base: string;
+    readonly commit?: string;
+  };
 }
 
 export interface Comparisons {
@@ -85,19 +89,34 @@ async function remoteDefault(checkout: Checkout, remote: string): Promise<Compar
   return commit ? { name: ref.slice(prefix.length), ref, commit, from: "remote-default" } : null;
 }
 
+async function sameBranch(
+  checkout: Checkout,
+  head: string,
+  worktreeBase: NonNullable<TargetHints["worktreeBase"]>,
+  branch: string,
+): Promise<boolean> {
+  if (worktreeBase.branch !== branch) return false;
+  if (!worktreeBase.commit) return true;
+  const result = await checkout.run(["merge-base", "--is-ancestor", worktreeBase.commit, head], {
+    okCodes: [0, 1, 128],
+  });
+  return result.code === 0;
+}
+
 async function resolveTarget(
   checkout: Checkout,
+  head: string,
   branch: { readonly name: string; readonly upstream: Upstream },
-  head: BranchHead | null,
+  pullRequestHead: BranchHead | null,
   hints: TargetHints,
 ): Promise<ComparisonTarget | null> {
   const { upstream } = branch;
   const { tracked } = upstream;
-  if (head && hints.pullRequest) {
+  if (pullRequestHead && hints.pullRequest) {
     const target = await pullRequestTarget(checkout, upstream, hints.pullRequest);
     if (target) return target;
   }
-  if (hints.worktreeBase?.branch === branch.name) {
+  if (hints.worktreeBase && (await sameBranch(checkout, head, hints.worktreeBase, branch.name))) {
     const target = await namedTarget(checkout, tracked, hints.worktreeBase.base, "worktree");
     if (target) return target;
   }
@@ -119,7 +138,7 @@ async function branchScope(
 ): Promise<{ comparison: Comparison } | { unavailable: string; target?: ComparisonTarget }> {
   if (!head) return { unavailable: "No commits yet." };
   if (!branch) return { unavailable: "Detached HEAD." };
-  const target = await resolveTarget(checkout, branch, pullRequestHead, hints);
+  const target = await resolveTarget(checkout, head, branch, pullRequestHead, hints);
   if (!target) return { unavailable: "No base branch known." };
   const { upstream } = branch;
   if (

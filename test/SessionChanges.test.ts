@@ -32,6 +32,7 @@ async function fixture(t: TestContext) {
   git(repo, "commit", "-qm", "base");
   git(repo, "branch", "-q", "release");
   git(repo, "worktree", "add", "-q", "-b", "feature", worktree);
+  const createdAt = git(worktree, "rev-parse", "HEAD");
   writeFileSync(join(worktree, "a"), "edited\n");
   git(worktree, "commit", "-qam", "work");
   git(repo, "remote", "add", "origin", "https://github.com/example/repo.git");
@@ -84,6 +85,7 @@ async function fixture(t: TestContext) {
       path: worktree,
       branch: "feature",
       baseBranch: "main",
+      commit: createdAt,
     }),
   );
   await runtime.runPromise(registry.addSession(worktree, "one"));
