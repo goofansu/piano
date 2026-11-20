@@ -227,9 +227,8 @@ test("live/reload output shows transcript and editor text as Pi wrote it, redact
           "Pi persists ok, not success",
         );
         assert.match(snap.state.extension?.statuses[0].text ?? "", /Projection ready/);
-        assert.match(
-          snap.state.extension?.widgets[0].lines[0] ?? "",
-          /<script>/,
+        assert.ok(
+          snap.state.extension?.widgets[0].lines[0]?.includes("<script>"),
           "markup remains inert data for the renderer",
         );
         assert.equal(snap.state.extension?.editorRequest?.text, editorText);
