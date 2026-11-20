@@ -21,7 +21,6 @@ import { Registry, RegistryDatabasePath } from "../server/Registry.ts";
 import { SessionChanges, SessionChangesLive } from "../server/SessionChanges.ts";
 import { SidebarView } from "../server/SidebarView.ts";
 import { WorkspaceChangesLive } from "../server/WorkspaceChanges.ts";
-import { WorkspaceCommands } from "../server/WorkspaceCommands.ts";
 import { checkoutHint, createWorktree, listWorktrees } from "../server/Worktrees.ts";
 import { forkWorktree } from "./fixtures/forkWorktree.ts";
 
@@ -524,8 +523,6 @@ test("INV-06: recreating a worktree at its old path from another base records th
         },
       });
 
-      const commands = yield* WorkspaceCommands;
-      assert.equal((yield* commands.addWorktree(repo, first.path)).status, "ready");
       yield* (yield* SidebarView).fresh;
       assert.equal((yield* recorded(first.path))?.created?.baseBranch, "release");
       assert.deepEqual((yield* branchChanges(first.path, "fresh")).target, ["release", "worktree"]);

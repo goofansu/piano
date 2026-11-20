@@ -92,10 +92,11 @@ memory growth or stall Pi stdout draining.
 ## INV-06 — Worktree discovery and lifecycle failures remain unknown or failed
 
 Discover worktrees with Git (`git worktree list --porcelain -z` and `git rev-parse --show-toplevel`):
-picking a worktree needs only its path, branch, detached state and whether Git can prune it. Do not
+the sidebar needs only each worktree's path, branch, detached state and whether Git can prune it. Do not
 collect per-worktree status such as dirty or in-progress operations in discovery; it costs a
 `git status` per worktree on every refresh. A feature that needs it reads it for the one workspace it
-concerns. Only a dispatched session start creates a worktree; the UI opens existing ones. Creation
+concerns. Only a dispatched session start creates a worktree; a session started in a linked worktree made
+elsewhere registers it. Creation
 runs `git worktree add` for a new branch on the repository's default branch, beside the main
 checkout at `<main checkout>.<branch>`, and records the base it used. It runs no setup hooks and
 copies no ignored files.

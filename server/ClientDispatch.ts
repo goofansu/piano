@@ -13,7 +13,7 @@ import { Registry } from "./Registry.ts";
 import { SessionHosts, SessionNotCreated } from "./SessionHosts.ts";
 import { SessionStatus } from "./SessionStatus.ts";
 import { SidebarView } from "./SidebarView.ts";
-import { WorkspaceCommands, worktreeFailure } from "./WorkspaceCommands.ts";
+import { WorkspaceCommands } from "./WorkspaceCommands.ts";
 
 export type ClientRequest = Exclude<ClientMessage, { _tag: "ack" }>;
 
@@ -61,18 +61,6 @@ const plainError = (_request: unknown, reason: Unanswered): ServerMessage => ({
   _tag: "error",
   message: unansweredText(reason),
   selectionId: undefined,
-});
-
-const worktreeUnanswered = (
-  request: { readonly requestId: string },
-  reason: Unanswered,
-): ServerMessage => ({
-  _tag: "worktree_result",
-  requestId: request.requestId,
-  result:
-    reason._tag !== "failed"
-      ? { status: "error", detail: unansweredText(reason), unconfirmed: false }
-      : worktreeFailure(reason.error),
 });
 
 const dataControlsUnanswered = (
@@ -204,28 +192,6 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
       unanswered: plainError,
       confirmed: null,
     },
-    worktrees: {
-      admission: "ordinary",
-      run: ({ folder, requestId }) =>
-        commands
-          .discoverWorktrees(folder)
-          .pipe(
-            Effect.flatMap((discovery) =>
-              send({ _tag: "worktrees", folder, requestId, discovery }),
-            ),
-          ),
-      unanswered: ({ folder, requestId }, reason) => ({
-        _tag: "worktrees",
-        folder,
-        requestId,
-        discovery: {
-          status: "error",
-          observedAt: new Date().toISOString(),
-          detail: unansweredText(reason),
-        },
-      }),
-      confirmed: null,
-    },
     directory: {
       admission: "ordinary",
       run: Effect.fn("ClientDispatch.directory")(function* ({ cwd, requestId }) {
@@ -328,15 +294,6 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
         cwd: path,
         message: unansweredText(reason),
       }),
-      confirmed: null,
-    },
-    add_worktree: {
-      admission: "ordinary",
-      run: ({ requestId, folder, path }) =>
-        commands
-          .addWorktree(folder, path)
-          .pipe(Effect.flatMap((result) => send({ _tag: "worktree_result", requestId, result }))),
-      unanswered: worktreeUnanswered,
       confirmed: null,
     },
     rename_session: {

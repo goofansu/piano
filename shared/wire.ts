@@ -728,10 +728,6 @@ export type SessionStatusFacts = typeof SessionStatusFacts.Type;
 
 export const ClientMessage = Schema.Union([
   Schema.TaggedStruct("registry", {}),
-  Schema.TaggedStruct("worktrees", {
-    folder: Schema.String,
-    requestId: Schema.String,
-  }),
   Schema.TaggedStruct("models", {
     cwd: Schema.String,
     requestId: Schema.String,
@@ -763,11 +759,6 @@ export const ClientMessage = Schema.Union([
     trusted: Schema.Boolean,
   }),
   Schema.TaggedStruct("directory", { cwd: Schema.String, requestId: Schema.String }),
-  Schema.TaggedStruct("add_worktree", {
-    requestId: Schema.String,
-    folder: Schema.String,
-    path: Schema.String,
-  }),
   Schema.TaggedStruct("select", {
     selectionId: Schema.String,
     attemptId: Schema.optional(Schema.String),
@@ -828,21 +819,6 @@ export type ClientCommand = ClientMessage extends infer M
     : never
   : never;
 
-export const WorktreeResult = Schema.Union([
-  Schema.Struct({
-    status: Schema.Literal("ready"),
-    folder: Schema.String,
-    path: Schema.String,
-    branch: Schema.NullOr(Schema.String),
-  }),
-  Schema.Struct({
-    status: Schema.Literal("error"),
-    detail: Schema.String,
-    unconfirmed: Schema.optional(Schema.Boolean),
-  }),
-]);
-export type WorktreeResult = typeof WorktreeResult.Type;
-
 export const ServerMessage = Schema.Union([
   Schema.TaggedStruct("pong", { nonce: Schema.String }),
   Schema.TaggedStruct("registry", {
@@ -872,11 +848,6 @@ export const ServerMessage = Schema.Union([
       }),
       Schema.Struct({ status: Schema.Literal("error"), message: Schema.String }),
     ]),
-  }),
-  Schema.TaggedStruct("worktrees", {
-    folder: Schema.String,
-    requestId: Schema.String,
-    discovery: WorktreeDiscovery,
   }),
   Schema.TaggedStruct("trust", {
     cwd: Schema.String,
@@ -919,7 +890,6 @@ export const ServerMessage = Schema.Union([
       Schema.Struct({ status: Schema.Literal("error"), detail: Schema.String }),
     ]),
   }),
-  Schema.TaggedStruct("worktree_result", { requestId: Schema.String, result: WorktreeResult }),
   Schema.TaggedStruct("session_status", {
     requestId: Schema.String,
     result: Schema.Union([
