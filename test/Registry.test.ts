@@ -96,7 +96,7 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
   const upgraded = new DatabaseSync(f.dbPath, { readOnly: true }),
     backup = new DatabaseSync(`${f.dbPath}.v1-backup`, { readOnly: true });
   try {
-    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 20);
+    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 21);
     assert.deepEqual(
       upgraded
         .prepare("SELECT name FROM pragma_table_info('projects')")
@@ -298,6 +298,7 @@ test("INV-01: a session with every optional field set, linked without an API hos
           branch: "feature",
           baseBranch: "main",
           commit: "0123456789abcdef0123456789abcdef01234567",
+          instance: "2003884:1795142070102827281",
         },
       },
     ],
@@ -393,7 +394,7 @@ test("version-16 retires session sharing: a saved Radius link is dropped and its
   assert.deepEqual((await f.get()).sessions, [before]);
   const upgraded = new DatabaseSync(f.dbPath, { readOnly: true });
   try {
-    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 20);
+    assert.equal(upgraded.prepare("PRAGMA user_version").get()!.user_version, 21);
     assert.equal(
       upgraded
         .prepare("SELECT name FROM pragma_table_info('sessions')")
@@ -516,7 +517,7 @@ test("PIN-167: an upgrade forgets every recorded base it cannot tie to a creatio
   assert.deepEqual((await f.get()).worktrees, expected);
   const reopened = new DatabaseSync(f.dbPath);
   try {
-    assert.equal(reopened.prepare("PRAGMA user_version").get()!.user_version, 20);
+    assert.equal(reopened.prepare("PRAGMA user_version").get()!.user_version, 21);
   } finally {
     reopened.close();
   }
@@ -647,7 +648,7 @@ for (const version of [4, 5, 6]) {
     assert.deepEqual(await f.get(), before, "reopening the upgraded database is idempotent");
     const stored = new DatabaseSync(f.dbPath, { readOnly: true });
     try {
-      assert.equal(stored.prepare("PRAGMA user_version").get()!.user_version, 20);
+      assert.equal(stored.prepare("PRAGMA user_version").get()!.user_version, 21);
       assert.deepEqual(
         stored
           .prepare(

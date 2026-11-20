@@ -15,6 +15,7 @@ import { join } from "node:path";
 import { type TestContext, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
+import { worktreeInstance } from "../server/GitCheckout.ts";
 import { PianoCoreLive } from "../server/PianoServices.ts";
 import { Registry, RegistryDatabasePath } from "../server/Registry.ts";
 import { SessionChanges, SessionChangesLive } from "../server/SessionChanges.ts";
@@ -561,7 +562,7 @@ console.log(JSON.stringify({action:'created',branch:'feature',path:${JSON.string
   );
 });
 
-test("INV-06: recreating a worktree at its old path from another base records the new base for Branch Changes, and a branch made outside Piano, even under the same name, does not use it", async (t) => {
+function branchChangesHarness(t: TestContext) {
   const { root, repo } = fixture(t),
     cli = join(root, "wt"),
     home = join(root, "home");
@@ -640,6 +641,12 @@ test("INV-06: recreating a worktree at its old path from another base records th
       (d) => d.worktrees.find((w) => w.path === path),
     );
 
+  return { root, repo, commit, setDefault, run, created, branchChanges, recorded };
+}
+
+test("INV-06: recreating a worktree at its old path from another base records the new base for Branch Changes, and a branch made outside Piano, even under the same name, does not use it", async (t) => {
+  const { repo, commit, setDefault, run, created, branchChanges, recorded } =
+    branchChangesHarness(t);
   const first = await run(
     Effect.gen(function* () {
       const commands = yield* WorkspaceCommands;
@@ -665,6 +672,7 @@ test("INV-06: recreating a worktree at its old path from another base records th
     }),
   );
   setDefault("main");
+  const instance = await worktreeInstance(git(first.path, "rev-parse", "--absolute-git-dir"));
 
   await run(
     Effect.gen(function* () {
@@ -682,6 +690,7 @@ test("INV-06: recreating a worktree at its old path from another base records th
           branch: "topic",
           baseBranch: "release",
           commit: git(repo, "rev-parse", "release"),
+          instance,
         },
       });
 
@@ -716,6 +725,7 @@ test("INV-06: recreating a worktree at its old path from another base records th
           branch: "topic",
           baseBranch: "release",
           commit: git(repo, "rev-parse", "release"),
+          instance,
         },
       });
     }),
@@ -735,6 +745,81 @@ test("INV-06: recreating a worktree at its old path from another base records th
         files: ["replacement-only.txt"],
       });
       assert.equal((yield* recorded(first.path))?.branch, "topic");
+    }),
+  );
+});
+
+function createdFromRelease(harness: ReturnType<typeof branchChangesHarness>) {
+  const { repo, setDefault, run, created } = harness;
+  setDefault("release");
+  return run(
+    Effect.gen(function* () {
+      const registry = yield* Registry;
+      yield* registry.addFolder(repo);
+      const made = created(yield* (yield* WorkspaceCommands).createWorktree(repo, "topic", {}));
+      assert.equal(made.creation?.baseBranch, "release");
+      yield* registry.addSession(made.path, "s");
+      return made.path;
+    }),
+  ).finally(() => setDefault("main"));
+}
+
+test("PIN-158: a worktree recreated outside Piano at its path and branch name drops the recorded base even when it shares the recorded history", async (t) => {
+  const harness = branchChangesHarness(t);
+  const { repo, commit, run, branchChanges } = harness;
+  const commitFile = (cwd: string, name: string) => {
+    writeFileSync(join(cwd, name), `${name}\n`);
+    git(cwd, "add", ".");
+    commit(cwd, name);
+  };
+  const path = await createdFromRelease(harness);
+  git(repo, "merge", "-q", "--ff-only", "release");
+  commitFile(repo, "main-only.txt");
+  git(repo, "worktree", "remove", "--force", path);
+  git(repo, "branch", "-D", "topic");
+  git(repo, "worktree", "add", "-q", "-b", "topic", path, "main");
+  commitFile(path, "replacement-only.txt");
+  await run(
+    Effect.gen(function* () {
+      yield* (yield* SidebarView).fresh;
+      assert.deepEqual(yield* branchChanges(path, "s"), {
+        target: ["main", "assumed"],
+        files: ["replacement-only.txt"],
+      });
+    }),
+  );
+});
+
+test("PIN-158: a surviving worktree keeps its recorded base after its branch is rebased onto a rewritten base, and after switching away and back", async (t) => {
+  const harness = branchChangesHarness(t);
+  const { repo, commit, run, branchChanges } = harness;
+  const commitFile = (cwd: string, name: string) => {
+    writeFileSync(join(cwd, name), `${name}\n`);
+    git(cwd, "add", ".");
+    commit(cwd, name);
+  };
+  const identity = ["-c", "user.name=Test", "-c", "user.email=test@example.invalid"];
+  const path = await createdFromRelease(harness);
+  commitFile(path, "feature-only.txt");
+  const oldRelease = git(repo, "rev-parse", "release");
+  commitFile(repo, "main-only.txt");
+  git(repo, ...identity, "rebase", "-q", "main", "release");
+  git(repo, "switch", "-q", "main");
+  git(path, ...identity, "rebase", "-q", "--onto", "release", oldRelease);
+  assert.equal(git(path, "diff", "--name-only", "release...HEAD"), "feature-only.txt");
+  const expected = { target: ["release", "worktree"], files: ["feature-only.txt"] };
+  await run(
+    Effect.gen(function* () {
+      yield* (yield* SidebarView).fresh;
+      assert.deepEqual(yield* branchChanges(path, "s"), expected);
+    }),
+  );
+  git(path, "switch", "-q", "-c", "detour", "main");
+  git(path, "switch", "-q", "topic");
+  await run(
+    Effect.gen(function* () {
+      yield* (yield* SidebarView).fresh;
+      assert.deepEqual(yield* branchChanges(path, "s"), expected);
     }),
   );
 });

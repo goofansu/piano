@@ -6,6 +6,7 @@ import { join, resolve as resolvePath } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { type TestContext, test } from "node:test";
 import { Effect, Layer, ManagedRuntime } from "effect";
+import { worktreeInstance } from "../server/GitCheckout.ts";
 import { GitHubPullRequestsLive } from "../server/GitHubPullRequests.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionChanges, SessionChangesLive } from "../server/SessionChanges.ts";
@@ -88,6 +89,7 @@ async function fixture(t: TestContext) {
       branch: "feature",
       baseBranch: "main",
       commit: createdAt,
+      instance: await worktreeInstance(git(worktree, "rev-parse", "--absolute-git-dir")),
     }),
   );
   await runtime.runPromise(registry.addSession(worktree, "one"));

@@ -8,6 +8,7 @@ import { NodeServices } from "@effect/platform-node";
 import { Context, Effect, Fiber, Layer, Queue, type Scope, Stream } from "effect";
 import { DirectoryFacts } from "../server/DirectoryFacts.ts";
 import { FolderWorktreesLive } from "../server/FolderWorktrees.ts";
+import { worktreeInstance } from "../server/GitCheckout.ts";
 import { PianoCoreLive } from "../server/PianoServices.ts";
 import { PiCli } from "../server/PiCli.ts";
 import { Registry, RegistryDatabasePath, RegistryError } from "../server/Registry.ts";
@@ -232,6 +233,9 @@ console.log(${JSON.stringify(JSON.stringify({ action: "created", branch: "next",
           branch: "next",
           baseBranch: "main",
           commit: git(repo, "rev-parse", "HEAD").toString().trim(),
+          instance: yield* Effect.promise(() =>
+            worktreeInstance(git(path, "rev-parse", "--absolute-git-dir").toString().trim()),
+          ),
         },
       });
     }).pipe(Effect.provideService(WorktrunkCommand, wt)),

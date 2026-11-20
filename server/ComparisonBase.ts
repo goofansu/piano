@@ -5,7 +5,7 @@ import type {
   ComparisonTarget,
   ScopeAvailability,
 } from "../shared/wire.ts";
-import type { BranchHome, Checkout, Upstream } from "./GitCheckout.ts";
+import { type BranchHome, type Checkout, type Upstream, worktreeInstance } from "./GitCheckout.ts";
 import { type BranchHead, branchRemote, githubRemote, isFromBranch } from "./GitHubPullRequests.ts";
 
 export interface TargetHints {
@@ -14,6 +14,7 @@ export interface TargetHints {
     readonly branch: string;
     readonly base: string;
     readonly commit?: string;
+    readonly instance?: string;
   };
 }
 
@@ -96,6 +97,10 @@ async function sameBranch(
   branch: string,
 ): Promise<boolean> {
   if (worktreeBase.branch !== branch) return false;
+  if (worktreeBase.instance) {
+    const gitDir = (await checkout.text(["rev-parse", "--absolute-git-dir"])).trim();
+    return (await worktreeInstance(gitDir).catch(() => null)) === worktreeBase.instance;
+  }
   if (!worktreeBase.commit) return true;
   const result = await checkout.run(["merge-base", "--is-ancestor", worktreeBase.commit, head], {
     okCodes: [0, 1, 128],
