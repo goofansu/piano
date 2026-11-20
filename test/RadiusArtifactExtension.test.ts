@@ -6,13 +6,12 @@ import {
   constants,
   mkdtempSync,
   openSync,
-  readdirSync,
-  readlinkSync,
-  realpathSync,
+  statSync,
   rmSync,
   truncateSync,
   writeFileSync,
 } from "node:fs";
+import { open } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -836,28 +835,22 @@ test(
   },
 );
 
-function growsOnceOpen(path: string, bytes: Buffer) {
-  const target = realpathSync(path);
-  const signal = new AbortController().signal;
+async function growsOnceSized(path: string, bytes: Buffer) {
+  const target = statSync(path);
+  const probe = await open(path);
+  const proto: { stat: typeof probe.stat } = Object.getPrototypeOf(probe);
+  await probe.close();
+  const stat = proto.stat;
   let grown = false;
-  const check = signal.throwIfAborted.bind(signal);
-  Object.defineProperty(signal, "throwIfAborted", {
-    value() {
-      const open = readdirSync("/proc/self/fd").some((fd) => {
-        try {
-          return readlinkSync(`/proc/self/fd/${fd}`) === target;
-        } catch {
-          return false;
-        }
-      });
-      if (open && !grown) {
-        grown = true;
-        appendFileSync(target, bytes);
-      }
-      check();
-    },
-  });
-  return { signal, grown: () => grown };
+  proto.stat = async function (this: typeof probe, ...args: Parameters<typeof probe.stat>) {
+    const stats = await stat.apply(this, args);
+    if (!grown && stats.dev === target.dev && stats.ino === target.ino) {
+      grown = true;
+      appendFileSync(path, bytes);
+    }
+    return stats;
+  } as typeof probe.stat;
+  return { grown: () => grown, restore: () => void (proto.stat = stat) };
 }
 
 test("a file that grows while it is read, below or past 25 MiB, publishes nothing; the same file at rest publishes", async () => {
@@ -870,9 +863,14 @@ test("a file that grows while it is read, below or past 25 MiB, publishes nothin
       [25 * 1024 * 1024, 1, /25 MiB publication limit/],
     ] as const) {
       writeFileSync(path, Buffer.alloc(start, "x"));
-      const growth = growsOnceOpen(path, Buffer.alloc(added, "y"));
-      const refused = await h.call("create", { ...byPath, path: "growing.md" }, growth.signal);
-      assert.equal(growth.grown(), true, "the file grew while the reader held it open");
+      const growth = await growsOnceSized(path, Buffer.alloc(added, "y"));
+      let refused: RadiusArtifactResult;
+      try {
+        refused = await h.call("create", { ...byPath, path: "growing.md" });
+      } finally {
+        growth.restore();
+      }
+      assert.equal(growth.grown(), true, "the file grew after the reader took its size");
       assert.equal(refused.status, "error");
       assert.match(refused.message, refusal);
       assert.equal(JSON.stringify(refused).includes(h.root), false, "no local path");
