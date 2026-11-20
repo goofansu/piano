@@ -22,13 +22,12 @@ Keep health output and deployed SHA in a temporary directory on the VM, created 
 After startup, run the existing read-only checks from a Piano checkout, retaining stdout/stderr and exit status:
 
 - **On the new VM:** `.agents/skills/verify-piano/scripts/doctor.sh --deployed` checks active units, listener ownership, backend API, built UI through port 8000, and coarse checkout/build/start ordering.
-- **On the deploying machine, outside the new VM:** `.agents/skills/verify-piano/scripts/doctor.sh --deployed-auth <vm>` checks cookie-free HTTPS requests to `/` and `/api/folders` redirect to exe.dev login. Copy its output into the VM's evidence directory and record where it ran. A VM-local probe or unreachable external URL does not prove privacy.
+- **On the deploying machine:** `.agents/skills/verify-piano/scripts/doctor.sh --deployed-auth <vm>` checks `ssh exe.dev share show` reports private access on port 8000 with no user, link or team shares. Copy its output into the VM's evidence directory.
 
 Require both checks to exit 0; a failed or unavailable check is not completion. Also establish what these scripts do not assert:
 
 - The installed checkout SHA matches the requested revision. The doctor's timestamps do not prove the build's exact contents.
 - Backend and proxy listen only on loopback; PID ownership alone does not establish the bind address.
 - The backend and socket are enabled for reboot. The proxy service may report `disabled`: establish that `piano-web.socket` triggers it rather than enabling the service separately.
-- `ssh exe.dev share show <vm> --json` reports private access and port 8000, with no unintended shares.
 
 Report the URL, VM, tag, SHA, evidence location and any limitations. Direct the user to **Settings → Providers** for sign-in and to add folders. Health checks establish deployment, not session behavior; use the checkout's scratch-browser policy only when that behavior needs testing. Leave model calls and credential transfer out of deploy-only work.

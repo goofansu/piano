@@ -61,16 +61,14 @@ Both listeners must stay on loopback, with exe.dev private authenticated access 
 and WebSockets. Missing built-in login is not alone evidence of a vulnerability; public exposure
 or a requirement for untrusted users would change the accepted deployment model.
 
-For provisioning or access-configuration changes, inspect `ssh exe.dev share show <vm> --json`:
-require private access, port 8000 and no unintended shares. Inspect the actual listening addresses;
-listener ownership alone does not establish loopback-only binding. Keep generated previews on
-separate origins and do not change the primary proxy route for them.
-
-From the deploying machine, outside the target VM, run
-`.agents/skills/verify-piano/scripts/doctor.sh --deployed-auth <vm>` and retain its output. It
-requires cookie-free HTTPS requests to `/` and `/api/folders` to redirect to exe.dev login. A
-VM-local probe, an unreachable URL or HTTPS alone does not establish private external access.
-This HTTP probe does not independently exercise authenticated browser or WebSocket access.
+For provisioning or access-configuration changes, run
+`.agents/skills/verify-piano/scripts/doctor.sh --deployed-auth <vm>` wherever `ssh exe.dev` works
+and retain its output. It reads `ssh exe.dev share show <vm> --json` and requires private access,
+port 8000 and no user, link or team shares. That is exe.dev's own access setting; an HTTPS probe
+from outside answers from exe.dev's proxy whether or not Piano is running, and its reply format
+has changed before. Whether Piano serves is `--deployed`'s loopback check on the VM. Inspect the
+actual listening addresses; listener ownership alone does not establish loopback-only binding.
+Keep generated previews on separate origins and do not change the primary proxy route for them.
 
 ## Origin configuration
 

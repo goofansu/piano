@@ -47,9 +47,9 @@ Seed data: `.agents/skills/verify-piano/scripts/seed.ts`.
 its own, and the origin check is its only write guard. The Piano VMs are the ones `ssh exe.dev ls
 --json` tags `goofansu-piano` (for example `eng-1`). Target them read-only:
 
-- From outside the VM: `.agents/skills/verify-piano/scripts/doctor.sh --deployed-auth eng-1` expects `307` to
-  `https://eng-1.exe.xyz/__exe.dev/login`; `answered '000 '` means the name does not resolve (no
-  such VM). A headless `agent-browser` has no exe.dev login, so it
+- Where `ssh exe.dev` works: `.agents/skills/verify-piano/scripts/doctor.sh --deployed-auth eng-1`
+  requires exe.dev to report eng-1 private on port 8000 with no other shares; a `share show`
+  failure usually means no such VM. A headless `agent-browser` has no exe.dev login, so it
   cannot open that UI; UI observation there needs the owner's signed-in browser.
 - On the VM, from any checkout there (the script sources its `lib.sh`, so it cannot be piped over
   SSH): `.agents/skills/verify-piano/scripts/doctor.sh --deployed`.

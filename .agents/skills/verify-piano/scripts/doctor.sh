@@ -2,7 +2,7 @@
 # Read-only check: is this Piano worth driving? Starts, stops and writes nothing.
 # Usage: doctor.sh <run-dir>            an isolated instance from launch.sh
 #        doctor.sh --deployed           ON an exe.dev VM: piano.service (8001) behind piano-web (8000)
-#        doctor.sh --deployed-auth <vm> from OUTSIDE the VM: https://<vm>.exe.xyz requires exe.dev login
+#        doctor.sh --deployed-auth <vm> with exe.dev SSH access: the VM's share is private on port 8000
 # Exit 0 when every check passes; each line starts with ok, FAIL or note.
 set -uo pipefail
 # shellcheck source=lib.sh
@@ -89,18 +89,25 @@ deployed() {
   [ "$c" = 200 ] && ok "GET 127.0.0.1:8000/ 200 (built UI through the socket proxy)" || bad "GET 8000/ answered $c"
   origins=$(systemctl show -p Environment --value piano.service | tr ' ' '\n' | sed -n 's/^PIANO_ALLOWED_ORIGINS=//p')
   note "allowed origins: $origins (a browser on any other origin, including http://127.0.0.1:8000, cannot open the session socket)"
-  note "auth is exe.dev private access: run 'doctor.sh --deployed-auth <vm>' from outside the VM"
+  note "auth is exe.dev private access: run 'doctor.sh --deployed-auth <vm>' where 'ssh exe.dev' works"
 }
 
 deployed_auth() {
   vm=${1:?usage: doctor.sh --deployed-auth <vm>}
-  for path in / /api/folders; do
-    out=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' "https://$vm.exe.xyz$path")
-    case "$out" in
-      "307 https://$vm.exe.xyz/__exe.dev/login"*) ok "https://$vm.exe.xyz$path without a login redirects to exe.dev login" ;;
-      *) bad "https://$vm.exe.xyz$path answered '$out'; expected 307 to /__exe.dev/login (is the VM still private?)" ;;
-    esac
-  done
+  if ! share=$(ssh -o BatchMode=yes -o ConnectTimeout=15 exe.dev share show "$vm" --json 2>&1); then
+    bad "exe.dev share show $vm failed: $share"
+    return
+  fi
+  result=$(SHARE=$share node -e '
+    const s = JSON.parse(process.env.SHARE);
+    const line = (pass, okText, badText) => console.log(pass ? `ok   ${okText}` : `FAIL ${badText}`);
+    line(s.status === "private", `${s.vm_name} is private`, `${s.vm_name} access is ${s.status}; expected private`);
+    line(s.port === 8000, `${s.vm_name} proxies port 8000`, `${s.vm_name} proxies port ${s.port}; expected 8000`);
+    const shares = s.users.length + s.links.length + s.teams.length + (s.team_access ? 1 : 0);
+    line(shares === 0, `${s.vm_name} has no user, link or team shares`, `${s.vm_name} has ${shares} user, link or team shares; expected none`);
+  ' 2>&1) || result="FAIL could not read exe.dev share for $vm: $result"
+  echo "$result"
+  case "$result" in *FAIL*) failed=1 ;; esac
 }
 
 case "${1:-}" in
