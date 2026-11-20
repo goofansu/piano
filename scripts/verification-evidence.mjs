@@ -166,6 +166,35 @@ export function executionEnvironment(cwd, commands = ["npm", "git", "wt"]) {
   };
 }
 
+export function testLinesSince(cwd, base = "origin/main") {
+  const quiet = (...args) =>
+    execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  try {
+    const from = quiet("merge-base", "HEAD", base).trim();
+    const rows = [
+      quiet("diff", "--numstat", "-M", from, "--", "test"),
+      ...quiet("ls-files", "--others", "--exclude-standard", "-z", "test")
+        .split("\0")
+        .filter(Boolean)
+        .map((path) => {
+          try {
+            return quiet("diff", "--numstat", "--no-index", "--", "/dev/null", path);
+          } catch (error) {
+            if (error.status === 1) return error.stdout;
+            throw error;
+          }
+        }),
+    ]
+      .flatMap((out) => out.split("\n"))
+      .filter(Boolean)
+      .map((line) => line.split("\t"));
+    const sum = (column) => rows.reduce((total, row) => total + (Number(row[column]) || 0), 0);
+    return { base, from, added: sum(0), removed: sum(1), files: rows.length };
+  } catch (error) {
+    return { base, unavailable: String(error.stderr || error.message).trim() };
+  }
+}
+
 export function revisionOutcome(before, after) {
   if (!before.identity || !after.identity || before.problems.length || after.problems.length)
     return "unknown";

@@ -3,9 +3,11 @@
 ## Verification
 
 Before changing behavior, name the claim, relevant invariant and smallest check that could disprove
-it. Inspect existing coverage first. Add a regression test only for a meaningful failure that is not
-already protected; test observable contracts, not private helpers or mock choreography. For a bug,
-reproduce it before fixing it when feasible, then show the same check passing.
+it. Inspect existing coverage first. For a bug, reproduce it before fixing it when feasible, then
+show the same check passing; that reproduction is PR evidence. Commit a regression test only for a
+meaningful failure that is not already protected, by the
+[test ladder](docs/testing.md#when-to-add-a-test): close the class, extend a case, else add a test.
+Test observable contracts, not private helpers or mock choreography.
 
 Ground new fallback states, retries and compatibility branches in observed reproducible behavior,
 documented supported contracts or explicit requirements. Fake or mutated external replies alone
@@ -18,7 +20,7 @@ violation, report uncertainty or ask before expanding product behavior.
 | Change | Verification |
 | --- | --- |
 | Documentation or comments only | Review accuracy, links and the diff; confirm no runtime or tooling directives changed. No tests or app run needed. |
-| Logic, protocol or lifecycle behavior | Add or extend a focused module test for an uncovered failure at the public boundary. Run `node --test --import ./test/setup.ts test/<name>.test.ts`. |
+| Logic, protocol or lifecycle behavior | Cover an uncovered failure at the public boundary by the test ladder, in a focused module test. Run `node --test --import ./test/setup.ts test/<name>.test.ts`. |
 | Application behavior | Observe the affected journey on scratch Piano, using an existing browser journey or a focused `agent-browser` check. Module tests alone do not prove the user journey. |
 | UI strings, controls or styling | Apply Quiet UI and choose evidence using the [UI evidence scope](docs/testing.md#ui-evidence-scope): a focused capture for a local cosmetic edit, the affected journey for behavior, broader comparisons for shared styles. |
 | New critical path | Add a journey in `test/browser/`; otherwise extend relevant existing coverage rather than adding another browser journey. |
@@ -33,8 +35,9 @@ committed suite. Use the table above to choose the check, not every journey by d
 Keep local verification output under `~/piano-evidence/`, using the
 [evidence directory convention](docs/testing.md#evidence-directories) before running checks.
 Retain actual command/browser output on the PR, outside Git, tied to the tested revision and
-environment. Report pass/fail, skipped or blocked checks, and limitations. Never weaken assertions
-to make a change green. Stop once the claim and relevant risk are covered and required gates pass.
+environment. Report pass/fail, skipped or blocked checks, the test lines `verify` printed, and
+limitations. Never weaken assertions to make a change green. Stop once the claim and relevant risk
+are covered and required gates pass.
 
 ### Scratch instance
 
