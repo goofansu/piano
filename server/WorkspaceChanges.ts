@@ -164,7 +164,19 @@ async function preview(
         files,
       };
     const limit = path === undefined ? CHANGES_INITIAL_PATCH_BYTES : CHANGES_FILE_PATCH_BYTES;
-    let excerpt = await git.excerpt([...diffArgs, "--patch", base, "--", ...pathArgs], limit);
+    let excerpt = working.length
+      ? await git.excerpt(
+          [
+            ...diffArgs,
+            "--patch",
+            base,
+            "--",
+            ...pathArgs,
+            ...staged.map((file) => `:(top,literal,exclude)${file.path}`),
+          ],
+          limit,
+        )
+      : { text: "", truncated: false };
     if (staged.length && !excerpt.truncated) {
       const rest = limit - Buffer.byteLength(excerpt.text);
       const index =
