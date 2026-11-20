@@ -96,18 +96,25 @@ async function preview(
     const index = (
       await checkout.text(["rev-parse", "--path-format=absolute", "--git-path", "index"])
     ).trimEnd();
-    const temporaryIndex = join(temp, "index");
+    // Two copies: intent-to-add entries for untracked paths can displace a staged file at a
+    // colliding path (a staged `dir` and an untracked `dir/child`), so staged reads keep the copy
+    // that intent-to-add never touches.
+    const stagedIndex = join(temp, "index");
+    const workingIndex = join(temp, "working-index");
     try {
       // Git trusts cached stat data for entries older than the index file, so a fresh copy's mtime
       // would hide a same-size edit made in the tick of the last index write. Stat before copying
       // and round down, so the copy is never newer than what it holds.
       const { atimeMs, mtimeMs } = await stat(index);
-      await copyFile(index, temporaryIndex);
-      await utimes(temporaryIndex, new Date(Math.floor(atimeMs)), new Date(Math.floor(mtimeMs)));
+      for (const copy of [stagedIndex, workingIndex]) {
+        await copyFile(index, copy);
+        await utimes(copy, new Date(Math.floor(atimeMs)), new Date(Math.floor(mtimeMs)));
+      }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
-    const git = checkout.with({ env: { GIT_INDEX_FILE: temporaryIndex } });
+    const cachedGit = checkout.with({ env: { GIT_INDEX_FILE: stagedIndex } });
+    const git = checkout.with({ env: { GIT_INDEX_FILE: workingIndex } });
     const diffArgs = [
       "diff",
       "--no-ext-diff",
@@ -117,21 +124,21 @@ async function preview(
       "--src-prefix=a/",
       "--dst-prefix=b/",
     ];
-    const numstat = async (args: readonly string[]): Promise<ChangeFile[]> =>
-      (await git.records([...diffArgs, ...args, "--numstat", "-z", base, "--", ...pathArgs])).map(
-        (row) => {
-          const match = /^(\d+|-)\t(\d+|-)\t([\s\S]+)$/.exec(row);
-          if (!match)
-            throw new Error("Incomplete or unsupported Git metadata; no file list is available.");
-          return {
-            path: git.safePath(match[3]),
-            binary: match[1] === "-",
-            additions: Number(match[1]) || 0,
-            deletions: Number(match[2]) || 0,
-          };
-        },
-      );
-    const indexed = scope === "uncommitted" ? await numstat(["--cached"]) : [];
+    const numstat = async (reader: typeof git, args: readonly string[]): Promise<ChangeFile[]> =>
+      (
+        await reader.records([...diffArgs, ...args, "--numstat", "-z", base, "--", ...pathArgs])
+      ).map((row) => {
+        const match = /^(\d+|-)\t(\d+|-)\t([\s\S]+)$/.exec(row);
+        if (!match)
+          throw new Error("Incomplete or unsupported Git metadata; no file list is available.");
+        return {
+          path: git.safePath(match[3]),
+          binary: match[1] === "-",
+          additions: Number(match[1]) || 0,
+          deletions: Number(match[2]) || 0,
+        };
+      });
+    const indexed = scope === "uncommitted" ? await numstat(cachedGit, ["--cached"]) : [];
     const untracked = (
       await git.records(["ls-files", "--others", "--exclude-standard", "-z", "--", ...pathArgs])
     ).map(git.safePath);
@@ -146,7 +153,7 @@ async function preview(
         ],
         { input: Buffer.from(`${untracked.join("\0")}\0`) },
       );
-    const working = await numstat([]);
+    const working = await numstat(git, []);
     const listed = new Set(working.map((file) => file.path));
     const staged = indexed
       .filter((file) => !listed.has(file.path))
@@ -177,7 +184,7 @@ async function preview(
             base,
             "--",
             ...pathArgs,
-            ...staged.map((file) => `:(top,literal,exclude)${file.path}`),
+            ...staged.map((file) => `:(top,glob,exclude)${exactGlob(file.path)}`),
           ],
           limit,
         )
@@ -186,7 +193,7 @@ async function preview(
       const rest = limit - Buffer.byteLength(excerpt.text);
       const index =
         rest > 0
-          ? await git.excerpt(
+          ? await cachedGit.excerpt(
               [
                 ...diffArgs,
                 "--cached",
@@ -216,6 +223,11 @@ async function preview(
     await rm(temp, { recursive: true, force: true });
   }
 }
+
+// A literal or plain-glob pathspec also matches every path beneath it, so excluding a staged file
+// `dir` would hide a working `dir/child`. Escaping each character makes Git's glob matcher compare
+// the whole path, matching only the file itself.
+const exactGlob = (path: string): string => path.replace(/[^/]/gu, (char) => `\\${char}`);
 
 const bounded = (observation: Observation): Observation =>
   Buffer.byteLength(answerJson(observation)) <= CHANGES_ANSWER_BYTES
