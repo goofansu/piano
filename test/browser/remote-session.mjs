@@ -76,7 +76,12 @@ const clearDraft = async (page) => {
   await page.press("Backspace");
   await page.until(`document.querySelector('${composer}')?.value === ""`);
 };
-const toastsGone = (page) => page.until("!document.querySelector('[data-sonner-toast]')");
+const toastsGone = async (page) => {
+  await page.evaluate(
+    "document.querySelectorAll('[data-sonner-toast] [data-close-button]').forEach((b) => b.click())",
+  );
+  await page.until("!document.querySelector('[data-sonner-toast]')");
+};
 const ready = (page) =>
   page.until(`document.querySelector('[aria-label^="Model:"]')?.disabled === false`);
 const send = async (page, text) => {
