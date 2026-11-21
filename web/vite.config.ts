@@ -100,7 +100,16 @@ const precompress = (): Plugin => {
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), precompress()],
-  optimizeDeps: { include: ["react-pdf", "shiki/bundle/full"] },
+  optimizeDeps: {
+    include: [
+      "react-pdf",
+      "shiki/bundle/full",
+      "shiki/core",
+      "shiki/engine/javascript",
+      "shiki/langs",
+      "shiki/themes",
+    ],
+  },
   worker: { format: "es" },
   resolve: {
     alias: {
