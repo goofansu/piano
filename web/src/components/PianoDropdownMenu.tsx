@@ -61,12 +61,14 @@ export function DropdownMenuContent({
 }
 
 export function DropdownMenuSubContent({
+  alignOffset = 0,
   className,
   finalFocus = keyboardFocusReturn,
   ...props
 }: ComponentProps<typeof BaseSubContent>) {
   return (
     <BaseSubContent
+      alignOffset={alignOffset}
       collisionPadding={8}
       positionerClassName={raisedLayer}
       data-motion="anchored"

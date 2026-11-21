@@ -22,7 +22,7 @@ export function ComposerActionButton({
   className,
   children,
   ...props
-}: Omit<ComponentProps<typeof Button>, "size" | "asChild" | "variant"> & {
+}: Omit<ComponentProps<typeof Button>, "size" | "render" | "variant"> & {
   label: string;
   tooltip?: ReactNode;
   face?: ComposerActionFace;

@@ -140,4 +140,24 @@ export async function commandDialogFocus(page) {
     failures.map((error) => error.message),
     [],
   );
+  const trigger = `document.querySelector('main header ${session}')`;
+  await page.open("/s/login-bug");
+  await page.until(`${trigger}?.disabled === false`);
+  await page.ab("eval", `${trigger}.focus()`);
+  await page.press("Enter");
+  await page.until(`document.activeElement?.getAttribute('role') === 'menuitem'`);
+  await page.press("r");
+  await page.until(`document.activeElement?.textContent.trim() === 'Rename'`);
+  await page.press("Enter");
+  await page.until(
+    `!!document.querySelector('[role=dialog][data-open]') && !document.querySelector('[role=menu]')`,
+  );
+  assert.equal(
+    await page.evaluate(`document.activeElement?.getAttribute('aria-label')`),
+    "Session name",
+    "the closing menu leaves focus in the dialog its item opened",
+  );
+  await page.press("Escape");
+  await page.until(`!document.querySelector('[role=dialog]')`);
+  await page.until(`document.activeElement === ${trigger}`);
 }
