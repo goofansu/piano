@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Popover, PopoverAnchor, PopoverContent } from "@/components/PianoPopover";
+import { Popover, PopoverContent } from "@/components/PianoPopover";
 import { Textarea } from "@/components/ui/textarea";
 import { sessionCommands, slashCommands } from "@/lib/api";
 import {
@@ -55,6 +55,7 @@ export function SlashTextarea({
 }: Props) {
   const id = useId();
   const [state, setState] = useState(initialSlashState);
+  const anchor = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLUListElement>(null);
   const mirror = useRef<HTMLDivElement>(null);
   const tokenElement = useRef<HTMLSpanElement>(null);
@@ -163,127 +164,123 @@ export function SlashTextarea({
   return (
     <Popover
       open={visible}
-      onOpenChange={(next) => {
-        if (!next) update({ type: "dismiss" });
+      onOpenChange={(next, details) => {
+        if (next) return;
+        if (details.reason === "escape-key" || details.event.target === ref.current)
+          details.cancel();
+        else update({ type: "dismiss" });
       }}
     >
-      <PopoverAnchor asChild>
-        <div className="slash-textarea" data-command={!!token}>
-          <Textarea
-            {...props}
-            ref={ref}
-            value={value}
-            role="combobox"
-            aria-autocomplete="list"
-            aria-haspopup="listbox"
-            aria-expanded={visible}
-            aria-controls={visible ? id : undefined}
-            aria-activedescendant={open && commands.length ? `${id}-${active}` : undefined}
-            onPointerMove={(event) => {
-              const rects = tokenElement.current?.getClientRects();
-              setHovered(
-                !!rects &&
-                  Array.from(rects).some(
-                    (rect) =>
-                      event.clientX >= rect.left &&
-                      event.clientX <= rect.right &&
-                      event.clientY >= rect.top &&
-                      event.clientY <= rect.bottom,
-                  ),
-              );
-              props.onPointerMove?.(event);
-            }}
-            onPointerLeave={(event) => {
-              setHovered(false);
-              props.onPointerLeave?.(event);
-            }}
-            onChange={(event) => {
-              setHovered(false);
-              update({ type: "select", ...snapshot(event.currentTarget) });
-              onValueChange(event.currentTarget.value);
-            }}
-            onSelect={(event) => {
-              update({ type: "select", ...snapshot(event.currentTarget) });
-              onSelect?.(event);
-            }}
-            onFocus={(event) => {
-              update({ type: "focus", ...snapshot(event.currentTarget) });
-              onFocus?.(event);
-            }}
-            onBlur={(event) => {
-              update({ type: "blur" });
-              onBlur?.(event);
-            }}
-            onCompositionStart={(event) => {
-              update({ type: "composition-start" });
-              onCompositionStart?.(event);
-            }}
-            onCompositionEnd={(event) => {
-              update({ type: "composition-end", ...snapshot(event.currentTarget) });
-              onCompositionEnd?.(event);
-            }}
-            onKeyDown={(event) => {
-              const element = event.currentTarget;
-              const { state: next, effect } = slashKeyDown(
-                state,
-                view,
-                {
-                  key: event.key,
-                  repeat: event.repeat,
-                  shiftKey: event.shiftKey,
-                  ctrlKey: event.ctrlKey,
-                  metaKey: event.metaKey,
-                  altKey: event.altKey,
-                  isComposing: event.nativeEvent.isComposing,
-                  keyCode: event.nativeEvent.keyCode,
-                  selection: snapshot(element).selection,
-                },
-                commands.length,
-              );
-              if (effect.type === "ignore") return;
-              if (effect.type === "pass") return onKeyDown?.(event);
-              event.preventDefault();
-              setState(next);
-              if (effect.type === "select-token") element.setSelectionRange(effect.from, effect.to);
-              else if (effect.type === "close") event.stopPropagation();
-              else if (effect.type === "accept") accept(commands[effect.index]);
-            }}
-          />
-          <div ref={mirror} className="slash-textarea-mirror" aria-hidden="true">
-            {token && (
-              <>
-                {value.slice(0, token.from)}
-                <span
-                  ref={tokenElement}
-                  className="slash-command-token"
-                  data-hovered={hovered && !props.disabled}
-                >
-                  {value.slice(token.from, token.to)}
-                </span>
-                {value.slice(token.to)}
-                {"\u200b"}
-              </>
-            )}
-          </div>
+      <div ref={anchor} className="slash-textarea" data-command={!!token}>
+        <Textarea
+          {...props}
+          ref={ref}
+          value={value}
+          role="combobox"
+          aria-autocomplete="list"
+          aria-haspopup="listbox"
+          aria-expanded={visible}
+          aria-controls={visible ? id : undefined}
+          aria-activedescendant={open && commands.length ? `${id}-${active}` : undefined}
+          onPointerMove={(event) => {
+            const rects = tokenElement.current?.getClientRects();
+            setHovered(
+              !!rects &&
+                Array.from(rects).some(
+                  (rect) =>
+                    event.clientX >= rect.left &&
+                    event.clientX <= rect.right &&
+                    event.clientY >= rect.top &&
+                    event.clientY <= rect.bottom,
+                ),
+            );
+            props.onPointerMove?.(event);
+          }}
+          onPointerLeave={(event) => {
+            setHovered(false);
+            props.onPointerLeave?.(event);
+          }}
+          onChange={(event) => {
+            setHovered(false);
+            update({ type: "select", ...snapshot(event.currentTarget) });
+            onValueChange(event.currentTarget.value);
+          }}
+          onSelect={(event) => {
+            update({ type: "select", ...snapshot(event.currentTarget) });
+            onSelect?.(event);
+          }}
+          onFocus={(event) => {
+            update({ type: "focus", ...snapshot(event.currentTarget) });
+            onFocus?.(event);
+          }}
+          onBlur={(event) => {
+            update({ type: "blur" });
+            onBlur?.(event);
+          }}
+          onCompositionStart={(event) => {
+            update({ type: "composition-start" });
+            onCompositionStart?.(event);
+          }}
+          onCompositionEnd={(event) => {
+            update({ type: "composition-end", ...snapshot(event.currentTarget) });
+            onCompositionEnd?.(event);
+          }}
+          onKeyDown={(event) => {
+            const element = event.currentTarget;
+            const { state: next, effect } = slashKeyDown(
+              state,
+              view,
+              {
+                key: event.key,
+                repeat: event.repeat,
+                shiftKey: event.shiftKey,
+                ctrlKey: event.ctrlKey,
+                metaKey: event.metaKey,
+                altKey: event.altKey,
+                isComposing: event.nativeEvent.isComposing,
+                keyCode: event.nativeEvent.keyCode,
+                selection: snapshot(element).selection,
+              },
+              commands.length,
+            );
+            if (effect.type === "ignore") return;
+            if (effect.type === "pass") return onKeyDown?.(event);
+            event.preventDefault();
+            setState(next);
+            if (effect.type === "select-token") element.setSelectionRange(effect.from, effect.to);
+            else if (effect.type === "close") event.stopPropagation();
+            else if (effect.type === "accept") accept(commands[effect.index]);
+          }}
+        />
+        <div ref={mirror} className="slash-textarea-mirror" aria-hidden="true">
+          {token && (
+            <>
+              {value.slice(0, token.from)}
+              <span
+                ref={tokenElement}
+                className="slash-command-token"
+                data-hovered={hovered && !props.disabled}
+              >
+                {value.slice(token.from, token.to)}
+              </span>
+              {value.slice(token.to)}
+              {"\u200b"}
+            </>
+          )}
         </div>
-      </PopoverAnchor>
+      </div>
       <PopoverContent
         still
+        anchor={anchor}
         side="top"
         align="start"
         role="presentation"
         className={cn(
           "max-w-[calc(100vw-2rem)] gap-0 p-1",
-          commands.length ? "w-[min(32rem,var(--radix-popover-trigger-width))]" : "w-auto",
+          commands.length ? "w-[min(32rem,var(--anchor-width))]" : "w-auto",
         )}
-        onOpenAutoFocus={(event) => event.preventDefault()}
-        onCloseAutoFocus={(event) => event.preventDefault()}
-        onEscapeKeyDown={(event) => {
-          event.preventDefault();
-        }}
-        onInteractOutside={(event) => {
-          if (event.target === ref.current) event.preventDefault();
-        }}
+        initialFocus={false}
+        finalFocus={false}
         onPointerDown={(event) => {
           if (event.pointerType !== "touch") event.preventDefault();
         }}
@@ -294,7 +291,7 @@ export function SlashTextarea({
           // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-to-interactive-role -- the textarea drives this listbox through aria-activedescendant.
           role="listbox"
           aria-label="Slash commands"
-          className="max-h-[min(18rem,var(--radix-popover-content-available-height))] overflow-y-auto"
+          className="max-h-[min(18rem,var(--available-height))] overflow-y-auto"
         >
           {commands.map((command, index) => (
             // oxlint-disable-next-line jsx-a11y/click-events-have-key-events -- the textarea keeps focus and handles keys.

@@ -189,7 +189,7 @@ function LibraryRow({
       badge={badge}
       menu={
         <RowMenu label={`${Noun} actions ${name}`} disabled={disabled}>
-          <DropdownMenuItem variant="destructive" onSelect={remove}>
+          <DropdownMenuItem variant="destructive" onClick={remove}>
             Delete
           </DropdownMenuItem>
         </RowMenu>

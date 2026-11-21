@@ -6,7 +6,7 @@ const LINGER_MS = 5000;
 
 function rootOf(content: HTMLElement): HTMLElement {
   const parent = content.parentElement;
-  return parent?.hasAttribute("data-radix-popper-content-wrapper") ? parent : content;
+  return parent?.matches('[role="presentation"][data-side]') ? parent : content;
 }
 
 function copy(content: HTMLElement): Face {
@@ -33,7 +33,8 @@ function play({ root, content, scrolled }: Face, after: HTMLElement): () => void
   root.setAttribute("aria-hidden", "true");
   root.inert = true;
   root.style.pointerEvents = "none";
-  content.setAttribute("data-state", "closed");
+  content.removeAttribute("data-open");
+  content.setAttribute("data-closed", "");
   after.after(root);
   const all = [root, ...root.querySelectorAll<HTMLElement>("*")];
   for (const [i, top, left] of scrolled) all[i].scrollTo(left, top);
@@ -61,7 +62,7 @@ export function useExitFace<T extends HTMLElement>(ref?: Ref<T>): RefCallback<T>
       let face = copy(content);
       let pending = 0;
       const observe = () => {
-        if (content.dataset.state === "closed") {
+        if (content.hasAttribute("data-closed")) {
           if (leave.current) return;
           content.style.transition = "none";
           content.style.visibility = "hidden";

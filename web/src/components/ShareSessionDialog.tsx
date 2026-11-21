@@ -5,6 +5,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  type DialogFinalFocus,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -23,21 +24,16 @@ export function ShareSessionDialog({
   target,
   close,
   openSettings,
-  onCloseAutoFocus,
+  finalFocus,
 }: {
   target: ShareTarget;
   close: () => void;
   openSettings: OpenSettings;
-  onCloseAutoFocus?: (event: Event) => void;
+  finalFocus?: DialogFinalFocus;
 }) {
   return (
-    <Dialog open onOpenChange={(next) => !next && close()}>
-      <DialogContent
-        className="sm:max-w-md"
-        showCloseButton={false}
-        onCloseAutoFocus={onCloseAutoFocus}
-        onInteractOutside={(event) => event.preventDefault()}
-      >
+    <Dialog open disablePointerDismissal onOpenChange={(next) => !next && close()}>
+      <DialogContent className="sm:max-w-md" showCloseButton={false} finalFocus={finalFocus}>
         <DialogHeader>
           <DialogTitle>Share to Radius</DialogTitle>
           <DialogDescription>The artifact is created with Private visibility.</DialogDescription>

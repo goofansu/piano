@@ -202,7 +202,7 @@ function ProvidersSettings() {
                         >
                           <DropdownMenuItem
                             variant="destructive"
-                            onSelect={() => actions.confirm(provider)}
+                            onClick={() => actions.confirm(provider)}
                           >
                             Sign out
                           </DropdownMenuItem>

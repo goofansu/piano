@@ -293,14 +293,14 @@ await run(
     const selectedVisible = `(() => {
       const nav = document.querySelector('nav[aria-label="Sessions"]');
       const row = nav.querySelector('[aria-current="page"]')?.getBoundingClientRect();
-      const box = nav.closest('[data-radix-scroll-area-viewport]').getBoundingClientRect();
+      const box = nav.closest('[data-slot="scroll-area-viewport"]').getBoundingClientRect();
       return !!row && row.top >= box.top - 1 && row.bottom <= box.bottom + 1;
     })()`;
     await page.open("/s/nav-050");
     await page.see("History nav-050");
     await page.until(selectedVisible);
     await page.evaluate(
-      `document.querySelector('nav[aria-label="Sessions"]').closest('[data-radix-scroll-area-viewport]').scrollTop = 0`,
+      `document.querySelector('nav[aria-label="Sessions"]').closest('[data-slot="scroll-area-viewport"]').scrollTop = 0`,
     );
     await page.until(`!document.querySelector('nav[aria-label="Sessions"] [aria-current="page"]')`);
     await page.ab("fill", '[aria-label="Message"]', "Offscreen draft");
@@ -348,7 +348,7 @@ await run(
     );
     await page.capture("sidebar-alt-hidden-return");
     await page.evaluate(
-      `document.querySelector('nav[aria-label="Sessions"]').closest('[data-radix-scroll-area-viewport]').scrollTop = 0`,
+      `document.querySelector('nav[aria-label="Sessions"]').closest('[data-slot="scroll-area-viewport"]').scrollTop = 0`,
     );
     await page.until(`!document.querySelector('nav[aria-label="Sessions"] [aria-current="page"]')`);
     await page.press("Meta+b");
@@ -387,7 +387,9 @@ await run(
       })()`);
     const closedTool = await tailToolGeometry();
     await page.ab("click", `${tailTool} [data-slot="collapsible-trigger"]`);
-    await page.until(`document.querySelector('${tailTool}').dataset.state === 'open'`);
+    await page.until(
+      `document.querySelector('${tailTool} [data-slot="collapsible-trigger"]').getAttribute('aria-expanded') === 'true'`,
+    );
     const openedTool = await tailToolGeometry();
     assert.ok(
       Math.abs(openedTool.header - closedTool.header) < 1,
@@ -402,7 +404,9 @@ await run(
       "click",
       `${tailTool} [data-slot="tool-header"] [data-slot="collapsible-trigger"]`,
     );
-    await page.until(`document.querySelector('${tailTool}').dataset.state === 'closed'`);
+    await page.until(
+      `document.querySelector('${tailTool} [data-slot="collapsible-trigger"]').getAttribute('aria-expanded') === 'false'`,
+    );
 
     const inView = (text) =>
       page.evaluate(`(() => {
@@ -439,7 +443,7 @@ await run(
       );
       await page.capture(step);
       await page.ab("press", "Escape");
-      await page.until("!document.querySelector('[data-radix-popper-content-wrapper]')");
+      await page.until("!document.querySelector('[data-slot=popover-content]')");
       return row;
     };
     assert.match(
@@ -711,7 +715,9 @@ await run(
     assert.ok(Math.abs(await headerOffset()) < 1, "the tool header pins at the transcript edge");
     assert.deepEqual(await headerGeometry(), compact, "pinning does not change header height");
     await page.ab("click", `${tool} [data-slot="tool-header"] .font-medium`);
-    await page.until(`document.querySelector('${tool}').dataset.state === 'closed'`);
+    await page.until(
+      `document.querySelector('${tool} [data-slot="collapsible-trigger"]').getAttribute('aria-expanded') === 'false'`,
+    );
     assert.ok(Math.abs(await headerOffset()) < 1, "collapse preserves the header's position");
     await page.capture("11b-collapsed-tool");
     await page.click("button", "Scroll to bottom");
@@ -796,7 +802,7 @@ await run(
     const areasWidth = `document.querySelector('[data-slot="agent-area"]').parentElement.getBoundingClientRect().width`;
     await page.until(`${areasWidth} === 848 && !document.querySelector('[data-rail-trigger]')`);
     await page.click("button", "Changes");
-    await page.until(`!!document.querySelector('[role="tab"][data-state="active"]')`);
+    await page.until(`!!document.querySelector('[role="tab"][aria-selected="true"]')`);
     assert.equal(
       await page.evaluate(`document.querySelector('[data-slot="agent-area"]').inert`),
       true,
@@ -914,9 +920,9 @@ await run(
     await page.see("Which checks?");
     assert.equal(await page.evaluate("!!document.querySelector('[role=dialog]')"), false);
     const answers = () => page.received().filter((r) => r.command === "extension_ui_response");
-    // agent-browser releases arrows before Radix's deferred radio focus; select with Space.
+    // agent-browser releases arrows before the radio group's deferred focus; select with Space.
     const radio = (name, checked) =>
-      `[...document.querySelectorAll('[role=radio]')].some((r) => r === document.activeElement && r.getAttribute('aria-checked') === '${checked}' && document.querySelector('label[for="' + r.id + '"]')?.innerText.trim() === ${JSON.stringify(name)})`;
+      `[...document.querySelectorAll('[role=radio]')].some((r) => r === document.activeElement && r.getAttribute('aria-checked') === '${checked}' && (r.getAttribute('aria-labelledby') ?? '').split(' ').some((id) => document.getElementById(id)?.innerText.trim() === ${JSON.stringify(name)}))`;
     await page.click("radio", "Quick checks");
     await page.until(radio("Quick checks", true));
     await page.press("ArrowDown");

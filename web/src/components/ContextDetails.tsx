@@ -76,12 +76,11 @@ export function ContextDetails({ figures, usage: session, messages }: Props) {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="font-medium">Response history</h3>
           <ToggleGroup
-            type="single"
             size="sm"
             spacing={0}
             variant="outline"
-            value={metric}
-            onValueChange={(value) => {
+            value={[metric]}
+            onValueChange={([value]) => {
               if (value) setMetric(value as HistoryMetric);
             }}
             aria-label="Graph metric"
@@ -148,7 +147,9 @@ export function ContextDetails({ figures, usage: session, messages }: Props) {
                 max={responses.length}
                 step={1}
                 value={[position]}
-                onValueChange={([value]) => setSelectedId(responses[value - 1]?.id)}
+                onValueChange={(value) =>
+                  setSelectedId(responses[(typeof value === "number" ? value : value[0]) - 1]?.id)
+                }
                 className="min-w-0 flex-1"
               />
             </div>

@@ -1,4 +1,4 @@
-import { Dialog } from "radix-ui";
+import { Dialog } from "@base-ui/react/dialog";
 import { type CSSProperties, type ReactNode, type RefObject, useEffect, useState } from "react";
 import { Sheet, SheetTitle } from "@/components/PianoSheet";
 import { useSidebarLayout } from "@/lib/useSidebarLayout";
@@ -29,38 +29,39 @@ export function PianoSidebarReveal({
     }
   }, [open, dragging, content]);
   return (
-    <Sheet open={open || dragging} onOpenChange={onOpenChange}>
+    <Sheet
+      open={open || dragging}
+      onOpenChange={(next) => onOpenChange(next)}
+      onOpenChangeComplete={(next) => {
+        if (!next) restoreFocus();
+      }}
+    >
       <Dialog.Portal>
-        <Dialog.Content
+        <Dialog.Popup
           ref={content}
           data-slot="mobile-sidebar"
           data-motion="drawer"
           data-dragging={dragging}
           data-restored={restored || undefined}
           style={style}
-          aria-describedby={undefined}
-          onOpenAutoFocus={(event) => {
-            event.preventDefault();
-            if (!dragging) content.current?.focus({ preventScroll: true });
-          }}
-          onCloseAutoFocus={(event) => {
-            event.preventDefault();
-            restoreFocus();
-          }}
+          initialFocus={() => !dragging && content.current}
+          finalFocus={false}
         >
           <SheetTitle className="sr-only">{title}</SheetTitle>
           <div data-slot="sidebar-reveal-navigation" data-motion="drawer">
             {children}
           </div>
-          <Dialog.Close asChild>
-            <button
-              type="button"
-              data-slot="sidebar-scrim"
-              data-motion="drawer"
-              aria-label="Dismiss sidebar"
-            />
-          </Dialog.Close>
-        </Dialog.Content>
+          <Dialog.Close
+            render={
+              <button
+                type="button"
+                data-slot="sidebar-scrim"
+                data-motion="drawer"
+                aria-label="Dismiss sidebar"
+              />
+            }
+          />
+        </Dialog.Popup>
       </Dialog.Portal>
     </Sheet>
   );

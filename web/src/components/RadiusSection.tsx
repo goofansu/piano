@@ -75,7 +75,7 @@ export function RadiusSection() {
                 <RowMenu label="Radius account actions" disabled={!account.canSignOut}>
                   <DropdownMenuItem
                     variant="destructive"
-                    onSelect={() => setup.confirm({ kind: "sign-out" })}
+                    onClick={() => setup.confirm({ kind: "sign-out" })}
                   >
                     Sign out
                   </DropdownMenuItem>
@@ -149,7 +149,7 @@ function RadiusToolRow({
       <DropdownMenuItem
         variant="destructive"
         aria-label={uninstall.ariaLabel}
-        onSelect={() => setup.confirm(uninstall.confirmation)}
+        onClick={() => setup.confirm(uninstall.confirmation)}
       >
         {uninstall.label}
       </DropdownMenuItem>

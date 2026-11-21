@@ -195,7 +195,6 @@ const fold = (html: string, label: string) => {
     canOpen: !/ disabled=""/.test(header),
     chevron: /lucide-chevron-right/.test(header),
     body,
-    bodyHidden: body ? / hidden=""/.test(body) : undefined,
   };
 };
 
@@ -232,13 +231,13 @@ test("every folding row folds the same way: context starts open, a card without 
   }
   assert.match(tool.header, /data-slot="gutter"/, "the tool gutter is part of its button");
   assert.deepEqual(
-    [context, skill, tool].map((row) => [row.open, row.canOpen, row.bodyHidden]),
+    [context, skill, tool].map((row) => [row.open, row.canOpen, !!row.body]),
     [
-      [true, true, false],
-      [false, true, true],
-      [false, true, true],
+      [true, true, true],
+      [false, true, false],
+      [false, true, false],
     ],
-    "context starts open; a skill and a tool start closed",
+    "context starts open; a skill and a tool start closed and render no body",
   );
   assert.match(context.markup, /data-slot="collapsible-content".*shell says hi/s);
   assert.equal(bare.canOpen, false, "a card without details cannot open");

@@ -101,24 +101,26 @@ export function ProjectsIndex({ state }: { state: AppState }) {
                   onOpenChange={setDoneOpen}
                   className="flex flex-col gap-3"
                 >
-                  <CollapsibleTrigger asChild>
-                    <button
-                      type="button"
-                      className="flex min-h-8 items-center gap-1.5 self-start rounded-sm text-base font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <ChevronRightIcon
-                        aria-hidden
-                        className={cn(
-                          "size-4 text-ink-3 transition-transform",
-                          doneOpen && "rotate-90",
-                        )}
-                      />
-                      Done
-                      <span className="font-normal text-ink-3 tabular-nums">
-                        {index.done.length}
-                      </span>
-                    </button>
-                  </CollapsibleTrigger>
+                  <CollapsibleTrigger
+                    render={
+                      <button
+                        type="button"
+                        className="flex min-h-8 items-center gap-1.5 self-start rounded-sm text-base font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <ChevronRightIcon
+                          aria-hidden
+                          className={cn(
+                            "size-4 text-ink-3 transition-transform",
+                            doneOpen && "rotate-90",
+                          )}
+                        />
+                        Done
+                        <span className="font-normal text-ink-3 tabular-nums">
+                          {index.done.length}
+                        </span>
+                      </button>
+                    }
+                  />
                   <CollapsibleContent className="disclosure-content">
                     <SettingsList aria-label="Done projects">
                       {index.done.map((row) => (

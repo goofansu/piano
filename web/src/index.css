@@ -329,7 +329,7 @@
   overflow: hidden;
   outline: none;
 }
-[data-slot="mobile-sidebar"][data-state="closed"] {
+[data-slot="mobile-sidebar"][data-closed] {
   animation: sidebar-reveal-exit var(--sidebar-duration) linear;
 }
 @keyframes sidebar-reveal-exit {
@@ -407,11 +407,6 @@
     black calc(100% - var(--rail-fade-bottom, 0px)),
     transparent
   );
-}
-
-/* Override Radix's inline display: table, which defeats truncation. */
-[data-slot="scroll-area-viewport"] > div {
-  display: block !important;
 }
 
 :root {
@@ -688,11 +683,11 @@
   --tw-animation-duration: 125ms;
 }
 [data-motion="dialog"],
-[data-slot="dialog-overlay"]:has(+ [data-motion="dialog"]) {
+[data-slot="dialog-overlay"]:has(~ [data-motion="dialog"]) {
   --tw-animation-duration: 200ms;
   --tw-ease: var(--ease-out);
 }
-:is([data-motion], [data-slot="dialog-overlay"])[data-state="closed"] {
+:is([data-motion], [data-slot="dialog-overlay"])[data-closed] {
   --tw-animation-duration: 120ms;
   --tw-ease: ease-out;
 }
@@ -767,7 +762,7 @@
   );
   transition: --yield 100ms ease-out;
 }
-[data-row]:where(:hover, :has(:focus-visible), :has([aria-haspopup="menu"][data-state="open"])) {
+[data-row]:where(:hover, :has(:focus-visible), :has([aria-haspopup="menu"][aria-expanded="true"])) {
   & [data-motion="reveal"] {
     opacity: 1;
   }
@@ -799,7 +794,7 @@
 }
 :not(
   [data-motion],
-  [data-slot="dialog-overlay"]:has(+ [data-motion]),
+  [data-slot="dialog-overlay"]:has(~ [data-motion]),
   .animate-spin,
   .late-enter,
   [data-sonner-toast]

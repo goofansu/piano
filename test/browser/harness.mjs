@@ -408,7 +408,7 @@ async function runJourney(name, setup, journey, options, owned, record) {
       await ab("find", "role", "combobox", "click", "--name", picker, "--exact");
       await ab("wait", "--text", option);
       await ab("find", "role", "option", "click", "--name", option, "--exact");
-      await ab("wait", "--fn", "!document.querySelector('[data-radix-popper-content-wrapper]')");
+      await ab("wait", "--fn", "!document.querySelector('[data-slot=popover-content]')");
     },
     press: async (key) => {
       if (key.startsWith("Mod+")) {

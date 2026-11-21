@@ -145,9 +145,8 @@ export function WorkspaceFile({ file, active }: { active: boolean; file: FileTab
           )}
           {result?.kind === "svg" && (
             <PianoViewToggle
-              type="single"
-              value={mode}
-              onValueChange={(value) => value && setMode(value)}
+              value={[mode]}
+              onValueChange={([value]) => value && setMode(value)}
               aria-label="SVG view"
             >
               <PianoViewToggleItem value="preview">Preview</PianoViewToggleItem>

@@ -77,7 +77,9 @@ const preferences = async (page) => {
   await page.click("button", "Settings");
   await page.click("button", "Preferences");
   await page.until(`location.pathname === '/settings/preferences'`);
-  await page.until(`document.querySelector('[role="switch"]')?.disabled === false`);
+  await page.until(
+    `document.querySelector('[role="switch"]')?.matches(':disabled, [aria-disabled="true"], [data-disabled]') === false`,
+  );
   if (await page.evaluate(`!!document.querySelector('[data-sonner-toast]')`)) {
     await page.click("button", "Close toast");
     await page.until(`!document.querySelector('[data-sonner-toast]')`);

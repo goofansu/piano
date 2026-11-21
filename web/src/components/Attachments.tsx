@@ -180,11 +180,13 @@ function ImagePreview({ url }: { url: string }) {
       <AttachmentMedia variant="image">
         <img src={url} alt="Attachment preview" loading="lazy" onError={() => setFailed(true)} />
       </AttachmentMedia>
-      <AttachmentTrigger asChild>
-        <a href={url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
-          <span className="sr-only">Open attached image</span>
-        </a>
-      </AttachmentTrigger>
+      <AttachmentTrigger
+        render={
+          <a href={url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+            <span className="sr-only">Open attached image</span>
+          </a>
+        }
+      />
     </Attachment>
   );
 }

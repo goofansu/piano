@@ -12,11 +12,13 @@ export function AlertDetails({
 }) {
   return (
     <Collapsible>
-      <CollapsibleTrigger asChild>
-        <Button variant="link" size="sm" className="h-auto p-0">
-          {label}
-        </Button>
-      </CollapsibleTrigger>
+      <CollapsibleTrigger
+        render={
+          <Button variant="link" size="sm" className="h-auto p-0">
+            {label}
+          </Button>
+        }
+      />
       <CollapsibleContent className="disclosure-content">{children}</CollapsibleContent>
     </Collapsible>
   );

@@ -314,76 +314,80 @@ function FileSection({
     .filter(Boolean)
     .join(" · ");
   return (
-    <Collapsible open={open} onOpenChange={onOpenChange} asChild>
-      <li className="border-b border-line" data-path={file.path}>
-        <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-1 bg-conversation px-2 py-1">
-          <CollapsibleTrigger
-            className="grid min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-start gap-2 rounded-md px-2 py-2.5 text-left text-xs leading-4 outline-none select-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 pointer-coarse:py-3.5"
-            aria-label={`${file.path}${status ? `, ${status}` : ""}${file.binary ? "" : `, ${file.additions} added, ${file.deletions} removed`}: ${open ? "collapse" : "expand"}`}
-          >
-            <span className="flex h-4 items-center">
-              <DisclosureChevron open={open} />
-            </span>
-            <FilePath
-              path={file.path}
-              title={status ? `${file.path} (${status})` : file.path}
-              filenameClassName={cn(
-                status === "new" && "text-ok",
-                status === "deleted" && "text-err line-through",
-              )}
-            />
-            <span className="flex items-center gap-2">
-              {file.binary && <span className="text-ink-3">Binary</span>}
-              {!file.binary && (
-                <span className="whitespace-nowrap font-mono tabular-nums">
-                  <span className="text-ok">+{file.additions}</span>{" "}
-                  <span className="text-err">−{file.deletions}</span>
-                </span>
-              )}
-            </span>
-          </CollapsibleTrigger>
-          {canAsk && (
-            <div className="flex h-9 items-center pointer-coarse:h-11">
-              <IconButton
-                size="list"
-                label={`Ask about ${file.path}`}
-                tooltip="Ask about this file"
-                disabled={!onAsk}
-                onClick={onAsk}
-              >
-                <MessageSquarePlusIcon />
-              </IconButton>
-            </div>
-          )}
-          {description && (
-            <p className="col-span-full pr-2 pb-2.5 pl-8 text-xs leading-normal text-muted-foreground [overflow-wrap:anywhere]">
-              {description}
-            </p>
-          )}
-        </div>
-        <CollapsibleContent className="disclosure-content">
-          {message && (
-            <p role="status" className="px-3 py-2 text-xs text-ink-2">
-              {message}{" "}
-              {retry && (
-                <Button variant="ghost" size="sm" onClick={retry}>
-                  Retry
-                </Button>
-              )}
-            </p>
-          )}
-          {file.binary || file.hunks.length === 0 ? (
-            !message && (
-              <p className="border-t border-line px-3 py-2 text-xs text-ink-3">
-                {file.binary ? "Binary file." : "No text changes."}
+    <Collapsible
+      open={open}
+      onOpenChange={onOpenChange}
+      render={
+        <li className="border-b border-line" data-path={file.path}>
+          <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-1 bg-conversation px-2 py-1">
+            <CollapsibleTrigger
+              className="grid min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-start gap-2 rounded-md px-2 py-2.5 text-left text-xs leading-4 outline-none select-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 pointer-coarse:py-3.5"
+              aria-label={`${file.path}${status ? `, ${status}` : ""}${file.binary ? "" : `, ${file.additions} added, ${file.deletions} removed`}: ${open ? "collapse" : "expand"}`}
+            >
+              <span className="flex h-4 items-center">
+                <DisclosureChevron open={open} />
+              </span>
+              <FilePath
+                path={file.path}
+                title={status ? `${file.path} (${status})` : file.path}
+                filenameClassName={cn(
+                  status === "new" && "text-ok",
+                  status === "deleted" && "text-err line-through",
+                )}
+              />
+              <span className="flex items-center gap-2">
+                {file.binary && <span className="text-ink-3">Binary</span>}
+                {!file.binary && (
+                  <span className="whitespace-nowrap font-mono tabular-nums">
+                    <span className="text-ok">+{file.additions}</span>{" "}
+                    <span className="text-err">−{file.deletions}</span>
+                  </span>
+                )}
+              </span>
+            </CollapsibleTrigger>
+            {canAsk && (
+              <div className="flex h-9 items-center pointer-coarse:h-11">
+                <IconButton
+                  size="list"
+                  label={`Ask about ${file.path}`}
+                  tooltip="Ask about this file"
+                  disabled={!onAsk}
+                  onClick={onAsk}
+                >
+                  <MessageSquarePlusIcon />
+                </IconButton>
+              </div>
+            )}
+            {description && (
+              <p className="col-span-full pr-2 pb-2.5 pl-8 text-xs leading-normal text-muted-foreground [overflow-wrap:anywhere]">
+                {description}
               </p>
-            )
-          ) : (
-            <Hunks file={file} />
-          )}
-        </CollapsibleContent>
-      </li>
-    </Collapsible>
+            )}
+          </div>
+          <CollapsibleContent className="disclosure-content">
+            {message && (
+              <p role="status" className="px-3 py-2 text-xs text-ink-2">
+                {message}{" "}
+                {retry && (
+                  <Button variant="ghost" size="sm" onClick={retry}>
+                    Retry
+                  </Button>
+                )}
+              </p>
+            )}
+            {file.binary || file.hunks.length === 0 ? (
+              !message && (
+                <p className="border-t border-line px-3 py-2 text-xs text-ink-3">
+                  {file.binary ? "Binary file." : "No text changes."}
+                </p>
+              )
+            ) : (
+              <Hunks file={file} />
+            )}
+          </CollapsibleContent>
+        </li>
+      }
+    />
   );
 }
 

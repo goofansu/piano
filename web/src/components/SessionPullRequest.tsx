@@ -31,7 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { localWorkFacts } from "@/lib/changesView";
-import { returnFocusForKeyboard } from "@/lib/pointerClose";
+import { pointerLast } from "@/lib/pointerClose";
 import {
   type PullRequestView,
   pullRequestForm,
@@ -185,30 +185,30 @@ function LinkedPullRequestRow({
         )}
       </div>
       <DropdownMenu modal={false}>
-        <DropdownMenuTrigger asChild>
-          <IconButton
-            data-pull-request-trigger
-            size="list"
-            label="Pull request actions"
-            disabled={pr.busy}
-          >
-            <MoreHorizontalIcon />
-          </IconButton>
+        <DropdownMenuTrigger
+          render={
+            <IconButton
+              data-pull-request-trigger
+              size="list"
+              label="Pull request actions"
+              disabled={pr.busy}
+            />
+          }
+        >
+          <MoreHorizontalIcon />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem asChild>
-            <a href={row.url} target="_blank" rel="noopener noreferrer">
-              Open pull request <ExternalLinkIcon data-icon="inline-end" aria-hidden />
-            </a>
+          <DropdownMenuItem render={<a href={row.url} target="_blank" rel="noopener noreferrer" />}>
+            Open pull request <ExternalLinkIcon data-icon="inline-end" aria-hidden />
           </DropdownMenuItem>
-          <DropdownMenuItem disabled={!pr.changeable} onSelect={pr.open}>
+          <DropdownMenuItem disabled={!pr.changeable} onClick={() => pr.open()}>
             Change link…
           </DropdownMenuItem>
-          <DropdownMenuItem disabled={!pr.changeable} onSelect={() => void pr.discover()}>
+          <DropdownMenuItem disabled={!pr.changeable} onClick={() => void pr.discover()}>
             Find from branch
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem disabled={!pr.changeable} onSelect={() => void pr.remove()}>
+          <DropdownMenuItem disabled={!pr.changeable} onClick={() => void pr.remove()}>
             Remove link
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -226,22 +226,16 @@ export function PullRequestLinkDialog({
 }) {
   const editing = pr.surface === "editing";
   const open = editing || pr.surface === "link-form";
-  const restoreFocus = (event: Event) => {
-    returnFocusForKeyboard(event);
-    if (event.defaultPrevented) return;
-    event.preventDefault();
-    const trigger = document.querySelector<HTMLButtonElement>(
+  const restoreFocus = () =>
+    !pointerLast() &&
+    (document.querySelector<HTMLButtonElement>(
       '[data-slot="surface-area"]:not([inert]) [data-pull-request-trigger]',
-    );
-    (trigger ?? fallbackTrigger.current)?.focus();
-  };
+    ) ??
+      fallbackTrigger.current ??
+      false);
   return (
     <Dialog open={open} onOpenChange={(next) => !next && pr.cancel()}>
-      <DialogContent
-        className="sm:max-w-sm"
-        aria-describedby={undefined}
-        onCloseAutoFocus={restoreFocus}
-      >
+      <DialogContent className="sm:max-w-sm" finalFocus={restoreFocus}>
         <DialogHeader>
           <DialogTitle>{editing ? "Change link" : "Pull request"}</DialogTitle>
         </DialogHeader>

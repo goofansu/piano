@@ -206,11 +206,11 @@ function WebhookRow({
       menu={
         <RowMenu label={`Webhook actions ${name}`} disabled={disabled}>
           <DropdownMenuGroup>
-            <DropdownMenuItem onSelect={edit}>Edit</DropdownMenuItem>
-            <DropdownMenuItem onSelect={test}>Test</DropdownMenuItem>
+            <DropdownMenuItem onClick={edit}>Edit</DropdownMenuItem>
+            <DropdownMenuItem onClick={test}>Test</DropdownMenuItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" onSelect={remove}>
+          <DropdownMenuItem variant="destructive" onClick={remove}>
             Delete
           </DropdownMenuItem>
         </RowMenu>

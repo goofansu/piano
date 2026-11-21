@@ -223,35 +223,35 @@ function EnvironmentRow({
   );
   return (
     <DropdownMenu modal={false} open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
-        <Item
-          size="sm"
-          className={cn(
-            railRow,
-            "cursor-pointer text-left hover:bg-fill-hover data-[state=open]:bg-fill-hover",
-          )}
-          title={open ? undefined : (description ?? cwd ?? (isName ? children : name))}
-          asChild
-        >
-          <button type="button" aria-label={`${name}: ${children}`}>
-            {content}
-            <ItemMedia variant="icon" className="text-ink-3">
-              <ChevronDownIcon aria-hidden />
-            </ItemMedia>
-          </button>
-        </Item>
-      </DropdownMenuTrigger>
+      <DropdownMenuTrigger
+        render={
+          <Item
+            size="sm"
+            className={cn(
+              railRow,
+              "cursor-pointer text-left hover:bg-fill-hover aria-expanded:bg-fill-hover",
+            )}
+            title={open ? undefined : (description ?? cwd ?? (isName ? children : name))}
+            render={
+              <button type="button" aria-label={`${name}: ${children}`}>
+                {content}
+                <ItemMedia variant="icon" className="text-ink-3">
+                  <ChevronDownIcon aria-hidden />
+                </ItemMedia>
+              </button>
+            }
+          />
+        }
+      />
       <DropdownMenuContent align="end">
         <DropdownMenuGroup>
           {environmentRowMenu(commands, menu).map((c) => (
             <SessionCommandMenuItem key={c.id} command={c} run={run} />
           ))}
           {href && (
-            <DropdownMenuItem asChild>
-              <a href={href} target="_blank" rel="noreferrer">
-                <ExternalLinkIcon aria-hidden />
-                Open {menu}
-              </a>
+            <DropdownMenuItem render={<a href={href} target="_blank" rel="noreferrer" />}>
+              <ExternalLinkIcon aria-hidden />
+              Open {menu}
             </DropdownMenuItem>
           )}
         </DropdownMenuGroup>
@@ -275,16 +275,18 @@ function RailSection({
     <Collapsible open={open} onOpenChange={onOpenChange} className="flex flex-col gap-2">
       <div className="flex min-h-8 items-center gap-2 pointer-coarse:min-h-11">
         <h2 className="flex min-w-0">
-          <CollapsibleTrigger asChild>
-            <PianoButton
-              variant="ghost"
-              size="sm"
-              className="-ml-2 h-7 gap-1 px-2 text-sm font-medium text-ink aria-expanded:bg-transparent pointer-coarse:min-h-11"
-            >
-              {title}
-              <DisclosureChevron open={open} />
-            </PianoButton>
-          </CollapsibleTrigger>
+          <CollapsibleTrigger
+            render={
+              <PianoButton
+                variant="ghost"
+                size="sm"
+                className="-ml-2 h-7 gap-1 px-2 text-sm font-medium text-ink aria-expanded:bg-transparent pointer-coarse:min-h-11"
+              >
+                {title}
+                <DisclosureChevron open={open} />
+              </PianoButton>
+            }
+          />
         </h2>
       </div>
       <CollapsibleContent className="disclosure-content">{children}</CollapsibleContent>

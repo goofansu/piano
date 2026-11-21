@@ -1,84 +1,117 @@
 import { cn } from "cn";
-import type { ComponentProps } from "react";
+import { Children, type ComponentProps, type ReactNode } from "react";
 import {
+  DropdownMenu as BaseMenu,
+  DropdownMenuCheckboxItem as BaseCheckboxItem,
   DropdownMenuContent as BaseContent,
   DropdownMenuItem as BaseItem,
+  DropdownMenuRadioItem as BaseRadioItem,
+  DropdownMenuSub as BaseSub,
   DropdownMenuSubContent as BaseSubContent,
+  DropdownMenuSubTrigger as BaseSubTrigger,
 } from "@/components/ui/dropdown-menu";
-import { raisedOverlay } from "@/lib/overlayStyles";
-import { returnFocusForKeyboard } from "@/lib/pointerClose";
+import { keyboardFocusReturn } from "@/lib/pointerClose";
 
 export {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuPortal,
   DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuShortcut,
-  DropdownMenuSub,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+// Base UI's menu typeahead matches an item's untrimmed text, so the space after a leading icon hides the item from it.
+function typeaheadLabel(children: ReactNode) {
+  const text = Children.toArray(children)
+    .filter((child) => typeof child === "string" || typeof child === "number")
+    .join("")
+    .trim();
+  return text || undefined;
+}
+
+export function DropdownMenu({ loopFocus = false, ...props }: ComponentProps<typeof BaseMenu>) {
+  return <BaseMenu loopFocus={loopFocus} {...props} />;
+}
+
+export function DropdownMenuSub({
+  closeParentOnEsc = true,
+  ...props
+}: ComponentProps<typeof BaseSub>) {
+  return <BaseSub closeParentOnEsc={closeParentOnEsc} {...props} />;
+}
+
 export function DropdownMenuContent({
   className,
-  onCloseAutoFocus,
+  finalFocus = keyboardFocusReturn,
   ...props
 }: ComponentProps<typeof BaseContent>) {
   return (
     <BaseContent
-      collisionPadding={8}
       data-motion="anchored"
       {...props}
-      className={cn(raisedOverlay, "w-max min-w-48 max-w-[calc(100vw-2rem)]", className)}
-      onCloseAutoFocus={(event) => {
-        onCloseAutoFocus?.(event);
-        if (!event.defaultPrevented) returnFocusForKeyboard(event);
-      }}
+      finalFocus={finalFocus}
+      className={cn("w-max min-w-48 max-w-[calc(100vw-2rem)] rounded-lg", className)}
     />
   );
 }
 
 export function DropdownMenuSubContent({
+  alignOffset = 0,
   className,
+  finalFocus = keyboardFocusReturn,
   ...props
 }: ComponentProps<typeof BaseSubContent>) {
   return (
     <BaseSubContent
-      collisionPadding={8}
+      alignOffset={alignOffset}
       data-motion="anchored"
       {...props}
-      className={cn(
-        raisedOverlay,
-        "w-max min-w-48 max-w-[calc(100vw-2rem)] max-h-(--radix-dropdown-menu-content-available-height) overflow-y-auto shadow-md",
-        className,
-      )}
+      finalFocus={finalFocus}
+      className={cn("w-max min-w-48 max-w-[calc(100vw-2rem)] rounded-lg shadow-md", className)}
     />
   );
 }
 
-// Radix's pointerleave refocus during menu exit dismisses the overlay just opened by its item.
-function keepFocusWhileClosing(event: React.PointerEvent<HTMLDivElement>) {
-  const menu = event.currentTarget.closest('[role="menu"]');
-  if (menu?.getAttribute("data-state") === "closed") event.preventDefault();
-}
-
-export function DropdownMenuItem({
-  className,
-  onPointerLeave,
-  ...props
-}: ComponentProps<typeof BaseItem>) {
+export function DropdownMenuItem({ className, label, ...props }: ComponentProps<typeof BaseItem>) {
   return (
     <BaseItem
+      label={label ?? typeaheadLabel(props.children)}
       {...props}
       className={cn("rounded-md", className)}
-      onPointerLeave={(event) => {
-        onPointerLeave?.(event);
-        keepFocusWhileClosing(event);
-      }}
+    />
+  );
+}
+
+export function DropdownMenuSubTrigger({ label, ...props }: ComponentProps<typeof BaseSubTrigger>) {
+  return <BaseSubTrigger label={label ?? typeaheadLabel(props.children)} {...props} />;
+}
+
+export function DropdownMenuCheckboxItem({
+  closeOnClick = true,
+  label,
+  ...props
+}: ComponentProps<typeof BaseCheckboxItem>) {
+  return (
+    <BaseCheckboxItem
+      closeOnClick={closeOnClick}
+      label={label ?? typeaheadLabel(props.children)}
+      {...props}
+    />
+  );
+}
+
+export function DropdownMenuRadioItem({
+  closeOnClick = true,
+  label,
+  ...props
+}: ComponentProps<typeof BaseRadioItem>) {
+  return (
+    <BaseRadioItem
+      closeOnClick={closeOnClick}
+      label={label ?? typeaheadLabel(props.children)}
+      {...props}
     />
   );
 }

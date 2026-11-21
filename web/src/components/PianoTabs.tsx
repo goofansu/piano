@@ -8,9 +8,7 @@ export { Tabs } from "@/components/ui/tabs";
 function useSelectedInView(list: RefObject<HTMLDivElement | null>) {
   useEffect(() => {
     const element = list.current;
-    const tab = element?.querySelector<HTMLElement>(
-      ':scope > [data-state="active"], :scope > [data-selected="true"]',
-    );
+    const tab = element?.querySelector<HTMLElement>(':scope > [data-selected="true"]');
     if (!element || !tab) return;
     const start = tab.offsetLeft;
     const end = start + tab.offsetWidth;
@@ -35,6 +33,7 @@ function ScrollingTabsList({ className, ...props }: ComponentProps<typeof TabsLi
     <TabsList
       ref={list}
       variant="line"
+      activateOnFocus
       {...props}
       className={cn(
         "relative max-w-full scrollbar-none justify-start overflow-x-auto overflow-y-hidden p-0 group-data-horizontal/tabs:h-auto",
@@ -42,12 +41,6 @@ function ScrollingTabsList({ className, ...props }: ComponentProps<typeof TabsLi
       )}
     />
   );
-}
-
-// Radix's scripted tab focus paints a spurious ring after reload; focus without it first.
-function focusPressedTab(event: React.MouseEvent<HTMLButtonElement>) {
-  if (event.button === 0 && !event.ctrlKey && !event.currentTarget.disabled)
-    event.currentTarget.focus({ focusVisible: false });
 }
 
 export function PianoStripBar({
@@ -112,17 +105,12 @@ export function PianoStripTab({
 export function PianoStripTabTrigger({
   icon,
   className,
-  onMouseDown,
   children,
   ...props
 }: ComponentProps<typeof TabsTrigger> & { icon: React.ReactNode }) {
   return (
     <TabsTrigger
       {...props}
-      onMouseDown={(event) => {
-        onMouseDown?.(event);
-        focusPressedTab(event);
-      }}
       className={cn(
         "h-full min-w-0 flex-1 justify-start gap-1.5 rounded-md border-0 pl-2.5 pr-0.5 last:pr-1.5 text-xs text-inherit after:hidden hover:text-inherit data-active:text-inherit dark:text-inherit dark:hover:text-inherit dark:data-active:text-inherit focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-none",
         className,

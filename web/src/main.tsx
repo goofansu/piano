@@ -16,7 +16,7 @@ createRoot(document.getElementById("root")!).render(
       disableTransitionOnChange
       scriptProps={{ type: "application/json" }}
     >
-      <TooltipProvider delayDuration={300}>
+      <TooltipProvider delay={300}>
         <App />
       </TooltipProvider>
     </ThemeProvider>

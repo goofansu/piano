@@ -102,7 +102,7 @@ export function SessionPanel({
       if (!lost) return;
       if (shown && active) {
         (single
-          ? document.querySelector<HTMLElement>('[role="tab"][data-state="active"]')
+          ? document.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
           : document.getElementById(surfaceTabId(active))
         )?.focus({ preventScroll: true });
         return;
@@ -110,7 +110,7 @@ export function SessionPanel({
       document
         .querySelector<HTMLElement>(
           single
-            ? '[role="tab"][data-state="active"], [data-session-menu]'
+            ? '[role="tab"][aria-selected="true"], [data-session-menu]'
             : "[data-rail-trigger], [data-changes-trigger]",
         )
         ?.focus({ preventScroll: true });

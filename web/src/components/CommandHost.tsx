@@ -45,7 +45,7 @@ import { Input } from "@/components/ui/input";
 import { artifactsMenu } from "@/lib/artifactsMenu";
 import { confirmation, FORM_NOT_SENT } from "@/lib/commandForms";
 import { type Command, type CommandEffects, type CommandForm, runCommand } from "@/lib/commands";
-import { focusReturn } from "@/lib/focusReturn";
+import { type FocusReturn, focusReturn } from "@/lib/focusReturn";
 import { type GlobalCommandContext, globalCommands } from "@/lib/globalCommands";
 import type { SessionLayout } from "@/lib/navigation";
 import { openLink } from "@/lib/openLink";
@@ -165,7 +165,7 @@ export function SessionCommandMenuItem({
     <DropdownMenuItem
       variant={command.destructive ? "destructive" : undefined}
       disabled={!command.enabled}
-      onSelect={() => run(command)}
+      onClick={() => run(command)}
     >
       <CommandIcon icon={command.icon} /> {command.label}
     </DropdownMenuItem>
@@ -249,7 +249,7 @@ export function CommandHost({
   const projectSettings = form?.kind === "project-settings";
   const [previewDetails, setPreviewDetails] = useState<PreviewClaim | null>(null);
   const [sharing, setSharing] = useState<ShareTarget | null>(null);
-  const returnFocus = useRef<((event: Event) => void) | undefined>(undefined);
+  const returnFocus = useRef<FocusReturn | undefined>(undefined);
 
   const effects: CommandEffects = {
     send,
@@ -320,19 +320,15 @@ export function CommandHost({
           target={sharing}
           close={() => setSharing(null)}
           openSettings={openSettings}
-          onCloseAutoFocus={returnFocus.current}
+          finalFocus={returnFocus.current}
         />
       )}
       <FormDialog
         open={!!renaming}
         close={close}
         className="sm:max-w-md"
-        aria-describedby={undefined}
-        onOpenAutoFocus={(event) => {
-          event.preventDefault();
-          renameInputRef.current?.focus();
-        }}
-        onCloseAutoFocus={returnFocus.current}
+        initialFocus={renameInputRef}
+        finalFocus={returnFocus.current}
       >
         <form
           onSubmit={(event) => {
@@ -376,12 +372,12 @@ export function CommandHost({
         disabled={!answer.allowed}
         cancel={close}
         confirm={forms.submit}
-        onCloseAutoFocus={returnFocus.current}
+        finalFocus={returnFocus.current}
       />
       <PreviewDetailsDialog
         claim={previewDetails}
         close={() => setPreviewDetails(null)}
-        onCloseAutoFocus={returnFocus.current}
+        finalFocus={returnFocus.current}
       />
       <ProjectDialogView
         open={!!project}
@@ -391,7 +387,7 @@ export function CommandHost({
         allowed={answer.allowed}
         submit={forms.submit}
         close={close}
-        onCloseAutoFocus={returnFocus.current}
+        finalFocus={returnFocus.current}
       />
       <ProjectSettingsDialog
         open={projectSettings}
@@ -401,7 +397,7 @@ export function CommandHost({
         allowed={answer.allowed}
         submit={forms.submit}
         close={close}
-        onCloseAutoFocus={returnFocus.current}
+        finalFocus={returnFocus.current}
       />
     </CommandsContext.Provider>
   );

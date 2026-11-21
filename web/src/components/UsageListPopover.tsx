@@ -46,21 +46,23 @@ export function UsageListPopover({
   return (
     <>
       <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-label={label}
-            aria-description={`${count} ${word} ${description}`}
-            aria-haspopup="dialog"
-            aria-expanded={open}
-            className="gap-1 px-1.5 font-mono text-xs font-normal text-ink-2 data-[state=open]:bg-fill-hover data-[state=open]:text-ink"
-          >
-            <Icon aria-hidden className="size-3.5 md:hidden" />
-            {count}
-            <span className="hidden md:inline">{word}</span>
-          </Button>
-        </PopoverTrigger>
+        <PopoverTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-label={label}
+              aria-description={`${count} ${word} ${description}`}
+              aria-haspopup="dialog"
+              aria-expanded={open}
+              className="gap-1 px-1.5 font-mono text-xs font-normal text-ink-2 aria-expanded:bg-fill-hover aria-expanded:text-ink"
+            >
+              <Icon aria-hidden className="size-3.5 md:hidden" />
+              {count}
+              <span className="hidden md:inline">{word}</span>
+            </Button>
+          }
+        />
         <PopoverContent
           side="top"
           align="end"
@@ -74,7 +76,7 @@ export function UsageListPopover({
             onClickCapture={(event) => {
               if ((event.target as Element).closest("a, button")) setOpen(false);
             }}
-            className="max-h-[min(24rem,var(--radix-popover-content-available-height,60dvh))] overflow-y-auto py-1"
+            className="max-h-[min(24rem,var(--available-height,60dvh))] overflow-y-auto py-1"
           >
             {children}
           </ul>

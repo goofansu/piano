@@ -144,11 +144,13 @@ function Question({
         <div className="flex flex-wrap items-center gap-2">
           {deadline && (
             <Popover>
-              <PopoverTrigger asChild>
-                <Button type="button" variant="ghost" size="sm">
-                  Details
-                </Button>
-              </PopoverTrigger>
+              <PopoverTrigger
+                render={
+                  <Button type="button" variant="ghost" size="sm">
+                    Details
+                  </Button>
+                }
+              />
               <PopoverContent align="start">
                 <PopoverHeader>
                   <PopoverTitle>Question details</PopoverTitle>

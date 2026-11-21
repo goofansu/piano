@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { test } from "node:test";
 import { setImmediate } from "node:timers/promises";
+import { Tooltip } from "@base-ui/react/tooltip";
 import { JSDOM } from "jsdom";
-import { Tooltip } from "radix-ui";
 import { act, createElement, type ComponentType, type Context } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
@@ -20,6 +20,7 @@ test("retained HTML viewer stops admitting links under Settings and resumes with
   const globals = {
     window: dom.window,
     document: dom.window.document,
+    Element: dom.window.Element,
     HTMLElement: dom.window.HTMLElement,
     HTMLFormElement: dom.window.HTMLFormElement,
     HTMLInputElement: dom.window.HTMLInputElement,

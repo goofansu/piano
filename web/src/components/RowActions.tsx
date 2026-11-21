@@ -134,10 +134,10 @@ export function RowMenu({
 }) {
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <PianoButton variant="ghost" size="list" aria-label={label} disabled={disabled}>
-          <MoreHorizontalIcon />
-        </PianoButton>
+      <DropdownMenuTrigger
+        render={<PianoButton variant="ghost" size="list" aria-label={label} disabled={disabled} />}
+      >
+        <MoreHorizontalIcon />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">{children}</DropdownMenuContent>
     </DropdownMenu>

@@ -2,6 +2,7 @@ import type { LoginPrompt, OAuthProvider } from "@shared/wire";
 import { CheckCircleIcon, CheckIcon, CopyIcon, ExternalLinkIcon } from "lucide-react";
 import { useState } from "react";
 import { useCopy } from "@/components/CopyButton";
+import { PianoLinkButton } from "@/components/PianoButton";
 import {
   Dialog,
   DialogContent,
@@ -36,12 +37,16 @@ import { useSignInAttempt } from "@/lib/useSignInAttempt";
 
 function SignInLink({ url, variant }: { url: string; variant?: "outline" }) {
   return (
-    <Button asChild variant={variant}>
-      <a href={url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">
-        Open sign-in page
-        <ExternalLinkIcon data-icon="inline-end" aria-hidden />
-      </a>
-    </Button>
+    <PianoLinkButton
+      variant={variant}
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      referrerPolicy="no-referrer"
+    >
+      Open sign-in page
+      <ExternalLinkIcon data-icon="inline-end" aria-hidden />
+    </PianoLinkButton>
   );
 }
 
@@ -108,16 +113,12 @@ function SignInDialog({
   return (
     <Dialog
       open={open}
+      disablePointerDismissal
       onOpenChange={(next) => {
         if (!next && open) dismiss();
       }}
     >
-      <DialogContent
-        className="max-h-[85dvh] overflow-y-auto"
-        showCloseButton={!busy}
-        onInteractOutside={(event) => event.preventDefault()}
-        {...(view.description ? {} : { "aria-describedby": undefined })}
-      >
+      <DialogContent className="max-h-[85dvh] overflow-y-auto" showCloseButton={!busy}>
         <DialogHeader>
           <DialogTitle>{view.title}</DialogTitle>
           {view.description && <DialogDescription>{view.description}</DialogDescription>}
@@ -201,11 +202,13 @@ function CopyDeviceCode({ code }: { code: string }) {
   const label = copied ? "Device code copied" : "Copy device code";
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <InputGroupButton size="icon-sm" aria-label={label} onClick={copy}>
-          {copied ? <CheckIcon /> : <CopyIcon />}
-        </InputGroupButton>
-      </TooltipTrigger>
+      <TooltipTrigger
+        render={
+          <InputGroupButton size="icon-sm" aria-label={label} onClick={copy}>
+            {copied ? <CheckIcon /> : <CopyIcon />}
+          </InputGroupButton>
+        }
+      />
       <TooltipContent>{label}</TooltipContent>
     </Tooltip>
   );
@@ -240,7 +243,12 @@ function LoginPromptForm({
         <Field>
           <FieldLabel htmlFor="login-answer">{label}</FieldLabel>
           {prompt.type === "select" ? (
-            <Select value={value} onValueChange={setValue} disabled={busy}>
+            <Select
+              items={prompt.options?.map((option) => ({ value: option.id, label: option.label }))}
+              value={value || null}
+              onValueChange={(next) => setValue(next ?? "")}
+              disabled={busy}
+            >
               <SelectTrigger id="login-answer">
                 <SelectValue placeholder="Choose a sign-in method" />
               </SelectTrigger>

@@ -1,7 +1,7 @@
 # shadcn ownership and upgrades
 
 `web/src/components/ui/` is upstream source, not Piano's design layer. The project uses the
-Radix base and the Vega style (`radix-vega` in `components.json`, chosen on
+Base UI base and the Vega style (`base-vega` in `components.json`, chosen on
 [shadcn/create](https://ui.shadcn.com/create) for keeping Lucide, `rounded-md` and 36px controls).
 Standard controls import from `ui/`; customized controls import the
 app components below. App wrappers forward props and refs and compose caller event handlers.
@@ -41,9 +41,39 @@ The stock provider and Settings tooltip still use upstream `hooks/use-mobile.ts`
 `isMobile` can disagree with CSS and the application at fractional widths or a non-default
 browser font baseline. Neither upstream consumer owns session capacity.
 
+### Base UI conventions
+
+- Compose with `render`. A link that looks like a button is a `PianoLinkButton` or `IconLink`,
+  not a `Button` rendering an anchor: Base UI's Button gives a non-button element `role="button"`.
+- A closed overlay returns focus through `finalFocus`. Piano returns it only after a keyboard
+  close, using `keyboardFocusReturn` or `focusReturn`. Base UI focuses whatever a `finalFocus`
+  function returns even when focus has already moved, so a custom one checks `focusMovedOn()`.
+- Base UI tooltips are visual only: they add no `role="tooltip"` and no `aria-describedby`. Give
+  the trigger an accessible name that carries what the tooltip says.
+- A single-choice `ToggleGroup` is a group of pressed buttons, not a radio group. Keep one item
+  pressed by ignoring the empty value Base UI reports when the pressed item is pressed again.
+
+### Patches in `ui/`
+
+Each is marked `Piano patch` in its source and must be restored after an upgrade overwrites the
+file.
+
+**Popover Positioner props.** Base UI positions an overlay on its `Positioner`, which the stock
+wrappers do not expose. `ui/popover.tsx` forwards two of its props. `anchor` places a popover that
+has no trigger: the slash-command list against the composer and the quote pill against a text
+selection. `collisionPadding` keeps the full-width model picker and usage list centred on a
+phone; without it they sit 5px from one screen edge. Drop the patch when upstream forwards them.
+
+Menus, tooltips and selects are stock and use Base UI's defaults: a 5px collision padding and
+the `z-50` layer. A popup opened from inside a dialog or the sidebar reveal still lands on top
+because its portal is added to the page later.
+
+**Unused import.** `ui/scroll-area.tsx` ships `import * as React` without using it, which fails
+`noUnusedLocals`; the line is removed.
+
 ### Stock sidebar shortcut
 
-`ui/sidebar.tsx` carries one intentional patch in `ui/`, marked `Piano patch` in its source: an
+`ui/sidebar.tsx` carries the third patch, marked the same way: an
 optional `keyboardShortcut` provider prop (default `true`) that disables the stock listener
 entirely. `AppLayout` passes `keyboardShortcut={false}`; Piano's one listener lives in
 `useSidebarLayoutController`. It toggles on ⌘B alone: upstream also takes Ctrl+B, which on macOS
@@ -61,11 +91,11 @@ styles across the transcript and navigation.
    `npx shadcn@latest add <component> --dry-run --diff <file>`. Include transitive components,
    dependency and CSS changes in the review.
 2. Take reviewed upstream source changes without carrying local component patches, except the
-   [sidebar shortcut opt-out](#stock-sidebar-shortcut). Avoid
+   [patches in `ui/`](#patches-in-ui). Avoid
    overwriting `index.css`, app wrappers or unrelated dependencies as a side effect.
-   The `--diff` for `sidebar.tsx` shows removal of the `keyboardShortcut` prop, its default and
-   effect guard/dependency. These hunks revert Piano, not upstream changes: restore the opt-out
-   after writing the file. Confirm `AppLayout` still disables the stock listener and only the
+   The `--diff` for a patched file shows the patch being removed: for `sidebar.tsx`, the
+   `keyboardShortcut` prop, its default and effect guard/dependency. These hunks revert Piano,
+   not upstream changes: restore them after writing the file. Confirm `AppLayout` still disables the stock listener and only the
    application listener handles ⌘B. If upstream supplies an equivalent opt-out, adopt it and drop
    the patch without enabling two listeners.
 3. Check changed props, slots and internal composition against app wrappers. In particular,

@@ -151,16 +151,18 @@ const SessionRow = memo(
             onOpenChange={(open) => {
               if (open) onMenuChange(sessionKey(t), true);
             }}
+            onOpenChangeComplete={(open) => {
+              if (!open) onMenuChange(sessionKey(t), false);
+            }}
           >
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="row" aria-label={`Session menu for ${t.label}`}>
-                <MoreHorizontalIcon />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              onCloseAutoFocus={() => onMenuChange(sessionKey(t), false)}
+            <DropdownMenuTrigger
+              render={
+                <Button variant="ghost" size="row" aria-label={`Session menu for ${t.label}`} />
+              }
             >
+              <MoreHorizontalIcon />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
               <SessionMenu target={target} />
             </DropdownMenuContent>
           </DropdownMenu>
@@ -193,9 +195,11 @@ export function SessionMenu({
     <>
       {target.hint && (
         <>
-          <DropdownMenuLabel className="max-w-72 font-normal text-ink-3">
-            {target.hint}
-          </DropdownMenuLabel>
+          <DropdownMenuGroup>
+            <DropdownMenuLabel className="max-w-72 font-normal text-ink-3">
+              {target.hint}
+            </DropdownMenuLabel>
+          </DropdownMenuGroup>
           <DropdownMenuSeparator />
         </>
       )}

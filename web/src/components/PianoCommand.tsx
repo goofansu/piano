@@ -64,7 +64,8 @@ export function CommandDialog({
   filter,
   commandProps,
   ...props
-}: ComponentProps<typeof Dialog> & {
+}: Omit<ComponentProps<typeof Dialog>, "children"> & {
+  children?: React.ReactNode;
   title?: string;
   description?: string;
   className?: string;

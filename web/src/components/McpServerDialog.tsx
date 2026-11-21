@@ -267,7 +267,7 @@ export function McpServerDialog({
       </DialogHeader>
       {!entry && (
         <Tabs value={tab} onValueChange={(value) => setTab(value as "form" | "json")}>
-          <TabsList variant="line">
+          <TabsList variant="line" activateOnFocus>
             <TabsTrigger value="form">Form</TabsTrigger>
             <TabsTrigger value="json">JSON</TabsTrigger>
           </TabsList>
@@ -319,13 +319,12 @@ export function McpServerDialog({
               <FieldLabel id="mcp-kind-label">Type</FieldLabel>
               <div>
                 <ToggleGroup
-                  type="single"
                   variant="outline"
                   spacing={0}
                   aria-labelledby="mcp-kind-label"
-                  value={kind}
+                  value={[kind]}
                   disabled={busy}
-                  onValueChange={(value) => value && setKind(value as Kind)}
+                  onValueChange={([value]) => value && setKind(value as Kind)}
                 >
                   <ToggleGroupItem value="url">URL</ToggleGroupItem>
                   <ToggleGroupItem value="command">Command</ToggleGroupItem>
@@ -358,6 +357,7 @@ export function McpServerDialog({
                   <Field>
                     <FieldLabel htmlFor="mcp-auth">Authentication</FieldLabel>
                     <Select
+                      items={{ oauth: "Sign in if needed", header: "Authorization header" }}
                       value={auth}
                       onValueChange={(value) => setAuth(value as Auth)}
                       disabled={busy}

@@ -19,6 +19,7 @@ import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { isImeKey } from "@/lib/keys";
 import { modelPickerView } from "@/lib/modelPicker";
+import { keyboardFocusReturn } from "@/lib/pointerClose";
 import { footerPicker, footerPickerMenu } from "@/lib/styles";
 import type { ModelControl } from "@/lib/useModelChoice";
 
@@ -89,9 +90,11 @@ export function ModelSelect({
     if (focusModel === null || focusModel !== want) return;
     const panel = effortPanel.current;
     const current = panel?.querySelector<HTMLButtonElement>(
-      '[role="radio"][aria-checked="true"]:not(:disabled)',
+      '[data-slot="toggle-group-item"][aria-pressed="true"]:not(:disabled)',
     );
-    const first = panel?.querySelector<HTMLButtonElement>('[role="radio"]:not(:disabled)');
+    const first = panel?.querySelector<HTMLButtonElement>(
+      '[data-slot="toggle-group-item"]:not(:disabled)',
+    );
     (current ?? first ?? search.current)?.focus({ preventScroll: true });
     setFocusModel(null);
   }, [open, focusModel, want]);
@@ -116,37 +119,46 @@ export function ModelSelect({
   return (
     <Popover
       open={open}
-      onOpenChange={(next) => {
+      onOpenChange={(next, details) => {
+        if (!next && details.reason === "escape-key") {
+          if (isImeKey(details.event as KeyboardEvent)) {
+            details.cancel();
+            return;
+          }
+          restoreFocus.current = true;
+        }
         setOpen(next);
         setQuery("");
       }}
     >
-      <PopoverTrigger asChild>
-        <Button
-          variant={variant === "outline" ? "outline-transparent" : variant}
-          size={variant === "outline" ? "default" : "sm"}
-          aria-haspopup="dialog"
-          aria-expanded={open}
-          aria-label={`Model: ${want || view.label}; effort: ${effort}`}
-          title={want}
-          disabled={!view.triggerEnabled}
-          className={cn(
-            "min-w-0 shrink",
-            variant === "outline"
-              ? "max-w-full justify-start font-mono"
-              : [footerPicker, "max-w-none justify-end px-1.5"],
-          )}
-        >
-          <span className={cn("min-w-0 truncate", view.shimmer && "shimmer")}>{view.label}</span>
-          <span className="shrink-0 text-ink-3 max-[360px]:hidden" aria-hidden>
-            ·
-          </span>
-          <span className="shrink-0 text-ink-3 max-[360px]:hidden" aria-hidden>
-            {effort}
-          </span>
-          {variant === "outline" && <ChevronDownIcon data-icon="inline-end" aria-hidden />}
-        </Button>
-      </PopoverTrigger>
+      <PopoverTrigger
+        render={
+          <Button
+            variant={variant === "outline" ? "outline-transparent" : variant}
+            size={variant === "outline" ? "default" : "sm"}
+            aria-haspopup="dialog"
+            aria-expanded={open}
+            aria-label={`Model: ${want || view.label}; effort: ${effort}`}
+            title={want}
+            disabled={!view.triggerEnabled}
+            className={cn(
+              "min-w-0 shrink",
+              variant === "outline"
+                ? "max-w-full justify-start font-mono"
+                : [footerPicker, "max-w-none justify-end px-1.5"],
+            )}
+          >
+            <span className={cn("min-w-0 truncate", view.shimmer && "shimmer")}>{view.label}</span>
+            <span className="shrink-0 text-ink-3 max-[360px]:hidden" aria-hidden>
+              ·
+            </span>
+            <span className="shrink-0 text-ink-3 max-[360px]:hidden" aria-hidden>
+              {effort}
+            </span>
+            {variant === "outline" && <ChevronDownIcon data-icon="inline-end" aria-hidden />}
+          </Button>
+        }
+      />
       <PickerContent
         still
         aria-label="Model and effort"
@@ -172,19 +184,10 @@ export function ModelSelect({
           input.focus({ preventScroll: true });
           input.select();
         }}
-        onEscapeKeyDown={(event) => {
-          if (isImeKey(event)) {
-            event.preventDefault();
-            return;
-          }
-          restoreFocus.current = true;
-        }}
-        onCloseAutoFocus={(event) => {
-          if (restoreFocus.current && returnFocusRef?.current) {
-            event.preventDefault();
-            returnFocusRef.current.focus({ preventScroll: true });
-          }
+        finalFocus={() => {
+          const target = restoreFocus.current ? returnFocusRef?.current : null;
           restoreFocus.current = false;
+          return target ?? keyboardFocusReturn();
         }}
       >
         <Command

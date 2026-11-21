@@ -50,14 +50,14 @@ export function ApiKeySettings() {
                   provider.saved && (
                     <RowMenu label={`${provider.name} API key actions`} disabled={busy}>
                       <DropdownMenuGroup>
-                        <DropdownMenuItem onSelect={() => setEditing(provider)}>
+                        <DropdownMenuItem onClick={() => setEditing(provider)}>
                           Replace key
                         </DropdownMenuItem>
                       </DropdownMenuGroup>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         variant="destructive"
-                        onSelect={() => actions.confirm(provider)}
+                        onClick={() => actions.confirm(provider)}
                       >
                         Remove key
                       </DropdownMenuItem>

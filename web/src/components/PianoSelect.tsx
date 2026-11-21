@@ -1,4 +1,3 @@
-import { cn } from "cn";
 import type { ComponentProps } from "react";
 import { SelectContent as BaseContent } from "@/components/ui/select";
 
@@ -15,18 +14,16 @@ export {
 } from "@/components/ui/select";
 
 export function SelectContent({
-  className,
-  position = "popper",
-  sideOffset = 4,
+  alignItemWithTrigger = false,
+  sideOffset = 8,
   ...props
 }: ComponentProps<typeof BaseContent>) {
   return (
     <BaseContent
       data-motion="anchored"
       {...props}
-      position={position}
+      alignItemWithTrigger={alignItemWithTrigger}
       sideOffset={sideOffset}
-      className={cn("z-[60]", className)}
     />
   );
 }
