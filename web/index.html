@@ -11,39 +11,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Piano</title>
     <!-- next-themes applies the theme only once React runs, after the first paint; a page painted
-         light would then fade to dark on every load. Apply its stored choice before that paint.
-         Every key this browser keeps is `piano.<name>`: a choice saved under a former name is
-         carried to today's once, here, before anything reads it, and the former key removed. -->
+         light would then fade to dark on every load. Apply its stored choice before that paint. -->
     <script>
       try {
-        for (const [former, key] of [
-          ["theme", "piano.theme"],
-          ["piano:messages-only", "piano.messagesOnly"],
-          ["piano:changes-wrap", "piano.codeWrap"],
-          ["piano.machine.local.catalogs", "piano.catalogs"],
-          ["piano.machine.local.lastDir", "piano.lastDir"],
-          ["piano.machine.local.openGroups", "piano.openGroups"],
-        ]) {
-          const saved = localStorage.getItem(former);
-          if (saved === null) continue;
-          if (localStorage.getItem(key) === null) localStorage.setItem(key, saved);
-          localStorage.removeItem(former);
-        }
-        // Read by nothing since Messages only replaced it.
-        localStorage.removeItem("piano:session-display");
         const stored = localStorage.getItem("piano.theme");
         const dark = stored === "dark" || (stored !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
         document.documentElement.classList.add(dark ? "dark" : "light");
         document.documentElement.style.colorScheme = dark ? "dark" : "light";
-      } catch {}
-      try {
-        const surface = sessionStorage.getItem("piano.machine.local.surface");
-        if (surface !== null && sessionStorage.getItem("piano.surface") === null)
-          sessionStorage.setItem("piano.surface", surface);
-        // Read by nothing since Piano stopped connecting to other machines.
-        for (const store of [localStorage, sessionStorage])
-          for (const key of Object.keys(store))
-            if (key.startsWith("piano.machine.")) store.removeItem(key);
       } catch {}
     </script>
   </head>

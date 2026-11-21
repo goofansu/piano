@@ -28,8 +28,10 @@ Then check two things before storing it at all:
 ## Names
 
 Every key is `piano.<name>`, with `<name>` in camelCase (`piano.messagesOnly`, `piano.lastDir`).
-A library that stores its own key is given a `piano.` name through its options, as `next-themes`
-is given `piano.theme`.
+Configure libraries that persist their own values to use the same naming convention.
+Read each value from its current key. A renamed preference starts with its default.
+The pre-paint script in `web/index.html` and `ThemeProvider` in `web/src/main.tsx` both use
+`piano.theme` so the first paint matches the saved theme.
 
 ## What Piano remembers about its own data
 
@@ -41,14 +43,6 @@ the name and its store to `BROWSER_MEMORY` in `web/src/lib/browserMemory.ts` and
 
 How the person likes Piano to look or behave: create one with `createPreference`
 (`web/src/lib/preference.ts`) under a fixed `piano.<name>` key.
-
-## Renaming or retiring a key
-
-A renamed key forgets what people saved unless it is carried over. The inline script in
-`web/index.html` runs before the first paint and before any reader: add a `[former, key]` pair
-there to carry a value across once and remove the former key, or a `removeItem` for a key nothing
-reads. Keep `piano.theme` identical in that script and in `ThemeProvider`'s `storageKey`
-(`web/src/main.tsx`); a mismatch flashes the wrong theme on load.
 
 ## Reading and writing
 
