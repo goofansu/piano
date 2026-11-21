@@ -22,8 +22,7 @@ Then start a new session.
 Piano has no login and runs commands as your user. Keep it on loopback or behind a private,
 authenticated proxy; never expose it publicly.
 
-See [using Piano](docs/use.md) for features and [configuration](docs/configuration.md) for
-storage, backups and browser origins.
+Browse the [Piano user guides](docs/use.md) to find a task, or see [configuration](docs/configuration.md) for storage, backups and browser origins.
 
 ## Develop
 

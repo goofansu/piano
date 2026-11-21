@@ -84,19 +84,11 @@ where boundaries matter, backed by focused lower-level tests for distinct logic.
 test validates Piano's contract handling, not the real Pi release; a real-runtime smoke check serves
 a different purpose.
 
+When changing HTML previews, use a scratch browser to check that page scripts stay disabled and that opening local links stays under Piano’s control. After a React-PDF upgrade, check the installed `react-pdf` and `pdfjs-dist` versions, the emitted worker and assets, and a PDF rendered in the browser.
+
 ## Feature verification map
 
-For a new or substantially changed feature, give verification one starting place: its
-`features/<feature>/README.md`, linking:
-
-- the owning modules per runtime and their public interfaces;
-- the relevant module tests;
-- the `verify-piano` feature entry and browser journey or focused verification recipe.
-
-Link that page from the feature's entry in the [verification map](../.agents/skills/verify-piano/features/README.md#features).
-Keep implementation maps in the owning doc and user-facing steps in the feature recipe. Choose
-coverage by the risk rules above; the map does not itself require new tests, duplicate tests or
-separate guides for each runtime.
+For a new or substantially changed feature, update its entry in the [verification map](../.agents/skills/verify-piano/features/README.md#features). Link to its user guide and identify the relevant module tests and browser journey or focused check there. Choose coverage according to the risk of the change.
 
 ## UI evidence scope
 

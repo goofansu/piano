@@ -54,7 +54,7 @@ Read the matching entry before working on that surface; follow its linked detail
 | When | Read |
 | --- | --- |
 | Choosing tests or evidence | [Testing policy](docs/testing.md), [commands and prerequisites](docs/development.md#tests) |
-| Finding a feature's owning modules, or verifying its behavior | The [feature map](.agents/skills/verify-piano/features/README.md#features) links each feature's recipe and owning doc; [verify-piano](.agents/skills/verify-piano/SKILL.md) launches and drives scratch Piano |
+| Finding a feature's owning modules, or verifying its behavior | Browse the [feature directories](features) for source and the [verification map](.agents/skills/verify-piano/features/README.md#features) for checks |
 | Measuring performance | [Benchmarks](docs/performance.md) |
 | Naming code, UI or docs | [Glossary](docs/glossary.md); in UI strings use the user's names, such as "Piano's database"; code and docs say "registry" |
 | Changing UI, including strings and controls | [Quiet UI](docs/quiet-ui.md), [UI evidence scope](docs/testing.md#ui-evidence-scope), [Linear design language](docs/design-moonstone.md#linear) |
@@ -78,6 +78,8 @@ truthful, concise reason. Let names, types and tests carry module overviews, API
 test narration; what they cannot say follows [Docs](#docs). Leave upstream/vendor comments intact.
 
 ## Docs
+
+Write feature READMEs and their linked feature topics for people using Piano. Describe tasks, visible controls, outcomes, and limits that affect a user’s decision. Keep maintainer decisions, benchmarks, and verification instructions in the development docs and verification recipes.
 
 If a type, lint rule or test can enforce a rule, enforce it there instead of documenting it. Write
 docs only for what code cannot explain: a decision and its reason, a contract others rely on, a

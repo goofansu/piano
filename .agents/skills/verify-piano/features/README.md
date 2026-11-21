@@ -38,27 +38,26 @@ then labeled bullets pairing each action with an exact command and the observabl
 `Gotchas`. Keep implementation details out; name user paths, handles, required state, commands and
 proof.
 
-In the Features list below, link to the owning feature README or a topic in that directory. Keep the implementation map in the feature root. New or substantially changed features follow
-the [feature verification mapping policy](../../../../docs/testing.md#feature-verification-map).
+Link each recipe to the guide for the user task it exercises. Keep test commands and evidence requirements in the recipe. See the [feature verification mapping policy](../../../../docs/testing.md#feature-verification-map).
 
 ## Features
 
 - [Start a session](./start-session.md).
-  Docs: [Session creation and recovery](../../../../features/sessions/README.md#developer-navigation-session-creation-and-recovery),
+  Docs: [Start and continue sessions](../../../../features/sessions/README.md),
   [Image attachments](../../../../features/sessions/image-attachments.md).
 - [Open and continue a session](./open-session.md).
-  Docs: [Session navigation](../../../../features/navigation/README.md#developer-navigation),
-  [Transcript performance](../../../../features/sessions/session-performance.md),
+  Docs: [Session navigation](../../../../features/navigation/README.md),
+  [Transcript performance](../../../../docs/session-performance.md),
   [Radius artifacts](../../../../features/radius/radius-artifacts.md).
 - [Share a session](./session-sharing.md).
   Docs: [Session sharing](../../../../features/sharing/README.md).
 - [Projects index](./projects-index.md).
-  Docs: [Projects UX](../../../../features/projects/project-centered-ux.md).
+  Docs: [Using the project dashboard](../../../../features/projects/project-centered-ux.md).
 - [Project home](./project-home.md).
   Docs: [Project grouping](../../../../features/projects/README.md).
 - [Session dispatch](./session-dispatch.md).
   Docs: [Session dispatch](../../../../features/dispatch/README.md),
-  [Session creation and recovery](../../../../features/sessions/README.md#developer-navigation-session-creation-and-recovery).
+  [Start and continue sessions](../../../../features/sessions/README.md).
 - [Changes and files](./changes-and-files.md).
   Docs: [File previews](../../../../features/workspace/README.md).
 - [Settings › Skills and Prompts](./settings-skills-prompts.md).
