@@ -1,6 +1,8 @@
+import { mergeProps } from "@base-ui/react/merge-props";
+import { useRender } from "@base-ui/react/use-render";
 import { cn } from "cn";
 import type { ComponentProps } from "react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 
 const variants = {
   "outline-solid":
@@ -28,36 +30,65 @@ const leadingPad =
 const trailingPad =
   "justify-end pr-[calc(var(--glyph-pad)-1px)] has-data-[icon=inline-end]:pr-[calc(var(--glyph-pad)-1px)]";
 
-type Props = Omit<ComponentProps<typeof Button>, "variant" | "size"> & {
+type Look = {
   variant?: ComponentProps<typeof Button>["variant"] | keyof typeof variants;
   size?: ComponentProps<typeof Button>["size"] | IconPlace;
   leading?: boolean;
   trailing?: boolean;
+  className?: string;
 };
 
-const isPlace = (size: Props["size"]): size is IconPlace =>
+type Props = Omit<ComponentProps<typeof Button>, "variant" | "size" | "className"> & Look;
+
+const isPlace = (size: Look["size"]): size is IconPlace =>
   typeof size === "string" && Object.hasOwn(places, size);
 
-export function PianoButton({ variant, size, leading, trailing, className, ...props }: Props) {
+function look({ variant, size, leading, trailing, className }: Look, role?: string) {
   const placed = cn(
     isPlace(size) && places[size].className,
     leading && leadingPad,
     trailing && trailingPad,
-    props.role === "menuitem" &&
+    role === "menuitem" &&
       "focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-none",
     className,
   );
-  const sized = { size: isPlace(size) ? places[size].size : size, className: placed };
-  if (variant === "outline-solid" || variant === "outline-transparent") {
-    return (
-      <Button
-        {...props}
-        size={sized.size}
-        variant={null}
-        data-variant={variant}
-        className={cn(variants[variant], sized.className)}
-      />
-    );
-  }
-  return <Button {...props} variant={variant} size={sized.size} className={sized.className} />;
+  const sized = isPlace(size) ? places[size].size : size;
+  if (variant === "outline-solid" || variant === "outline-transparent")
+    return {
+      size: sized,
+      variant: null,
+      "data-variant": variant,
+      className: cn(variants[variant], placed),
+    };
+  return { size: sized, variant, className: placed };
+}
+
+export function PianoButton({ variant, size, leading, trailing, className, ...props }: Props) {
+  return (
+    <Button {...props} {...look({ variant, size, leading, trailing, className }, props.role)} />
+  );
+}
+
+export function PianoLinkButton({
+  variant,
+  size,
+  leading,
+  trailing,
+  className,
+  render,
+  ...props
+}: useRender.ComponentProps<"a"> & Look) {
+  const { "data-variant": custom, ...face } = look({ variant, size, leading, trailing, className });
+  return useRender({
+    defaultTagName: "a",
+    render,
+    props: mergeProps<"a">(
+      {
+        "data-slot": "button",
+        "data-variant": custom,
+        className: buttonVariants(face),
+      } as ComponentProps<"a">,
+      props,
+    ),
+  });
 }

@@ -29,23 +29,28 @@ export function ComposerActionButton({
 }) {
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          {...props}
-          size="icon"
-          variant={null}
-          data-motion="press"
-          className={cn(composerAction, className)}
-          aria-label={label}
-        >
-          <span
-            aria-hidden
-            className={cn(buttonVariants({ variant: FACE_VARIANT[face], size: "icon" }), faceClass)}
+      <TooltipTrigger
+        render={
+          <Button
+            {...props}
+            size="icon"
+            variant={null}
+            data-motion="press"
+            className={cn(composerAction, className)}
+            aria-label={label}
           >
-            {children}
-          </span>
-        </Button>
-      </TooltipTrigger>
+            <span
+              aria-hidden
+              className={cn(
+                buttonVariants({ variant: FACE_VARIANT[face], size: "icon" }),
+                faceClass,
+              )}
+            >
+              {children}
+            </span>
+          </Button>
+        }
+      />
       <TooltipContent>{tooltip}</TooltipContent>
     </Tooltip>
   );

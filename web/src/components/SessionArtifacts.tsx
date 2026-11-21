@@ -21,22 +21,24 @@ export function ArtifactsMenu({ state }: { state: AppState }) {
   return (
     <DropdownMenu modal={false} open={open} onOpenChange={setOpen}>
       <Tooltip>
-        <TooltipTrigger asChild>
-          <DropdownMenuTrigger
-            render={
-              <PianoButton
-                data-artifacts-trigger
-                variant="ghost"
-                size="sm"
-                className="h-8 gap-1.5 px-2 text-ink-2 pointer-coarse:h-11"
-              />
-            }
-          >
-            <ShapesIcon aria-hidden />
-            <span className="sr-only">Artifacts:</span>
-            <span className="text-xs tabular-nums">{artifacts.length}</span>
-          </DropdownMenuTrigger>
-        </TooltipTrigger>
+        <TooltipTrigger
+          render={
+            <DropdownMenuTrigger
+              render={
+                <PianoButton
+                  data-artifacts-trigger
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-1.5 px-2 text-ink-2 pointer-coarse:h-11"
+                />
+              }
+            >
+              <ShapesIcon aria-hidden />
+              <span className="sr-only">Artifacts:</span>
+              <span className="text-xs tabular-nums">{artifacts.length}</span>
+            </DropdownMenuTrigger>
+          }
+        />
         <TooltipContent>Artifacts</TooltipContent>
       </Tooltip>
       <DropdownMenuContent align="end" className="w-80">

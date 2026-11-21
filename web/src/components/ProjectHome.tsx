@@ -125,15 +125,17 @@ export function ProjectHome({
         <Breadcrumb className="flex min-w-0 flex-1 items-center">
           <BreadcrumbList className="min-w-0 flex-nowrap gap-1.5 sm:gap-1.5">
             <BreadcrumbItem className="shrink-0">
-              <BreadcrumbLink asChild>
-                <button
-                  type="button"
-                  className="rounded-sm text-ink-3 outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-ring"
-                  onClick={() => openProjects()}
-                >
-                  Projects
-                </button>
-              </BreadcrumbLink>
+              <BreadcrumbLink
+                render={
+                  <button
+                    type="button"
+                    className="rounded-sm text-ink-3 outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => openProjects()}
+                  >
+                    Projects
+                  </button>
+                }
+              />
             </BreadcrumbItem>
             <BreadcrumbSeparator className="text-ink-3/60">/</BreadcrumbSeparator>
             <BreadcrumbItem className="min-w-0 gap-2">

@@ -26,7 +26,7 @@ export function useSidebarWindow(sessions: readonly SessionEntry[], selectionId:
   const update = useCallback(() => {
     const ul = list.current;
     const probe = measure.current;
-    const viewport = ul?.closest<HTMLElement>("[data-radix-scroll-area-viewport]");
+    const viewport = ul?.closest<HTMLElement>('[data-slot="scroll-area-viewport"]');
     if (!ul || !probe || !viewport) return;
     const css = getComputedStyle(ul);
     const gap = parseFloat(css.rowGap) || 0;
@@ -70,7 +70,7 @@ export function useSidebarWindow(sessions: readonly SessionEntry[], selectionId:
   useLayoutEffect(update);
   useLayoutEffect(() => {
     const ul = list.current;
-    const viewport = ul?.closest<HTMLElement>("[data-radix-scroll-area-viewport]");
+    const viewport = ul?.closest<HTMLElement>('[data-slot="scroll-area-viewport"]');
     const nav = ul?.closest("nav");
     if (!viewport || !nav || !measure.current) return;
     const observer = new ResizeObserver(update);

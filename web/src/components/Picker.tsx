@@ -16,15 +16,13 @@ export function PickerContent({
       align="start"
       tabIndex={-1}
       className={cn(
-        "max-h-(--radix-popover-content-available-height) w-[360px] max-w-[calc(100vw-2rem)] gap-0 overflow-y-auto p-0",
+        "max-h-(--available-height) w-[360px] max-w-[calc(100vw-2rem)] gap-0 overflow-y-auto p-0",
         className,
       )}
-      onOpenAutoFocus={(event) => {
-        event.preventDefault();
-        if (window.matchMedia("(pointer: coarse)").matches)
-          content.current?.focus({ preventScroll: true });
-        else searchRef?.current?.focus({ preventScroll: true });
-      }}
+      initialFocus={() =>
+        (window.matchMedia("(pointer: coarse)").matches ? content.current : searchRef?.current) ??
+        true
+      }
       {...props}
     />
   );

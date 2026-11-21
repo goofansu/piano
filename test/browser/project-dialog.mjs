@@ -4,11 +4,11 @@ export async function projectDialogFocus(page) {
   await page.open("/projects");
   await page.see("New project");
   const trigger = `[...document.querySelectorAll('main header button')].find(e => e.textContent.trim() === 'New project')`;
-  const dialog = `document.querySelector('[role=dialog][data-state=open]')`;
+  const dialog = `document.querySelector('[role=dialog][data-open]')`;
   const focus = async () => {
     const active = await page.evaluate(`(() => {
       const e = document.activeElement;
-      return { tag: e.tagName, name: e.labels?.[0]?.textContent || e.textContent.trim().slice(0, 80), inside: !!e.closest('[role=dialog][data-state=open]') };
+      return { tag: e.tagName, name: e.labels?.[0]?.textContent || e.textContent.trim().slice(0, 80), inside: !!e.closest('[role=dialog][data-open]') };
     })()`);
     console.log("New project focus:", active);
     return active;
@@ -37,8 +37,8 @@ export async function projectDialogFocus(page) {
       const visited = [];
       for (let i = 0; i < names.length; i++) {
         await page.press(key);
+        await page.until(`!!document.activeElement.closest('[role=dialog][data-open]')`);
         const active = await focus();
-        assert.equal(active.inside, true, `${key} stays inside New project`);
         visited.push(active.name);
       }
       assert.deepEqual(new Set(visited), new Set(names));
@@ -111,7 +111,7 @@ export async function commandDialogFocus(page) {
     );
     await page.press("Enter");
     await page.until(
-      `document.getElementById(document.querySelector('[role=dialog][data-state=open], [role=alertdialog][data-state=open]')?.getAttribute('aria-labelledby'))?.textContent === ${JSON.stringify(dialog)}`,
+      `document.getElementById(document.querySelector('[role=dialog][data-open], [role=alertdialog][data-open]')?.getAttribute('aria-labelledby'))?.textContent === ${JSON.stringify(dialog)}`,
     );
     await page.press("Escape");
     await page.until(`!document.querySelector('[role=dialog], [role=alertdialog]')`);

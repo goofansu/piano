@@ -9,7 +9,7 @@ import {
   useSessionCommands,
   useSessionProjectMenu,
 } from "@/components/CommandHost";
-import { IconButton } from "@/components/IconButton";
+import { IconButton, IconLink } from "@/components/IconButton";
 import { PaneHeader } from "@/components/Pane";
 import { PianoButton } from "@/components/PianoButton";
 import {
@@ -61,6 +61,7 @@ export function SessionHeader({
   const [sheetOpen, setSheetOpen] = useState(false);
   if (!sheet && sheetOpen) setSheetOpen(false);
   const menuTrigger = useRef<HTMLButtonElement>(null);
+  const sheetDismissed = useRef(false);
   const session = state.session;
   const context = sessionContext(state);
   const { title, sessionId, cwd } = context;
@@ -98,11 +99,18 @@ export function SessionHeader({
     heading
   );
   const sessionMenu = sheet ? (
-    <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-      <SheetTrigger asChild>{menuButton}</SheetTrigger>
+    <Sheet
+      open={sheetOpen}
+      onOpenChange={(open, { reason }) => {
+        sheetDismissed.current = reason === "escape-key" || reason === "outside-press";
+        setSheetOpen(open);
+      }}
+    >
+      <SheetTrigger render={menuButton} />
       <SessionMenuSheet
         key={sessionId}
         onLeave={() => setSheetOpen(false)}
+        dismissed={sheetDismissed}
         onDismissFocus={menuTrigger}
       />
     </Sheet>
@@ -165,16 +173,18 @@ export function SessionHeader({
               <Breadcrumb className={cn(titleGroup, narrowViewport && "h-full")}>
                 <BreadcrumbList className="min-w-0 flex-nowrap gap-1.5 sm:gap-1.5">
                   <BreadcrumbItem className="hidden min-w-0 max-w-32 shrink-0 md:inline-flex">
-                    <BreadcrumbLink asChild>
-                      <button
-                        type="button"
-                        className="min-w-0 truncate rounded-sm text-ink-3 outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-ring"
-                        onClick={() => run(openProject)}
-                      >
-                        <span className="sr-only">Project: </span>
-                        {projectMenu.current.name}
-                      </button>
-                    </BreadcrumbLink>
+                    <BreadcrumbLink
+                      render={
+                        <button
+                          type="button"
+                          className="min-w-0 truncate rounded-sm text-ink-3 outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-ring"
+                          onClick={() => run(openProject)}
+                        >
+                          <span className="sr-only">Project: </span>
+                          {projectMenu.current.name}
+                        </button>
+                      }
+                    />
                   </BreadcrumbItem>
                   <BreadcrumbSeparator className="hidden text-ink-3/60 md:block">
                     /
@@ -202,11 +212,13 @@ export function SessionHeader({
         </span>
         <div className="-mr-(--glyph-pad) flex shrink-0 items-center gap-0.5">
           {openPreview && (
-            <IconButton asChild size="header" label={openPreview.label}>
-              <CommandLink command={openPreview}>
-                <CommandIcon icon={openPreview.icon} />
-              </CommandLink>
-            </IconButton>
+            <IconLink
+              size="header"
+              label={openPreview.label}
+              render={<CommandLink command={openPreview} />}
+            >
+              <CommandIcon icon={openPreview.icon} />
+            </IconLink>
           )}
           <ArtifactsMenu state={state} />
           <ChangesToggle />

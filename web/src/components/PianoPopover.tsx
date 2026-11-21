@@ -1,13 +1,12 @@
 import { cn } from "cn";
 import type { ComponentProps } from "react";
 import { PopoverContent as BaseContent } from "@/components/ui/popover";
-import { raisedOverlay } from "@/lib/overlayStyles";
-import { returnFocusForKeyboard } from "@/lib/pointerClose";
+import { raisedLayer } from "@/lib/overlayStyles";
+import { keyboardFocusReturn } from "@/lib/pointerClose";
 import { useExitFace } from "@/lib/useExitFace";
 
 export {
   Popover,
-  PopoverAnchor,
   PopoverDescription,
   PopoverHeader,
   PopoverTitle,
@@ -16,22 +15,24 @@ export {
 
 export function PopoverContent({
   className,
-  onCloseAutoFocus,
+  finalFocus = keyboardFocusReturn,
+  hideWhenDetached = false,
   still = false,
   ref,
   ...props
-}: ComponentProps<typeof BaseContent> & { still?: boolean }) {
+}: ComponentProps<typeof BaseContent> & { hideWhenDetached?: boolean; still?: boolean }) {
   const exitFace = useExitFace(ref);
   return (
     <BaseContent
       data-motion={still ? undefined : "anchored"}
+      positionerClassName={cn(
+        raisedLayer,
+        hideWhenDetached && "data-anchor-hidden:pointer-events-none data-anchor-hidden:invisible",
+      )}
       ref={still ? ref : exitFace}
       {...props}
-      className={cn(raisedOverlay, className)}
-      onCloseAutoFocus={(event) => {
-        onCloseAutoFocus?.(event);
-        if (!event.defaultPrevented) returnFocusForKeyboard(event);
-      }}
+      finalFocus={finalFocus}
+      className={cn("rounded-lg", className)}
     />
   );
 }

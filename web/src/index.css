@@ -329,7 +329,7 @@
   overflow: hidden;
   outline: none;
 }
-[data-slot="mobile-sidebar"][data-state="closed"] {
+[data-slot="mobile-sidebar"][data-closed] {
   animation: sidebar-reveal-exit var(--sidebar-duration) linear;
 }
 @keyframes sidebar-reveal-exit {
@@ -407,11 +407,6 @@
     black calc(100% - var(--rail-fade-bottom, 0px)),
     transparent
   );
-}
-
-/* Override Radix's inline display: table, which defeats truncation. */
-[data-slot="scroll-area-viewport"] > div {
-  display: block !important;
 }
 
 :root {
@@ -692,7 +687,7 @@
   --tw-animation-duration: 200ms;
   --tw-ease: var(--ease-out);
 }
-:is([data-motion], [data-slot="dialog-overlay"]):is([data-state="closed"], [data-closed]) {
+:is([data-motion], [data-slot="dialog-overlay"])[data-closed] {
   --tw-animation-duration: 120ms;
   --tw-ease: ease-out;
 }

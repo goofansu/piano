@@ -1,6 +1,7 @@
 import {
   Dialog,
   DialogContent,
+  type DialogFinalFocus,
   DialogDescription,
   DialogFooter,
   DialogHeader,
@@ -20,7 +21,7 @@ export function RemovalDialog({
   destructive = true,
   cancel,
   confirm,
-  onCloseAutoFocus,
+  finalFocus,
 }: {
   open: boolean;
   title: string;
@@ -32,21 +33,17 @@ export function RemovalDialog({
   destructive?: boolean;
   cancel: () => void;
   confirm: () => void;
-  onCloseAutoFocus?: (event: Event) => void;
+  finalFocus?: DialogFinalFocus;
 }) {
   return (
     <Dialog
       open={open}
+      disablePointerDismissal
       onOpenChange={(next) => {
         if (!next && !busy) cancel();
       }}
     >
-      <DialogContent
-        className="sm:max-w-md"
-        showCloseButton={false}
-        onCloseAutoFocus={onCloseAutoFocus}
-        onInteractOutside={(event) => event.preventDefault()}
-      >
+      <DialogContent className="sm:max-w-md" showCloseButton={false} finalFocus={finalFocus}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>

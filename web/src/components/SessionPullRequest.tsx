@@ -31,7 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { localWorkFacts } from "@/lib/changesView";
-import { returnFocusForKeyboard } from "@/lib/pointerClose";
+import { pointerLast } from "@/lib/pointerClose";
 import {
   type PullRequestView,
   pullRequestForm,
@@ -226,22 +226,16 @@ export function PullRequestLinkDialog({
 }) {
   const editing = pr.surface === "editing";
   const open = editing || pr.surface === "link-form";
-  const restoreFocus = (event: Event) => {
-    returnFocusForKeyboard(event);
-    if (event.defaultPrevented) return;
-    event.preventDefault();
-    const trigger = document.querySelector<HTMLButtonElement>(
+  const restoreFocus = () =>
+    !pointerLast() &&
+    (document.querySelector<HTMLButtonElement>(
       '[data-slot="surface-area"]:not([inert]) [data-pull-request-trigger]',
-    );
-    (trigger ?? fallbackTrigger.current)?.focus();
-  };
+    ) ??
+      fallbackTrigger.current ??
+      false);
   return (
     <Dialog open={open} onOpenChange={(next) => !next && pr.cancel()}>
-      <DialogContent
-        className="sm:max-w-sm"
-        aria-describedby={undefined}
-        onCloseAutoFocus={restoreFocus}
-      >
+      <DialogContent className="sm:max-w-sm" finalFocus={restoreFocus}>
         <DialogHeader>
           <DialogTitle>{editing ? "Change link" : "Pull request"}</DialogTitle>
         </DialogHeader>

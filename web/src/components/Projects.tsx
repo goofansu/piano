@@ -15,7 +15,12 @@ import {
 import { useId, useRef } from "react";
 import { FormDialog } from "@/components/FormDialog";
 import { type IconPlace, PianoButton } from "@/components/PianoButton";
-import { DialogFooter, DialogHeader, DialogTitle } from "@/components/PianoDialog";
+import {
+  type DialogFinalFocus,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/PianoDialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -226,7 +231,7 @@ export function ProjectDialogView({
   allowed,
   submit,
   close,
-  onCloseAutoFocus,
+  finalFocus,
 }: {
   open: boolean;
   dialog: ProjectDialog | undefined;
@@ -235,7 +240,7 @@ export function ProjectDialogView({
   allowed: boolean;
   submit: () => void;
   close: () => void;
-  onCloseAutoFocus?: (event: Event) => void;
+  finalFocus?: DialogFinalFocus;
 }) {
   const id = useId();
   const nameInput = useRef<HTMLInputElement>(null);
@@ -244,12 +249,8 @@ export function ProjectDialogView({
       open={open}
       close={close}
       className="sm:max-w-xl"
-      aria-describedby={undefined}
-      onOpenAutoFocus={(event) => {
-        event.preventDefault();
-        nameInput.current?.focus();
-      }}
-      onCloseAutoFocus={onCloseAutoFocus}
+      initialFocus={nameInput}
+      finalFocus={finalFocus}
     >
       <form
         className="flex flex-col gap-4"

@@ -274,13 +274,15 @@ export function ViewMenu() {
   return (
     <DropdownMenu>
       <Tooltip>
-        <TooltipTrigger asChild>
-          <DropdownMenuTrigger
-            render={<Button variant="ghost" size="header" aria-label="View options" />}
-          >
-            <SlidersHorizontalIcon />
-          </DropdownMenuTrigger>
-        </TooltipTrigger>
+        <TooltipTrigger
+          render={
+            <DropdownMenuTrigger
+              render={<Button variant="ghost" size="header" aria-label="View options" />}
+            >
+              <SlidersHorizontalIcon />
+            </DropdownMenuTrigger>
+          }
+        />
         <TooltipContent>View options</TooltipContent>
       </Tooltip>
       <DropdownMenuContent align="end" className="min-w-48">
@@ -424,21 +426,23 @@ function SidebarGroup({
           rowActionsWidth.row[shown.length as keyof typeof rowActionsWidth.row],
         )}
       >
-        <CollapsibleTrigger asChild>
-          <button type="button" className={groupTrigger} title={title}>
-            <Chevron open={open} />
-            <span
-              data-motion="yield"
-              className={cn(
-                "min-w-0 flex-1 truncate text-sm",
-                done ? "font-normal" : "font-medium",
-                muted ? "text-ink-3" : "text-ink-2",
-              )}
-            >
-              {label}
-            </span>
-          </button>
-        </CollapsibleTrigger>
+        <CollapsibleTrigger
+          render={
+            <button type="button" className={groupTrigger} title={title}>
+              <Chevron open={open} />
+              <span
+                data-motion="yield"
+                className={cn(
+                  "min-w-0 flex-1 truncate text-sm",
+                  done ? "font-normal" : "font-medium",
+                  muted ? "text-ink-3" : "text-ink-2",
+                )}
+              >
+                {label}
+              </span>
+            </button>
+          }
+        />
         {shown.length > 0 && <RowActions className={rowActions}>{shown}</RowActions>}
       </div>
       {notice}
@@ -567,11 +571,15 @@ function FolderGroup({
       notice={
         folder.discovery.status === "error" && (
           <Popover>
-            <PopoverTrigger asChild>
-              <Badge asChild variant="destructive" className="ml-7 cursor-pointer">
-                <button type="button">Git status unavailable</button>
-              </Badge>
-            </PopoverTrigger>
+            <PopoverTrigger
+              render={
+                <Badge
+                  variant="destructive"
+                  className="ml-7 cursor-pointer"
+                  render={<button type="button">Git status unavailable</button>}
+                />
+              }
+            />
             <PopoverContent
               align="start"
               className="w-auto max-w-sm text-xs break-words whitespace-pre-wrap"

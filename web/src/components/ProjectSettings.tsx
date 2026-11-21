@@ -1,7 +1,12 @@
 import { cn } from "cn";
 import { type Ref, useId } from "react";
 import { FormDialog } from "@/components/FormDialog";
-import { DialogFooter, DialogHeader, DialogTitle } from "@/components/PianoDialog";
+import {
+  type DialogFinalFocus,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/PianoDialog";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -20,7 +25,7 @@ export function ProjectSettingsDialog({
   check,
   submit,
   close,
-  onCloseAutoFocus,
+  finalFocus,
 }: {
   open: boolean;
   draft: ProjectDraft;
@@ -29,17 +34,11 @@ export function ProjectSettingsDialog({
   check: ProjectDraftCheck | undefined;
   submit: () => void;
   close: () => void;
-  onCloseAutoFocus?: (event: Event) => void;
+  finalFocus?: DialogFinalFocus;
 }) {
   const id = useId();
   return (
-    <FormDialog
-      open={open}
-      close={close}
-      className="sm:max-w-xl"
-      aria-describedby={undefined}
-      onCloseAutoFocus={onCloseAutoFocus}
-    >
+    <FormDialog open={open} close={close} className="sm:max-w-xl" finalFocus={finalFocus}>
       <form
         className="flex flex-col gap-4"
         onSubmit={(event) => {

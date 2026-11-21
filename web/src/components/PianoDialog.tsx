@@ -13,6 +13,8 @@ export {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
+export type DialogFinalFocus = ComponentProps<typeof BaseContent>["finalFocus"];
+
 export function DialogContent({
   className,
   still = false,

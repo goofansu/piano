@@ -260,7 +260,7 @@ await run(
       "the top-level bash call and the codemode call's last 8 nested calls open",
     );
     await page.until(
-      `[...document.querySelectorAll('[data-slot="collapsible-content"]')].every((c) => c.dataset.state === "open" && !c.getAnimations().length)`,
+      `[...document.querySelectorAll('[data-slot="collapsible-content"]')].every((c) => c.hasAttribute("data-open") && !c.getAnimations().length)`,
     );
     await page.capture("2-open");
     const bodies = await page.evaluate(`[...document.querySelectorAll('[role="group"]')]
@@ -359,7 +359,7 @@ await run(
     );
     await page.ab("click", `${tool} [data-slot="collapsible-trigger"]`);
     await page.until(
-      `!document.querySelector('${tool} [data-slot="collapsible-content"]').textContent`,
+      `!document.querySelector('${tool}').querySelector('[data-slot="collapsible-content"]')?.textContent`,
     );
 
     await page.ab("fill", '[aria-label="Message"]', "question");

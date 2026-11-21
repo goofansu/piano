@@ -15,10 +15,12 @@ import {
   useSessionCommands,
 } from "@/components/CommandHost";
 import { IconButton } from "@/components/IconButton";
+import { PianoLinkButton } from "@/components/PianoButton";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  type DialogFinalFocus,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -218,11 +220,11 @@ function PreviewFacts({ preview }: { preview: SessionPreview }) {
 export function PreviewDetailsDialog({
   claim,
   close,
-  onCloseAutoFocus,
+  finalFocus,
 }: {
   claim: PreviewClaim | null;
   close: () => void;
-  onCloseAutoFocus?: (event: Event) => void;
+  finalFocus?: DialogFinalFocus;
 }) {
   const { state } = useCommands();
   const commands = usePreviewCommands();
@@ -231,17 +233,16 @@ export function PreviewDetailsDialog({
   const observed = usePreviewObservation();
   const refreshing = observed.refreshing;
   const openRef = useRef<HTMLAnchorElement>(null);
+  const content = useRef<HTMLDivElement>(null);
   const preview = useClaimedPreview(state, claim);
   const details = seenDetails(state, observed);
   return (
     <Dialog open={!!preview} onOpenChange={(o) => !o && close()}>
       <DialogContent
+        ref={content}
         className="max-h-[85dvh] overflow-y-auto sm:max-w-xl"
-        onCloseAutoFocus={onCloseAutoFocus}
-        onOpenAutoFocus={(event) => {
-          event.preventDefault();
-          (openRef.current ?? (event.currentTarget as HTMLElement | null))?.focus();
-        }}
+        finalFocus={finalFocus}
+        initialFocus={() => openRef.current ?? content.current ?? true}
       >
         <DialogHeader>
           <DialogTitle>Preview</DialogTitle>
@@ -293,12 +294,10 @@ export function PreviewDetailsDialog({
             preview
           </Button>
           {preview && openPreview && (
-            <Button asChild>
-              <CommandLink ref={openRef} command={openPreview}>
-                {openPreview.label}
-                <ExternalLinkIcon data-icon="inline-end" aria-hidden />
-              </CommandLink>
-            </Button>
+            <PianoLinkButton render={<CommandLink ref={openRef} command={openPreview} />}>
+              {openPreview.label}
+              <ExternalLinkIcon data-icon="inline-end" aria-hidden />
+            </PianoLinkButton>
           )}
         </DialogFooter>
       </DialogContent>

@@ -19,6 +19,7 @@ import {
   useSessionProjectMenu,
 } from "@/components/CommandHost";
 import { IconButton } from "@/components/IconButton";
+import { PianoLinkButton } from "@/components/PianoButton";
 import { SheetClose, SheetContent, SheetTitle } from "@/components/PianoSheet";
 import { ProjectCommandIconView } from "@/components/Projects";
 import { SessionIdDetails } from "@/components/SessionIdDetails";
@@ -33,7 +34,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { returnFocusForKeyboard } from "@/lib/pointerClose";
+import { keyboardFocusReturn } from "@/lib/pointerClose";
 import type { ProjectCommand } from "@/lib/projectCommands";
 import { pullRequestView } from "@/lib/pullRequestView";
 import { type SessionCommand, sessionHeaderMenu } from "@/lib/sessionCommands";
@@ -56,16 +57,18 @@ function SessionCommandRow({
   run: (command: SessionCommand) => void;
 }) {
   return (
-    <SheetClose asChild>
-      <Button
-        variant="ghost"
-        className={cn(row, command.destructive && "text-destructive hover:text-destructive")}
-        disabled={!command.enabled}
-        onClick={() => run(command)}
-      >
-        <CommandIcon icon={command.icon} /> {command.label}
-      </Button>
-    </SheetClose>
+    <SheetClose
+      render={
+        <Button
+          variant="ghost"
+          className={cn(row, command.destructive && "text-destructive hover:text-destructive")}
+          disabled={!command.enabled}
+          onClick={() => run(command)}
+        >
+          <CommandIcon icon={command.icon} /> {command.label}
+        </Button>
+      }
+    />
   );
 }
 
@@ -81,16 +84,18 @@ function ProjectCommandRow({
   children?: ReactNode;
 }) {
   return (
-    <SheetClose asChild>
-      <Button
-        variant="ghost"
-        className={row}
-        disabled={!command.enabled}
-        onClick={() => run(command)}
-      >
-        {icon ?? <ProjectCommandIconView icon={command.icon} />} {children ?? command.label}
-      </Button>
-    </SheetClose>
+    <SheetClose
+      render={
+        <Button
+          variant="ghost"
+          className={row}
+          disabled={!command.enabled}
+          onClick={() => run(command)}
+        >
+          {icon ?? <ProjectCommandIconView icon={command.icon} />} {children ?? command.label}
+        </Button>
+      }
+    />
   );
 }
 
@@ -133,18 +138,25 @@ function LinkRow({
       <ExternalLinkIcon data-icon="inline-end" className="ml-auto text-muted-foreground" />
     </>
   );
-  return (
-    <Button asChild variant="ghost" className={row}>
-      {typeof to === "string" ? (
-        <a href={to} target="_blank" rel="noopener noreferrer" onClick={onOpen}>
-          {content}
-        </a>
-      ) : (
-        <CommandLink command={to} onClick={onOpen}>
-          {content}
-        </CommandLink>
-      )}
-    </Button>
+  return typeof to === "string" ? (
+    <PianoLinkButton
+      variant="ghost"
+      className={row}
+      href={to}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={onOpen}
+    >
+      {content}
+    </PianoLinkButton>
+  ) : (
+    <PianoLinkButton
+      variant="ghost"
+      className={row}
+      render={<CommandLink command={to} onClick={onOpen} />}
+    >
+      {content}
+    </PianoLinkButton>
   );
 }
 
@@ -175,18 +187,21 @@ function SessionIdRow({
     <div data-session-details className="flex min-h-11 items-center gap-1 pl-3">
       <SessionIdDetails sessionId={sessionId} />
       {details.map((c) => (
-        <SheetClose asChild key={c.id}>
-          <IconButton
-            variant="ghost"
-            size="icon-lg"
-            className="size-11 shrink-0"
-            label={c.label}
-            disabled={!c.enabled}
-            onClick={() => run(c)}
-          >
-            <CommandIcon icon={c.icon} />
-          </IconButton>
-        </SheetClose>
+        <SheetClose
+          key={c.id}
+          render={
+            <IconButton
+              variant="ghost"
+              size="icon-lg"
+              className="size-11 shrink-0"
+              label={c.label}
+              disabled={!c.enabled}
+              onClick={() => run(c)}
+            >
+              <CommandIcon icon={c.icon} />
+            </IconButton>
+          }
+        />
       ))}
     </div>
   );
@@ -211,9 +226,11 @@ function PaneHeader({ title, onBack }: { title: string; onBack: () => void }) {
 
 export function SessionMenuSheet({
   onLeave,
+  dismissed,
   onDismissFocus,
 }: {
   onLeave: () => void;
+  dismissed: RefObject<boolean>;
   onDismissFocus: RefObject<HTMLElement | null>;
 }) {
   const { state } = useCommands();
@@ -227,24 +244,21 @@ export function SessionMenuSheet({
   const pagePreview = useClaimedPreview(state, previewPage);
   const projects = useSessionProjectMenu();
   const left = useRef(false);
-  const dismissed = useRef(false);
   const leave = () => {
     left.current = true;
     onLeave();
   };
   const [page, setPage] = useState<Page>("actions");
   const pane = useRef<HTMLDivElement>(null);
-  const focusFirstRow = () =>
-    pane.current
-      ?.querySelector<HTMLElement>(
-        "a[href], button:not(:disabled):not([data-session-details] button)",
-      )
-      ?.focus();
+  const firstRow = () =>
+    pane.current?.querySelector<HTMLElement>(
+      "a[href], button:not(:disabled):not([data-session-details] button)",
+    );
   const previousPage = useRef(page);
   useLayoutEffect(() => {
     if (previousPage.current === page) return;
     previousPage.current = page;
-    focusFirstRow();
+    firstRow()?.focus();
   }, [page]);
 
   const menu = sessionHeaderMenu(commands);
@@ -257,27 +271,16 @@ export function SessionMenuSheet({
     <SheetContent
       side="bottom"
       showCloseButton={false}
-      aria-describedby={undefined}
       className="max-h-[85dvh] gap-0 overflow-y-auto rounded-t-2xl p-2 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
-      onOpenAutoFocus={(event) => {
+      initialFocus={() => {
         left.current = false;
-        dismissed.current = false;
         setPage("actions");
-        event.preventDefault();
-        focusFirstRow();
+        return firstRow() ?? true;
       }}
-      onEscapeKeyDown={() => {
-        dismissed.current = true;
-      }}
-      onInteractOutside={() => {
-        dismissed.current = true;
-      }}
-      onCloseAutoFocus={(event) => {
-        if (left.current) event.preventDefault();
-        else if (dismissed.current) {
-          event.preventDefault();
-          onDismissFocus.current?.focus({ preventScroll: true });
-        } else returnFocusForKeyboard(event);
+      finalFocus={() => {
+        if (left.current) return false;
+        if (dismissed.current) return onDismissFocus.current ?? false;
+        return keyboardFocusReturn();
       }}
     >
       <div ref={pane} className="flex flex-col">

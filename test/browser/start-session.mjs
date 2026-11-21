@@ -96,11 +96,13 @@ await run(
       assert.deepEqual(page.prompts(), [], "pointer changes do not send the draft");
     });
     await page.ab("find", "role", "button", "click", "--name", "Model:");
+    await page.see("fake/gamma");
     await page.click("option", "fake/gamma");
-    await page.click("radio", "high");
+    await page.click("button", "high");
     await page.ab("press", "Escape");
-    await page.until("!document.querySelector('[data-radix-popper-content-wrapper]')");
+    await page.until("!document.querySelector('[data-slot=popover-content]')");
     await page.click("button", "Project");
+    await page.see("Launch");
     await page.click("menuitem", "Launch");
     await page.until("!document.querySelector('[role=\"menu\"]')");
     await page.capture("1-new-session");

@@ -1,25 +1,16 @@
-import { cn } from "cn";
 import type { ComponentProps } from "react";
-import {
-  TooltipContent as BaseContent,
-  TooltipTrigger as BaseTrigger,
-} from "@/components/ui/tooltip";
-import { pointerLast } from "@/lib/pointerClose";
+import { TooltipContent as BaseContent } from "@/components/ui/tooltip";
+import { raisedLayer } from "@/lib/overlayStyles";
 
-export { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
+export { Tooltip, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-export function TooltipTrigger({ onFocus, ...props }: ComponentProps<typeof BaseTrigger>) {
+export function TooltipContent({ sideOffset = 10, ...props }: ComponentProps<typeof BaseContent>) {
   return (
-    <BaseTrigger
+    <BaseContent
+      data-motion="tooltip"
+      positionerClassName={raisedLayer}
+      sideOffset={sideOffset}
       {...props}
-      onFocus={(event) => {
-        onFocus?.(event);
-        if (pointerLast()) event.preventDefault();
-      }}
     />
   );
-}
-
-export function TooltipContent({ className, ...props }: ComponentProps<typeof BaseContent>) {
-  return <BaseContent data-motion="tooltip" {...props} className={cn("z-[60]", className)} />;
 }

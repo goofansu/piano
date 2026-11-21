@@ -1,7 +1,7 @@
 import { MessageSquareQuoteIcon, XIcon } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { PianoButton } from "@/components/PianoButton";
-import { Popover, PopoverAnchor, PopoverContent } from "@/components/PianoPopover";
+import { Popover, PopoverContent } from "@/components/PianoPopover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/PianoTooltip";
 import { Button } from "@/components/ui/button";
 import { type DraftKey } from "@/lib/messageDraft";
@@ -22,12 +22,14 @@ export function QuoteChips({ draft, disabled }: { draft: QuoteDraft; disabled: b
           className="group/quote flex min-w-0 items-center rounded-md hover:bg-fill-hover focus-within:bg-fill-hover"
         >
           <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="flex min-w-0 items-center gap-1.5 py-1 pl-2">
-                <MessageSquareQuoteIcon className="size-3.5 shrink-0 text-ink-3" aria-hidden />
-                <span className="max-w-[12rem] truncate">“{quote}</span>
-              </span>
-            </TooltipTrigger>
+            <TooltipTrigger
+              render={
+                <span className="flex min-w-0 items-center gap-1.5 py-1 pl-2">
+                  <MessageSquareQuoteIcon className="size-3.5 shrink-0 text-ink-3" aria-hidden />
+                  <span className="max-w-[12rem] truncate">“{quote}</span>
+                </span>
+              }
+            />
             <TooltipContent
               side="top"
               align="start"
@@ -128,12 +130,11 @@ export function AddToChat({
     };
   }, []);
   const anchor = useMemo(
-    () => ({
-      current: range && {
+    () =>
+      range && {
         getBoundingClientRect: () => firstLine(range),
         contextElement: range.startContainer.parentElement ?? undefined,
       },
-    }),
     [range],
   );
   const add = () => {
@@ -146,17 +147,16 @@ export function AddToChat({
     <div ref={area} className={className}>
       {children}
       <Popover open={!!range && !!draftKey} onOpenChange={(open) => !open && setRange(null)}>
-        {anchor.current && <PopoverAnchor virtualRef={anchor as { current: Measurable }} />}
         <PopoverContent
           ref={pill}
+          anchor={anchor}
           side="top"
           align="start"
           sideOffset={6}
-          updatePositionStrategy="always"
           hideWhenDetached
           className="w-auto p-1"
-          onOpenAutoFocus={(e) => e.preventDefault()}
-          onCloseAutoFocus={(e) => e.preventDefault()}
+          initialFocus={false}
+          finalFocus={false}
         >
           <Button
             type="button"
@@ -172,4 +172,3 @@ export function AddToChat({
     </div>
   );
 }
-type Measurable = { getBoundingClientRect: () => DOMRect };

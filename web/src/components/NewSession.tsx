@@ -320,31 +320,33 @@ function TrustToggle({
   const trusted = !!command.pressed;
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-pressed={trusted}
-          aria-label="Directory trust"
-          aria-busy={command.pending || undefined}
-          disabled={!command.enabled}
-          className={cn(picker, "shrink-0", trusted ? "text-ink-3" : "text-ink-2")}
-          onClick={() => run(command)}
-        >
-          {command.pending ? (
-            <Spinner
-              data-icon="inline-start"
-              aria-label="Updating trust"
-              className="motion-reduce:animate-none"
-            />
-          ) : trusted ? (
-            <ShieldCheckIcon data-icon="inline-start" />
-          ) : (
-            <ShieldOffIcon data-icon="inline-start" />
-          )}
-          <span>{trusted ? "Trusted" : "Untrusted"}</span>
-        </Button>
-      </TooltipTrigger>
+      <TooltipTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-pressed={trusted}
+            aria-label="Directory trust"
+            aria-busy={command.pending || undefined}
+            disabled={!command.enabled}
+            className={cn(picker, "shrink-0", trusted ? "text-ink-3" : "text-ink-2")}
+            onClick={() => run(command)}
+          >
+            {command.pending ? (
+              <Spinner
+                data-icon="inline-start"
+                aria-label="Updating trust"
+                className="motion-reduce:animate-none"
+              />
+            ) : trusted ? (
+              <ShieldCheckIcon data-icon="inline-start" />
+            ) : (
+              <ShieldOffIcon data-icon="inline-start" />
+            )}
+            <span>{trusted ? "Trusted" : "Untrusted"}</span>
+          </Button>
+        }
+      />
       <TooltipContent>
         {trusted
           ? "Pi loads this directory's .pi resources"
@@ -370,36 +372,38 @@ function DirectorySelect({
   const { trigger, roots } = directoryChoices(state, value);
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          // oxlint-disable-next-line jsx-a11y/role-has-required-aria-props -- PopoverTrigger sets aria-controls.
-          role="combobox"
-          aria-expanded={open}
-          aria-label="Directory"
-          title={value || undefined}
-          className={cn(
-            picker,
-            "w-full min-w-0 max-w-none justify-start",
-            trigger.kind === "none" && "text-ink-3",
-          )}
-        >
-          <FolderIcon className="text-ink-3" />
-          {trigger.kind === "none" ? (
-            <span>Directory</span>
-          ) : trigger.kind === "checkout" ? (
-            <>
-              <span className="max-w-[12rem] shrink-0 truncate">{trigger.folder}</span>
-              {trigger.branchLabel && (
-                <BranchLabel branch={trigger.branchLabel} className="text-ink-3" />
-              )}
-            </>
-          ) : (
-            <span className="truncate font-mono">{trigger.label}</span>
-          )}
-        </Button>
-      </PopoverTrigger>
+      <PopoverTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="sm"
+            // oxlint-disable-next-line jsx-a11y/role-has-required-aria-props -- PopoverTrigger sets aria-controls.
+            role="combobox"
+            aria-expanded={open}
+            aria-label="Directory"
+            title={value || undefined}
+            className={cn(
+              picker,
+              "w-full min-w-0 max-w-none justify-start",
+              trigger.kind === "none" && "text-ink-3",
+            )}
+          >
+            <FolderIcon className="text-ink-3" />
+            {trigger.kind === "none" ? (
+              <span>Directory</span>
+            ) : trigger.kind === "checkout" ? (
+              <>
+                <span className="max-w-[12rem] shrink-0 truncate">{trigger.folder}</span>
+                {trigger.branchLabel && (
+                  <BranchLabel branch={trigger.branchLabel} className="text-ink-3" />
+                )}
+              </>
+            ) : (
+              <span className="truncate font-mono">{trigger.label}</span>
+            )}
+          </Button>
+        }
+      />
       <PickerContent aria-label="Choose a directory" searchRef={search}>
         <Command>
           <PickerSearch

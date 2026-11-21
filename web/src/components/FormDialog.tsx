@@ -7,7 +7,7 @@ export function FormDialog({
   busy = false,
   close,
   ...content
-}: Omit<ComponentProps<typeof DialogContent>, "showCloseButton" | "onInteractOutside"> & {
+}: Omit<ComponentProps<typeof DialogContent>, "showCloseButton"> & {
   open?: boolean;
   busy?: boolean;
   close: () => void;
@@ -15,15 +15,12 @@ export function FormDialog({
   return (
     <Dialog
       open={open}
+      disablePointerDismissal
       onOpenChange={(next) => {
         if (!next && !busy) close();
       }}
     >
-      <DialogContent
-        {...content}
-        showCloseButton={!busy}
-        onInteractOutside={(event) => event.preventDefault()}
-      />
+      <DialogContent {...content} showCloseButton={!busy} />
     </Dialog>
   );
 }

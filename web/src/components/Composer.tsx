@@ -163,22 +163,24 @@ export function Composer({
               <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-1">
                 <h2 className="font-medium text-ink-2">{queue.heading}</h2>
                 <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-11 shrink-0 compact:h-8"
-                      aria-label={queue.editAriaLabel}
-                      disabled={!control.canRestoreQueue}
-                      onClick={() => {
-                        sendCommand(RESTORE_QUEUE);
-                        editor.ref.current?.focus();
-                      }}
-                    >
-                      <PencilIcon data-icon="inline-start" aria-hidden />
-                      {queue.editLabel}
-                    </Button>
-                  </TooltipTrigger>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-11 shrink-0 compact:h-8"
+                        aria-label={queue.editAriaLabel}
+                        disabled={!control.canRestoreQueue}
+                        onClick={() => {
+                          sendCommand(RESTORE_QUEUE);
+                          editor.ref.current?.focus();
+                        }}
+                      >
+                        <PencilIcon data-icon="inline-start" aria-hidden />
+                        {queue.editLabel}
+                      </Button>
+                    }
+                  />
                   <TooltipContent>
                     <Hint of={["Esc"]}>{QUEUE_RESTORE_HINT}</Hint>
                   </TooltipContent>
@@ -281,25 +283,27 @@ export function Composer({
         >
           <JumpTo messages={messages} working={streaming} />
           <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                aria-label="Context usage"
-                aria-description={figures.description}
-                className={cn(
-                  "px-1.5 font-mono text-xs font-normal",
-                  figures.low && "text-warning hover:text-warning",
-                )}
-              >
-                {figures.label}
-              </Button>
-            </PopoverTrigger>
+            <PopoverTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label="Context usage"
+                  aria-description={figures.description}
+                  className={cn(
+                    "px-1.5 font-mono text-xs font-normal",
+                    figures.low && "text-warning hover:text-warning",
+                  )}
+                >
+                  {figures.label}
+                </Button>
+              }
+            />
             <PopoverContent
               side="top"
               align="end"
               aria-label="Context usage details"
-              className="w-96 max-w-[calc(100vw-2rem)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
+              className="w-96 max-w-[calc(100vw-2rem)] max-h-(--available-height) overflow-y-auto"
             >
               <ContextDetails figures={figures} usage={usage} messages={messages} />
             </PopoverContent>

@@ -1,6 +1,6 @@
 import path from "node:path";
 import { after } from "node:test";
-import { TooltipProvider } from "@radix-ui/react-tooltip";
+import { Tooltip } from "@base-ui/react/tooltip";
 import { type ComponentType, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createServer } from "vite";
@@ -29,7 +29,7 @@ export const renderMarkdown = (
 ) =>
   renderToStaticMarkup(
     createElement(
-      TooltipProvider,
+      Tooltip.Provider,
       null,
       createElement(Markdown, {
         text,
@@ -45,4 +45,6 @@ const { QuestionText } = (await vite.ssrLoadModule("/src/components/QuestionText
   QuestionText: ComponentType<{ text: string }>;
 };
 export const renderQuestion = (text: string) =>
-  renderToStaticMarkup(createElement(TooltipProvider, null, createElement(QuestionText, { text })));
+  renderToStaticMarkup(
+    createElement(Tooltip.Provider, null, createElement(QuestionText, { text })),
+  );

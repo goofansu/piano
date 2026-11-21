@@ -21,27 +21,29 @@ export function SessionOutputs({ files, cwd }: Props) {
           <Item
             key={file.path}
             size="sm"
-            asChild
             className={cn(
               railRow,
               "cursor-pointer hover:bg-fill-hover focus-visible:bg-fill-hover",
             )}
-          >
-            <button
-              type="button"
-              onClick={() => {
-                openFile(file.path);
-              }}
-              title={shown}
-            >
-              <ItemMedia variant="icon" className="text-ink-3">
-                <FileTabIcon path={file.path} />
-              </ItemMedia>
-              <ItemContent className="min-w-0">
-                <RailRowTitle className="truncate font-mono">{splitPath(shown).name}</RailRowTitle>
-              </ItemContent>
-            </button>
-          </Item>
+            render={
+              <button
+                type="button"
+                onClick={() => {
+                  openFile(file.path);
+                }}
+                title={shown}
+              >
+                <ItemMedia variant="icon" className="text-ink-3">
+                  <FileTabIcon path={file.path} />
+                </ItemMedia>
+                <ItemContent className="min-w-0">
+                  <RailRowTitle className="truncate font-mono">
+                    {splitPath(shown).name}
+                  </RailRowTitle>
+                </ItemContent>
+              </button>
+            }
+          />
         );
       })}
     </RailList>

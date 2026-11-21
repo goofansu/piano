@@ -29,11 +29,13 @@ export function AnsweredQuestion({ resolution }: { resolution: DialogResolution 
             </span>
             {details && (
               <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="ghost" size="sm" aria-label="Answer details">
-                    Details
-                  </Button>
-                </PopoverTrigger>
+                <PopoverTrigger
+                  render={
+                    <Button variant="ghost" size="sm" aria-label="Answer details">
+                      Details
+                    </Button>
+                  }
+                />
                 <PopoverContent align="end">
                   <PopoverHeader>
                     <PopoverTitle>Answer details</PopoverTitle>

@@ -158,7 +158,7 @@ for (const n of sizes) {
         result.scroll = [];
         for (let repeat = 0; repeat < 3; repeat++) {
           const scroll = await page.evaluate(`new Promise(resolve => {
-          const viewport = document.querySelector('[data-slot="session-sidebar"] [data-radix-scroll-area-viewport]');
+          const viewport = document.querySelector('[data-slot="session-sidebar"] [data-slot=scroll-area-viewport]');
           const intervals = [];
           let last, start, direction = 1, travelled = 0;
           viewport.scrollTop = 0;
@@ -191,12 +191,12 @@ for (const n of sizes) {
         );
         for (const fraction of [0.5, 1, 0]) {
           await page.evaluate(`(() => {
-            const viewport = document.querySelector('[data-slot="session-sidebar"] [data-radix-scroll-area-viewport]');
+            const viewport = document.querySelector('[data-slot="session-sidebar"] [data-slot=scroll-area-viewport]');
             viewport.scrollTop = (viewport.scrollHeight - viewport.clientHeight) * ${fraction};
             return true;
           })()`);
           await page.until(`(() => {
-            const viewport = document.querySelector('[data-slot="session-sidebar"] [data-radix-scroll-area-viewport]');
+            const viewport = document.querySelector('[data-slot="session-sidebar"] [data-slot=scroll-area-viewport]');
             const box = viewport.getBoundingClientRect();
             const rows = [...document.querySelectorAll('${rows}')];
             const visible = rows.filter(r => { const b = r.getBoundingClientRect(); return b.bottom > box.top && b.top < box.bottom; });
@@ -217,7 +217,7 @@ for (const n of sizes) {
             const row = document.querySelectorAll('${rows}')[10];
             window.sidebarRetainedRow = row;
             row.querySelector('button').focus();
-            document.querySelector('[data-slot="session-sidebar"] [data-radix-scroll-area-viewport]').scrollTop = 1000;
+            document.querySelector('[data-slot="session-sidebar"] [data-slot=scroll-area-viewport]').scrollTop = 1000;
             return true;
           })()`);
           await page.until(`document.querySelector('${rows}[aria-posinset="30"]') !== null`);
@@ -242,7 +242,7 @@ for (const n of sizes) {
           await page.click("button", label);
           await page.until(`document.querySelector('[role="menu"]') !== null`);
           await page.evaluate(`(() => {
-            document.querySelector('[data-slot="session-sidebar"] [data-radix-scroll-area-viewport]').scrollTop = 2000;
+            document.querySelector('[data-slot="session-sidebar"] [data-slot=scroll-area-viewport]').scrollTop = 2000;
             return true;
           })()`);
           await page.until(`document.querySelector('${rows}[aria-posinset="55"]') !== null`);
@@ -260,12 +260,12 @@ for (const n of sizes) {
           await page.capture(`sidebar-${n}-focus-restored`);
           await page.evaluate(`(() => {
             document.activeElement.blur();
-            document.querySelector('[data-slot="session-sidebar"] [data-radix-scroll-area-viewport]').scrollTop = 2000;
+            document.querySelector('[data-slot="session-sidebar"] [data-slot=scroll-area-viewport]').scrollTop = 2000;
             return true;
           })()`);
           await page.until("!window.sidebarRetainedRow.isConnected");
           await page.evaluate(`(() => {
-            const viewport = document.querySelector('[data-slot="session-sidebar"] [data-radix-scroll-area-viewport]');
+            const viewport = document.querySelector('[data-slot="session-sidebar"] [data-slot=scroll-area-viewport]');
             viewport.scrollTop = viewport.scrollHeight;
             return true;
           })()`);

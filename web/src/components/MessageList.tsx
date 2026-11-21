@@ -32,7 +32,7 @@ import { BranchLabel } from "@/components/BranchLabel";
 import { useCopy } from "@/components/CopyButton";
 import { DisclosureChevron } from "@/components/Disclosure";
 import { DraftFileView } from "@/components/DraftDialogs";
-import { IconButton } from "@/components/IconButton";
+import { IconLink } from "@/components/IconButton";
 import { Markdown } from "@/components/Markdown";
 import { PianoButton } from "@/components/PianoButton";
 import { Keys } from "@/components/PianoMark";
@@ -488,26 +488,31 @@ function FoldRow({
     </>
   );
   const trigger = (
-    <CollapsibleTrigger asChild disabled={!canOpen}>
-      <button
-        type="button"
-        data-sidebar-swipe="true"
-        className={cn(
-          disclosureRow,
-          toolOutput && "m-0 w-full px-0 py-1",
-          action && "w-auto flex-1",
-          !toolOutput && headerClassName,
-        )}
-      >
-        {toolOutput ? (
-          <Row as="span" glyph={glyph} className="w-full">
-            <span className={cn("flex min-w-0 items-center gap-2", headerClassName)}>{title}</span>
-          </Row>
-        ) : (
-          title
-        )}
-      </button>
-    </CollapsibleTrigger>
+    <CollapsibleTrigger
+      disabled={!canOpen}
+      render={
+        <button
+          type="button"
+          data-sidebar-swipe="true"
+          className={cn(
+            disclosureRow,
+            toolOutput && "m-0 w-full px-0 py-1",
+            action && "w-auto flex-1",
+            !toolOutput && headerClassName,
+          )}
+        >
+          {toolOutput ? (
+            <Row as="span" glyph={glyph} className="w-full">
+              <span className={cn("flex min-w-0 items-center gap-2", headerClassName)}>
+                {title}
+              </span>
+            </Row>
+          ) : (
+            title
+          )}
+        </button>
+      }
+    />
   );
   const head = action ? (
     <div className="flex min-w-0 items-center gap-1">
@@ -521,11 +526,13 @@ function FoldRow({
     <div className={cn(ruled && "border-l-2 border-line pl-3 text-ink-2", bodyClassName)}>
       {children}
       {toolOutput && tall && (
-        <CollapsibleTrigger asChild>
-          <Button variant="ghost" size="xs" className="mt-2 -ml-2 self-start">
-            Collapse
-          </Button>
-        </CollapsibleTrigger>
+        <CollapsibleTrigger
+          render={
+            <Button variant="ghost" size="xs" className="mt-2 -ml-2 self-start">
+              Collapse
+            </Button>
+          }
+        />
       )}
     </div>
   );
@@ -604,12 +611,14 @@ function ErrorMessage({ error, id }: { error: MessageError; id?: string }) {
         </p>
         {error.details && (
           <Collapsible open={open} onOpenChange={setOpen}>
-            <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="xs" className="-ml-2">
-                Error details
-                <DisclosureChevron open={open} />
-              </Button>
-            </CollapsibleTrigger>
+            <CollapsibleTrigger
+              render={
+                <Button variant="ghost" size="xs" className="-ml-2">
+                  Error details
+                  <DisclosureChevron open={open} />
+                </Button>
+              }
+            />
             <CollapsibleContent className="disclosure-content">
               <pre className="whitespace-pre-wrap break-words text-sm text-ink-2">
                 {error.details}
@@ -813,11 +822,9 @@ function useSessionLink(cwd: string, sessionId: string) {
 function OpenSession({ cwd, sessionId }: SessionDestination) {
   const link = useSessionLink(cwd, sessionId);
   return (
-    <IconButton asChild label="Open session" size="inline" className="-my-1 shrink-0 text-ink-3">
-      <a {...link}>
-        <ArrowUpRightIcon className="size-3.5" />
-      </a>
-    </IconButton>
+    <IconLink {...link} label="Open session" size="inline" className="-my-1 shrink-0 text-ink-3">
+      <ArrowUpRightIcon className="size-3.5" />
+    </IconLink>
   );
 }
 
