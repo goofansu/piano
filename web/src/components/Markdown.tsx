@@ -3,6 +3,8 @@ import {
   Component,
   type ComponentProps,
   createContext,
+  type CSSProperties,
+  Fragment,
   type ReactNode,
   useContext,
   useEffect,
@@ -13,6 +15,7 @@ import remarkBreaks from "remark-breaks";
 import { type Components, type ExtraProps, Streamdown, useIsCodeFenceIncomplete } from "streamdown";
 import { CopyButton } from "@/components/CopyButton";
 import { MarkdownWebLink } from "@/components/MarkdownWebLink";
+import type { FenceLines } from "@/lib/fenceHighlight";
 import { LOCAL_PATH, markdownPlugins, markdownWithinBudget } from "@/lib/markdown";
 
 export const LocalFileContext = createContext<((path: string) => void) | undefined>(() => {});
@@ -139,6 +142,49 @@ function MarkdownImage({ alt, node }: ComponentProps<"img"> & ExtraProps) {
   );
 }
 
+let fenceHighlighter: typeof import("@/lib/fenceHighlight") | undefined;
+
+function useFenceHighlight(text: string, language: string, enabled: boolean) {
+  const lang = language.replace(/^language-/, "");
+  const cached = enabled && lang ? fenceHighlighter?.highlightedFence(text, lang) : undefined;
+  const [found, setFound] = useState<{ text: string; lang: string; lines: FenceLines }>();
+  useEffect(() => {
+    if (!enabled || !lang || cached) return;
+    let cancelled = false;
+    void (async () => {
+      fenceHighlighter ??= await import("@/lib/fenceHighlight");
+      const lines = await fenceHighlighter.highlightFence(text, lang);
+      if (!cancelled && lines) setFound({ text, lang, lines });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [text, lang, enabled, cached]);
+  if (!enabled) return undefined;
+  return cached ?? (found?.text === text && found.lang === lang ? found.lines : undefined);
+}
+
+function FenceCode({ lines }: { lines: FenceLines }) {
+  return lines.map((line, index) => (
+    <Fragment key={index}>
+      {index > 0 && "\n"}
+      {line.map(([text, light, dark], at) =>
+        light || dark ? (
+          <span
+            key={at}
+            className="code-token"
+            style={{ "--token-light": light, "--token-dark": dark } as CSSProperties}
+          >
+            {text}
+          </span>
+        ) : (
+          text
+        ),
+      )}
+    </Fragment>
+  ));
+}
+
 function MarkdownPre({ node }: ComponentProps<"pre"> & ExtraProps) {
   const code = node?.children.find((child) => child.type === "element" && child.tagName === "code");
   const text =
@@ -155,6 +201,8 @@ function MarkdownPre({ node }: ComponentProps<"pre"> & ExtraProps) {
   const { resolvedTheme } = useTheme();
   const ref = useRef<HTMLDivElement>(null);
   const [rendered, setRendered] = useState(false);
+  const mermaid = diagrams && language === "language-mermaid";
+  const lines = useFenceHighlight(text, language, closed && !incomplete && !mermaid);
   useEffect(() => {
     const host = ref.current;
     setRendered(false);
@@ -194,7 +242,7 @@ function MarkdownPre({ node }: ComponentProps<"pre"> & ExtraProps) {
     <div className="markdown-code-block">
       {!rendered && (
         <pre>
-          <code>{text}</code>
+          <code>{lines ? <FenceCode lines={lines} /> : text}</code>
         </pre>
       )}
       <div

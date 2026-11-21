@@ -533,6 +533,12 @@
 .prose-chat .markdown-code-block pre {
   padding-right: 3rem;
 }
+.code-token {
+  color: var(--token-light);
+}
+.dark .code-token {
+  color: var(--token-dark);
+}
 .prose-chat pre code {
   background: none;
   padding: 0;

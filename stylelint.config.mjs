@@ -9,6 +9,8 @@ const runtimeProperties = {
   "--sidebar-reveal-radius": "0",
   "--sidebar-duration": "0",
   "--sidebar-easing": "linear",
+  "--token-light": "currentColor",
+  "--token-dark": "currentColor",
 };
 
 /** @type {import("stylelint").Config} */
