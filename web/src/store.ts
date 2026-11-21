@@ -1,4 +1,5 @@
 import type {
+  DisconnectReason,
   FolderView,
   HostInfo,
   ModelCatalog,
@@ -35,6 +36,7 @@ export interface SessionView extends Snapshot {
 
 export interface AppState {
   connected: boolean;
+  reconnecting: boolean;
   selectionId: string | null;
   resync: boolean;
   view: { kind: "session" } | Page;
@@ -75,6 +77,7 @@ export const isSession = (
 
 export const initialState: AppState = {
   connected: false,
+  reconnecting: false,
   selectionId: null,
   resync: false,
   view: { kind: "new" },
@@ -98,7 +101,7 @@ export const initialState: AppState = {
 
 export type Action =
   | { type: "dismiss_creation" }
-  | { type: "connected"; connected: boolean }
+  | { type: "connected"; connected: boolean; reason?: DisconnectReason }
   | { type: "server"; message: ServerMessage }
   | TrustDecisionAction
   | {
@@ -127,17 +130,29 @@ const creationContext = (s: AppState, pending: FirstMessage.PendingCreate): Crea
   sessionNamed: !!s.session,
 });
 
+function disconnected(s: AppState, reconnecting: boolean): AppState {
+  return {
+    ...s,
+    connected: false,
+    reconnecting,
+    hostsCurrent: false,
+    selectionId: null,
+    selecting: s.pendingCreate ? null : s.selecting,
+    pendingCreate: FirstMessage.connectionLost(s.pendingCreate),
+  };
+}
+
 function reduceAction(s: AppState, a: Action): AppState {
   switch (a.type) {
     case "connected":
-      return {
-        ...s,
-        connected: a.connected,
-        hostsCurrent: a.connected && s.connected && s.hostsCurrent,
-        selectionId: a.connected ? s.selectionId : null,
-        selecting: !a.connected && s.pendingCreate ? null : s.selecting,
-        pendingCreate: a.connected ? s.pendingCreate : FirstMessage.connectionLost(s.pendingCreate),
-      };
+      return a.connected
+        ? {
+            ...s,
+            connected: true,
+            reconnecting: false,
+            hostsCurrent: s.connected && s.hostsCurrent,
+          }
+        : disconnected(s, a.reason !== "too-large");
     case "dismiss_creation":
       return { ...s, selectionFailure: null, pendingCreate: null };
     case "trust_decision":
@@ -165,7 +180,7 @@ function reduceAction(s: AppState, a: Action): AppState {
         session: s.session && sessionKey(s.session) === sessionKey(a) ? s.session : null,
         done: s.done.filter((k) => k !== sessionKey(a)),
       };
-      return s.connected ? next : reduceAction(next, { type: "connected", connected: false });
+      return s.connected ? next : disconnected(next, s.reconnecting);
     }
     case "open":
       return {

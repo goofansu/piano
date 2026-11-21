@@ -206,16 +206,21 @@ for (const failure of ["selection_rejected", "selection_failed"] as const)
     });
   }
 
-test("a connection lost for falling behind or for its size tells the person; a plain loss is quiet", () => {
+test("a failed connection shows retries until it opens; delivery failures explain the cause", () => {
   const h = harness();
-  h.status(true);
+  assert.equal(h.client.getState().reconnecting, false, "the first attempt is still pending");
   h.status(false);
-  assert.equal(h.notes.length, 0, "a plain loss only disables controls");
+  assert.equal(h.client.getState().reconnecting, true);
+  h.status(false);
+  assert.equal(h.notes.length, 0, "a retry does not toast on each attempt");
   h.status(true);
+  assert.equal(h.client.getState().reconnecting, false);
   h.status(false, "behind");
   assert.equal(h.client.getState().connected, false);
+  assert.equal(h.client.getState().reconnecting, true);
   h.status(true);
   h.status(false, "too-large");
+  assert.equal(h.client.getState().reconnecting, false, "the transport stopped retrying");
   assert.deepEqual(
     h.notes.map(([, level]) => level),
     ["warning", "error"],
