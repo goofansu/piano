@@ -7,10 +7,6 @@ Standard controls import from `ui/`; customized controls import the
 app components below. App wrappers forward props and refs and compose caller event handlers.
 The CLI also owns `web/src/hooks/use-mobile.ts`.
 
-The registry does not pin `@base-ui/react`. `web/package.json` pins the exact version the `ui/`
-files were generated and verified against; change it only as part of an
-[upgrade](#upgrade-procedure).
-
 Always exclude upstream shadcn source from formatting, import sorting and general linting:
 `ignorePatterns` in `.oxfmtrc.json`, while `components/ui/` keeps its own `.oxlintrc.json`;
 [Formatting and lint](development.md#formatting-and-lint) says what that config checks. This includes generated hooks and other
