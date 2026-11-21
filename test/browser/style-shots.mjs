@@ -72,7 +72,7 @@ const openFolds = async (page) => {
     await page.ab("click", `[data-fold-probe="${i}"]`);
   }
   await page.until(
-    `[...document.querySelectorAll('[data-slot="collapsible-content"]')].every((c) => c.hasAttribute("data-open") && !c.getAnimations().length)`,
+    `[...document.querySelectorAll('[data-fold-probe]')].every((t) => t.getAttribute("aria-expanded") === "true") && [...document.querySelectorAll('[data-slot="collapsible-content"]')].every((c) => !c.getAnimations().length)`,
   );
 };
 
@@ -116,9 +116,14 @@ await run(
       await page.ab("press", "Escape");
       await page.ab("wait", "--fn", "!document.querySelector('[data-slot=popover-content]')");
       await page.ab("click", "[aria-label='Session information and actions']");
-      await page.ab("wait", "--fn", "!!document.querySelector('[role=menu]')");
+      await page.ab(
+        "wait",
+        "--fn",
+        "[...document.querySelectorAll('[role=menu]')].some((m) => !m.getAnimations().length)",
+      );
       await page.capture(`05-session-menu-${scheme}`);
       await page.ab("press", "Escape");
+      await page.ab("wait", "--fn", "!document.querySelector('[role=menu]')");
       await page.click("button", "Changes");
       await page.until("!!document.querySelector('[data-slot=surface-area]:not([inert])')");
       await page.capture(`05c-changes-${scheme}`);
