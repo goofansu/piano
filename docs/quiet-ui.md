@@ -53,7 +53,7 @@ passes these checks:
 Shared structure, so every pane reads as one app: one header shape on the session, the right
 sidebar and Settings (a title, context beside or beneath it when that adds something, controls at
 the end);
-one status glyph, `StatusDot`, for every state (an app preview, a webhook delivery), breathing
+one status glyph, `StatusDot`, for every state (an answered question, a webhook delivery), breathing
 (its `busy` tone) only while something is in progress, and each state shown once: the sidebar row owns a
 session's state, so the header repeats nothing; a refresh control turns its own icon while it
 reads; a page listing things (providers, webhooks, the Projects index) is `SettingsGroup`s and

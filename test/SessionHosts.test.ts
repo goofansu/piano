@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -17,8 +16,6 @@ import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Deferred, Effect, Fiber, Layer, Option, type Scope, Stream } from "effect";
 import { TestClock } from "effect/testing";
-import { PreviewAdapter, type PreviewOwnerIdentity } from "../scripts/PreviewAdapter.ts";
-import { ownerRequest } from "../scripts/PreviewClient.ts";
 import { worktreeInstance } from "../server/GitCheckout.ts";
 import { PiCli } from "../server/PiCli.ts";
 import {
@@ -27,7 +24,6 @@ import {
   PiSessionError,
   PiSessions,
   PiSessionsLive,
-  PreviewOwnerOptions,
 } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionHosts, SessionHostsLive, SessionNotCreated } from "../server/SessionHosts.ts";
@@ -58,7 +54,6 @@ type Record = {
   sessionId: string;
   command?: string;
   text?: string;
-  previewOwner?: string;
   instructions?: string;
 };
 const records = (id: string): Record[] =>
@@ -106,7 +101,6 @@ const run = <A, E>(
     clock?: boolean;
     timeoutMs?: number;
     fakePi?: string;
-    previewAdapter?: PreviewAdapter;
     registry?: string;
   } = {},
 ) => {
@@ -166,12 +160,6 @@ const run = <A, E>(
     Effect.provideService(
       RegistryDatabasePath,
       join(root, `${options.registry ?? options.fakePi ?? "registry"}.db`),
-    ),
-    Effect.provideService(
-      PreviewOwnerOptions,
-      options.previewAdapter
-        ? { adapter: options.previewAdapter, root: join(root, "previews") }
-        : {},
     ),
   );
   return Effect.runPromise(options.clock ? work.pipe(Effect.provide(TestClock.layer())) : work);
@@ -812,92 +800,6 @@ test(
   },
 );
 
-test("INV-02/06: archive/delete retain the session on preview cleanup failure; explicit release retries", async () => {
-  const stateRoot = join(root, "broken-preview-state");
-  mkdirSync(stateRoot);
-  const previous = process.env.PIANO_PREVIEW_STATE;
-  process.env.PIANO_PREVIEW_STATE = stateRoot;
-  const id = "preview-cleanup-failure";
-  const intent = join(
-    stateRoot,
-    `piano-preview-${createHash("sha256").update(realpathSync(cwd)).digest("hex").slice(0, 24)}.json`,
-  );
-  try {
-    await run(
-      Effect.gen(function* () {
-        const hosts = yield* SessionHosts;
-        const registry = yield* Registry;
-        yield* registered(id);
-        const endpoint = records(id).find((r) => r.event === "spawn")?.previewOwner;
-        assert.ok(endpoint);
-        writeFileSync(intent, "corrupt launch intent");
-        yield* Effect.promise(() =>
-          assert.rejects(
-            ownerRequest(endpoint, {
-              action: "start",
-              command: [process.execPath, "-e", "process.exit(1)"],
-            }),
-          ),
-        );
-        for (const operation of ["archive", "delete"] as const) {
-          const error = yield* hosts[operation](cwd, id).pipe(Effect.flip);
-          assert.match(error.detail, /Preview cleanup failed/);
-          const reference = (yield* registry.get).sessions.find((s) => s.sessionId === id);
-          assert.ok(reference && !reference.archived, "failed cleanup does not change retention");
-          assert.equal(records(id).filter((r) => r.event === "exit").length, 0);
-        }
-        rmSync(intent);
-        yield* hosts.release(cwd, id);
-        assert.equal(yield* hosts.get(cwd, id), undefined);
-        assert.ok((yield* registry.get).sessions.some((s) => s.sessionId === id));
-      }),
-    );
-  } finally {
-    if (previous === undefined) delete process.env.PIANO_PREVIEW_STATE;
-    else process.env.PIANO_PREVIEW_STATE = previous;
-  }
-});
-
-for (const operation of ["archive", "delete"] as const)
-  test(
-    `INV-01/02: ${operation} owns shutdown and retention; racing reopen cannot resurrect work`,
-    {
-      timeout: 10000,
-    },
-    async () => {
-      await run(
-        Effect.gen(function* () {
-          const hosts = yield* SessionHosts;
-          const s = yield* registered(operation);
-          yield* prompt(s, "/hold");
-          const file = (yield* s.state).sessionFile!;
-          const retirement = yield* hosts[operation](cwd, operation).pipe(Effect.forkChild);
-          yield* waitAudit(operation, (rs) => rs.some((r) => r.event === "stdin-end"));
-          const reopening = yield* hosts
-            .open({ cwd: alias, sessionId: operation })
-            .pipe(Effect.result, Effect.forkChild);
-          process.kill(records(operation)[0].pid, "SIGUSR2");
-          yield* Fiber.join(retirement);
-          const result = yield* Fiber.join(reopening);
-          assert.equal(result._tag, "Failure");
-          if (result._tag === "Failure")
-            assert.match(
-              result.failure.detail,
-              operation === "archive" ? /archived/ : /no longer registered/,
-            );
-          assert.equal(records(operation).filter((r) => r.event === "spawn").length, 1);
-          assert.equal(existsSync(file), operation === "archive");
-          const entries = (yield* (yield* Registry).get).sessions.filter(
-            (s) => s.sessionId === operation,
-          );
-          assert.equal(entries.length, operation === "archive" ? 1 : 0);
-          if (entries.length) assert.equal(entries[0].archived, true);
-        }),
-        { holdShutdown: true },
-      );
-    },
-  );
-
 test("PIN-152: bulk archive keeps live and pinned sessions, includes closed/missing checkouts, and unarchive starts nothing", async () => {
   await run(
     Effect.gen(function* () {
@@ -1136,68 +1038,6 @@ test("the browser hears a session's working state change when only its queue cha
     }),
   );
 });
-
-test(
-  "INV-02: one host's failing idle check does not keep the next idle host from release",
-  {
-    timeout: 15000,
-  },
-  async () => {
-    class UnknownPreview extends PreviewAdapter {
-      override async request(): Promise<never> {
-        throw new Error("no supervisor in this test");
-      }
-      override async retire(_: PreviewOwnerIdentity, __: string, idle = false) {
-        if (idle) throw new Error("preview state unreadable");
-        return true;
-      }
-    }
-    await run(
-      Effect.gen(function* () {
-        const hosts = yield* SessionHosts;
-        const failing = yield* registered("idle-check-fails");
-        const endpoint = records("idle-check-fails").find((r) => r.event === "spawn")?.previewOwner;
-        assert.ok(endpoint);
-        yield* Effect.promise(() =>
-          assert.rejects(
-            ownerRequest(endpoint, {
-              action: "start",
-              command: [process.execPath, "-e", "process.exit(1)"],
-            }),
-          ),
-        );
-        yield* hosts.archiveAll;
-        assert.equal(
-          records("idle-check-fails").some((r) => r.event === "exit"),
-          false,
-          "bulk cannot retire an app-owning Pi, even when the supervisor is unreadable",
-        );
-        assert.equal(
-          (yield* (yield* Registry).get).sessions.find((s) => s.sessionId === "idle-check-fails")
-            ?.archived,
-          false,
-        );
-        const other = yield* registered("idle-after-failure");
-        for (const s of [failing, other]) {
-          yield* prompt(s, "/settle");
-          yield* quiescent(s);
-        }
-        yield* TestClock.adjust(2000);
-        yield* waitAudit("idle-after-failure", (rs) => rs.some((r) => r.event === "exit"));
-        assert.equal(yield* hosts.get(cwd, "idle-after-failure"), undefined);
-        assert.equal(yield* hosts.get(cwd, "idle-check-fails"), failing, "unknown is not idle");
-        assert.equal(records("idle-check-fails").filter((r) => r.event === "exit").length, 0);
-      }),
-      {
-        idleMs: 100,
-        clock: true,
-        timeoutMs: 1000,
-        previewAdapter: new UnknownPreview(),
-        registry: "app-owner-bulk",
-      },
-    );
-  },
-);
 
 test(
   "INV-02/03: idle release waits for in-flight input; a retired host rejects input",
@@ -1507,35 +1347,13 @@ test("INV-01: a prompt or steer records activity on every path to a running sess
 });
 
 test("INV-01/02: input refused because its Pi is closing records no activity", async () => {
-  let entered!: () => void, finish!: () => void;
-  const cleaning = new Promise<void>((resolve) => (entered = resolve));
-  const cleaned = new Promise<void>((resolve) => (finish = resolve));
-  class HeldCleanup extends PreviewAdapter {
-    override async request(): Promise<never> {
-      throw new Error("no supervisor in this test");
-    }
-    override async retire() {
-      entered();
-      await cleaned;
-      return true;
-    }
-  }
   const id = "refused-activity";
   await run(
     Effect.gen(function* () {
       const hosts = yield* SessionHosts,
         registry = yield* Registry;
       const session = yield* registered(id);
-      const endpoint = records(id).find((r) => r.event === "spawn")?.previewOwner;
-      assert.ok(endpoint);
-      yield* Effect.promise(() =>
-        assert.rejects(
-          ownerRequest(endpoint, {
-            action: "start",
-            command: [process.execPath, "-e", "process.exit(1)"],
-          }),
-        ),
-      );
+      const pid = records(id).find((r) => r.event === "spawn")!.pid;
       const bumps: string[] = [];
       yield* registry.onChange((before, after) =>
         Effect.sync(() => {
@@ -1553,25 +1371,21 @@ test("INV-01/02: input refused because its Pi is closing records no activity", a
       yield* prompt(session, "accepted");
       assert.equal(bumps.length, 1, "accepted input records activity");
       const closing = yield* hosts.release(cwd, id).pipe(Effect.forkChild);
-      yield* Effect.promise(() => cleaning);
-      assert.equal(
-        yield* hosts.archiveAll,
-        0,
-        "bulk never waits for or takes over preview cleanup's held ownership",
-      );
+      yield* waitAudit(id, (rs) => rs.some((r) => r.event === "stdin-end"));
+      assert.equal(yield* hosts.archiveAll, 0, "bulk never takes over a closing session");
       assert.equal((yield* registry.get).sessions[0]?.archived, false);
       yield* Effect.sleep("2 millis");
       const refused = yield* session
         .act({ _tag: "prompt", text: "while closing" })
         .pipe(Effect.flip, Effect.forkChild);
       yield* Effect.sleep("100 millis");
-      yield* Effect.sync(finish);
+      process.kill(pid, "SIGUSR2");
       yield* Fiber.join(closing);
-      assert.match((yield* Fiber.join(refused)).detail, /closing or has stopped/);
+      assert.match((yield* Fiber.join(refused)).detail, /Pi is closing/);
       assert.equal(bumps.length, 1, "refused input records no activity");
       assert.equal(records(id).filter((r) => r.text === "while closing").length, 0);
-    }).pipe(Effect.ensuring(Effect.sync(finish))),
-    { previewAdapter: new HeldCleanup(), registry: id },
+    }),
+    { holdShutdown: true, registry: id },
   );
 });
 

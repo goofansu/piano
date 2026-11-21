@@ -35,8 +35,8 @@ What Piano takes from it, in Moonstone's palette:
   groups of hairline-divided rows with no intro line: the rows say what the page does. Piano takes Linear's structure and
   restraint, not its chrome: the palette, type and radii stay Moonstone's.
 - **State at a glance, once** ([agent interaction guidelines](https://linear.app/developers/aig)
-  §4): the sidebar row says whether Pi is working; a `StatusDot` names an app's state in the
-  preview control and a webhook's last delivery, so one vocabulary covers every state: busy
+  §4): the sidebar row says whether Pi is working; a `StatusDot` names an answered question's
+  outcome and a webhook's last delivery, so one vocabulary covers every state: busy
   (breathing), ok, warn, err, muted. A state appears in one place. A header dot beside the sidebar
   row's was tried and removed, as the header mark playing beside the rows was before.
 - **Instant, unobtrusive feedback** (§3): a dot breathes while something is in progress; a refresh

@@ -24,13 +24,12 @@ export interface SessionHost {
   readonly session: PiSession;
   readonly closing: boolean;
   readonly busy: Effect.Effect<boolean>;
-  readonly idle: (idleMs: number) => Effect.Effect<boolean, PiSessionError>;
-  readonly close: (how?: CloseHow) => Effect.Effect<SessionClosure, PiSessionError>;
+  readonly idle: (idleMs: number) => Effect.Effect<boolean>;
+  readonly close: (how?: CloseHow) => Effect.Effect<SessionClosure>;
 }
 
 export interface CloseHow {
   readonly closure?: SessionClosure;
-  readonly shutdown?: boolean;
   readonly requested?: boolean;
 }
 
@@ -38,9 +37,8 @@ const rejected = (detail: string) => new PiSessionError({ reason: "rejected", de
 const stopped = () => rejected("Pi is closing or has stopped. Refresh before sending new input.");
 const notSent = (error: PiSessionError) => refusedUnsent(error.reason, error.detail);
 
-export const listedFacts = (state: SessionState): Pick<HostInfo, "working" | "preview"> => ({
+export const listedFacts = (state: SessionState): Pick<HostInfo, "working"> => ({
   working: workUnderWay(state),
-  ...(state.preview && { preview: true }),
 });
 
 export const mirrorSession = (
@@ -151,21 +149,13 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
     busy,
     idle: Effect.fn("SessionHost.idle")(function* (idleMs: number) {
       if (closing || (yield* Clock.currentTimeMillis) - lastActivity < idleMs) return false;
-      if (yield* busy) return false;
-      return yield* raw.prepareRelease("idle");
+      return !(yield* busy);
     }),
     close: Effect.fn("SessionHost.close")(function* ({
       closure,
-      shutdown = false,
       requested = false,
     }: CloseHow = {}) {
-      yield* raw
-        .prepareRelease(requested ? "requested" : undefined)
-        .pipe(
-          Effect.catchTag("PiSessionError", (error) =>
-            shutdown ? Effect.logWarning(error.detail) : Effect.fail(error),
-          ),
-        );
+      if (requested) yield* raw.requestRelease;
       closing = true;
       yield* Scope.close(scope, Exit.void);
       const closed = closure ??
@@ -207,7 +197,7 @@ export const makeSessionHost = Effect.fn("SessionHost.make")(function* (options:
         if (closure) yield* options.onExit(closure);
         else if (observed) {
           const facts = listedFacts(observed.state);
-          if (facts.working === announced?.working && facts.preview === announced.preview) return;
+          if (facts.working === announced?.working) return;
           announced = facts;
           yield* options.onChange;
         }

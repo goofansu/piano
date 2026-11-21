@@ -27,7 +27,6 @@ export function radioChoiceOf<
 }
 
 export type CommandForm =
-  | Extract<SessionCommand["intent"], { kind: "stop-preview" }>
   | { kind: "rename-session"; target: SessionTarget }
   | { kind: "delete-session"; target: SessionTarget }
   | { kind: "archive-session"; target: SessionTarget }
@@ -57,8 +56,6 @@ export interface CommandEffects {
   copy: (value: string, label: string) => void;
   openForm: (form: CommandForm) => void;
   shareSession: (target: SessionTarget) => void;
-  openUrl: (url: string) => void;
-  openPreviewDetails: () => void;
   openPageEditor: (page: EditorPage) => void;
 }
 
@@ -127,17 +124,8 @@ export function runCommand(command: Command, effects: CommandEffects): boolean {
       if (intent.linked) effects.openChanges();
       else effects.openPullRequest();
       break;
-    case "open-url":
-      effects.openUrl(intent.url);
-      break;
-    case "stop-preview":
-      effects.openForm(intent);
-      break;
     case "artifacts":
       effects.openArtifacts();
-      break;
-    case "preview-details":
-      effects.openPreviewDetails();
       break;
     case "page-editor":
       effects.openPageEditor(intent.page);

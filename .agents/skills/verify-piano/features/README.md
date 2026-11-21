@@ -61,8 +61,7 @@ the [feature verification mapping policy](../../../../docs/testing.md#feature-ve
   Docs: [Session dispatch](../../../../docs/session-dispatch.md),
   [Session creation and recovery](../../../../docs/runtime-ownership.md#developer-navigation-session-creation-and-recovery).
 - [Changes and files](./changes-and-files.md).
-  Docs: [File previews](../../../../docs/file-previews.md),
-  [Managed live previews](../../../../docs/live-previews.md).
+  Docs: [File previews](../../../../docs/file-previews.md).
 - [Settings › Skills and Prompts](./settings-skills-prompts.md).
   Docs: [Prompts](../../../../docs/prompts.md).
 - [Settings › Providers, Webhooks and Preferences](./settings-other.md).
@@ -91,7 +90,3 @@ Keep these prerequisites visible when using the default launch:
   does not establish transcription or secret checking. The committed
   `node test/browser/voice-input.mjs <evidence-directory>` journey covers composer visibility and
   draft ownership with a fake microphone and a stubbed transcription reply.
-- Managed Preview (external tabs, rail actions and the same-sheet Preview pane) needs the isolated real-Pi/native
-  supervisor journey in [`docs/testing.md`](../../../../docs/testing.md#managed-preview-host-journey),
-  `node test/browser/preview.mjs <evidence-directory>`. The default fake's Changes/rail checks
-  are not Preview evidence; authenticated exe.dev access and real-device touch remain separate.

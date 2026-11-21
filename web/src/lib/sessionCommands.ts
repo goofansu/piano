@@ -1,7 +1,6 @@
 import type { ClientCommand } from "../../../shared/wire.ts";
 import type { AppState } from "../store.ts";
 import type { SessionLayout } from "./navigation.ts";
-import { type PreviewObservationState, seenPreview } from "./previewObservation.ts";
 import { pullRequestView } from "./pullRequestView.ts";
 import { sessionArtifacts } from "./sessionArtifacts.ts";
 import {
@@ -10,17 +9,10 @@ import {
   sessionCheckoutMissing,
   sessionContext,
   sessionMutable,
-  sessionReady,
   sessionReference,
   sessionReferenceChangeable,
   sessionWorking,
 } from "./sessionContext.ts";
-import {
-  type PreviewClaim,
-  previewClaim,
-  previewHost,
-  sessionHasPreview,
-} from "./sessionPreview.ts";
 
 export type SessionTarget = { cwd: string; sessionId: string; title?: string };
 
@@ -46,9 +38,6 @@ export type SessionCommandId =
   | "agent"
   | "wrap-code"
   | "pull-request"
-  | "open-preview"
-  | "preview-details"
-  | "stop-preview"
   | "messages-only"
   | "rename"
   | "pin"
@@ -65,9 +54,6 @@ export type SessionCommandIcon =
   | "list"
   | "agent"
   | "pull-request"
-  | "preview"
-  | "details"
-  | "stop"
   | "messages"
   | "rename"
   | "pin"
@@ -86,9 +72,6 @@ export type SessionCommandIntent =
   | { kind: "agent" }
   | { kind: "wrap-code"; on: boolean }
   | { kind: "pull-request"; linked: boolean }
-  | { kind: "open-url"; url: string }
-  | ({ kind: "stop-preview"; host: string } & PreviewClaim)
-  | { kind: "preview-details" }
   | { kind: "messages-only"; on: boolean }
   | { kind: "rename" | "delete" | "share"; target: SessionTarget | undefined }
   | { kind: "archive"; target: SessionTarget | undefined; confirm: boolean }
@@ -183,7 +166,6 @@ export function sessionCommands(
     messagesOnly?: boolean;
     codeWrap?: boolean;
     layout?: SessionLayout;
-    previewObservation?: Pick<PreviewObservationState, "unconfirmed">;
   },
 ): SessionCommand[] {
   const session = state.session;
@@ -326,7 +308,6 @@ export function sessionCommands(
         keywords: ["pr"],
         intent: { kind: "pull-request", linked },
       },
-      ...(options.previewObservation ? previewCommands(state, options.previewObservation) : []),
       {
         id: "messages-only",
         label: "Messages only",
@@ -383,8 +364,7 @@ export function sessionCommands(
         intent: {
           kind: "archive",
           target: subject,
-          confirm:
-            !!subject && (sessionWorking(state, subject) || sessionHasPreview(state, subject)),
+          confirm: !!subject && sessionWorking(state, subject),
         },
       },
       {
@@ -410,45 +390,4 @@ export function sessionCommands(
     });
   }
   return commands;
-}
-
-function previewCommands(
-  state: AppState,
-  observed: Pick<PreviewObservationState, "unconfirmed">,
-): SessionCommand[] {
-  const preview = seenPreview(state, observed);
-  const claim = previewClaim(state);
-  if (!preview || !claim) return [];
-  return [
-    {
-      id: "open-preview",
-      label: "Open preview in new tab",
-      icon: "preview",
-      enabled: !!preview.url,
-      keywords: ["app", "run", "localhost"],
-      ...(preview.url && { detail: previewHost(preview.url) }),
-      intent: { kind: "open-url", url: preview.url ?? "" },
-    },
-    {
-      id: "preview-details",
-      label: "Preview details",
-      icon: "details",
-      enabled: true,
-      keywords: ["logs", "app"],
-      intent: { kind: "preview-details" },
-    },
-    {
-      id: "stop-preview",
-      label: "Stop preview",
-      icon: "stop",
-      destructive: true,
-      enabled: sessionReady(state),
-      keywords: ["app", "kill"],
-      intent: {
-        kind: "stop-preview",
-        ...claim,
-        host: preview.url ? previewHost(preview.url) : "this app",
-      },
-    },
-  ];
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { FolderView, SessionPreview, SessionState, WorktreeView } from "../shared/wire.ts";
+import type { FolderView, SessionState, WorktreeView } from "../shared/wire.ts";
 import type { SessionLayout } from "../web/src/lib/navigation.ts";
 import { sessionProjectMenu } from "../web/src/lib/projectCommands.ts";
 import {
@@ -356,94 +356,14 @@ test("the header menu: copy beside the details, manage, a Messages only switch, 
   assert.ok(!other.sections.includes("display"));
 });
 
-const app = (preview: Partial<SessionPreview> = {}): SessionPreview => ({
-  instanceId: "i1",
-  state: "running",
-  ready: true,
-  warming: false,
-  url: "http://localhost:5173/",
-  port: 5173,
-  command: ["npm", "run", "dev"],
-  detail: "",
-  externalAccess: "same-host",
-  observedAt: 0,
-  ...preview,
-});
-const seen = { previewObservation: { unconfirmed: null } };
-const previewIds = (state: AppState) =>
-  sessionCommands(state, undefined, seen)
-    .filter((c) => c.id.includes("preview"))
-    .map((c) => [c.id, c.enabled]);
-
-test("preview commands exist only while the selected session's live Pi owns an app", () => {
-  assert.deepEqual(previewIds(base), []);
-  const running = { ...base, session: session("/work/repo.feature", { preview: app() }) };
-  assert.deepEqual(previewIds(running), [
-    ["open-preview", true],
-    ["preview-details", true],
-    ["stop-preview", true],
-  ]);
-  assert.ok(
-    !sessionCommands(running, undefined, {}).some((c) => c.id.includes("preview")),
-    "without the page's observation, no app status is claimed",
-  );
-  const open = sessionCommands(running, undefined, seen).find((c) => c.id === "open-preview");
-  assert.deepEqual(open?.intent, { kind: "open-url", url: "http://localhost:5173/" });
-  assert.equal(open?.detail, "localhost:5173");
-  assert.deepEqual(
-    sessionCommands(running, undefined, seen).find((c) => c.id === "stop-preview")?.intent,
-    {
-      kind: "stop-preview",
-      instanceId: "i1",
-      selectionId: running.selectionId,
-      generation: null,
-      host: "localhost:5173",
-    },
-  );
-  assert.ok(
-    !headerIds(sessionHeaderMenu(sessionCommands(running, undefined, seen))).some((id) =>
-      id.includes("preview"),
-    ),
-  );
-
-  const failed = {
-    ...base,
-    session: session("/work/repo.feature", {
-      preview: app({ state: "failed", ready: false, url: null }),
-    }),
-  };
-  assert.deepEqual(previewIds(failed), [
-    ["open-preview", false],
-    ["preview-details", true],
-    ["stop-preview", true],
-  ]);
-  assert.equal(
-    previewIds({ ...running, resync: true }).at(-1)?.[1],
-    false,
-    "stop waits for resync",
-  );
-
-  const closed = session("/work/repo.feature", {
-    preview: app(),
-    closure: { _tag: "released", detail: "" },
-  });
-  assert.deepEqual(previewIds({ ...base, session: closed }), []);
-  const peek = { ...session("/work/repo.feature", { preview: app() }), hosted: false };
-  assert.deepEqual(previewIds({ ...base, session: peek }), []);
-  assert.deepEqual(
-    sessionCommands(running, other, seen).filter((c) => c.id.includes("preview")),
-    [],
-  );
-});
-
-test("archiving a session that owns an app asks first, from the header or its sidebar row", () => {
+test("archiving a working session asks first from its sidebar row", () => {
   const archive = (state: AppState, target?: typeof other) =>
     sessionCommands(state, target, {}).find((c) => c.id === "archive")?.intent;
   assert.equal((archive(base) as { confirm: boolean }).confirm, false);
-  const running = { ...base, session: session("/work/repo.feature", { preview: app() }) };
-  assert.equal((archive(running) as { confirm: boolean }).confirm, true);
-  const background = { ...base, hosts: [{ ...other, working: false, preview: true }] };
-  assert.equal((archive(background, other) as { confirm: boolean }).confirm, true);
+  const idle = { ...base, hosts: [{ ...other, working: false }] };
+  assert.equal((archive(idle, other) as { confirm: boolean }).confirm, false);
+  const working = { ...base, hosts: [{ ...other, working: true }] };
+  assert.equal((archive(working, other) as { confirm: boolean }).confirm, true);
 });
 
 test("view commands offer the rail side by side, Agent one at a time beside an open tab", () => {

@@ -3,13 +3,11 @@ import { ListIcon, MoreHorizontalIcon } from "lucide-react";
 import { Fragment, useRef, useState } from "react";
 import {
   CommandIcon,
-  CommandLink,
   SessionCommandMenuItem,
-  useOpenPreview,
   useSessionCommands,
   useSessionProjectMenu,
 } from "@/components/CommandHost";
-import { IconButton, IconLink } from "@/components/IconButton";
+import { IconButton } from "@/components/IconButton";
 import { PaneHeader } from "@/components/Pane";
 import { PianoButton } from "@/components/PianoButton";
 import {
@@ -54,7 +52,6 @@ export function SessionHeader({
   status: string;
   pullRequest: PullRequestControl;
 }) {
-  const openPreview = useOpenPreview();
   const narrowViewport = useNarrowViewport();
   const { single } = useNavigation();
   const sheet = narrowViewport || single;
@@ -207,15 +204,6 @@ export function SessionHeader({
           {status}
         </span>
         <div className="-mr-(--glyph-pad) flex shrink-0 items-center gap-0.5">
-          {openPreview && (
-            <IconLink
-              size="header"
-              label={openPreview.label}
-              render={<CommandLink command={openPreview} />}
-            >
-              <CommandIcon icon={openPreview.icon} />
-            </IconLink>
-          )}
           <ArtifactsMenu state={state} />
           <ChangesToggle />
           <SessionRailToggle />

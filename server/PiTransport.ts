@@ -83,7 +83,7 @@ const debug = (...a: unknown[]) => {
 const spawn = Effect.fn("PiTransport.spawn")(function* (
   args: ReadonlyArray<string>,
   cwd: string,
-  lifetime?: { env: LaunchEnv; onExit: () => void },
+  lifetime?: { env: LaunchEnv },
 ) {
   const cli = yield* PiCli;
   const timeoutMs = yield* PiRequestTimeoutMs;
@@ -210,7 +210,6 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
   const stopInput = Effect.fn("PiTransport.stopInput")(function* (closure: SessionClosure) {
     if (inputClosure) return;
     inputClosure = closure;
-    lifetime?.onExit();
     yield* Queue.shutdown(stdin);
     for (const [done, release] of writes) {
       release();
@@ -386,7 +385,6 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
 
   yield* Effect.addFinalizer(() =>
     Effect.gen(function* () {
-      lifetime?.onExit();
       if (closed) return;
       yield* Queue.end(stdin);
       const done = yield* Deferred.await(exited).pipe(Effect.timeoutOption("3 seconds"));

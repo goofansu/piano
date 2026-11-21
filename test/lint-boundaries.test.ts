@@ -61,7 +61,7 @@ test("oxlint enforces layer edges, including types, aliases and a shared bridge"
       ],
       ["web/src/check.ts", 'export type { Thing } from "@shared/Thing";', true],
       ["server/check.ts", 'export type { Thing } from "../shared/Thing.ts";', true],
-      ["server/check.ts", 'export type { Thing } from "../scripts/PreviewAdapter.ts";', true],
+      ["server/check.ts", 'export type { Thing } from "../scripts/Thing.ts";', true],
       [
         "shared/check.ts",
         'export { Schema } from "effect"; export { str } from "@earendil-works/pi-schema"; export { z } from "zod";',

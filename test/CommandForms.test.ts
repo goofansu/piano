@@ -13,7 +13,6 @@ import {
 import { answerForm, confirmation, createCommandForms } from "../web/src/lib/commandForms.ts";
 import type { CommandForm } from "../web/src/lib/commands.ts";
 import { type SessionTarget, sessionCommands } from "../web/src/lib/sessionCommands.ts";
-import { previewClaim, previewClaimHolds } from "../web/src/lib/sessionPreview.ts";
 import type { SendDisposition } from "../web/src/lib/ws.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
@@ -69,116 +68,6 @@ const archive = (target: SessionTarget = other): CommandForm => ({
 });
 const closeFolder: CommandForm = { kind: "close-folder", folder: { path: "/repo", name: "repo" } };
 const deleteProject: CommandForm = { kind: "delete-project", project: launch };
-
-test("preview confirmation stays on its exact attachment, generation and instance", () => {
-  const preview = {
-    instanceId: "i1",
-    state: "running" as const,
-    ready: true,
-    warming: false,
-    url: "http://localhost:4000/",
-    port: 4000,
-    command: ["npm", "run", "dev"],
-    detail: "",
-    externalAccess: "same-host" as const,
-    observedAt: 0,
-  };
-  let current = { ...online, session: { ...session, state: { ...session.state, preview } } };
-  const form = sessionCommands(current, undefined, {
-    previewObservation: { unconfirmed: null },
-  }).find((c) => c.id === "stop-preview")!.intent;
-  assert.equal(form.kind, "stop-preview");
-  if (form.kind !== "stop-preview") throw new Error("expected confirmation");
-  const sent: ClientCommand[] = [];
-  const forms = createCommandForms({
-    getState: () => current,
-    send: (command) => {
-      sent.push(command);
-      return "sent";
-    },
-    openPage: () => {},
-  });
-  forms.open(form);
-  forms.cancel();
-  assert.deepEqual(sent, [], "cancel has no effect");
-  forms.open(form);
-  assert.equal(answerForm(current, form).allowed, true);
-  assert.equal(answerForm({ ...current, selectionId: "new-selection" }, form).allowed, false);
-  assert.equal(
-    answerForm(
-      {
-        ...current,
-        session: {
-          ...current.session,
-          cursor: { cwd: "/repo", sessionId: "s1", generation: "new-owner", sequence: 1 },
-        },
-      },
-      form,
-    ).allowed,
-    false,
-  );
-  assert.equal(answerForm({ ...current, connected: false }, form).allowed, false);
-  current = {
-    ...current,
-    session: {
-      ...current.session,
-      state: { ...current.session.state, preview: { ...preview, instanceId: "replacement" } },
-    },
-  };
-  assert.equal(forms.submit(), false, "old confirmation never targets replacement");
-  assert.deepEqual(sent, []);
-  current = {
-    ...current,
-    session: { ...current.session, state: { ...current.session.state, preview } },
-  };
-  assert.equal(forms.submit(), true);
-  assert.equal(forms.submit(), false);
-  assert.deepEqual(sent, [{ _tag: "act", action: { _tag: "preview_stop", instanceId: "i1" } }]);
-});
-
-test("a preview claim holds only for the same selection, Pi generation and app instance", () => {
-  const preview = {
-    instanceId: "i1",
-    state: "running" as const,
-    ready: true,
-    warming: false,
-    url: "http://localhost:4000/",
-    port: 4000,
-    command: ["npm", "run", "dev"],
-    detail: "",
-    externalAccess: "same-host" as const,
-    observedAt: 0,
-  };
-  const withSession = (patch: Partial<SessionView>, state: Partial<SessionState> = {}) => ({
-    ...online,
-    session: {
-      ...session,
-      cursor: { cwd: "/repo", sessionId: "s1", generation: "g1", sequence: 1 },
-      ...patch,
-      state: { ...session.state, preview, ...state },
-    },
-  });
-  const current = withSession({});
-  assert.equal(previewClaim(online), undefined, "no app, nothing to claim");
-  const claim = previewClaim(current)!;
-  assert.deepEqual(claim, { instanceId: "i1", selectionId: "sel", generation: "g1" });
-  assert.equal(previewClaimHolds(current, claim), true, "the same app");
-  assert.equal(
-    previewClaimHolds({ ...current, selectionId: "next" }, claim),
-    false,
-    "new selection",
-  );
-  const restarted = withSession({
-    cursor: { cwd: "/repo", sessionId: "s1", generation: "g2", sequence: 1 },
-  });
-  assert.equal(previewClaimHolds(restarted, claim), false, "new Pi generation");
-  const replaced = withSession({}, { preview: { ...preview, instanceId: "i2" } });
-  assert.equal(previewClaimHolds(replaced, claim), false, "replaced app");
-  const stopped = withSession({}, { preview: undefined });
-  assert.equal(previewClaimHolds(stopped, claim), false, "stopped app");
-  const closed = withSession({}, { closure: { _tag: "exited", code: 1, detail: "Pi exited." } });
-  assert.equal(previewClaimHolds(closed, claim), false, "closed session");
-});
 
 test("rename sends the trimmed new title, and refuses an empty or unchanged one", () => {
   assert.deepEqual(answerForm(online, rename(), "  Renamed  "), {
@@ -742,31 +631,4 @@ test("opening Project settings replaces the open form, and another form replaces
   assert.equal(subject.getState().text, "Other");
   subject.open({ kind: "project", dialog: {} });
   assert.deepEqual(subject.getState().projectDraft, { name: "", instructions: "" });
-});
-
-test("archive and delete say they stop the app a session started", () => {
-  const owning: AppState = { ...online, hosts: [{ ...other, working: false, preview: true }] };
-  assert.deepEqual(confirmation(owning, archive()), {
-    title: "Stop and archive this session?",
-    description:
-      'This will stop the app "Other" started and remove the session from the sidebar. Its transcript will be kept. Changes already made to files will not be undone.',
-    confirmLabel: "Stop and archive",
-    destructive: false,
-  });
-  assert.deepEqual(confirmation(owning, del()), {
-    title: "Delete session?",
-    description:
-      'This will stop the app the session started. "Other" and its transcript are removed from Pi\'s session store. This cannot be undone.',
-    confirmLabel: "Stop and delete",
-    destructive: true,
-  });
-  const both: AppState = { ...online, hosts: [{ ...other, working: true, preview: true }] };
-  assert.match(
-    confirmation(both, archive())?.description ?? "",
-    /^This will stop any work still running in "Other" and the app it started and remove the session from the sidebar\./,
-  );
-  assert.match(
-    confirmation(both, del())?.description ?? "",
-    /^This will stop the session and interrupt its current work, and stop the app it started\. /,
-  );
 });

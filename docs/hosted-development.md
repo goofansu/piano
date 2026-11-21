@@ -79,9 +79,3 @@ from local development and generated preview origins.
 
 An Origin header is not a credential and does not replace exe.dev private access. Changing a
 unit or origin and restarting is a deployment action, not development verification.
-
-## Managed app previews
-
-For session-launched apps, follow [managed previews](live-previews.md#hosts-and-configuration), including
-`PIANO_PREVIEW_CONFIG` and the existing lingering systemd user manager. Preview setup and service
-restarts require user authorization; local readiness does not prove authenticated browser access.

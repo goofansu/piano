@@ -1,14 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect";
+import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Scope, Stream } from "effect";
 import { ChildProcessSpawner as Spawner } from "effect/process";
 
 const ChildProcessSpawner = Spawner.ChildProcessSpawner;
 type ChildProcessSpawner = Spawner.ChildProcessSpawner;
 
-import type { PreviewAdapter, PreviewConfig } from "../scripts/PreviewAdapter.ts";
-import { PreviewOwner } from "../scripts/PreviewOwner.ts";
-import { PREVIEW_OWNER_ENV, PROJECT_INSTRUCTIONS_ENV } from "../shared/dispatch.ts";
+import { PROJECT_INSTRUCTIONS_ENV } from "../shared/dispatch.ts";
 import { withLastKnownStats } from "../shared/sessionProjection.ts";
 import { liveActivityOf } from "../shared/sessionStatus.ts";
 import type {
@@ -18,7 +16,6 @@ import type {
   SessionActionResult,
   SessionClosure,
   SessionFrame,
-  SessionPreview,
   SessionState,
   SessionStats,
   SlashCommand,
@@ -43,7 +40,6 @@ import {
   stateFactsOf,
 } from "./PiRecords.ts";
 import { type PiLane, PiSessionError, PiTransport, refusedUnsent } from "./PiTransport.ts";
-import { previewLogs, projectPreview } from "./PreviewProjection.ts";
 import { makeSessionDialogs } from "./SessionDialogs.ts";
 import { makeSessionPublication } from "./SessionPublication.ts";
 import { makeSessionReadbacks } from "./SessionReadbacks.ts";
@@ -63,9 +59,7 @@ export interface PiSessionSpec {
 
 export interface PiSession {
   readonly spec: PiSessionSpec;
-  readonly prepareRelease: (
-    reason?: "idle" | "requested",
-  ) => Effect.Effect<boolean, PiSessionError>;
+  readonly requestRelease: Effect.Effect<void>;
   readonly events: Stream.Stream<SessionFrame, DeliveryOverflow>;
   readonly act: (
     action: SessionAction,
@@ -99,7 +93,6 @@ export interface SessionActionPolicy {
   readonly blockedWhileStopping: boolean;
   readonly needsCheckout: boolean;
   readonly activity: boolean;
-  readonly startsPi: boolean;
 }
 
 export const sessionActionPolicy: Readonly<Record<SessionAction["_tag"], SessionActionPolicy>> = {
@@ -109,7 +102,6 @@ export const sessionActionPolicy: Readonly<Record<SessionAction["_tag"], Session
     blockedWhileStopping: true,
     needsCheckout: true,
     activity: true,
-    startsPi: true,
   },
   steer: {
     priority: false,
@@ -117,7 +109,6 @@ export const sessionActionPolicy: Readonly<Record<SessionAction["_tag"], Session
     blockedWhileStopping: true,
     needsCheckout: true,
     activity: true,
-    startsPi: true,
   },
   abort: {
     priority: true,
@@ -125,7 +116,6 @@ export const sessionActionPolicy: Readonly<Record<SessionAction["_tag"], Session
     blockedWhileStopping: true,
     needsCheckout: false,
     activity: false,
-    startsPi: true,
   },
   stop: {
     priority: true,
@@ -133,7 +123,6 @@ export const sessionActionPolicy: Readonly<Record<SessionAction["_tag"], Session
     blockedWhileStopping: true,
     needsCheckout: false,
     activity: false,
-    startsPi: true,
   },
   restore_queue: {
     priority: true,
@@ -141,7 +130,6 @@ export const sessionActionPolicy: Readonly<Record<SessionAction["_tag"], Session
     blockedWhileStopping: true,
     needsCheckout: true,
     activity: false,
-    startsPi: true,
   },
   set_model: {
     priority: false,
@@ -149,7 +137,6 @@ export const sessionActionPolicy: Readonly<Record<SessionAction["_tag"], Session
     blockedWhileStopping: false,
     needsCheckout: true,
     activity: false,
-    startsPi: true,
   },
   set_thinking_level: {
     priority: false,
@@ -157,7 +144,6 @@ export const sessionActionPolicy: Readonly<Record<SessionAction["_tag"], Session
     blockedWhileStopping: false,
     needsCheckout: true,
     activity: false,
-    startsPi: true,
   },
   set_name: {
     priority: false,
@@ -165,7 +151,6 @@ export const sessionActionPolicy: Readonly<Record<SessionAction["_tag"], Session
     blockedWhileStopping: false,
     needsCheckout: true,
     activity: false,
-    startsPi: true,
   },
   answer: {
     priority: true,
@@ -173,23 +158,6 @@ export const sessionActionPolicy: Readonly<Record<SessionAction["_tag"], Session
     blockedWhileStopping: false,
     needsCheckout: true,
     activity: false,
-    startsPi: true,
-  },
-  preview_status: {
-    priority: false,
-    supersedes: false,
-    blockedWhileStopping: false,
-    needsCheckout: false,
-    activity: false,
-    startsPi: false,
-  },
-  preview_stop: {
-    priority: true,
-    supersedes: false,
-    blockedWhileStopping: false,
-    needsCheckout: false,
-    activity: false,
-    startsPi: false,
   },
 };
 
@@ -209,12 +177,6 @@ export { PiRequestTimeoutMs, PiSessionError, refusedUnsent } from "./PiTransport
 export const PiDialogRecoveryMs = Context.Reference<number>("piano/PiDialogRecoveryMs", {
   defaultValue: () => 10 * 60_000,
 });
-
-export const PreviewOwnerOptions = Context.Reference<{
-  readonly adapter?: PreviewAdapter;
-  readonly root?: string;
-  readonly config?: () => Promise<PreviewConfig>;
-}>("piano/PreviewOwnerOptions", { defaultValue: () => ({}) });
 
 const settled = (snapshot: Snapshot) => liveActivityOf(snapshot)._tag === "idle";
 
@@ -240,30 +202,12 @@ const openSession = (
 ) =>
   Effect.gen(function* () {
     const generation = randomUUID();
-    const previewOptions = yield* PreviewOwnerOptions;
-    const preview =
-      process.platform === "linux" || process.platform === "darwin"
-        ? yield* Effect.acquireRelease(
-            Effect.tryPromise({
-              try: () => PreviewOwner.open(spec, generation, previewOptions),
-              catch: (error) => new PiSessionError({ reason: "spawn", detail: String(error) }),
-            }),
-            (owner) =>
-              Effect.promise(() => owner.prepareRelease()).pipe(
-                Effect.catchCause((cause) =>
-                  Effect.logWarning(`Preview cleanup failed: ${String(cause)}`),
-                ),
-              ),
-          )
-        : undefined;
     const child = yield* PiTransport.spawn(sessionArgs(spec), spec.cwd, {
       env: {
-        ...(preview ? { [PREVIEW_OWNER_ENV]: preview.identity.endpoint } : {}),
         ...(spec.projectInstructions
           ? { [PROJECT_INSTRUCTIONS_ENV]: spec.projectInstructions }
           : {}),
       },
-      onExit: () => preview?.disconnect(),
     });
     spawned(child);
     const sessionScope = yield* Effect.scope;
@@ -322,32 +266,6 @@ const openSession = (
     const { transaction, apply, patchState, announced } = publication;
     let submissionId = 0;
 
-    let observedPreview: SessionPreview | undefined;
-    const previewObserved = yield* Queue.sliding<void>(1);
-    preview?.observe((request, outcome) => {
-      observedPreview = projectPreview(observedPreview, generation, request, outcome);
-      Queue.offerUnsafe(previewObserved, undefined);
-    });
-    const publishPreview = patchState(() => ({ preview: observedPreview }));
-    yield* Queue.take(previewObserved).pipe(
-      Effect.andThen(publishPreview),
-      Effect.forever,
-      Effect.forkIn(sessionScope),
-    );
-    const previewRequest = (
-      request: { action: "status" } | { action: "stop"; instanceId: string },
-    ) =>
-      Effect.tryPromise({
-        try: () => {
-          if (!preview) throw new Error("Previews are not supported on this host.");
-          return preview.request({ ...request, workspace: preview.identity.workspace });
-        },
-        catch: (error) =>
-          new PiSessionError({
-            reason: "rejected",
-            detail: `Preview ${request.action === "stop" ? "stop" : "status"} failed: ${error instanceof Error ? error.message : String(error)}`,
-          }),
-      });
     const progress = makeSessionRecordProgress({ observed: child.observationVersion });
     let initializing = true;
     const initialRefreshes = new Set<RefreshKind>();
@@ -626,38 +544,6 @@ const openSession = (
           case "answer":
             yield* dialogs.answer(action);
             return;
-          case "preview_status":
-            return yield* previewRequest({ action: "status" }).pipe(
-              Effect.ensuring(publishPreview),
-              Effect.match({
-                onSuccess: (result): SessionActionResult => ({
-                  _tag: "preview_observed",
-                  ...(action.requestId !== undefined && { requestId: action.requestId }),
-                  ...previewLogs(result, generation),
-                }),
-                onFailure: (error): SessionActionResult => ({
-                  _tag: "preview_observed",
-                  ...(action.requestId !== undefined && { requestId: action.requestId }),
-                  instanceId: observedPreview?.instanceId ?? null,
-                  logs: "",
-                  error: error.detail,
-                }),
-              }),
-            );
-          case "preview_stop": {
-            const { instanceId } = action;
-            const result = yield* previewRequest({ action: "stop", instanceId }).pipe(
-              Effect.ensuring(publishPreview),
-            );
-            const status = (result as { status?: unknown }).status;
-            const outcome = status === "stopped" || status === "cleared" ? status : "not-current";
-            if (outcome === "not-current")
-              yield* previewRequest({ action: "status" }).pipe(
-                Effect.ensuring(publishPreview),
-                Effect.ignore,
-              );
-            return { _tag: "preview_stopped", instanceId, outcome };
-          }
         }
       });
 
@@ -670,19 +556,8 @@ const openSession = (
     const actionCapacity = makeInboundCapacity(inboundLimits.requests);
     const session: PiSession = {
       spec,
-      prepareRelease: Effect.fn("PiSessions.prepareRelease")(function* (
-        reason?: "idle" | "requested",
-      ) {
-        const prepared = yield* Effect.tryPromise({
-          try: () => preview?.prepareRelease(reason === "idle") ?? Promise.resolve(true),
-          catch: (error) =>
-            new PiSessionError({
-              reason: "rejected",
-              detail: `Preview cleanup failed: ${String(error)}`,
-            }),
-        });
-        if (reason === "requested") releaseRequested = true;
-        return prepared;
+      requestRelease: Effect.sync(() => {
+        releaseRequested = true;
       }),
       events,
       act: (action) =>

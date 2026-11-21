@@ -1598,7 +1598,7 @@ test("INV-02: releasing a session tells subscribers it closed, and whether that 
           yield* t.act({ _tag: "prompt", text: prompt });
           yield* Fiber.join(waiting);
         } else yield* Effect.sleep("50 millis");
-        if (requested) yield* t.prepareRelease("requested");
+        if (requested) yield* t.requestRelease;
         yield* Scope.close(scope, Exit.succeed(undefined));
         return yield* Fiber.join(collector).pipe(Effect.timeoutOption("5 seconds"));
       }),

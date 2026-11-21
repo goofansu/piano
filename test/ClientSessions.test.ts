@@ -15,12 +15,10 @@ import { join } from "node:path";
 import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Deferred, Effect, Fiber, Layer, Queue, type Scope, Stream } from "effect";
-import { PreviewAdapter } from "../scripts/PreviewAdapter.ts";
-import { ownerRequest } from "../scripts/PreviewClient.ts";
 import { makeClientSessions } from "../server/ClientSessions.ts";
 import { CreationAttempts, CreationAttemptsLive } from "../server/CreationAttempts.ts";
 import { PiCli } from "../server/PiCli.ts";
-import { type PiSession, PiSessionsLive, PreviewOwnerOptions } from "../server/PiSessions.ts";
+import { type PiSession, PiSessionsLive } from "../server/PiSessions.ts";
 import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
 import { SessionHosts, SessionHostsLive } from "../server/SessionHosts.ts";
 import { GitCommand } from "../server/Subprocess.ts";
@@ -289,18 +287,6 @@ test("INV-02/05: starting from a stopped selection attaches before the first pro
       );
       const unstarted = yield* Effect.flip(sessions.act("S", { _tag: "prompt", text: "first" }));
       assert.ok(unstarted._tag === "ActRefused" && unstarted.reason === "not_running");
-      for (const action of [
-        { _tag: "preview_status" as const },
-        { _tag: "preview_stop" as const, instanceId: "old-instance" },
-      ]) {
-        const refused = yield* sessions.act("S", action, { model: "fake/beta" }).pipe(Effect.flip);
-        assert.ok(refused._tag === "ActRefused" && refused.reason === "not_running");
-        assert.deepEqual(
-          yield* hosts.list,
-          [],
-          "preview actions cannot start Pi, even with start options",
-        );
-      }
       yield* sessions.act("S", { _tag: "prompt", text: "first" }, {});
       assert.ok(
         sent.some((m) => m._tag === "selected" && m.selectionId === "S" && m.hosted),
@@ -781,48 +767,29 @@ test("INV-02/05: input with start options that arrives while the attached Pi clo
     readFileSync(audit, "utf8")
       .split("\n")
       .filter(Boolean)
-      .map(
-        (line) =>
-          JSON.parse(line) as { event: string; pid: number; text?: string; previewOwner?: string },
-      );
+      .map((line) => JSON.parse(line) as { event: string; pid: number; text?: string });
   const spawns = () => records().filter((r) => r.event === "spawn");
-  let entered!: () => void, finish!: () => void;
-  const cleaning = new Promise<void>((resolve) => (entered = resolve));
-  const cleaned = new Promise<void>((resolve) => (finish = resolve));
-  class HeldCleanup extends PreviewAdapter {
-    override async request(): Promise<never> {
-      throw new Error("no supervisor in this test");
-    }
-    override async retire() {
-      entered();
-      await cleaned;
-      return true;
-    }
-  }
+  const closing = (pid: number) =>
+    Effect.promise(async () => {
+      while (!records().some((r) => r.event === "stdin-end" && r.pid === pid))
+        await new Promise((resolve) => setTimeout(resolve, 10));
+    });
   await run(
     Effect.gen(function* () {
       const hosts = yield* SessionHosts;
       const id = (yield* started()).spec.sessionId;
       const [first] = spawns();
-      yield* Effect.promise(() =>
-        assert.rejects(
-          ownerRequest(first.previewOwner!, {
-            action: "start",
-            command: [process.execPath, "-e", "process.exit(1)"],
-          }),
-        ),
-      );
       const { sessions, sent, next } = yield* client;
       yield* yield* sessions.select({ cwd, sessionId: id, selectionId: "S" });
       const shown = yield* next((m) => m._tag === "selected");
       assert.ok(shown._tag === "selected" && shown.hosted, "the live session is attached");
-      const closing = yield* hosts.release(cwd, id).pipe(Effect.forkChild);
-      yield* Effect.promise(() => cleaning);
+      const releasing = yield* hosts.release(cwd, id).pipe(Effect.forkChild);
+      yield* closing(first.pid);
       const acting = yield* sessions
         .act("S", { _tag: "prompt", text: "after close" }, {})
         .pipe(Effect.result, Effect.forkChild);
-      yield* Effect.sync(finish);
-      yield* Fiber.join(closing);
+      process.kill(first.pid, "SIGUSR2");
+      yield* Fiber.join(releasing);
       const result = yield* Fiber.join(acting);
       assert.equal(
         result._tag,
@@ -852,15 +819,12 @@ test("INV-02/05: input with start options that arrives while the attached Pi clo
         2,
         "the new Pi is attached in place of the closed one",
       );
-    }).pipe(
-      Effect.ensuring(Effect.sync(finish)),
-      Effect.provideService(PreviewOwnerOptions, {
-        adapter: new HeldCleanup(),
-        root: join(dir, "previews"),
-      }),
-    ),
+    }),
     undefined,
-    { cli: new URL("./fake-host-pi.mjs", import.meta.url).pathname, extraArgs: ["--audit", audit] },
+    {
+      cli: new URL("./fake-host-pi.mjs", import.meta.url).pathname,
+      extraArgs: ["--audit", audit, "--hold-shutdown"],
+    },
   );
 });
 
@@ -913,66 +877,6 @@ test("INV-02: retiring the selected session detaches before Pi stops, clears the
       }
       assert.equal(sent.filter((m) => m._tag === "selected").length, shown);
     }),
-  );
-});
-
-test("INV-02: a refused archive leaves the selected session attached and controllable", async () => {
-  class BrokenCleanup extends PreviewAdapter {
-    override async request(): Promise<never> {
-      throw new Error("no supervisor in this test");
-    }
-    override async retire(): Promise<boolean> {
-      throw new Error("cleanup broke");
-    }
-  }
-  const dir = mkdtempSync(join(root, "refused-archive-"));
-  const audit = join(dir, "audit.jsonl");
-  writeFileSync(audit, "");
-  const owner = () =>
-    readFileSync(audit, "utf8")
-      .split("\n")
-      .filter(Boolean)
-      .map((line) => JSON.parse(line) as { event: string; previewOwner?: string })
-      .find((r) => r.event === "spawn")!.previewOwner!;
-  await run(
-    Effect.gen(function* () {
-      const hosts = yield* SessionHosts;
-      const id = (yield* started()).spec.sessionId;
-      yield* Effect.promise(() =>
-        assert.rejects(
-          ownerRequest(owner(), {
-            action: "start",
-            command: [process.execPath, "-e", "process.exit(1)"],
-          }),
-        ),
-      );
-      const { sessions, sent, next } = yield* client;
-      yield* yield* sessions.select({ cwd, sessionId: id, selectionId: "S" });
-      yield* next((m) => m._tag === "selected");
-      const before = sent.length;
-      const refused = yield* Effect.result(sessions.retire(cwd, id, "archive"));
-      assert.equal(refused._tag, "Failure", "failed cleanup refuses the archive");
-      assert.deepEqual(
-        (yield* hosts.list).map((h) => h.sessionId),
-        [id],
-        "Pi still runs",
-      );
-      const shown = sent.slice(before).filter((m) => m._tag === "selected");
-      assert.deepEqual(
-        shown.map((m) => m._tag === "selected" && [m.selectionId, m.sessionId, m.hosted]),
-        [["S", id, true]],
-        "shown live again",
-      );
-      yield* sessions.act("S", { _tag: "restore_queue" });
-      yield* next((m) => m._tag === "action_result");
-    }).pipe(
-      Effect.provideService(PreviewOwnerOptions, {
-        adapter: new BrokenCleanup(),
-        root: join(dir, "previews"),
-      }),
-    ),
-    undefined,
-    { cli: new URL("./fake-host-pi.mjs", import.meta.url).pathname, extraArgs: ["--audit", audit] },
   );
 });
 

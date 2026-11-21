@@ -24,7 +24,7 @@ field focused so you can type a project name.
 A session's **Archive** action stops its Pi and hides it, keeping the transcript.
 In **Settings → Data controls**, use **Unarchive** to restore its listing without starting Pi;
 a closed folder stays closed. **Archive all** keeps pinned sessions and every running or starting
-Pi, including idle sessions and app owners. It never stops work.
+Pi, including idle sessions. It never stops work.
 
 ## Preview local files
 
@@ -38,16 +38,6 @@ saves the file as it is on disk. Click the link again to reread. See
 With Radius signed in, ask **“Create an artifact containing this report.”** The agent publishes it
 privately to Radius and returns a confirmed viewing link. Ask to update or view the same artifact
 on later turns. See [confirmation and failure handling](radius-artifacts.md#confirmation-and-uncertainty).
-
-## Run an app preview
-
-On macOS, or on a configured private exe.dev host, ask **“Run this app so I can try it.”** The
-agent launches an app in the session's workspace and returns a preview link (on a Mac,
-`http://localhost:<port>/`). It keeps running after the reply, Stop and browser disconnect,
-but ends with its owning Pi process (including that session's Archive/Delete or Piano shutdown).
-Data controls' **Archive all** keeps app-owning sessions running.
-Ask the agent to stop the exact instance when finished. See [setup and limits](live-previews.md).
-The app opens in its own browser tab; see [external app access](live-previews.md#external-app-access).
 
 ## Dispatch work to another session
 

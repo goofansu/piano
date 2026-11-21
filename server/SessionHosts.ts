@@ -278,8 +278,6 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
                       lock,
                       1,
                     )(Effect.suspend(() => close(key, host, { closure }))),
-                  ).pipe(
-                    Effect.catchTag("PiSessionError", (error) => Effect.logWarning(error.detail)),
                   ),
               }).pipe(
                 Scope.provide(layerScope),
@@ -584,17 +582,14 @@ export const SessionHostsLive = (options: { idleMs: number }) =>
                 if (hosts.get(key) === host && (yield* host.idle(options.idleMs)))
                   yield* close(key, host);
               }),
-            ).pipe(Effect.catchTag("PiSessionError", (error) => Effect.logWarning(error.detail)));
+            );
           }
         }).pipe(Effect.delay(Math.min(15_000, options.idleMs)), Effect.forever, Effect.forkScoped);
 
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {
           stopping = true;
-          for (const [key, host] of hosts)
-            yield* close(key, host, { shutdown: true }).pipe(
-              Effect.catchTag("PiSessionError", (error) => Effect.logWarning(error.detail)),
-            );
+          for (const [key, host] of hosts) yield* close(key, host);
         }),
       );
       return SessionHosts.of({

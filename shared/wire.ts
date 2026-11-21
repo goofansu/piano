@@ -202,29 +202,6 @@ export const SessionClosure = Schema.Union([
 ]);
 export type SessionClosure = typeof SessionClosure.Type;
 
-export const PREVIEW_STATES = [
-  "starting",
-  "running",
-  "exited",
-  "failed",
-  "stopping",
-  "not-loaded",
-] as const;
-
-export const SessionPreview = Schema.Struct({
-  instanceId: Schema.String,
-  state: Schema.Literals([...PREVIEW_STATES, "unknown"]),
-  ready: Schema.Boolean,
-  warming: Schema.Boolean,
-  url: Schema.NullOr(Schema.String),
-  port: Schema.Number,
-  command: Schema.Array(Schema.String),
-  detail: Schema.String,
-  externalAccess: Schema.Literals(["same-host", "unverified"]),
-  observedAt: Schema.Number,
-});
-export type SessionPreview = typeof SessionPreview.Type;
-
 export const ArtifactPublication = Schema.Struct({
   artifactId: Schema.String,
   title: Schema.String,
@@ -260,7 +237,6 @@ export const SessionState = Schema.Struct({
   isQuiescent: Schema.optional(Schema.Boolean),
   closure: Schema.optional(SessionClosure),
   checkoutMissing: Schema.optional(Schema.Boolean),
-  preview: Schema.optional(SessionPreview),
 });
 export type SessionState = typeof SessionState.Type;
 
@@ -378,10 +354,6 @@ export const SessionAction = Schema.Union([
     confirmed: Schema.optional(Schema.Boolean),
     cancelled: Schema.optional(Schema.Boolean),
   }),
-  Schema.TaggedStruct("preview_status", {
-    requestId: Schema.optional(Schema.String),
-  }),
-  Schema.TaggedStruct("preview_stop", { instanceId: Schema.String }),
 ]);
 export type SessionAction = typeof SessionAction.Type;
 
@@ -389,16 +361,6 @@ export const SessionActionResult = Schema.Union([
   Schema.TaggedStruct("queue_restored", {
     messages: Schema.Array(QueuedMessage),
     stopError: Schema.optional(Schema.String),
-  }),
-  Schema.TaggedStruct("preview_observed", {
-    requestId: Schema.optional(Schema.String),
-    instanceId: Schema.NullOr(Schema.String),
-    logs: Schema.String,
-    error: Schema.optional(Schema.String),
-  }),
-  Schema.TaggedStruct("preview_stopped", {
-    instanceId: Schema.String,
-    outcome: Schema.Literals(["stopped", "cleared", "not-current"]),
   }),
 ]);
 export type SessionActionResult = typeof SessionActionResult.Type;
@@ -685,7 +647,6 @@ export const HostInfo = Schema.Struct({
   sessionId: Schema.String,
   working: Schema.Boolean,
   starting: Schema.optional(Schema.Boolean),
-  preview: Schema.optional(Schema.Boolean),
 });
 export type HostInfo = typeof HostInfo.Type;
 
@@ -874,11 +835,6 @@ export const ServerMessage = Schema.Union([
     cwd: Schema.String,
     sessionId: Schema.String,
     result: SessionActionResult,
-  }),
-  Schema.TaggedStruct("preview_unobserved", {
-    selectionId: Schema.String,
-    requestId: Schema.String,
-    message: Schema.String,
   }),
   Schema.TaggedStruct("data_controls_result", {
     requestId: Schema.String,
