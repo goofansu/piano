@@ -1,5 +1,17 @@
 # AGENTS.md
 
+## Feature granularity
+
+Start new work in the feature that owns the user's task. Create a top-level `features/<name>/`
+when you can name a distinct user outcome, the decisions it owns, and a concrete change it can
+make independently of neighboring features. Keep steps that routinely change together in the same
+feature. A screen can compose several features, and one feature can span browser and server code.
+
+For example, image attachments belong to Sessions because they travel with a message from draft
+to transcript. Voice input owns microphone access and transcription, which can evolve independently
+of message delivery. Apply the same test when splitting a growing feature. See the
+[feature layout](docs/README.md#feature-inventory) for where its code belongs.
+
 ## Verification
 
 Before changing behavior, name the claim, relevant invariant and smallest check that could disprove
