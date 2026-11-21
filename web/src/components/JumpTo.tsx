@@ -1,24 +1,19 @@
-import type { RenderMsg } from "@shared/wire";
 import { cn } from "cn";
 import { ArrowDownIcon, ArrowUpIcon, MessageSquareIcon } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { UsageListPopover } from "@/components/UsageListPopover";
 import { listRow } from "@/lib/styles";
-import { jumpEntries, transcriptRows } from "@/lib/transcript";
+import { jumpEntries, type TranscriptRow } from "@/lib/transcript";
 import { useTranscriptViewport } from "@/lib/useTranscriptViewport";
 
 interface Props {
-  messages: ReadonlyArray<RenderMsg>;
-  working?: boolean;
+  history: ReadonlyArray<TranscriptRow>;
 }
 
-export function JumpTo({ messages, working = false }: Props) {
+export function JumpTo({ history }: Props) {
   const [active, setActive] = useState<string>("bottom");
   const viewport = useTranscriptViewport();
-  const entries = useMemo(
-    () => jumpEntries(transcriptRows(messages, { working })),
-    [messages, working],
-  );
+  const entries = useMemo(() => jumpEntries(history), [history]);
   const total = entries.filter(
     (entry) => entry.kind === "user" || entry.kind === "assistant",
   ).length;
