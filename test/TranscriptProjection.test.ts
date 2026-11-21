@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { RenderMsg, ToolExecution } from "../shared/wire.ts";
-import { createTranscriptProjector, jumpEntries } from "../web/src/lib/transcript.ts";
+import {
+  createTranscriptProjector,
+  jumpEntries,
+} from "../web/src/features/transcript/transcript.ts";
 
 const user: RenderMsg = { id: "user", role: "user", text: "Inspect the files" };
 const call: RenderMsg = {

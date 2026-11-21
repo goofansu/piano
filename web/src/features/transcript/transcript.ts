@@ -1,6 +1,6 @@
 import type { RenderMsg, ToolExecution } from "@shared/wire";
-import { ASK_USER_TOOL, type AskUserOutcome, askUserOutcome } from "../../../shared/askUser.ts";
-import { cutText } from "../../../shared/cutText.ts";
+import { ASK_USER_TOOL, type AskUserOutcome, askUserOutcome } from "../../../../shared/askUser.ts";
+import { cutText } from "../../../../shared/cutText.ts";
 import {
   type Disposition,
   type SessionCreation,
@@ -15,9 +15,9 @@ import {
   type WaitArguments,
   type WaitStatus,
   type WaitToolResult,
-} from "../../../shared/dispatch.ts";
-import { type LibraryResult, storedLibraryResult } from "../../../shared/library.ts";
-import { abbrevHome, DETACHED_HEAD, stripAnsi, toolArgsText } from "./format.ts";
+} from "../../../../shared/dispatch.ts";
+import { type LibraryResult, storedLibraryResult } from "../../../../shared/library.ts";
+import { abbrevHome, DETACHED_HEAD, stripAnsi, toolArgsText } from "../../lib/format.ts";
 import { type MessageError, messageError } from "./messageError.ts";
 
 export const messageAnchorId = (id: string) => `msg-${id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
@@ -31,7 +31,7 @@ type ToolCall = NonNullable<RenderMsg["toolCalls"]>[number];
 
 export type ToolOutcome = "running" | "failed" | "incomplete" | "done" | "pending";
 
-export type Badge = "destructive" | "secondary" | "success" | "warning";
+type Badge = "destructive" | "secondary" | "success" | "warning";
 
 export interface ToolRow {
   call: ToolCall;
@@ -436,15 +436,6 @@ function nestedView(
 const turnLabel = (m: RenderMsg) =>
   messageLabel(m.skill ? `/skill:${m.skill.name} ${m.text}` : m.text) ||
   (m.attachments?.length ? "Image" : "");
-
-export function transcriptRows(
-  messages: ReadonlyArray<RenderMsg>,
-  options: TranscriptOptions = {},
-): TranscriptRow[] {
-  const projection = projectHistory(messages, options);
-  const pending = projection.pending(options.pending);
-  return pending ? [...projection.rows, pending] : projection.rows;
-}
 
 export interface TranscriptProjection {
   history: readonly TranscriptRow[];

@@ -1,5 +1,7 @@
 # Session page performance baseline
 
+Ownership and correctness checks: [Transcript rendering and scrolling](transcript.md).
+
 `PERF_SIZES` and `PERF_REPEATS` narrow a run of `test/browser/session-perf.mjs`.
 
 ## Boundary and method
@@ -12,5 +14,5 @@ numbers.
 
 The scroll sweep sets `scrollTop` from script, as a scrollbar drag does, so its rows take the
 deferred placeholder path. Scrolling driven by wheel, touch or keys renders rows entering view before
-paint while `web/src/lib/scrollRenderBudget.ts` allows it; the sweep does not measure that path.
+paint while `web/src/features/transcript/scrollRenderBudget.ts` allows it; the sweep does not measure that path.
 `test/browser/transcript-scroll.mjs` covers it with native wheel input.

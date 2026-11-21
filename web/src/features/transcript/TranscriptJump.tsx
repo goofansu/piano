@@ -1,29 +1,21 @@
-import type { RenderMsg } from "@shared/wire";
 import { cn } from "cn";
 import { ArrowDownIcon, ArrowUpIcon, MessageSquareIcon } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { UsageListPopover } from "@/components/UsageListPopover";
 import { listRow } from "@/lib/styles";
-import { jumpEntries, transcriptRows } from "@/lib/transcript";
-import { useTranscriptViewport } from "@/lib/useTranscriptViewport";
+import { jumpEntries } from "./transcript";
+import { useTranscript, useTranscriptViewport } from "./TranscriptContext";
 
-interface Props {
-  messages: ReadonlyArray<RenderMsg>;
-  working?: boolean;
-}
-
-export function JumpTo({ messages, working = false }: Props) {
+export function TranscriptJump() {
   const [active, setActive] = useState<string>("bottom");
   const viewport = useTranscriptViewport();
-  const entries = useMemo(
-    () => jumpEntries(transcriptRows(messages, { working })),
-    [messages, working],
-  );
+  const { projection } = useTranscript();
+  const entries = useMemo(() => jumpEntries(projection.history), [projection.history]);
   const total = entries.filter(
     (entry) => entry.kind === "user" || entry.kind === "assistant",
   ).length;
   const centre = useCallback(() => {
-    const id = viewport ? viewport.current(entries) : "bottom";
+    const id = viewport.current(entries);
     setActive(id);
     return `[data-entry="${CSS.escape(id)}"]`;
   }, [entries, viewport]);
@@ -44,7 +36,7 @@ export function JumpTo({ messages, working = false }: Props) {
             type="button"
             data-entry={entry.id}
             aria-current={entry.id === active ? "true" : undefined}
-            onClick={(event) => viewport?.jump(entry, { animate: event.detail > 0 })}
+            onClick={(event) => viewport.jump(entry, { animate: event.detail > 0 })}
             className={cn(
               listRow,
               "gap-3 px-4 py-1.5",

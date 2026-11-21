@@ -1,12 +1,17 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { after, test } from "node:test";
-import { type ComponentType, type Context, createElement } from "react";
+import { JSDOM } from "jsdom";
+import { act, type ComponentType, type Context, createElement, type ReactNode } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createServer } from "vite";
 import type { RenderMsg, ToolExecution } from "../shared/wire.ts";
+import {
+  createTranscriptProjector,
+  jumpEntries,
+} from "../web/src/features/transcript/transcript.ts";
 import type { PageStores } from "../web/src/lib/pageStores.ts";
-import { jumpEntries, transcriptRows } from "../web/src/lib/transcript.ts";
 import { pageStores } from "./fixtures/pageStores.ts";
 
 const vite = await createServer({
@@ -16,14 +21,17 @@ const vite = await createServer({
   optimizeDeps: { noDiscovery: true, include: [] },
 });
 after(() => vite.close());
-const { MessageList } = (await vite.ssrLoadModule("/src/components/MessageList.tsx")) as {
-  MessageList: ComponentType<{
-    messages: RenderMsg[];
+const { Transcript, TranscriptProvider } = (await vite.ssrLoadModule(
+  "/src/features/transcript/index.ts",
+)) as {
+  Transcript: ComponentType<{ activity?: "starting" | "working" }>;
+  TranscriptProvider: ComponentType<{
+    messages: readonly RenderMsg[];
     pending: RenderMsg | null;
-    tools: Record<string, ToolExecution>;
+    tools?: readonly ToolExecution[];
     showTools?: boolean;
-    activity?: "starting" | "working";
     working?: boolean;
+    children?: ReactNode;
   }>;
 };
 const { PageStoresContext } = (await vite.ssrLoadModule("/src/lib/usePageStores.ts")) as {
@@ -34,14 +42,65 @@ const render = (
   tools: Record<string, ToolExecution> = {},
   pending: RenderMsg | null = null,
   showTools = true,
+  working = false,
 ) =>
   renderToStaticMarkup(
     createElement(
       PageStoresContext.Provider,
       { value: pageStores() },
-      createElement(MessageList, { messages, tools, pending, showTools }),
+      createElement(
+        TranscriptProvider,
+        { messages, tools: Object.values(tools), pending, showTools, working },
+        createElement(Transcript, { activity: working ? "working" : undefined }),
+      ),
     ),
   );
+test("unchanged saved history is not reread when empty executions are supplied again", async (t) => {
+  const dom = new JSDOM("<div id='root'></div>");
+  const globals = {
+    window: dom.window,
+    document: dom.window.document,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const originals = Object.fromEntries(
+    Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+  );
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, value });
+  const root = createRoot(dom.window.document.getElementById("root")!);
+  t.after(async () => {
+    await act(() => root.unmount());
+    dom.window.close();
+    for (const [key, descriptor] of Object.entries(originals)) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  });
+  let reads = 0;
+  const messages: RenderMsg[] = [
+    {
+      id: "saved",
+      role: "user",
+      get text() {
+        reads++;
+        return "Saved question";
+      },
+    },
+  ];
+  const renderProvider = async (tools?: ToolExecution[]) => {
+    await act(() =>
+      root.render(createElement(TranscriptProvider, { messages, pending: null, tools })),
+    );
+  };
+  await renderProvider([]);
+  assert.ok(reads > 0, "the initial history was projected");
+  const initial = reads;
+  await renderProvider([]);
+  assert.equal(reads, initial, "an empty execution list must not reproject unchanged history");
+  await renderProvider();
+  assert.equal(reads, initial, "absent saved executions mean the same empty input");
+});
+
 const apiError =
   'exe-dev-openai API error (429): {"type":"usage_limit_reached","message":"The usage limit has been reached","retry_after":123}';
 const failure = (errorMessage = apiError): RenderMsg => ({
@@ -118,7 +177,7 @@ test("messages-only renders no tool activity, and every Jump to destination has 
   assert.match(html, /This operation was aborted/);
   for (const showTools of [true, false]) {
     const shown = render(history, {}, null, showTools);
-    for (const entry of jumpEntries(transcriptRows(history)))
+    for (const entry of jumpEntries(createTranscriptProjector()(history).history))
       if ("messageId" in entry)
         assert.ok(shown.includes(`id="msg-${entry.messageId}"`), entry.messageId);
     assert.equal(
@@ -136,23 +195,10 @@ test("messages-only never flashes a completed intermediate message while the age
   const final: RenderMsg = { id: "final", role: "assistant", text: "Final answer" };
   const history = [user, commentary];
   const working = (messages: RenderMsg[], pending: RenderMsg | null = null, showTools = false) =>
-    renderToStaticMarkup(
-      createElement(
-        PageStoresContext.Provider,
-        { value: pageStores() },
-        createElement(MessageList, {
-          messages,
-          pending,
-          tools: {},
-          showTools,
-          activity: "working",
-          working: true,
-        }),
-      ),
-    );
+    render(messages, {}, pending, showTools, true);
   assert.doesNotMatch(working(history), /Let me investigate/);
   assert.deepEqual(
-    jumpEntries(transcriptRows(history, { working: true })).flatMap((entry) =>
+    jumpEntries(createTranscriptProjector()(history, { working: true }).history).flatMap((entry) =>
       "messageId" in entry ? [entry.messageId] : [],
     ),
     ["user"],

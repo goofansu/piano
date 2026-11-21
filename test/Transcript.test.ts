@@ -10,14 +10,18 @@ import type {
   WaitToolResult,
 } from "../shared/dispatch.ts";
 import type { RenderMsg, ToolExecution } from "../shared/wire.ts";
-import { messageError } from "../web/src/lib/messageError.ts";
+import { messageError } from "../web/src/features/transcript/messageError.ts";
 import {
+  createTranscriptProjector,
   jumpEntries,
   type TranscriptOptions,
   type TranscriptRow,
-  transcriptRows,
-} from "../web/src/lib/transcript.ts";
+} from "../web/src/features/transcript/transcript.ts";
 
+const transcriptRows = (messages: readonly RenderMsg[], options: TranscriptOptions = {}) => {
+  const { history, pending } = createTranscriptProjector()(messages, options);
+  return pending ? [...history, pending] : [...history];
+};
 const jumps = (messages: ReadonlyArray<RenderMsg>) => jumpEntries(transcriptRows(messages));
 const ids = (rows: TranscriptRow[]) => rows.map((row) => row.msg.id);
 const reply = (rows: TranscriptRow[], id: string) => {

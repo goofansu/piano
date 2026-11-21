@@ -2,7 +2,7 @@ import { isWorking } from "@shared/sessionProjection";
 import type { ExtensionState } from "@shared/wire";
 import { cn } from "cn";
 import { MessagesSquareIcon } from "lucide-react";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AnsweredQuestion } from "@/components/AnsweredQuestion";
 import { Banner } from "@/components/Banner";
@@ -10,7 +10,6 @@ import { useSessionCommands } from "@/components/CommandHost";
 import { Composer } from "@/components/Composer";
 import { InlineQuestion } from "@/components/InlineQuestion";
 import { LocalFileContext } from "@/components/Markdown";
-import { MessageList, SessionDestinationContext } from "@/components/MessageList";
 import {
   PianoStripBar,
   PianoStripTab,
@@ -23,8 +22,8 @@ import { SessionHeader } from "@/components/SessionHeader";
 import { SessionPanel, SurfaceTabTrigger } from "@/components/SessionPanel";
 import { SessionRail } from "@/components/SessionRail";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { Transcript, TranscriptProvider } from "@/features/transcript";
 import type { Client } from "@/lib/client";
 import { tabKey } from "@/lib/navigation";
 import { AGENT_MIN_WIDTH, PANEL_WIDTH, RAIL_WIDTH, singleArea } from "@/lib/panelLayout";
@@ -45,7 +44,6 @@ import { useMessagesOnly } from "@/lib/useMessagesOnly";
 import { useNavigation } from "@/lib/useNavigation";
 import { useDrafts } from "@/lib/usePageStores";
 import { useSessionPullRequest } from "@/lib/useSessionPullRequest";
-import { TranscriptViewportContext, useNewTranscriptViewport } from "@/lib/useTranscriptViewport";
 import { type AppState, sessionKey } from "@/store";
 
 interface Props {
@@ -89,10 +87,6 @@ export function SessionView({ state, send }: Props) {
   const agent = useRef<HTMLDivElement>(null);
   const [messagesOnly] = useMessagesOnly();
   const t = state.session;
-  const tools = useMemo(
-    () => Object.fromEntries((t?.tools ?? []).map((tool) => [tool.id, tool])),
-    [t?.tools],
-  );
   useLibraryToasts(t?.tools);
   const input = state.pendingCreate;
   const context = sessionContext(state);
@@ -139,10 +133,15 @@ export function SessionView({ state, send }: Props) {
   const answerReceipt = answeredQuestion(state);
   const readOnly = notices.find((n) => n.placement === "composer");
   const [usedEditorRequest, setUsedEditorRequest] = useState<string>();
-  const viewport = useNewTranscriptViewport();
 
   return (
-    <TranscriptViewportContext value={viewport}>
+    <TranscriptProvider
+      messages={t?.messages ?? []}
+      pending={t?.pending ?? null}
+      tools={t?.tools}
+      working={!!t && isWorking(t.state)}
+      showTools={!messagesOnly}
+    >
       <SessionHeader state={state} status={status} pullRequest={pullRequest} />
       {areaTabs && <AreaTabs />}
       <div
@@ -201,26 +200,20 @@ export function SessionView({ state, send }: Props) {
             ))}
           <div className="relative flex min-h-0 flex-1 flex-col">
             <AddToChat draftKey={draftKey} className="relative flex min-h-0 flex-1 flex-col">
-              {pane.list && (
+              {(pane.list || pane.skeleton) && (
                 <LocalFileContext value={(path) => openFile(path, "agent")}>
-                  <SessionDestinationContext value={destination}>
-                    <MessageList
-                      key={t ? sessionKey(t) : draftKey}
-                      workspaceId={workspace?.id}
-                      showTools={!messagesOnly}
-                      messages={t?.messages ?? []}
-                      pending={t?.pending ?? null}
-                      submittedInput={input}
-                      tools={tools}
-                      activity={replyActivity}
-                      working={!!t && isWorking(t.state)}
-                      placeholder={pane.placeholder}
-                      dispatchedFrom={dispatchedFrom}
-                    />
-                  </SessionDestinationContext>
+                  <Transcript
+                    key={t ? sessionKey(t) : draftKey}
+                    loading={pane.skeleton}
+                    workspaceId={workspace?.id}
+                    submittedInput={input}
+                    activity={replyActivity}
+                    placeholder={pane.placeholder}
+                    dispatchedFrom={dispatchedFrom}
+                    destinationOf={destination}
+                  />
                 </LocalFileContext>
               )}
-              {pane.skeleton && <TranscriptSkeleton />}
               {!state.connected && (
                 <div
                   role="status"
@@ -280,7 +273,7 @@ export function SessionView({ state, send }: Props) {
           labelledBy={areaTabs && surface ? tabId(surface.active) : undefined}
         />
       </div>
-    </TranscriptViewportContext>
+    </TranscriptProvider>
   );
 }
 
@@ -390,39 +383,5 @@ function ExtensionBlock({
         </div>
       )}
     </section>
-  );
-}
-
-function TranscriptSkeleton() {
-  return (
-    <div aria-hidden className="absolute inset-0 overflow-hidden bg-conversation px-(--gutter)">
-      <div className="late-enter mx-auto flex w-full max-w-3xl flex-col gap-6 py-6 md:py-8">
-        <div className="rounded-2xl border border-line bg-fill px-4 py-3.5">
-          <div className="flex gap-3">
-            <span className="flex h-[1lh] w-4 items-center justify-center">
-              <Skeleton className="h-3 w-1.5 rounded-sm" />
-            </span>
-            <Skeleton className="h-4 w-[52%]" />
-          </div>
-        </div>
-        <div className="flex gap-3">
-          <span className="flex h-[1lh] w-4 items-center justify-center">
-            <Skeleton className="size-1.5 rounded-full" />
-          </span>
-          <div className="flex min-w-0 flex-1 flex-col gap-2.5 pt-0.5">
-            <Skeleton className="h-4 w-[88%]" />
-            <Skeleton className="h-4 w-[72%]" />
-            <Skeleton className="h-4 w-[44%]" />
-          </div>
-        </div>
-        <div className="flex items-center gap-3 text-sm">
-          <span className="flex h-[1lh] w-4 items-center justify-center">
-            <Skeleton className="size-2 rounded-full" />
-          </span>
-          <Skeleton className="h-3.5 w-10" />
-          <Skeleton className="h-3.5 w-36" />
-        </div>
-      </div>
-    </div>
   );
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createScrollRenderBudget } from "../web/src/lib/scrollRenderBudget.ts";
+import { createScrollRenderBudget } from "../web/src/features/transcript/scrollRenderBudget.ts";
 
 function harness() {
   let time = 0;

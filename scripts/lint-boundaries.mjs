@@ -1,9 +1,20 @@
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
 const within = (path, dir) => path === dir || path.startsWith(`${dir}${sep}`);
 const sharedPackages = new Set(["effect", "@earendil-works/pi-schema", "zod"]);
+const transcript = resolve(root, "web/src/features/transcript");
+const transcriptEntry = resolve(transcript, "index.ts");
+const transcriptOwners = new Set(
+  [
+    "components/SessionView.tsx",
+    "components/Composer.tsx",
+    "components/SessionRail.tsx",
+    "store.ts",
+    "lib/client.ts",
+  ].map((path) => resolve(root, "web/src", path)),
+);
 
 function aliases(config) {
   const json = JSON.parse(readFileSync(config, "utf8"));
@@ -25,7 +36,7 @@ const webAliases = aliases(resolve(root, "web/tsconfig.app.json"));
 
 function canonical(path) {
   for (const candidate of [path, `${path}.ts`, `${path}.tsx`, `${path}.js`, `${path}/index.ts`])
-    if (existsSync(candidate)) return realpathSync(candidate);
+    if (existsSync(candidate) && statSync(candidate).isFile()) return realpathSync(candidate);
   return path;
 }
 
@@ -103,6 +114,24 @@ export default {
             return;
           }
           for (const target of targets.map(canonical)) {
+            if (layer === "web") {
+              if (
+                within(target, transcript) &&
+                !within(file, transcript) &&
+                target !== transcriptEntry
+              ) {
+                report(node, specifier, "Use the transcript public entry point");
+                break;
+              }
+              if (within(file, transcript) && transcriptOwners.has(target)) {
+                report(
+                  node,
+                  specifier,
+                  "Transcript cannot depend on its callers or session transport/state",
+                );
+                break;
+              }
+            }
             const allowed =
               layer === "server"
                 ? !within(target, resolve(root, "web"))

@@ -26,8 +26,9 @@ skill bodies, keeps standard soft-break behavior. HTML and unsafe links remain i
   dialog prefills and extension editor text), which gets the same control stripping without
   redaction. The voice `transcribe` endpoint in `shared/http.ts` sets `redact: false`. `server/PiSessions.ts` returns action results
   unredacted; they are redacted where they leave the server.
-- `web/src/components/MessageList.tsx` opts into `Markdown.tsx`'s `preserveLineBreaks` rendering;
-  `remark-breaks` converts soft breaks in the parsed tree, never in the source string.
+- The [transcript feature](transcript.md)'s `MessageRows.tsx` and `ToolRows.tsx` opt into
+  `Markdown.tsx`'s `preserveLineBreaks` rendering; `remark-breaks` converts soft breaks in the
+  parsed tree, never in the source string.
 - `test/SessionProjection.test.ts` checks original text in live, partial and reloaded messages and
   redaction of statuses, widgets, notices, dialogs, errors and exits. `SessionDelivery.test.ts`,
   `SessionHistory.test.ts`, `PiProjector.test.ts` and `PiIdentity.test.ts` cover streaming,

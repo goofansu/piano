@@ -39,6 +39,13 @@ test("oxlint enforces layer edges, including types, aliases and a shared bridge"
     put("server/Thing.ts", "export type Thing = string;\n");
     put("shared/Thing.ts", "export type Thing = string;\n");
     put("web/src/Thing.ts", "export type Thing = string;\n");
+    for (const file of [
+      "features/transcript/index.ts",
+      "features/transcript/private.ts",
+      "components/Composer.tsx",
+      "store.ts",
+    ])
+      put(`web/src/${file}`, "export type Thing = string;\n");
     const lint = (files: string[]) =>
       spawnSync(
         join(ROOT, "node_modules/.bin/oxlint"),
@@ -60,6 +67,31 @@ test("oxlint enforces layer edges, including types, aliases and a shared bridge"
         false,
       ],
       ["web/src/check.ts", 'export type { Thing } from "@shared/Thing";', true],
+      ["web/src/check.ts", 'export type { Thing } from "@/features/transcript";', true],
+      ["web/src/check.ts", 'export type { Thing } from "./features/transcript/index.ts";', true],
+      ["web/src/check.ts", 'export type { Thing } from "@/features/transcript/private";', false],
+      [
+        "web/src/check.ts",
+        'export type T = import("./features/transcript/private.ts").Thing;',
+        false,
+      ],
+      [
+        "web/src/check.ts",
+        'export const load = () => import("@/features/transcript/private");',
+        false,
+      ],
+      ["web/src/features/transcript/check.ts", 'export type { Thing } from "./private";', true],
+      [
+        "web/src/features/transcript/check.ts",
+        'export type { Thing } from "@/components/Composer";',
+        false,
+      ],
+      [
+        "web/src/features/transcript/check.ts",
+        'export type { Thing } from "../../store.ts";',
+        false,
+      ],
+      ["web/src/features/transcript/check.ts", 'export type { Thing } from "@shared/Thing";', true],
       ["server/check.ts", 'export type { Thing } from "../shared/Thing.ts";', true],
       ["server/check.ts", 'export type { Thing } from "../scripts/Thing.ts";', true],
       [

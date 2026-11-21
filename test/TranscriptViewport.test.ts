@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BOTTOM_ENTRY, type JumpEntry } from "../web/src/lib/transcript.ts";
+import { BOTTOM_ENTRY, type JumpEntry } from "../web/src/features/transcript/transcript.ts";
 import {
   createTranscriptViewport,
   type ViewportElement,
-} from "../web/src/lib/transcriptViewport.ts";
+} from "../web/src/features/transcript/transcriptViewport.ts";
 
 class FakeElement implements ViewportElement {
   #top = 0;

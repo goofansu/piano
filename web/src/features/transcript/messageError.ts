@@ -1,5 +1,5 @@
 import type { RenderMsg, ToolExecution } from "@shared/wire";
-import { cutText } from "../../../shared/cutText.ts";
+import { cutText } from "../../../../shared/cutText.ts";
 
 export interface MessageError {
   summary: string;

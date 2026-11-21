@@ -49,7 +49,7 @@ the [feature verification mapping policy](../../../../docs/testing.md#feature-ve
   [Image attachments](../../../../docs/image-attachments.md).
 - [Open and continue a session](./open-session.md).
   Docs: [Session navigation](../../../../docs/sidebar-session-navigation.md#developer-navigation),
-  [Transcript performance](../../../../docs/session-performance.md),
+  [Transcript rendering and scrolling](../../../../docs/transcript.md),
   [Radius artifacts](../../../../docs/radius-artifacts.md).
 - [Share a session](./session-sharing.md).
   Docs: [Session sharing](../../../../docs/session-sharing.md).

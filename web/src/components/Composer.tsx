@@ -5,7 +5,6 @@ import { ArrowUpIcon, ChevronDownIcon, PencilIcon, SquareIcon } from "lucide-rea
 import { useId } from "react";
 import { ContextDetails } from "@/components/ContextDetails";
 import { ComposerSend, DraftEditor, useDraftEditor } from "@/components/DraftEditor";
-import { JumpTo } from "@/components/JumpTo";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,6 +19,7 @@ import type { CompletionContext } from "@/components/SlashTextarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { TranscriptJump } from "@/features/transcript";
 import type { Client } from "@/lib/client";
 import {
   composerControl,
@@ -281,7 +281,7 @@ export function Composer({
           role="group"
           aria-label="Session usage"
         >
-          <JumpTo messages={messages} working={streaming} />
+          <TranscriptJump />
           <Popover>
             <PopoverTrigger
               render={

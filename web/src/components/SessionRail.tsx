@@ -23,14 +23,13 @@ import { SessionOutputs } from "@/components/SessionOutputs";
 import { RailList, RailRowTitle, railRow } from "@/components/SessionRailList";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Item, ItemContent, ItemMedia } from "@/components/ui/item";
+import { useTranscriptWheel } from "@/features/transcript";
 import { createPreference, parseJson } from "@/lib/preference";
 import { pullRequestView } from "@/lib/pullRequestView";
 import { type EnvironmentRowKind, environmentRowMenu } from "@/lib/sessionCommands";
 import { sessionContext, sessionPlace } from "@/lib/sessionContext";
-import type { TranscriptViewport } from "@/lib/transcriptViewport";
 import { usePreference } from "@/lib/usePreference";
 import { useSessionFiles } from "@/lib/useSessionFiles";
-import { useTranscriptViewport } from "@/lib/useTranscriptViewport";
 import { type AppState, sessionKey } from "@/store";
 
 type RailSectionName = "workspace" | "outputs";
@@ -55,10 +54,14 @@ export function SessionRail({ state }: RailProps) {
 
 function SessionRailContent({ state }: RailProps) {
   const attachRail = useCallback((rail: HTMLElement | null) => fadeOverflow(rail), []);
-  const viewport = useTranscriptViewport();
+  const wheel = useTranscriptWheel();
   const onWheel = useCallback(
-    (event: React.WheelEvent<HTMLElement>) => passWheel(event, viewport),
-    [viewport],
+    (event: React.WheelEvent<HTMLElement>) => {
+      const rail = event.currentTarget;
+      if (rail.scrollHeight > rail.clientHeight || event.ctrlKey) return;
+      wheel(event.deltaY, event.deltaMode);
+    },
+    [wheel],
   );
   if (!state.session) return null;
   return (
@@ -93,12 +96,6 @@ function fadeOverflow(rail: HTMLElement | null) {
     observer.disconnect();
     rail.removeEventListener("scroll", update);
   };
-}
-
-function passWheel(event: React.WheelEvent<HTMLElement>, viewport: TranscriptViewport | null) {
-  const rail = event.currentTarget;
-  if (rail.scrollHeight > rail.clientHeight || event.ctrlKey) return;
-  viewport?.wheel(event.deltaY, event.deltaMode);
 }
 
 function RailSections({ state }: { state: AppState }) {
