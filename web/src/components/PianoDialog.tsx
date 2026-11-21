@@ -1,6 +1,7 @@
 import { cn } from "cn";
 import type { ComponentProps } from "react";
 import { DialogContent as BaseContent } from "@/components/ui/dialog";
+import { keyboardFocusReturn } from "@/lib/pointerClose";
 import { useExitFace } from "@/lib/useExitFace";
 
 export {
@@ -17,6 +18,7 @@ export type DialogFinalFocus = ComponentProps<typeof BaseContent>["finalFocus"];
 
 export function DialogContent({
   className,
+  finalFocus = keyboardFocusReturn,
   still = false,
   ref,
   ...props
@@ -27,6 +29,7 @@ export function DialogContent({
       data-motion={still ? undefined : "dialog"}
       ref={still ? ref : exitFace}
       {...props}
+      finalFocus={finalFocus}
       className={cn("rounded-2xl bg-surface-3", className)}
     />
   );

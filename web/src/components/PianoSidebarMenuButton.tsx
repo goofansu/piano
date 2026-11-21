@@ -4,7 +4,7 @@ import { sidebarRowClassName } from "@/components/SidebarSessionList";
 import { SidebarMenuButton } from "@/components/ui/sidebar";
 
 const row =
-  "gap-1.5 text-ink-2 data-[active=true]:bg-(--selected) data-[active=true]:text-ink hover:data-[active=true]:bg-(--selected)";
+  "gap-1.5 text-ink-2 data-active:bg-(--selected) data-active:text-ink hover:data-active:bg-(--selected)";
 
 export function PianoSidebarMenuButton({
   className,

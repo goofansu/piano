@@ -683,7 +683,7 @@
   --tw-animation-duration: 125ms;
 }
 [data-motion="dialog"],
-[data-slot="dialog-overlay"]:has(+ [data-motion="dialog"]) {
+[data-slot="dialog-overlay"]:has(~ [data-motion="dialog"]) {
   --tw-animation-duration: 200ms;
   --tw-ease: var(--ease-out);
 }
@@ -794,7 +794,7 @@
 }
 :not(
   [data-motion],
-  [data-slot="dialog-overlay"]:has(+ [data-motion]),
+  [data-slot="dialog-overlay"]:has(~ [data-motion]),
   .animate-spin,
   .late-enter,
   [data-sonner-toast]
