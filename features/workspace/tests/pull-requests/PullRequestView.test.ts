@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { PullRequest, SessionPullRequest } from "../../../../shared/wire.ts";
+import type { PullRequest, SessionPullRequest } from "../../contracts/pull-requests/http.ts";
 import {
   pullRequestForm,
   pullRequestRow,

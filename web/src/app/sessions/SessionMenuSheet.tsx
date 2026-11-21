@@ -26,7 +26,7 @@ import { PianoLinkButton } from "@/shared/components/PianoButton";
 import { SheetClose, SheetContent, SheetTitle } from "@/shared/components/PianoSheet";
 import { ProjectCommandIconView } from "@/shared/components/ProjectCommandIcon";
 import { keyboardFocusReturn } from "@/shared/lib/pointerClose";
-import type { ProjectCommand } from "@/shared/state/projectActions";
+import type { ProjectCommand } from "@/shared/state/projectCommandTypes";
 import { sessionContext } from "@/shared/state/sessionContext";
 
 type Page = "actions" | "projects";

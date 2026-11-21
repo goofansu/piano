@@ -9,12 +9,12 @@ import { Context, Effect, Fiber, Layer, type Scope, Stream } from "effect";
 import { SidebarView } from "../../../features/navigation/server/SidebarView.ts";
 import { PiCli } from "../../../features/sessions/server/pi/PiCli.ts";
 import type { SessionHosts } from "../../../features/sessions/server/SessionHosts.ts";
+import { worktreeInstance } from "../../../features/workspace/server/GitCheckout.ts";
 import { WorkspaceCommands } from "../../../features/workspace/server/WorkspaceCommands.ts";
 import { FolderWorktreesLive } from "../../../features/workspace/server/worktrees/FolderWorktrees.ts";
 import { PianoCoreLive } from "../../../server/app/PianoServices.ts";
 import { DirectoryFacts } from "../../../server/shared/DirectoryFacts.ts";
 import { FolderWorktrees } from "../../../server/shared/FolderWorktrees.ts";
-import { worktreeInstance } from "../../../server/shared/GitCheckout.ts";
 import {
   Registry,
   RegistryDatabasePath,

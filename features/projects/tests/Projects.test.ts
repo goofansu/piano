@@ -11,6 +11,12 @@ import {
   RegistryLive,
 } from "../../../server/shared/registry/Registry.ts";
 import { seedRegistry } from "../../../test/shared/registry.ts";
+import {
+  assignProject,
+  deleteProject,
+  saveProject,
+  updateProject,
+} from "../server/ProjectCommands.ts";
 
 test("a project's instructions are saved trimmed, kept by a rename, cleared when blank, across a restart", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "piano-projects-"));
@@ -25,19 +31,19 @@ test("a project's instructions are saved trimmed, kept by a rename, cleared when
   await run(
     Effect.flatMap(Registry, (r) =>
       Effect.andThen(
-        r.updateProject("launch", { instructions: "\n  Answer in French.\nKeep it short.  \n" }),
-        r.updateProject("launch", { name: " Launch v2 " }),
+        updateProject(r, "launch", { instructions: "\n  Answer in French.\nKeep it short.  \n" }),
+        updateProject(r, "launch", { name: " Launch v2 " }),
       ),
     ),
   );
   assert.deepEqual(await projects(), [
     { id: "launch", name: "Launch v2", instructions: "Answer in French.\nKeep it short." },
   ]);
-  await run(Effect.flatMap(Registry, (r) => r.updateProject("launch", { instructions: "   " })));
+  await run(Effect.flatMap(Registry, (r) => updateProject(r, "launch", { instructions: "   " })));
   assert.deepEqual(await projects(), [{ id: "launch", name: "Launch v2" }]);
   const failure = await run(
     Effect.flatMap(Registry, (r) =>
-      r.updateProject("missing", { instructions: "x" }).pipe(Effect.flip),
+      updateProject(r, "missing", { instructions: "x" }).pipe(Effect.flip),
     ),
   );
   assert.match(failure.message, /Project is unavailable/);
@@ -55,7 +61,7 @@ test("a project created with instructions keeps them, trimmed; saving its ID aga
   const projects = () => run(Effect.flatMap(Registry, (r) => r.get)).then((d) => d.projects);
   await run(
     Effect.flatMap(Registry, (r) =>
-      r.saveProject({ id: "ship", name: " Ship ", instructions: "  Reply in French.\n" }),
+      saveProject(r, { id: "ship", name: " Ship ", instructions: "  Reply in French.\n" }),
     ),
   );
   assert.deepEqual(await projects(), [
@@ -63,7 +69,7 @@ test("a project created with instructions keeps them, trimmed; saving its ID aga
   ]);
   const failure = await run(
     Effect.flatMap(Registry, (r) =>
-      r.saveProject({ id: "ship", name: "Ship v2" }).pipe(Effect.flip),
+      saveProject(r, { id: "ship", name: "Ship v2" }).pipe(Effect.flip),
     ),
   );
   assert.match(failure.message, /Project already exists/);
@@ -100,8 +106,8 @@ test("INV-01/07: deleting a project keeps its sessions, in no project, across a 
   await run(
     Effect.gen(function* () {
       const r = yield* Registry;
-      yield* r.deleteProject("launch");
-      const failure = yield* r.deleteProject("launch").pipe(Effect.flip);
+      yield* deleteProject(r, "launch");
+      const failure = yield* deleteProject(r, "launch").pipe(Effect.flip);
       assert.match(failure.message, /Project is unavailable/);
     }),
   );
@@ -150,14 +156,14 @@ test("INV-01/07: grouping preserves identities and survives closing, moving, ren
       assert.deepEqual(seeded.folders, old.folders);
       assert.deepEqual(seeded.projects, []);
       const first = { id: "launch", name: "Launch subscriptions" };
-      yield* r.saveProject(first);
-      yield* r.saveProject({ id: "accessibility", name: "Improve accessibility" });
-      yield* r.saveProject({ id: "empty", name: "Empty project" });
-      yield* r.assignProject(a, "one", "launch");
-      yield* r.assignProject(b, "two", "launch");
-      yield* r.assignProject(a, "three", "accessibility");
+      yield* saveProject(r, first);
+      yield* saveProject(r, { id: "accessibility", name: "Improve accessibility" });
+      yield* saveProject(r, { id: "empty", name: "Empty project" });
+      yield* assignProject(r, a, "one", "launch");
+      yield* assignProject(r, b, "two", "launch");
+      yield* assignProject(r, a, "three", "accessibility");
       yield* r.removeFolder(a);
-      yield* r.updateProject(first.id, { name: "Subscriptions" });
+      yield* updateProject(r, first.id, { name: "Subscriptions" });
       const renamed = yield* r.get;
       assert.equal(renamed.projects.find((p) => p.id === first.id)?.name, "Subscriptions");
       assert.equal(renamed.sessions.filter((s) => s.projectId === "launch").length, 2);
@@ -166,17 +172,17 @@ test("INV-01/07: grouping preserves identities and survives closing, moving, ren
         sessions,
       );
       assert.deepEqual(renamed.workspaces, old.workspaces);
-      yield* r.assignProject(a, "one", "accessibility");
-      yield* r.assignProject(b, "two", null);
+      yield* assignProject(r, a, "one", "accessibility");
+      yield* assignProject(r, b, "two", null);
       yield* r.removeSession(a, "three");
       const before = yield* r.get;
       assert.equal(before.projects.length, 3);
       assert.equal(before.sessions.find((s) => s.sessionId === "one")?.projectId, "accessibility");
       assert.equal(before.sessions.find((s) => s.sessionId === "two")?.projectId, undefined);
       assert.equal(before.sessions.length, 2);
-      yield* r.assignProject(a, "missing", "launch").pipe(Effect.flip);
-      yield* r.assignProject(a, "one", "missing").pipe(Effect.flip);
-      yield* r.updateProject(first.id, { name: " " }).pipe(Effect.flip);
+      yield* assignProject(r, a, "missing", "launch").pipe(Effect.flip);
+      yield* assignProject(r, a, "one", "missing").pipe(Effect.flip);
+      yield* updateProject(r, first.id, { name: " " }).pipe(Effect.flip);
       assert.deepEqual(yield* r.get, before);
     }),
   );
@@ -209,14 +215,16 @@ test("INV-01/05: saving a project with a session is one write, announced once, o
       );
 
       const before = yield* r.get;
-      const failure = yield* r
-        .saveProject({ id: "launch", name: "Launch" }, { cwd, sessionId: "missing" })
-        .pipe(Effect.flip);
+      const failure = yield* saveProject(
+        r,
+        { id: "launch", name: "Launch" },
+        { cwd, sessionId: "missing" },
+      ).pipe(Effect.flip);
       assert.match(failure.message, /Session reference is unavailable/);
       assert.deepEqual(yield* r.get, before, "an unknown session saves no project either");
       assert.equal(heard.length, 0);
 
-      yield* r.saveProject({ id: "launch", name: "Launch" }, { cwd, sessionId: "one" });
+      yield* saveProject(r, { id: "launch", name: "Launch" }, { cwd, sessionId: "one" });
       assert.equal(heard.length, 1, "the project and its session arrive in one announcement");
       assert.deepEqual(heard[0].projects, [{ id: "launch", name: "Launch" }]);
       assert.equal(heard[0].sessions.find((s) => s.sessionId === "one")?.projectId, "launch");

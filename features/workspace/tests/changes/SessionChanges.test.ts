@@ -6,17 +6,17 @@ import { join, resolve as resolvePath } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { type TestContext, test } from "node:test";
 import { Effect, Layer, ManagedRuntime } from "effect";
-import { worktreeInstance } from "../../../../server/shared/GitCheckout.ts";
 import {
   Registry,
   RegistryDatabasePath,
   RegistryLive,
 } from "../../../../server/shared/registry/Registry.ts";
 import { GhCommand } from "../../../../server/shared/Subprocess.ts";
-import type { WorkspaceChanges as Observation } from "../../../../shared/wire.ts";
 import { seedRegistry } from "../../../../test/shared/registry.ts";
+import type { WorkspaceChanges as Observation } from "../../contracts/changes/http.ts";
 import { SessionChanges, SessionChangesLive } from "../../server/changes/SessionChanges.ts";
 import { WorkspaceChangesLive } from "../../server/changes/WorkspaceChanges.ts";
+import { worktreeInstance } from "../../server/GitCheckout.ts";
 import { GitHubPullRequestsLive } from "../../server/pull-requests/GitHubPullRequests.ts";
 import {
   SessionPullRequests,

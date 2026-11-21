@@ -2,11 +2,13 @@
 
 Piano uses the selected directory and Git checkout to discover worktrees, inspect changes and pull requests, and preview local files.
 
+The [Git checkout reader](server/GitCheckout.ts) supplies worktree, diff and pull request observations. The [changes contract](contracts/changes/http.ts) sets the patch and response size limits.
+
 ## Local file previews
 
-## Formats and limits
+### Formats and limits
 
-Formats and size limits live in `shared/workspace/files.ts`. SVG previews use a Blob URL in an `<img>`,
+Formats and size limits live in the [file preview contract](../../shared/workspace/files.ts). SVG previews use a Blob URL in an `<img>`,
 never inline SVG, an object or an iframe, so scripts, event handlers and external resources stay
 disabled by browser image mode.
 

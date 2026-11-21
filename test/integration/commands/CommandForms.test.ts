@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import type { CommandForm } from "../../../features/commands/web/commands.ts";
+import {
+  type SessionTarget,
+  sessionCommands,
+} from "../../../features/commands/web/sessionCommands.ts";
 import type { SendDisposition } from "../../../shared/transport/ws.ts";
 import {
   type ClientCommand,
@@ -11,15 +16,17 @@ import {
   type SessionReference,
   type SessionState,
 } from "../../../shared/wire.ts";
-import { sessionReference } from "../../../test/shared/sessionReference.ts";
+import {
+  answerForm,
+  confirmation,
+  createCommandForms,
+} from "../../../web/src/app/commands/commandForms.ts";
 import {
   type AppState,
   initialState,
   type SessionView,
 } from "../../../web/src/shared/state/state.ts";
-import { answerForm, confirmation, createCommandForms } from "../web/commandForms.ts";
-import type { CommandForm } from "../web/commands.ts";
-import { type SessionTarget, sessionCommands } from "../web/sessionCommands.ts";
+import { sessionReference } from "../../shared/sessionReference.ts";
 
 const selected = { cwd: "/repo", sessionId: "s1", title: "Selected" };
 const other = { cwd: "/repo", sessionId: "s2", title: "Other" };

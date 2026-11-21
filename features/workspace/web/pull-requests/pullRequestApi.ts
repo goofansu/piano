@@ -1,6 +1,8 @@
-import type { SessionPullRequestAction } from "../../../../shared/wire.ts";
 import { call, type RequestOptions } from "../../../../web/src/shared/transport/api.ts";
-import { pullRequestEndpoints } from "../../contracts/pull-requests/http.ts";
+import {
+  type SessionPullRequestAction,
+  pullRequestEndpoints,
+} from "../../contracts/pull-requests/http.ts";
 
 export const sessionPullRequest = (
   workspaceId: string,

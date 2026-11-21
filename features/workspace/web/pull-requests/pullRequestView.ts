@@ -1,6 +1,7 @@
-import type { LocalWork, PullRequest, SessionPullRequest } from "@shared/wire";
 import { pullRequestIdentity } from "../../../../shared/git/pullRequestIdentity.ts";
 import { timeAgo } from "../../../../web/src/shared/lib/format.ts";
+import type { LocalWork } from "../../contracts/changes/http.ts";
+import type { PullRequest, SessionPullRequest } from "../../contracts/pull-requests/http.ts";
 import { localWorkFacts } from "../changes/changesView.ts";
 import { canLink } from "./pullRequestState.ts";
 

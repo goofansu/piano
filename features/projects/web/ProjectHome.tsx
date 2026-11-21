@@ -25,9 +25,10 @@ import { SessionDetails } from "@/shared/components/SessionDetails";
 import { SettingsGroup, SettingsList } from "@/shared/components/SettingsSectionFrame";
 import { StatusDot, type StatusTone } from "@/shared/components/StatusDot";
 import { timeAgo } from "@/shared/lib/format";
-import { type ProjectCommand, projectCommands } from "@/shared/state/projectActions";
+import type { ProjectCommand } from "@/shared/state/projectCommandTypes";
 import { type AppState, sessionKey } from "@/shared/state/state";
 import { isProjectDone } from "../../../web/src/shared/lib/projects.ts";
+import { projectCommands } from "./projectActions";
 
 function useStableOrder(keys: readonly string[]): string[] {
   const order = useRef<string[]>([]);

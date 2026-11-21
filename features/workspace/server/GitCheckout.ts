@@ -1,18 +1,20 @@
 import { lstat, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import { Data, Effect, Semaphore } from "effect";
-import { CHECKOUT_TIMEOUT_MS, type Workspace } from "../../shared/wire.ts";
-import { gitEnvironment } from "./GitEnvironment.ts";
+import { childEnvironment } from "../../../server/shared/ChildEnvironment.ts";
 import {
   GitCommand,
   type RunOptions,
   type RunResult,
   runAsync,
   SubprocessError,
-} from "./Subprocess.ts";
+} from "../../../server/shared/Subprocess.ts";
+import type { Workspace } from "../../../shared/wire.ts";
 
 function hardenedEnv(extra: Record<string, string> = {}, userConfig = false): NodeJS.ProcessEnv {
-  const env = gitEnvironment();
+  const env = Object.fromEntries(
+    Object.entries(childEnvironment()).filter(([key]) => !key.startsWith("GIT_")),
+  );
   const config = userConfig ? {} : { GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" };
   return {
     ...env,
@@ -471,7 +473,7 @@ export const observeCheckout = Effect.fn("GitCheckout.observeCheckout")(function
   read: (checkout: Checkout, signal: AbortSignal) => Promise<R>,
 ): Effect.fn.Return<CheckoutObservation<R>> {
   const git = yield* GitCommand;
-  const { slots, limit, writes, messages, timeout = CHECKOUT_TIMEOUT_MS } = options;
+  const { slots, limit, writes, messages, timeout = 30_000 } = options;
   return yield* Semaphore.withPermits(
     slots,
     1,

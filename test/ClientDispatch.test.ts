@@ -8,6 +8,7 @@ import { Deferred, Effect, Fiber, Layer, Queue, type Scope } from "effect";
 import { type SessionStatus } from "../features/dispatch/server/SessionStatus.ts";
 import { createModelCatalogs } from "../features/models/web/modelCatalogs.ts";
 import { SidebarView } from "../features/navigation/server/SidebarView.ts";
+import { deleteProject, saveProject } from "../features/projects/server/ProjectCommands.ts";
 import type { CreationAttempts } from "../features/sessions/server/CreationAttempts.ts";
 import { PiCli } from "../features/sessions/server/pi/PiCli.ts";
 import { SessionHosts } from "../features/sessions/server/SessionHosts.ts";
@@ -1044,7 +1045,7 @@ test("deleting a project tells its browser so; deleting an unknown one is answer
   await run(
     Effect.gen(function* () {
       const registry = yield* Registry;
-      yield* registry.saveProject({ id: "launch", name: "Launch" });
+      yield* saveProject(registry, { id: "launch", name: "Launch" });
       const { receive } = yield* client;
       const from = sent.length;
       yield* yield* receive({ _tag: "delete_project", id: "launch" });
@@ -1069,7 +1070,7 @@ test("INV-01: saving a project's settings is one write answered with a toast; an
   await run(
     Effect.gen(function* () {
       const registry = yield* Registry;
-      yield* registry.saveProject({ id: "launch", name: "Launch" });
+      yield* saveProject(registry, { id: "launch", name: "Launch" });
       const { receive } = yield* client;
       const from = sent.length;
       yield* yield* receive({
@@ -1084,7 +1085,7 @@ test("INV-01: saving a project's settings is one write answered with a toast; an
       assert.deepEqual((yield* registry.get).projects, [
         { id: "launch", name: "Relaunch", instructions: "Answer in French." },
       ]);
-      yield* registry.deleteProject("launch");
+      yield* deleteProject(registry, "launch");
       const again = sent.length;
       yield* yield* receive({ _tag: "update_project", id: "launch", name: "Back" });
       assert.deepEqual(answers(again), [
@@ -1224,7 +1225,7 @@ test("every change ends with one toast naming it after it succeeds; a failed cha
     Effect.gen(function* () {
       const registry = yield* Registry;
       yield* registry.addFolder(cwd);
-      yield* registry.saveProject({ id: "launch", name: "Launch" });
+      yield* saveProject(registry, { id: "launch", name: "Launch" });
       for (const sessionId of ["kept", "archived", "deleted"])
         yield* registry.addSession(cwd, sessionId);
       const { receive } = yield* client;

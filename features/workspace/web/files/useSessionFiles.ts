@@ -1,8 +1,9 @@
-import type { Workspace, WorkspaceWrittenFiles } from "@shared/wire";
+import type { Workspace } from "@shared/wire";
 import { createContext, useContext, useMemo, useRef } from "react";
 import { useObservation } from "../../../../web/src/shared/lib/useObservation.ts";
 import { sessionContext } from "../../../../web/src/shared/state/sessionContext.ts";
 import type { AppState, SessionView } from "../../../../web/src/shared/state/state.ts";
+import type { WorkspaceWrittenFiles } from "../../contracts/files/http.ts";
 import { refreshKey } from "../changes/changesView.ts";
 import { workspaceWrittenFiles } from "./fileApi.ts";
 import { type SessionFile, sessionFiles, visibleFiles } from "./sessionFiles.ts";

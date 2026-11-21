@@ -1,6 +1,5 @@
 import { Context, Data, Effect, Layer, Schema } from "effect";
 import { childEnvironment } from "../../../../server/shared/ChildEnvironment.ts";
-import { type BranchHome, gitText, observeGit } from "../../../../server/shared/GitCheckout.ts";
 import {
   GhCommand,
   run as runProcess,
@@ -11,7 +10,8 @@ import {
   type GitHubHost,
   pullRequestIdentity,
 } from "../../../../shared/git/pullRequestIdentity.ts";
-import type { PullRequest } from "../../../../shared/wire.ts";
+import type { PullRequest } from "../../contracts/pull-requests/http.ts";
+import { type BranchHome, gitText, observeGit } from "../GitCheckout.ts";
 
 export class PullRequestError extends Data.TaggedError("PullRequestError")<{
   readonly detail: string;

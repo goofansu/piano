@@ -1,14 +1,17 @@
 import { CommandsContext } from "@features/commands/web/commandContext";
-import { confirmation, FORM_NOT_SENT } from "@features/commands/web/commandForms";
 import {
   type Command,
   type CommandEffects,
   type CommandForm,
   runCommand,
 } from "@features/commands/web/commands";
-import { useCommandForms } from "@features/commands/web/useCommandForms";
 import { useSidebarLayout } from "@features/navigation/web/sidebar/useSidebarLayout";
 import { useSidebarView } from "@features/navigation/web/sidebar/useSidebarView";
+import {
+  openProjectCommands,
+  projectPageActions,
+  sessionProjectMenu,
+} from "@features/projects/web/projectActions";
 import { ProjectDialogView } from "@features/projects/web/Projects";
 import { ProjectSettingsDialog } from "@features/projects/web/ProjectSettings";
 import { artifactsMenu } from "@features/radius/web/artifactsMenu";
@@ -33,6 +36,8 @@ import { sessionLabel } from "@/shared/state/sessionCatalog";
 import { workspaceFor } from "@/shared/state/sessionContext";
 import type { AppState } from "@/shared/state/state";
 import type { SendDisposition } from "../../../../shared/transport/ws.ts";
+import { confirmation, FORM_NOT_SENT } from "./commandForms";
+import { useCommandForms } from "./useCommandForms";
 
 async function copySessionValue(value: string, label: string) {
   const failure = `Could not copy the ${label[0]?.toLowerCase()}${label.slice(1)}.`;
@@ -151,7 +156,10 @@ export function CommandHost({
         layout,
         codeWrap,
         state,
+        sessionProjectMenu,
+        openProjectCommands,
         global: {
+          projectPageActions,
           editorAvailable,
           settings,
           view,

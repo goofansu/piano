@@ -4,13 +4,12 @@ import {
   type RegistryError,
   type SessionEntry,
 } from "../../../../server/shared/registry/Registry.ts";
-import {
-  PULL_REQUEST_TIMEOUT_MS,
-  type PullRequest,
-  type SessionPullRequest,
-  type SessionPullRequestAction,
-  type SessionPullRequestLink,
-} from "../../../../shared/wire.ts";
+import type { SessionPullRequestLink } from "../../../../shared/wire.ts";
+import type {
+  PullRequest,
+  SessionPullRequest,
+  SessionPullRequestAction,
+} from "../../contracts/pull-requests/http.ts";
 import {
   type PullRequestBranches,
   pullRequestBranches,
@@ -23,7 +22,7 @@ export { PullRequestError };
 const failure = (detail: string) => new PullRequestError({ detail });
 
 export const PullRequestTimeoutMs = Context.Reference<number>("piano/PullRequestTimeoutMs", {
-  defaultValue: () => PULL_REQUEST_TIMEOUT_MS,
+  defaultValue: () => 45_000,
 });
 
 const bounded = <A, E, R>(answer: Effect.Effect<A, E, R>) =>

@@ -1,18 +1,23 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { Project, SessionState } from "../../../shared/wire.ts";
-import { sessionReference } from "../../../test/shared/sessionReference.ts";
+import {
+  type Command,
+  type CommandEffects,
+  runCommand,
+} from "../../../features/commands/web/commands.ts";
+import { folderCommands } from "../../../features/commands/web/folderCommands.ts";
+import { globalCommands, trustCommand } from "../../../features/commands/web/globalCommands.ts";
+import { sessionCommands } from "../../../features/commands/web/sessionCommands.ts";
 import {
   assignProjectCommand,
   newProjectCommand,
   openProjectCommand,
   projectCommands,
-} from "../../../web/src/shared/state/projectActions.ts";
+  projectPageActions,
+} from "../../../features/projects/web/projectActions.ts";
+import type { Project, SessionState } from "../../../shared/wire.ts";
 import { type AppState, initialState } from "../../../web/src/shared/state/state.ts";
-import { type Command, type CommandEffects, runCommand } from "../web/commands.ts";
-import { folderCommands } from "../web/folderCommands.ts";
-import { globalCommands, trustCommand } from "../web/globalCommands.ts";
-import { sessionCommands } from "../web/sessionCommands.ts";
+import { sessionReference } from "../../shared/sessionReference.ts";
 
 const launch: Project = { id: "p1", name: "Launch" };
 const folder = { path: "/repo", name: "repo" };
@@ -110,6 +115,7 @@ test("enabled commands reach the effect their intent names", () => {
         globalCommands(online, {
           settings: null,
           editorAvailable: () => true,
+          projectPageActions,
           view: { groupBy: "date", sortBy: "recent", folderAndBranch: false },
         }),
         "new-session",
@@ -129,6 +135,7 @@ test("enabled commands reach the effect their intent names", () => {
           {
             settings: null,
             editorAvailable: () => true,
+            projectPageActions,
             view: { groupBy: "date", sortBy: "recent", folderAndBranch: false },
           },
         ),

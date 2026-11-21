@@ -4,7 +4,7 @@ import type { SidebarView } from "../../../web/src/shared/navigation/sidebarPref
 import type {
   ProjectCommand,
   ProjectDialog,
-} from "../../../web/src/shared/state/projectActions.ts";
+} from "../../../web/src/shared/state/projectCommandTypes.ts";
 import type { FolderCommand } from "./folderCommands.ts";
 import type { EditorPage } from "./globalCommands.ts";
 import type { Appearance, GlobalCommand } from "./globalCommands.ts";

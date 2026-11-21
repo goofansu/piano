@@ -1,5 +1,5 @@
 import { type RefObject, useEffect } from "react";
-import { shortcutBlocked } from "./keys.ts";
+import { shortcutBlocked } from "@/shared/lib/keys";
 
 const activates = (el: EventTarget | null) =>
   el instanceof Element &&

@@ -5,11 +5,10 @@ import { Button } from "@/components/ui/button";
 
 export function PageHeaderActions({ page }: { page: "settings" | "projects" }) {
   const { state, run, global } = useCommands();
-  return pageCommands(
-    state,
-    page === "settings" ? global.settings : null,
-    global.editorAvailable,
-  ).map((c) => (
+  return pageCommands(state, {
+    ...global,
+    settings: page === "settings" ? global.settings : null,
+  }).map((c) => (
     <Button key={c.id} data-command={c.id} size="sm" disabled={!c.enabled} onClick={() => run(c)}>
       <GlobalCommandIcon icon={c.icon} data-icon="inline-start" /> {c.label}
     </Button>

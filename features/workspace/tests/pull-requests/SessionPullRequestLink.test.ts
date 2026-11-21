@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import type { SessionPullRequestLink } from "../../../../shared/wire.ts";
+import type { ObservationEnvironment } from "../../../../web/src/shared/lib/observation.ts";
 import type {
   PullRequest,
   SessionPullRequest,
   SessionPullRequestAction,
-  SessionPullRequestLink,
-} from "../../../../shared/wire.ts";
-import type { ObservationEnvironment } from "../../../../web/src/shared/lib/observation.ts";
+} from "../../contracts/pull-requests/http.ts";
 import { createSessionPullRequest } from "../../web/pull-requests/pullRequestState.ts";
 
 const environment: ObservationEnvironment = {

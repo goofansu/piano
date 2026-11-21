@@ -1,6 +1,5 @@
 import { Context, Effect, Layer } from "effect";
-import { DirectoryFacts } from "../../../server/shared/DirectoryFacts.ts";
-import type { ProjectTrustError } from "../../../server/shared/DirectoryFacts.ts";
+import { DirectoryFacts, type ProjectTrustError } from "../../../server/shared/DirectoryFacts.ts";
 import type { ModelCatalog, ProjectTrust } from "../../../shared/wire.ts";
 
 export interface TrustDecision {

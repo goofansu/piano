@@ -2,25 +2,22 @@ import { copyFile, lstat, mkdtemp, rm, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer, Semaphore } from "effect";
-import {
-  type Checkout,
-  type CheckoutObservation,
-  observeCheckout,
-} from "../../../../server/shared/GitCheckout.ts";
 import { answerJson } from "../../../../shared/endpoint.ts";
+import type { ChangesScope, Workspace } from "../../../../shared/wire.ts";
 import {
   CHANGES_ANSWER_BYTES,
   CHANGES_FILE_PATCH_BYTES,
   CHANGES_INITIAL_PATCH_BYTES,
   type ChangeFile,
-  type ChangesScope,
   type LocalWork,
   type WorkspaceChanges as Observation,
-  type Workspace,
-  type WrittenFile,
-  type WorkspaceWrittenFiles as WrittenObservation,
-} from "../../../../shared/wire.ts";
+} from "../../contracts/changes/http.ts";
+import type {
+  WrittenFile,
+  WorkspaceWrittenFiles as WrittenObservation,
+} from "../../contracts/files/http.ts";
 import { place, spell } from "../files/WorkspaceFiles.ts";
+import { type Checkout, type CheckoutObservation, observeCheckout } from "../GitCheckout.ts";
 import {
   type Comparisons,
   commitsNotPushed,

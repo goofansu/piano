@@ -1,16 +1,13 @@
-import type {
-  ChangeFile,
-  ChangesScope,
-  Comparison,
-  ComparisonTarget,
-  LocalWork,
-  RenderMsg,
-  ScopeAvailability,
-  SessionPullRequestLink,
-  Workspace,
-  WorkspaceChanges,
-} from "@shared/wire";
-import { CHANGES_FILE_PATCH_BYTES } from "../../../../shared/wire.ts";
+import type { ChangesScope, RenderMsg, SessionPullRequestLink, Workspace } from "@shared/wire";
+import {
+  type ChangeFile,
+  type Comparison,
+  type ComparisonTarget,
+  type LocalWork,
+  type ScopeAvailability,
+  type WorkspaceChanges,
+  CHANGES_FILE_PATCH_BYTES,
+} from "../../contracts/changes/http.ts";
 import { pullRequestBranchesKey } from "../../contracts/pull-requests/pullRequestBranches.ts";
 import { type DiffFile, lineCount, parseUnifiedDiff } from "./diff.ts";
 

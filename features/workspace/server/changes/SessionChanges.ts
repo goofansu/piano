@@ -4,11 +4,8 @@ import {
   type RegistryError,
   type SessionEntry,
 } from "../../../../server/shared/registry/Registry.ts";
-import type {
-  ChangesScope,
-  WorkspaceChanges as Observation,
-  Workspace,
-} from "../../../../shared/wire.ts";
+import type { ChangesScope, Workspace } from "../../../../shared/wire.ts";
+import type { WorkspaceChanges as Observation } from "../../contracts/changes/http.ts";
 import { pullRequestBranches } from "../../contracts/pull-requests/pullRequestBranches.ts";
 import type { TargetHints } from "./ComparisonBase.ts";
 import { WorkspaceChanges } from "./WorkspaceChanges.ts";

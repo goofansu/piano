@@ -5,8 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { Effect, Semaphore } from "effect";
-import { branchHomes, observeCheckout, observeGit } from "../server/shared/GitCheckout.ts";
-import { forkWorktree } from "./shared/forkWorktree.ts";
+import { forkWorktree } from "../../../test/shared/forkWorktree.ts";
+import { branchHomes, observeCheckout, observeGit } from "../server/GitCheckout.ts";
 
 const git = (cwd: string, ...args: string[]) =>
   execFileSync(

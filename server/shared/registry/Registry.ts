@@ -118,6 +118,19 @@ export interface RegistryData {
   readonly sessions: ReadonlyArray<SessionEntry>;
 }
 
+type ProjectMembership = Pick<RegistryData, "projects" | "sessions">;
+
+export function requireChangeableSession(
+  sessions: readonly SessionEntry[],
+  cwd: string,
+  sessionId: string,
+) {
+  const entry = sessions.find((s) => sameSession(s, { cwd, sessionId }));
+  if (!entry || entry.archived)
+    throw new RegistryError({ detail: "Session reference is unavailable. Refresh and try again." });
+  return entry;
+}
+
 export const inOpenFolder = (data: RegistryData, cwd: string): boolean =>
   data.folders.includes(cwd) ||
   data.worktrees.some((w) => w.path === cwd && data.folders.includes(w.folder));
@@ -283,20 +296,8 @@ export class Registry extends Context.Service<
     >;
     readonly requireFolder: (path: string) => Effect.Effect<void, RegistryLookupError>;
     readonly requireProject: (id: string) => Effect.Effect<Project, RegistryLookupError>;
-    readonly saveProject: (
-      project: Pick<Project, "id" | "name" | "instructions">,
-      assign?: { readonly cwd: string; readonly sessionId: string },
-    ) => Effect.Effect<void, RegistryError>;
-    readonly updateProject: (
-      id: string,
-      change: { readonly name?: string; readonly instructions?: string | null },
-    ) => Effect.Effect<void, RegistryError>;
-    readonly setProjectDone: (id: string, done: boolean) => Effect.Effect<void, RegistryError>;
-    readonly deleteProject: (id: string) => Effect.Effect<void, RegistryError>;
-    readonly assignProject: (
-      cwd: string,
-      sessionId: string,
-      projectId: string | null,
+    readonly updateProjects: (
+      change: (data: ProjectMembership) => ProjectMembership,
     ) => Effect.Effect<void, RegistryError>;
     readonly addFolder: (path: string) => Effect.Effect<string, RegistryError>;
     readonly removeFolder: (path: string) => Effect.Effect<void, RegistryError>;
@@ -444,15 +445,6 @@ export const RegistryLive = Layer.effect(
       });
       return { data: { ...d, sessions }, count };
     };
-    const changeableIn = (d: RegistryData, cwd: string, sessionId: string) => {
-      const entry = d.sessions.find(isSession(cwd, sessionId));
-      if (!entry || entry.archived)
-        throw new RegistryError({
-          detail: "Session reference is unavailable. Refresh and try again.",
-        });
-      return entry;
-    };
-
     const workspace = (id: string) =>
       Effect.flatMap(Ref.get(state), (d) => {
         const found = d.workspaces.find((w) => w.id === id);
@@ -547,76 +539,12 @@ export const RegistryLive = Layer.effect(
                 }),
               );
         }),
-      saveProject: (project, assign) =>
-        update((d) => {
-          const parsed = Schema.decodeUnknownSync(Project)(project);
-          if (!parsed.name.trim()) throw new RegistryError({ detail: "A project needs a name." });
-          const assigned = assign && changeableIn(d, assign.cwd, assign.sessionId);
-          if (d.projects.some((p) => p.id === parsed.id))
-            throw new RegistryError({ detail: "Project already exists. Refresh and try again." });
-          const instructions = parsed.instructions?.trim();
-          const next = {
-            id: parsed.id,
-            name: parsed.name.trim(),
-            ...(instructions ? { instructions } : {}),
-          };
-          const projects = [...d.projects, next];
-          const sessions = assigned
-            ? d.sessions.map((s) => (s === assigned ? { ...s, projectId: next.id } : s))
-            : d.sessions;
-          return { ...d, projects, sessions };
-        }),
-      updateProject: (id, change) =>
-        update((d) => {
-          if (!d.projects.some((p) => p.id === id))
-            throw new RegistryError({ detail: "Project is unavailable. Refresh and try again." });
-          const name = change.name?.trim();
-          if (name === "") throw new RegistryError({ detail: "A project needs a name." });
-          const text = change.instructions?.trim();
-          return {
-            ...d,
-            projects: d.projects.map((p) => {
-              if (p.id !== id) return p;
-              const named = name ? { ...p, name } : p;
-              if (change.instructions === undefined) return named;
-              const { instructions: _, ...rest } = named;
-              return text ? { ...rest, instructions: text } : rest;
-            }),
-          };
-        }),
-      setProjectDone: (id, done) =>
-        update((d) => {
-          const project = d.projects.find((p) => p.id === id);
-          if (!project)
-            throw new RegistryError({ detail: "Project is unavailable. Refresh and try again." });
-          if (done === (project.doneAt !== undefined)) return d;
-          const { doneAt: _, ...open } = project;
-          const next = done ? { ...open, doneAt: now() } : open;
-          return { ...d, projects: d.projects.map((p) => (p.id === id ? next : p)) };
-        }),
-      deleteProject: (id) =>
-        update((d) => {
-          if (!d.projects.some((p) => p.id === id))
-            throw new RegistryError({ detail: "Project is unavailable. Refresh and try again." });
-          return {
-            ...d,
-            projects: d.projects.filter((p) => p.id !== id),
-            sessions: d.sessions.map((s) =>
-              s.projectId === id ? { ...s, projectId: undefined } : s,
-            ),
-          };
-        }),
-      assignProject: (cwd, sessionId, projectId) =>
-        update((d) => {
-          const entry = changeableIn(d, cwd, sessionId);
-          if (projectId !== null && !d.projects.some((p) => p.id === projectId))
-            throw new RegistryError({ detail: "Project is unavailable. Refresh and try again." });
-          return {
-            ...d,
-            sessions: d.sessions.map((s) =>
-              s === entry ? { ...s, projectId: projectId ?? undefined } : s,
-            ),
-          };
+      updateProjects: (change) =>
+        update((data) => {
+          const { projects, sessions } = change(data);
+          return projects === data.projects && sessions === data.sessions
+            ? data
+            : { ...data, projects, sessions };
         }),
       addFolder: (raw) =>
         Effect.gen(function* () {
@@ -740,7 +668,7 @@ export const RegistryLive = Layer.effect(
       }),
       pinSession: Effect.fn("Registry.pinSession")(function* (cwd, sessionId, pinned) {
         yield* update((d) => {
-          const entry = changeableIn(d, cwd, sessionId);
+          const entry = requireChangeableSession(d.sessions, cwd, sessionId);
           if (!!entry.pinned === pinned) return d;
           return {
             ...d,
@@ -753,7 +681,7 @@ export const RegistryLive = Layer.effect(
       setSessionChangesScope: Effect.fn("Registry.setSessionChangesScope")(
         function* (cwd, sessionId, scope) {
           yield* update((d) => {
-            const entry = changeableIn(d, cwd, sessionId);
+            const entry = requireChangeableSession(d.sessions, cwd, sessionId);
             if (entry.changesScope === scope) return d;
             return {
               ...d,

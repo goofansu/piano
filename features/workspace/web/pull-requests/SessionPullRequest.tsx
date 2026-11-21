@@ -7,7 +7,6 @@ import {
   type SignalOutcome,
 } from "@features/workspace/web/pull-requests/pullRequestView";
 import type { useSessionPullRequest } from "@features/workspace/web/pull-requests/useSessionPullRequest";
-import type { LocalWork } from "@shared/wire";
 import {
   ArrowRightIcon,
   CheckIcon,
@@ -40,6 +39,7 @@ import {
 } from "@/shared/components/PianoDropdownMenu";
 import { StatusBadge as Badge } from "@/shared/components/StatusBadge";
 import { pointerLast } from "@/shared/lib/pointerClose";
+import type { LocalWork } from "../../contracts/changes/http.ts";
 
 export const pullRequestStates = {
   open: { Icon: GitPullRequestIcon, color: "text-ok", variant: "success" },

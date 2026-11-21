@@ -1,8 +1,7 @@
 import { Effect, Fiber, Layer } from "effect";
-import { FolderWorktrees } from "../../../../server/shared/FolderWorktrees.ts";
-import { WorktreeError } from "../../../../server/shared/FolderWorktrees.ts";
-import { gitText, worktreeInstance } from "../../../../server/shared/GitCheckout.ts";
+import { FolderWorktrees, WorktreeError } from "../../../../server/shared/FolderWorktrees.ts";
 import { Registry } from "../../../../server/shared/registry/Registry.ts";
+import { gitText, worktreeInstance } from "../GitCheckout.ts";
 import { createWorktree, mainCheckoutOf, worktreeOwner } from "./Worktrees.ts";
 
 export const FolderWorktreesLive = Layer.effect(

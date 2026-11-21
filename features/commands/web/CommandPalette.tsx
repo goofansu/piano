@@ -1,5 +1,6 @@
 import {
   CommandIcon,
+  useCommands,
   useGlobalCommands,
   useSessionCommands,
   useSessionProjectMenu,
@@ -101,10 +102,12 @@ function PaletteContents({
     [],
   );
   const { commands: sessionCommandList } = useSessionCommands();
+  const { openProjectCommands } = useCommands();
   const sessionProject = useSessionProjectMenu();
   const groups = catalog(state, {
     globalCommands: globalCommandList,
     sessionCommands: sessionCommandList,
+    projects: open ? openProjectCommands(state) : [],
     sessionProject,
   });
   const results = usePaletteSearch(groups, search, editing || !open);

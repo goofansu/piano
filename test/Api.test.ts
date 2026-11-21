@@ -3,7 +3,10 @@ import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { listWebhooks, saveWebhook } from "../features/webhooks/web/webhookApi.ts";
-import { WRITTEN_PATHS_LIMIT } from "../features/workspace/contracts/files/http.ts";
+import {
+  WRITTEN_PATHS_LIMIT,
+  type WorkspaceWrittenFiles,
+} from "../features/workspace/contracts/files/http.ts";
 import { sessionChanges } from "../features/workspace/web/changes/changesApi.ts";
 import {
   workspaceFile,
@@ -11,7 +14,6 @@ import {
   workspaceWrittenFiles,
 } from "../features/workspace/web/files/fileApi.ts";
 import { listDirectory, makeDirectory } from "../features/workspace/web/folders/folderApi.ts";
-import type { WorkspaceWrittenFiles } from "../shared/wire.ts";
 import { ApiError } from "../web/src/shared/transport/api.ts";
 import { type RouterFixture, startRouter } from "./fixtures/router.ts";
 

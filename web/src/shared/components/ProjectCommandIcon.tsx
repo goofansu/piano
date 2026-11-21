@@ -9,7 +9,7 @@ import {
   TargetIcon,
   Trash2Icon,
 } from "lucide-react";
-import type { ProjectCommandIcon } from "../state/projectActions.ts";
+import type { ProjectCommandIcon } from "../state/projectCommandTypes.ts";
 const ICONS: Record<ProjectCommandIcon, LucideIcon> = {
   new: SquarePenIcon,
   create: PlusIcon,

@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { Effect } from "effect";
 import { DirectoryError } from "../../../server/shared/Directory.ts";
 import { directoryPath } from "../../../server/shared/PiEnv.ts";
-import type { DirListing } from "../../../shared/wire.ts";
+import type { DirListing } from "../contracts/folders/http.ts";
 import { checkoutHint } from "./worktrees/Worktrees.ts";
 
 const code = (error: unknown) => (error as NodeJS.ErrnoException | undefined)?.code;

@@ -1,6 +1,21 @@
 import { Schema } from "effect";
 import { endpoint } from "../../../../shared/endpoint.ts";
-import { DirListing, FolderView } from "../../../../shared/wire.ts";
+import { FolderView } from "../../../../shared/wire.ts";
+
+const DirEntry = Schema.Struct({
+  name: Schema.String,
+  path: Schema.String,
+  gitSubject: Schema.optional(Schema.String),
+});
+export const DirListing = Schema.Struct({
+  path: Schema.String,
+  parent: Schema.NullOr(Schema.String),
+  home: Schema.String,
+  gitSubject: Schema.optional(Schema.String),
+  gitRoot: Schema.optional(Schema.String),
+  entries: Schema.Array(DirEntry),
+});
+export type DirListing = typeof DirListing.Type;
 
 export const folderEndpoints = {
   listDirectory: endpoint({

@@ -32,7 +32,7 @@ import {
   type PullRequestControl,
   PullRequestRow,
 } from "@features/workspace/web/pull-requests/SessionPullRequest";
-import type { ChangeFile, ChangesScope, Comparison, Workspace } from "@shared/wire";
+import type { ChangesScope, Workspace } from "@shared/wire";
 import { cn } from "cn";
 import { FileDiffIcon, GitPullRequestIcon, MessageSquarePlusIcon } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
@@ -47,6 +47,7 @@ import { IconButton } from "@/shared/components/IconButton";
 import { SurfaceFrame } from "@/shared/components/SurfaceArea";
 import { useObservation } from "@/shared/lib/useObservation";
 import type { SessionView } from "@/shared/state/state";
+import type { ChangeFile, Comparison } from "../../contracts/changes/http.ts";
 
 type ReadFile = (path: string, signal: AbortSignal) => Promise<LoadedFile>;
 

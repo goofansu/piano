@@ -1,8 +1,8 @@
-import type { DirListing } from "@shared/wire";
 import {
   createObservation,
   type ObservationEnvironment,
 } from "../../../../web/src/shared/lib/observation.ts";
+import type { DirListing } from "../../contracts/folders/http.ts";
 import { browseInput, childPath, listing, parsePathInput, pickTarget } from "./folderPath.ts";
 
 type DirEntry = DirListing["entries"][number];

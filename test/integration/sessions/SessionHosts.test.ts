@@ -16,6 +16,13 @@ import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Deferred, Effect, Fiber, Layer, Option, type Scope, Stream } from "effect";
 import { TestClock } from "effect/testing";
+import {
+  assignProject,
+  deleteProject,
+  saveProject,
+  setProjectDone,
+  updateProject,
+} from "../../../features/projects/server/ProjectCommands.ts";
 import { PiCli } from "../../../features/sessions/server/pi/PiCli.ts";
 import {
   PiRequestTimeoutMs,
@@ -25,8 +32,8 @@ import {
   PiSessionsLive,
 } from "../../../features/sessions/server/pi/PiSessions.ts";
 import { SessionHosts, SessionNotCreated } from "../../../features/sessions/server/SessionHosts.ts";
+import { worktreeInstance } from "../../../features/workspace/server/GitCheckout.ts";
 import { SessionServicesLive } from "../../../server/app/PianoServices.ts";
-import { worktreeInstance } from "../../../server/shared/GitCheckout.ts";
 import {
   Registry,
   RegistryDatabasePath,
@@ -224,8 +231,8 @@ test("a failed fresh startup gives a done project its done mark back", async () 
     Effect.gen(function* () {
       const hosts = yield* SessionHosts,
         registry = yield* Registry;
-      yield* registry.saveProject({ id: "shipped", name: "Shipped" });
-      yield* registry.setProjectDone("shipped", true);
+      yield* saveProject(registry, { id: "shipped", name: "Shipped" });
+      yield* setProjectDone(registry, "shipped", true);
       const doneAt = (yield* registry.get).projects[0]!.doneAt;
       assert.ok(doneAt);
       let reopened = false;
@@ -727,7 +734,7 @@ test(
       Effect.gen(function* () {
         const hosts = yield* SessionHosts,
           registry = yield* Registry;
-        yield* registry.saveProject({ id: "abandoned", name: "Abandoned" });
+        yield* saveProject(registry, { id: "abandoned", name: "Abandoned" });
         const registered = yield* Deferred.make<string>();
         yield* registry.onChange((_, after) => {
           const entry = after.sessions.find((s) => s.projectId === "abandoned");
@@ -1160,8 +1167,8 @@ test("INV-01: creating with a deleted or unknown project registers no folder, re
     Effect.gen(function* () {
       const hosts = yield* SessionHosts,
         registry = yield* Registry;
-      yield* registry.saveProject({ id: "old", name: "Old" });
-      yield* registry.deleteProject("old");
+      yield* saveProject(registry, { id: "old", name: "Old" });
+      yield* deleteProject(registry, "old");
       for (const projectId of ["old", "missing", ""]) {
         const error = yield* hosts.create({ cwd, projectId, options: {} }).pipe(Effect.flip);
         assert.ok(error instanceof SessionNotCreated);
@@ -1180,10 +1187,10 @@ test("INV-01/02: a project deleted after preflight refuses registration before P
     Effect.gen(function* () {
       const hosts = yield* SessionHosts,
         registry = yield* Registry;
-      yield* registry.saveProject({ id: "launch", name: "Launch" });
+      yield* saveProject(registry, { id: "launch", name: "Launch" });
       yield* registry.onChange((before, after) =>
         after.folders.length > before.folders.length
-          ? registry.deleteProject("launch").pipe(Effect.orDie)
+          ? deleteProject(registry, "launch").pipe(Effect.orDie)
           : Effect.void,
       );
       const error = yield* hosts
@@ -1207,7 +1214,7 @@ test("dispatch reads saved membership without opening the parent and refuses amb
       const hosts = yield* SessionHosts,
         registry = yield* Registry;
       const missing = join(root, "unavailable-parent-checkout");
-      yield* registry.saveProject({
+      yield* saveProject(registry, {
         id: "parent-project",
         name: "Parent project",
         instructions: "Answer in French.",
@@ -1265,21 +1272,21 @@ test("a member session's Pi gets its project's instructions at each launch; othe
         records(id)
           .filter((r) => r.event === "spawn")
           .map((r) => r.instructions ?? null);
-      yield* registry.saveProject({ id: "guided", name: "Guided" });
-      yield* registry.updateProject("guided", { instructions: "Answer in French." });
+      yield* saveProject(registry, { id: "guided", name: "Guided" });
+      yield* updateProject(registry, "guided", { instructions: "Answer in French." });
       const member = (yield* hosts.create({ cwd, projectId: "guided", options: {} })).spec
         .sessionId;
       const loose = (yield* hosts.create({ cwd, options: {} })).spec.sessionId;
       assert.deepEqual(launches(member), ["Answer in French."]);
       assert.deepEqual(launches(loose), [null]);
 
-      yield* registry.updateProject("guided", { instructions: "Answer in German." });
+      yield* updateProject(registry, "guided", { instructions: "Answer in German." });
       assert.deepEqual(launches(member), ["Answer in French."], "a running Pi is not restarted");
       yield* hosts.release(cwd, member);
       yield* hosts.open({ cwd, sessionId: member });
       assert.deepEqual(launches(member), ["Answer in French.", "Answer in German."]);
 
-      yield* registry.assignProject(cwd, member, null);
+      yield* assignProject(registry, cwd, member, null);
       yield* hosts.release(cwd, member);
       yield* hosts.open({ cwd, sessionId: member });
       assert.equal(launches(member).at(-1), null, "a session that left the project gets none");
@@ -1299,8 +1306,8 @@ test("a Piano started inside a project member's session passes its parent's inst
           records(id)
             .filter((r) => r.event === "spawn")
             .map((r) => r.instructions ?? null);
-        yield* registry.saveProject({ id: "inheriting", name: "Inheriting" });
-        yield* registry.updateProject("inheriting", { instructions: "Answer in Dutch." });
+        yield* saveProject(registry, { id: "inheriting", name: "Inheriting" });
+        yield* updateProject(registry, "inheriting", { instructions: "Answer in Dutch." });
         const loose = (yield* hosts.create({ cwd, options: {} })).spec.sessionId;
         const member = (yield* hosts.create({ cwd, projectId: "inheriting", options: {} })).spec
           .sessionId;
@@ -1318,7 +1325,7 @@ test("INV-01: a prompt or steer records activity on every path to a running sess
     Effect.gen(function* () {
       const hosts = yield* SessionHosts,
         registry = yield* Registry;
-      yield* registry.saveProject({ id: "launch", name: "Launch" });
+      yield* saveProject(registry, { id: "launch", name: "Launch" });
       const session = yield* hosts.create({ cwd, projectId: "launch", options: {} });
       const id = session.spec.sessionId;
       const entry = (yield* registry.get).sessions.find((s) => s.sessionId === id)!;

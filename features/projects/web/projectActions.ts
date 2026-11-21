@@ -1,13 +1,18 @@
+import { type Project } from "../../../shared/wire.ts";
+import { byName } from "../../../web/src/shared/lib/byName.ts";
+import { findProject, isProjectDone } from "../../../web/src/shared/lib/projects.ts";
+import type {
+  ProjectCommand,
+  ProjectDialog,
+  ProjectDestination,
+  SessionProjectMenu,
+  ProjectCommandId,
+} from "../../../web/src/shared/state/projectCommandTypes.ts";
 import {
-  type ClientCommand,
-  PROJECT_INSTRUCTIONS_MAX,
-  PROJECT_NAME_MAX,
-  type Project,
-} from "../../../../shared/wire.ts";
-import { byName } from "../lib/byName.ts";
-import { findProject, isProjectDone } from "../lib/projects.ts";
-import { sessionProject, sessionReferenceChangeable } from "./sessionContext.ts";
-import type { AppState } from "./state.ts";
+  sessionProject,
+  sessionReferenceChangeable,
+} from "../../../web/src/shared/state/sessionContext.ts";
+import type { AppState } from "../../../web/src/shared/state/state.ts";
 
 export function projectDestinations(
   state: AppState,
@@ -18,46 +23,6 @@ export function projectDestinations(
     p.id === current?.id ? keepCurrent : !isProjectDone(p),
   );
   return choices.sort((a, b) => byName(a.name, b.name));
-}
-
-type SessionRef = { cwd: string; sessionId: string };
-
-export type ProjectDialog = { assign?: SessionRef; newPage?: true };
-
-export type ProjectCommandId =
-  | "new-session"
-  | "open-project"
-  | "settings"
-  | "done"
-  | "delete"
-  | "new-project"
-  | "assign";
-
-export type ProjectCommandIcon =
-  | "new"
-  | "create"
-  | "settings"
-  | "done"
-  | "reopen"
-  | "delete"
-  | "project"
-  | "remove";
-
-export type ProjectCommandIntent =
-  | { kind: "open-project"; projectId: string }
-  | { kind: "project-settings"; projectId: string }
-  | { kind: "project-dialog"; dialog: ProjectDialog }
-  | { kind: "delete-project"; project: Project }
-  | { kind: "send"; command: ClientCommand };
-
-export interface ProjectCommand {
-  id: ProjectCommandId;
-  label: string;
-  ariaLabel?: string;
-  icon: ProjectCommandIcon;
-  enabled: boolean;
-  destructive?: true;
-  intent: ProjectCommandIntent;
 }
 
 export function projectCommands(state: AppState, project: Project): ProjectCommand[] {
@@ -124,75 +89,13 @@ export function projectMenu(commands: readonly ProjectCommand[]): ProjectMenuSec
   };
 }
 
-export interface ProjectDraft {
-  name: string;
-  instructions: string;
-}
-
-export const EMPTY_PROJECT_DRAFT: ProjectDraft = { name: "", instructions: "" };
-
-export interface ProjectFieldCheck {
-  length: number;
-  max: number;
-  over: boolean;
-}
-
-export interface ProjectDraftCheck {
-  name: ProjectFieldCheck;
-  instructions: ProjectFieldCheck;
-  saved: ProjectDraft | undefined;
-}
-
-const fieldCheck = (saved: string, max: number, writing: boolean): ProjectFieldCheck => ({
-  length: saved.length,
-  max,
-  over: writing && saved.length > max,
-});
-
-export function checkProjectDraft(draft: ProjectDraft, opened?: ProjectDraft): ProjectDraftCheck {
-  const name = draft.name.trim();
-  const instructions = draft.instructions.trim();
-  const checks = {
-    name: fieldCheck(name, PROJECT_NAME_MAX, name !== opened?.name),
-    instructions: fieldCheck(
-      instructions,
-      PROJECT_INSTRUCTIONS_MAX,
-      instructions !== opened?.instructions,
-    ),
-  };
-  const savable = (name === opened?.name || name) && !checks.name.over && !checks.instructions.over;
-  return { ...checks, saved: savable ? { name, instructions } : undefined };
-}
-
-export function projectSettingsSave(
-  state: AppState,
-  projectId: string,
-  draft: ProjectDraft,
-  opened?: ProjectDraft,
-): { projectCheck: ProjectDraftCheck } & (
-  | { allowed: false }
-  | { allowed: true; command: ClientCommand }
-) {
-  const project = findProject(state, projectId);
-  const base =
-    opened ?? (project && { name: project.name, instructions: project.instructions ?? "" });
-  const projectCheck = checkProjectDraft(draft, base);
-  const { saved } = projectCheck;
-  if (!project || !state.connected || !saved || !base) return { allowed: false, projectCheck };
-  const { name, instructions } = saved;
-  const renamed = name !== base.name;
-  const instructed = instructions !== base.instructions;
-  if (!renamed && !instructed) return { allowed: false, projectCheck };
-  return {
-    allowed: true,
-    projectCheck,
-    command: {
-      _tag: "update_project",
-      id: project.id,
-      ...(renamed && { name }),
-      ...(instructed && { instructions: instructions || null }),
-    },
-  };
+export function projectPageActions(state: AppState) {
+  const { view } = state;
+  if (view.kind === "projects") return [newProjectCommand(state, {})];
+  const project = view.kind === "project" && findProject(state, view.projectId);
+  if (!project) return [];
+  const { manage, destructive } = projectMenu(projectCommands(state, project));
+  return [...manage, ...destructive];
 }
 
 export function openProjectCommand(project: Project): ProjectCommand {
@@ -208,7 +111,7 @@ export function openProjectCommand(project: Project): ProjectCommand {
 export function newProjectCommand(
   state: AppState,
   { assign, newPage }: ProjectDialog,
-): ProjectCommand {
+): ProjectCommand & { id: "new-project" } {
   return {
     id: "new-project",
     label: "New project",
@@ -227,7 +130,7 @@ export function newProjectCommand(
 
 export function assignProjectCommand(
   state: AppState,
-  session: SessionRef,
+  session: { cwd: string; sessionId: string },
   projectId: string | null,
 ): ProjectCommand {
   return {
@@ -247,20 +150,6 @@ export function assignProjectCommand(
   };
 }
 
-export interface ProjectDestination {
-  project: Project;
-  command: ProjectCommand;
-}
-
-export interface SessionProjectMenu {
-  current: Project | undefined;
-  open: ProjectCommand | undefined;
-  entry: { label: "Move to project" | "Add to project"; enabled: boolean };
-  create: ProjectCommand | undefined;
-  destinations: ProjectDestination[];
-  remove: ProjectCommand | undefined;
-}
-
 export function openProjectCommands(state: AppState): ProjectDestination[] {
   return projectDestinations(state, undefined, { keepCurrent: true }).map((project) => ({
     project,
@@ -268,7 +157,10 @@ export function openProjectCommands(state: AppState): ProjectDestination[] {
   }));
 }
 
-export function sessionProjectMenu(state: AppState, session: SessionRef): SessionProjectMenu {
+export function sessionProjectMenu(
+  state: AppState,
+  session: { cwd: string; sessionId: string },
+): SessionProjectMenu {
   const ref = { cwd: session.cwd, sessionId: session.sessionId };
   const current = sessionProject(state, ref);
   return {

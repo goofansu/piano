@@ -15,7 +15,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/shared/components/PianoDropdownMenu";
-import { WrapButton } from "@/shared/components/WrapButton";
+import { WrapButton } from "../WrapButton";
 
 export function ChangesScopeMenu({
   scope,

@@ -1,9 +1,5 @@
-import {
-  type RenderMsg,
-  sameWorkspace,
-  type Workspace,
-  type WorkspaceWrittenFiles,
-} from "../../../../shared/wire.ts";
+import type { RenderMsg, Workspace } from "../../../../shared/wire.ts";
+import { sameWorkspace, type WorkspaceWrittenFiles } from "../../contracts/files/http.ts";
 
 export interface SessionFile {
   path: string;

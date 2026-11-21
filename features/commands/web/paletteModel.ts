@@ -1,9 +1,9 @@
 import { defaultFilter } from "cmdk";
 import {
-  openProjectCommands,
+  type ProjectDestination,
   type ProjectCommand,
   type SessionProjectMenu,
-} from "../../../web/src/shared/state/projectActions.ts";
+} from "../../../web/src/shared/state/projectCommandTypes.ts";
 import {
   createSessionCatalog,
   recentSessions,
@@ -123,6 +123,7 @@ export type PaletteGroup =
 export interface PaletteInput {
   globalCommands: readonly GlobalCommand[];
   sessionCommands: readonly SessionCommand[];
+  projects: readonly ProjectDestination[];
   sessionProject?: SessionProjectMenu;
 }
 
@@ -211,7 +212,7 @@ function commandPalette(
       heading: "Sessions",
       rows: sessions,
     });
-  const projects = openProjectCommands(state);
+  const projects = input.projects;
   if (projects.length > 0)
     groups.push({
       id: "projects",

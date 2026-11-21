@@ -3,6 +3,7 @@ import { type GlobalCommand, trustCommand } from "@features/commands/web/globalC
 import { useModelCatalog } from "@features/models/web/useModelCatalog";
 import { useModelChoice } from "@features/models/web/useModelChoice";
 import { useSidebarLayout } from "@features/navigation/web/sidebar/useSidebarLayout";
+import { newProjectCommand, projectDestinations } from "@features/projects/web/projectActions";
 import { ProjectDestinationItems } from "@features/projects/web/Projects";
 import { completionTarget } from "@features/sessions/web/composer/completionTarget";
 import {
@@ -56,11 +57,7 @@ import { PickerCheck, PickerContent, PickerSearch } from "@/shared/components/Pi
 import { composerInput, picker } from "@/shared/lib/styles";
 import type { Client } from "@/shared/state/client";
 import { NEW_SESSION_DRAFT } from "@/shared/state/draftKey";
-import {
-  newProjectCommand,
-  type ProjectCommand,
-  projectDestinations,
-} from "@/shared/state/projectActions";
+import type { ProjectCommand } from "@/shared/state/projectCommandTypes";
 import { folderFor } from "@/shared/state/sessionCatalog";
 import { checkoutMissingAt } from "@/shared/state/sessionContext";
 import { startPage } from "@/shared/state/startPage";

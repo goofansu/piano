@@ -1,22 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { SessionState, WorktreeView } from "../../../shared/wire.ts";
-import { sessionReference } from "../../../test/shared/sessionReference.ts";
-import { sessionProjectMenu } from "../../../web/src/shared/state/projectActions.ts";
 import {
-  type AppState,
-  initialState,
-  type SessionView,
-  sessionKey,
-} from "../../../web/src/shared/state/state.ts";
-import { type GlobalCommandContext, globalCommands } from "../web/globalCommands.ts";
+  type GlobalCommandContext,
+  globalCommands,
+} from "../../../features/commands/web/globalCommands.ts";
 import {
-  createPaletteCatalog,
+  createPaletteCatalog as paletteCatalog,
   type PaletteInput,
   PROJECTS_ONLY,
   paletteFilter,
   paletteScope,
-} from "../web/paletteModel.ts";
+} from "../../../features/commands/web/paletteModel.ts";
 import {
   answerPalette,
   createPaletteSearch,
@@ -24,8 +18,24 @@ import {
   paletteItems,
   paletteSelection,
   searchPalette,
-} from "../web/paletteSearch.ts";
-import { type SessionCommand, sessionCommands } from "../web/sessionCommands.ts";
+} from "../../../features/commands/web/paletteSearch.ts";
+import {
+  type SessionCommand,
+  sessionCommands,
+} from "../../../features/commands/web/sessionCommands.ts";
+import {
+  sessionProjectMenu,
+  projectPageActions,
+  openProjectCommands,
+} from "../../../features/projects/web/projectActions.ts";
+import type { SessionState, WorktreeView } from "../../../shared/wire.ts";
+import {
+  type AppState,
+  initialState,
+  type SessionView,
+  sessionKey,
+} from "../../../web/src/shared/state/state.ts";
+import { sessionReference } from "../../shared/sessionReference.ts";
 
 const worktree = (path: string, branch: string, root: boolean): WorktreeView => ({
   workspace: { id: `ws:${path}`, folder: "/repo", path },
@@ -71,12 +81,19 @@ const selected: SessionView = {
 };
 const inSession: AppState = { ...home, view: { kind: "session" }, session: selected };
 const ctx: GlobalCommandContext = {
+  projectPageActions,
   settings: null,
   editorAvailable: () => true,
   view: { groupBy: "date", sortBy: "recent", folderAndBranch: false },
   theme: "dark",
 };
-const freshPalette = (state: AppState, input: PaletteInput) => createPaletteCatalog()(state, input);
+function createPaletteCatalog() {
+  const catalog = paletteCatalog();
+  return (state: AppState, input: Omit<PaletteInput, "projects">) =>
+    catalog(state, { ...input, projects: openProjectCommands(state) });
+}
+const freshPalette = (state: AppState, input: Omit<PaletteInput, "projects">) =>
+  createPaletteCatalog()(state, input);
 const palette = (state: AppState, search = "", c = ctx) =>
   searchPalette(
     freshPalette(state, {

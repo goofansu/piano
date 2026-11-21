@@ -3,7 +3,6 @@ import { test } from "node:test";
 import type { FolderView, SessionState, WorktreeView } from "../../../shared/wire.ts";
 import { sessionReference } from "../../../test/shared/sessionReference.ts";
 import type { SessionLayout } from "../../../web/src/shared/navigation/navigation.ts";
-import { sessionProjectMenu } from "../../../web/src/shared/state/projectActions.ts";
 import {
   type AppState,
   initialState,
@@ -235,7 +234,7 @@ test("pin commands reflect registry state and stay available independently of Pi
   );
 });
 
-test("an archived reference keeps read and copy commands but offers no change, project assignment included", () => {
+test("an archived reference keeps read and copy commands but offers no change", () => {
   const archived: AppState = {
     ...base,
     projects: [{ id: "p1", name: "Launch" }],
@@ -248,14 +247,6 @@ test("an archived reference keeps read and copy commands but offers no change, p
     const commands = enabled(archived, target);
     for (const id of ["rename", "pin", "archive", "delete"] as const)
       assert.equal(commands[id], false, `${target ? "row" : "header"} ${id}`);
-
-    const project = sessionProjectMenu(
-      archived,
-      target ?? { cwd: "/work/repo.feature", sessionId: "s1" },
-    );
-    assert.equal(project.entry.enabled, false, "Move/Add to project");
-    for (const c of [project.create!, ...project.destinations.map((d) => d.command)])
-      assert.equal(c.enabled, false, c.label);
   }
 });
 

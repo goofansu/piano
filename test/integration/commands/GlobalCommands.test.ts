@@ -12,6 +12,7 @@ import {
   trustCommand,
 } from "../../../features/commands/web/globalCommands.ts";
 import { type EditorPage } from "../../../features/commands/web/globalCommands.ts";
+import { projectPageActions } from "../../../features/projects/web/projectActions.ts";
 import type { SessionState } from "../../../shared/wire.ts";
 import {
   editorAvailable,
@@ -46,6 +47,7 @@ const onNewPage: AppState = {
   trusts: { "/repo": protectedDir, "/plain": { required: false, trusted: false } },
 };
 const ctx: GlobalCommandContext = {
+  projectPageActions,
   editorAvailable,
   settings: null,
   view: { groupBy: "date", sortBy: "recent", folderAndBranch: false },
@@ -260,7 +262,7 @@ test("each Settings page's header creation is a palette command that opens that 
     const [command] = offered;
     assert.deepEqual(
       command,
-      pageCommands(onNewPage, section, editorAvailable)[0],
+      pageCommands(onNewPage, { ...ctx, settings: section, editorAvailable })[0],
       "the palette row is the header's",
     );
     const editor = PAGE_EDITORS[expected.page];
@@ -352,7 +354,7 @@ test("a page reporting its creation unavailable disables its row until the page 
     PAGE_EDITORS.mcp.useAvailable(available);
     return null;
   }
-  const row = () => pageCommands(onNewPage, "mcp", editorAvailable)[0]!;
+  const row = () => pageCommands(onNewPage, { ...ctx, settings: "mcp", editorAvailable })[0]!;
   const root = createRoot(dom.window.document.getElementById("root")!);
   assert.equal(row().enabled, true);
   await act(() => root.render(createElement(McpPage, { available: false })));
@@ -364,7 +366,7 @@ test("a page reporting its creation unavailable disables its row until the page 
     "the palette lists the same disabled row",
   );
   assert.equal(
-    pageCommands(onNewPage, "skills", editorAvailable)[0]!.enabled,
+    pageCommands(onNewPage, { ...ctx, settings: "skills", editorAvailable })[0]!.enabled,
     true,
     "other pages are unaffected",
   );

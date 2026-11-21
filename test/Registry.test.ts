@@ -7,6 +7,12 @@ import { DatabaseSync } from "node:sqlite";
 import { type TestContext, test } from "node:test";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import {
+  assignProject,
+  saveProject,
+  setProjectDone,
+  updateProject,
+} from "../features/projects/server/ProjectCommands.ts";
+import {
   Registry,
   type RegistryData,
   RegistryDatabasePath,
@@ -136,7 +142,7 @@ test("INV-01/07: SQLite preserves all metadata, order, hidden folders and path a
     Effect.gen(function* () {
       const r = yield* Registry;
       yield* r.mirrorSession(hidden, "same", { sessionName: "Renamed" });
-      yield* r.assignProject(hidden, "same", "project-2");
+      yield* assignProject(r, hidden, "same", "project-2");
       yield* r.removeFolder(folder);
     }),
   );
@@ -588,14 +594,15 @@ test("INV-01: every user write to a session reference refuses an archived refere
     Effect.gen(function* () {
       const r = yield* Registry;
       yield* r.addSession(cwd, "one", "One");
-      yield* r.saveProject({ id: "launch", name: "Launch" });
+      yield* saveProject(r, { id: "launch", name: "Launch" });
       yield* r.archiveSession(cwd, "one");
       const before = yield* r.get;
       const writes = {
         pinSession: r.pinSession(cwd, "one", true),
         setSessionChangesScope: r.setSessionChangesScope(cwd, "one", "uncommitted"),
-        assignProject: r.assignProject(cwd, "one", "launch"),
-        "saveProject with assign": r.saveProject(
+        assignProject: assignProject(r, cwd, "one", "launch"),
+        "saveProject with assign": saveProject(
+          r,
           { id: "assigned", name: "Assigned" },
           { cwd, sessionId: "one" },
         ),
@@ -775,10 +782,10 @@ test("a project marked done keeps its members untouched, reopens when a session 
   await f.run(
     Effect.gen(function* () {
       const r = yield* Registry;
-      yield* r.saveProject({ id: "launch", name: "Launch", instructions: "Be brief." });
+      yield* saveProject(r, { id: "launch", name: "Launch", instructions: "Be brief." });
       yield* r.addSession(cwd, "one", "Original", "launch");
       const before = yield* r.get;
-      yield* r.setProjectDone("launch", true);
+      yield* setProjectDone(r, "launch", true);
       const done = yield* r.get;
       const project = done.projects[0]!;
       assert.equal(project.name, "Launch");
@@ -790,10 +797,10 @@ test("a project marked done keeps its members untouched, reopens when a session 
       assert.ok(project.doneAt && !Number.isNaN(Date.parse(project.doneAt)), "done records when");
       assert.deepEqual(done.sessions, before.sessions, "its sessions are untouched");
       const at = project.doneAt;
-      yield* r.setProjectDone("launch", true);
+      yield* setProjectDone(r, "launch", true);
       assert.equal((yield* r.get).projects[0]!.doneAt, at, "marking done again keeps the time");
 
-      yield* r.assignProject(cwd, "one", "launch");
+      yield* assignProject(r, cwd, "one", "launch");
       assert.equal(
         (yield* r.get).projects[0]!.doneAt,
         at,
@@ -806,20 +813,20 @@ test("a project marked done keeps its members untouched, reopens when a session 
         "a session started in it reopens it",
       );
 
-      yield* r.setProjectDone("launch", false);
+      yield* setProjectDone(r, "launch", false);
       assert.equal(
         (yield* r.get).projects[0]!.doneAt,
         undefined,
         "reopening an open project is a no-op",
       );
-      yield* r.setProjectDone("launch", true);
-      const failure = yield* r.setProjectDone("missing", true).pipe(Effect.flip);
+      yield* setProjectDone(r, "launch", true);
+      const failure = yield* setProjectDone(r, "missing", true).pipe(Effect.flip);
       assert.equal(failure.detail, "Project is unavailable. Refresh and try again.");
     }),
   );
   const reopened = await f.get();
   assert.ok(reopened.projects[0]!.doneAt, "done is saved, not held in memory");
-  await f.run(Effect.flatMap(Registry, (r) => r.setProjectDone("launch", false)));
+  await f.run(Effect.flatMap(Registry, (r) => setProjectDone(r, "launch", false)));
   assert.equal((await f.get()).projects[0]!.doneAt, undefined, "reopen is saved too");
 });
 
@@ -829,7 +836,7 @@ test("INV-01: initial membership never changes an existing reference or restrict
   await f.run(
     Effect.gen(function* () {
       const r = yield* Registry;
-      yield* r.saveProject({ id: "launch", name: "Launch" });
+      yield* saveProject(r, { id: "launch", name: "Launch" });
       yield* r.addSession(cwd, "one", "Original", "launch");
       const before = yield* r.get;
       for (const projectId of ["launch", "missing", undefined])
@@ -839,14 +846,14 @@ test("INV-01: initial membership never changes an existing reference or restrict
         before,
         "re-registering is a no-op, even naming a missing project",
       );
-      yield* r.assignProject(cwd, "one", null);
+      yield* assignProject(r, cwd, "one", null);
       yield* r.addSession(cwd, "one", undefined, "launch");
       assert.equal(
         (yield* r.get).sessions[0].projectId,
         undefined,
         "re-registration cannot restore removed membership",
       );
-      yield* r.assignProject(cwd, "one", "launch");
+      yield* assignProject(r, cwd, "one", "launch");
       assert.equal(
         (yield* r.get).sessions[0].projectId,
         "launch",
@@ -869,7 +876,7 @@ test("INV-01: a failed transaction publishes neither partial rows nor in-memory 
     runtime = ManagedRuntime.make(f.layer);
   try {
     const r = await runtime.runPromise(Registry);
-    await runtime.runPromise(r.saveProject({ id: "launch", name: "Launch" }));
+    await runtime.runPromise(saveProject(r, { id: "launch", name: "Launch" }));
     const before = await runtime.runPromise(r.get);
     const db = new DatabaseSync(f.dbPath);
     try {
@@ -924,9 +931,9 @@ test("INV-01: competing backends cannot overwrite each other's committed metadat
   try {
     const a = await first.runPromise(Registry),
       b = await second.runPromise(Registry);
-    await first.runPromise(a.saveProject({ id: "one", name: "First" }));
+    await first.runPromise(saveProject(a, { id: "one", name: "First" }));
     await assert.rejects(
-      second.runPromise(b.saveProject({ id: "two", name: "Second" })),
+      second.runPromise(saveProject(b, { id: "two", name: "Second" })),
       /another writer/,
     );
     assert.deepEqual((await second.runPromise(b.get)).projects, []);
@@ -984,8 +991,8 @@ test("PIN-50: metadata writes share unchanged collections and rows; value-equal 
       try {
         const revision = () => db.prepare("SELECT revision FROM registry_meta").get()!.revision;
         const priorRevision = revision();
-        yield* r.updateProject("project", { name: "Project" });
-        yield* r.assignProject(cwd, "one", null);
+        yield* updateProject(r, "project", { name: "Project" });
+        yield* assignProject(r, cwd, "one", null);
         yield* r.removeFolder("/missing");
         yield* r.removeSession(cwd, "missing");
         yield* r.touchSession(cwd, "missing");

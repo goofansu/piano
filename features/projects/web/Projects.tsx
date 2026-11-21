@@ -27,15 +27,14 @@ import {
 } from "@/shared/components/PianoDropdownMenu";
 import { PickerCheck } from "@/shared/components/Picker";
 import { ProjectCommandIconView } from "@/shared/components/ProjectCommandIcon";
-import {
-  type ProjectCommand,
-  type ProjectDialog,
-  type ProjectDraft,
-  projectCommands,
-  projectMenu,
-  type SessionProjectMenu,
-} from "@/shared/state/projectActions";
+import type {
+  ProjectCommand,
+  ProjectDialog,
+  SessionProjectMenu,
+} from "@/shared/state/projectCommandTypes";
 import type { AppState } from "@/shared/state/state";
+import { projectCommands, projectMenu } from "./projectActions";
+import type { ProjectDraft } from "./projectForms";
 
 function ProjectCommandMenuItem({
   command,

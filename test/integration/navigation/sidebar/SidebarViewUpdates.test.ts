@@ -12,6 +12,10 @@ import {
   type SidebarMessage,
   SidebarView,
 } from "../../../../features/navigation/server/SidebarView.ts";
+import {
+  assignProject,
+  saveProject,
+} from "../../../../features/projects/server/ProjectCommands.ts";
 import { PiCli } from "../../../../features/sessions/server/pi/PiCli.ts";
 import { SessionHosts } from "../../../../features/sessions/server/SessionHosts.ts";
 import { listWorktrees } from "../../../../features/workspace/server/worktrees/Worktrees.ts";
@@ -189,7 +193,7 @@ test("INV-01/06/07: a prompt, rename, pin or membership starts no reader; sessio
       for (let i = 0; i < 5; i++) yield* registry.touchSession(first, "s1", `prompt ${i}`);
       yield* registry.mirrorSession(first, "s1", { sessionName: "After" });
       yield* registry.pinSession(first, "s1", true);
-      yield* registry.saveProject({ id: "outcome", name: "Outcome" });
+      yield* saveProject(registry, { id: "outcome", name: "Outcome" });
       const shown = yield* nextView(view, () => true);
       assert.deepEqual(
         [titleOf(shown), shown.sessionReferences?.[0]?.pinned, shown.projects?.length],
@@ -201,7 +205,7 @@ test("INV-01/06/07: a prompt, rename, pin or membership starts no reader; sessio
       assert.equal(git.calls, quiet, "no discovery run for visible metadata or a project row");
       assert.equal(scans, 0, "no history scan for visible metadata or a project row");
 
-      yield* registry.assignProject(first, "s1", "outcome");
+      yield* assignProject(registry, first, "s1", "outcome");
       const assigned = yield* nextView(
         view,
         (m) => m.sessionReferences?.[0]?.projectId === "outcome",
@@ -533,7 +537,7 @@ test("INV-01/02/06: retirement rechecks saved history without waiting for Git or
       const registry = yield* Registry,
         hosts = yield* SessionHosts,
         view = yield* SidebarView;
-      yield* registry.saveProject({ id: "lifecycle", name: "Lifecycle" });
+      yield* saveProject(registry, { id: "lifecycle", name: "Lifecycle" });
       yield* registry.onChange((before, after) =>
         after.sessions.length > before.sessions.length
           ? view.fresh.pipe(
@@ -598,7 +602,7 @@ test("INV-01/02: failed acquisition rechecks history saved before readiness fail
       const registry = yield* Registry,
         hosts = yield* SessionHosts,
         view = yield* SidebarView;
-      yield* registry.saveProject({ id: "failed-start", name: "Failed start" });
+      yield* saveProject(registry, { id: "failed-start", name: "Failed start" });
       yield* registry.onChange((before, after) =>
         after.sessions.length > before.sessions.length ? view.fresh : Effect.void,
       );
@@ -667,7 +671,7 @@ test("INV-01/05: fresh awaits availability; a lifetime during its read invalidat
         hosts = yield* SessionHosts,
         view = yield* SidebarView;
       yield* registry.addFolder(cwd);
-      yield* registry.saveProject({ id: "racing", name: "Racing" });
+      yield* saveProject(registry, { id: "racing", name: "Racing" });
       yield* registry.addSession(cwd, "rapid", undefined, "racing");
       const before = yield* view.fresh;
       const ref = (m: SidebarMessage) => m.sessionReferences?.find((s) => s.sessionId === "rapid");
@@ -729,7 +733,7 @@ test("INV-01/06: established-host prompts do not rescan history; a never-written
         hosts = yield* SessionHosts,
         view = yield* SidebarView;
       seedHistory(first, "performance-marker");
-      yield* registry.saveProject({ id: "no-history", name: "No history" });
+      yield* saveProject(registry, { id: "no-history", name: "No history" });
       const session = yield* hosts.create({ cwd: first, projectId: "no-history", options: {} });
       const id = session.spec.sessionId;
       const ref = (m: SidebarMessage) => m.sessionReferences?.find((s) => s.sessionId === id);
@@ -799,7 +803,7 @@ test("INV-01: the sidebar marks a session unavailable when its history or checko
         view = yield* SidebarView;
       yield* registry.addFolder(kept);
       yield* registry.addFolder(gone);
-      yield* registry.saveProject({ id: "outcome", name: "Outcome" });
+      yield* saveProject(registry, { id: "outcome", name: "Outcome" });
       seedHistory(kept, "written");
       seedHistory(gone, "removed");
       seedHistory(kept, "loose-written");
@@ -810,7 +814,7 @@ test("INV-01: the sidebar marks a session unavailable when its history or checko
         [gone, "removed"],
       ]) {
         yield* registry.addSession(cwd, id);
-        yield* registry.assignProject(cwd, id, "outcome");
+        yield* assignProject(registry, cwd, id, "outcome");
       }
       for (const [cwd, id] of [
         [kept, "loose-written"],

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { ChangeFile, WorkspaceChanges } from "../../../../shared/wire.ts";
+import type { ChangeFile, WorkspaceChanges } from "../../contracts/changes/http.ts";
 import {
   askText,
   CHANGES_MOVED,

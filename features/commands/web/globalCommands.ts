@@ -1,5 +1,4 @@
 import type { ClientCommand } from "../../../shared/wire.ts";
-import { findProject } from "../../../web/src/shared/lib/projects.ts";
 import {
   SETTINGS_SECTIONS,
   type SettingsSection,
@@ -17,15 +16,11 @@ import {
   displayedTrust,
   pendingTrust,
 } from "../../../web/src/shared/state/directoryTrust.ts";
-import {
-  newProjectCommand,
-  type ProjectCommand,
-  type ProjectCommandIcon,
-  type ProjectCommandIntent,
-  type ProjectMenuCommandId,
-  projectCommands,
-  projectMenu,
-} from "../../../web/src/shared/state/projectActions.ts";
+import type {
+  ProjectCommand,
+  ProjectCommandIcon,
+  ProjectCommandIntent,
+} from "../../../web/src/shared/state/projectCommandTypes.ts";
 import {
   checkoutMissingAt,
   focusedDirectory,
@@ -120,6 +115,9 @@ export interface GlobalCommand {
 }
 
 export interface GlobalCommandContext {
+  projectPageActions: (
+    state: AppState,
+  ) => readonly (ProjectCommand & { id: keyof typeof PROJECT_MENU_IDS })[];
   settings: SettingsSection | null;
   editorAvailable: (page: EditorPage) => boolean;
   view: SidebarView;
@@ -153,15 +151,19 @@ export function trustCommand(state: AppState, cwd: string | undefined): GlobalCo
 }
 
 const PROJECT_MENU_IDS = {
+  "new-project": "new-project",
   settings: "project-settings",
   done: "project-done",
   delete: "delete-project",
-} as const satisfies Record<ProjectMenuCommandId, GlobalCommandId>;
+} as const satisfies Record<string, GlobalCommandId>;
 
 export function pageCommands(
   state: AppState,
-  settings: SettingsSection | null,
-  editorAvailable: GlobalCommandContext["editorAvailable"],
+  {
+    settings,
+    editorAvailable,
+    projectPageActions,
+  }: Pick<GlobalCommandContext, "settings" | "editorAvailable" | "projectPageActions">,
 ): GlobalCommand[] {
   if (settings) {
     if (!isEditorPage(settings)) return [];
@@ -185,14 +187,7 @@ export function pageCommands(
     enabled: c.enabled,
     intent: c.intent,
   });
-  const view = state.view;
-  if (view.kind === "projects") {
-    return [row("new-project", newProjectCommand(state, {}))];
-  }
-  const project = view.kind === "project" ? findProject(state, view.projectId) : undefined;
-  if (!project) return [];
-  const menu = projectMenu(projectCommands(state, project));
-  return [...menu.manage, ...menu.destructive].map((c) => row(PROJECT_MENU_IDS[c.id], c));
+  return projectPageActions(state).map((c) => row(PROJECT_MENU_IDS[c.id], c));
 }
 
 export function globalCommands(state: AppState, ctx: GlobalCommandContext): GlobalCommand[] {
@@ -241,7 +236,7 @@ export function globalCommands(state: AppState, ctx: GlobalCommandContext): Glob
       enabled: true,
       intent: { kind: "projects" },
     },
-    ...pageCommands(state, ctx.settings, ctx.editorAvailable),
+    ...pageCommands(state, ctx),
     ...(trust ? [trust] : []),
     {
       id: "toggle-sidebar",

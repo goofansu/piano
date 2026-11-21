@@ -1,11 +1,12 @@
+import type { Workspace } from "../../../../shared/wire.ts";
+import { ApiError, call, type RequestOptions } from "../../../../web/src/shared/transport/api.ts";
 import {
   sameWorkspace,
-  type Workspace,
   type WorkspaceWrittenFiles,
   type WrittenFile,
-} from "../../../../shared/wire.ts";
-import { ApiError, call, type RequestOptions } from "../../../../web/src/shared/transport/api.ts";
-import { fileEndpoints, WRITTEN_PATHS_LIMIT } from "../../contracts/files/http.ts";
+  fileEndpoints,
+  WRITTEN_PATHS_LIMIT,
+} from "../../contracts/files/http.ts";
 
 export const workspaceFile = (workspaceId: string, path: string, options?: RequestOptions) =>
   call(

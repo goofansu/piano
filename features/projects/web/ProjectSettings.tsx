@@ -11,11 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/PianoDialog";
-import {
-  checkProjectDraft,
-  type ProjectDraft,
-  type ProjectDraftCheck,
-} from "@/shared/state/projectActions";
+import { checkProjectDraft, type ProjectDraft, type ProjectDraftCheck } from "./projectForms";
 
 export function ProjectSettingsDialog({
   open,

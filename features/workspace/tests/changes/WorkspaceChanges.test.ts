@@ -15,12 +15,12 @@ import { type TestContext, test } from "node:test";
 import { Effect } from "effect";
 import { GitCommand } from "../../../../server/shared/Subprocess.ts";
 import { answerJson } from "../../../../shared/endpoint.ts";
+import { forkWorktree } from "../../../../test/shared/forkWorktree.ts";
 import {
   CHANGES_ANSWER_BYTES,
   CHANGES_INITIAL_PATCH_BYTES,
   type WorkspaceChanges as Observation,
-} from "../../../../shared/wire.ts";
-import { forkWorktree } from "../../../../test/shared/forkWorktree.ts";
+} from "../../contracts/changes/http.ts";
 import {
   type PreviewOptions,
   WorkspaceChanges,

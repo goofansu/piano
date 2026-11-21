@@ -4,6 +4,7 @@ import {
   useSessionCommands,
 } from "@features/commands/web/commandContext";
 import { sessionRowMenu } from "@features/commands/web/sessionCommands";
+import { sessionProjectMenu } from "@features/projects/web/projectActions";
 import { ProjectMenu } from "@features/projects/web/Projects";
 import { Fragment } from "react";
 import {
@@ -11,7 +12,6 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/shared/components/PianoDropdownMenu";
-import { sessionProjectMenu } from "@/shared/state/projectActions";
 import type { SessionEntry } from "@/shared/state/sessionCatalog";
 
 export function SessionMenu({

@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { globalCommands } from "../../../features/commands/web/globalCommands.ts";
+import {
+  projectCommands,
+  projectMenu,
+  projectPageActions,
+} from "../../../features/projects/web/projectActions.ts";
 import { projectHome, stableOrder } from "../../../features/projects/web/projectHomeView.ts";
 import type { FolderView, WorktreeView } from "../../../shared/wire.ts";
 import { reduce } from "../../../web/src/app/store.ts";
-import { projectCommands, projectMenu } from "../../../web/src/shared/state/projectActions.ts";
 import { type Action, type AppState, initialState } from "../../../web/src/shared/state/state.ts";
 import { sessionReference } from "../../shared/sessionReference.ts";
 
@@ -144,6 +148,7 @@ test("rows keep their place while the page is open: new ones append, gone ones d
 
 test("on a project's home, Mod+K offers its menu's Project settings and Delete project", () => {
   const ctx = {
+    projectPageActions,
     settings: null,
     editorAvailable: () => true,
     view: { groupBy: "date", sortBy: "recent", folderAndBranch: false },
@@ -176,6 +181,7 @@ test("on a project's home, Mod+K offers its menu's Project settings and Delete p
 
 test("on a project's home, Mod+K offers exactly its header menu's rows, named as they are", () => {
   const ctx = {
+    projectPageActions,
     settings: null,
     editorAvailable: () => true,
     view: { groupBy: "date", sortBy: "recent", folderAndBranch: false },

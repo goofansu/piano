@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { folderCommands } from "../../../features/commands/web/folderCommands.ts";
 import { trustCommand } from "../../../features/commands/web/globalCommands.ts";
 import { sessionCommands } from "../../../features/commands/web/sessionCommands.ts";
+import { sessionProjectMenu } from "../../../features/projects/web/projectActions.ts";
 import { completionTarget } from "../../../features/sessions/web/composer/completionTarget.ts";
 import {
   sessionActivity,
@@ -16,7 +17,6 @@ import {
 import type { FolderView, SessionState, WorktreeView } from "../../../shared/wire.ts";
 import { directoryTrust } from "../../../web/src/shared/state/directoryTrust.ts";
 import { sessionDraftKey } from "../../../web/src/shared/state/draftKey.ts";
-import { sessionProjectMenu } from "../../../web/src/shared/state/projectActions.ts";
 import { catalogEntry, sessionDirectories } from "../../../web/src/shared/state/sessionCatalog.ts";
 import {
   checkoutMissingAt,

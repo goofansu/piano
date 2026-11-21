@@ -2,17 +2,15 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { PROJECT_INSTRUCTIONS_MAX, PROJECT_NAME_MAX, type Project } from "../../../shared/wire.ts";
 import { sessionReference } from "../../../test/shared/sessionReference.ts";
+import { type AppState, initialState } from "../../../web/src/shared/state/state.ts";
 import {
-  checkProjectDraft,
   openProjectCommand,
-  type ProjectDraft,
   projectCommands,
   projectDestinations,
   projectMenu,
-  projectSettingsSave,
   sessionProjectMenu,
-} from "../../../web/src/shared/state/projectActions.ts";
-import { type AppState, initialState } from "../../../web/src/shared/state/state.ts";
+} from "../web/projectActions.ts";
+import { checkProjectDraft, type ProjectDraft, projectSettingsSave } from "../web/projectForms.ts";
 
 const launch: Project = { id: "p1", name: "Launch" };
 const billing: Project = { id: "p2", name: "Billing" };
@@ -257,4 +255,12 @@ test("a member session opens its project's home", () => {
   assert.equal(open?.enabled, true, "navigation needs no connection");
   assert.deepEqual(open?.intent, { kind: "open-project", projectId: "p2" });
   assert.equal(sessionProjectMenu(s, { cwd: "/repo", sessionId: "s2" }).open, undefined);
+});
+
+test("an archived session offers no project assignment or creation", () => {
+  const s = { ...state, sessionReferences: [sessionReference("/repo", "s1", { archived: true })] };
+  const menu = sessionProjectMenu(s, { cwd: "/repo", sessionId: "s1" });
+  assert.equal(menu.entry.enabled, false);
+  for (const c of [menu.create!, ...menu.destinations.map((d) => d.command)])
+    assert.equal(c.enabled, false, c.label);
 });

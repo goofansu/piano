@@ -1,7 +1,30 @@
 import { Schema } from "effect";
 import { endpoint } from "../../../../shared/endpoint.ts";
-import { WorkspaceWrittenFiles } from "../../../../shared/wire.ts";
+import { Workspace } from "../../../../shared/wire.ts";
 import { FileDownload, FilePreview } from "../../../../shared/workspace/files.ts";
+
+export const WrittenFile = Schema.Union([
+  Schema.Struct({ path: Schema.String, verdict: Schema.Literal("outside") }),
+  Schema.Struct({
+    path: Schema.String,
+    verdict: Schema.Literals(["listed", "ignored", "missing"]),
+    placed: Schema.String,
+  }),
+]);
+export type WrittenFile = typeof WrittenFile.Type;
+
+export const WorkspaceWrittenFiles = Schema.Struct({
+  workspace: Workspace,
+  observedAt: Schema.String,
+  result: Schema.Union([
+    Schema.Struct({ status: Schema.Literal("ready"), files: Schema.Array(WrittenFile) }),
+    Schema.Struct({ status: Schema.Literal("error"), detail: Schema.String }),
+  ]),
+});
+export type WorkspaceWrittenFiles = typeof WorkspaceWrittenFiles.Type;
+
+export const sameWorkspace = (a: Workspace, b: Workspace) =>
+  a.id === b.id && a.path === b.path && a.folder === b.folder;
 
 export const WRITTEN_PATHS_LIMIT = 1000;
 

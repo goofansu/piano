@@ -7,12 +7,14 @@ import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
 import { SessionStatus, StatusChangesMs } from "../../../features/dispatch/server/SessionStatus.ts";
+import { saveProject } from "../../../features/projects/server/ProjectCommands.ts";
 import { PiCli } from "../../../features/sessions/server/pi/PiCli.ts";
 import {
   PiRequestTimeoutMs,
   type PiSession,
 } from "../../../features/sessions/server/pi/PiSessions.ts";
 import { SessionHosts } from "../../../features/sessions/server/SessionHosts.ts";
+import type { PullRequest } from "../../../features/workspace/contracts/pull-requests/http.ts";
 import { WorkspaceChangesLive } from "../../../features/workspace/server/changes/WorkspaceChanges.ts";
 import {
   GitHubPullRequests,
@@ -24,7 +26,7 @@ import { Registry, RegistryDatabasePath } from "../../../server/shared/registry/
 import { GitCommand } from "../../../server/shared/Subprocess.ts";
 import { LAST_ANSWER_CHARS } from "../../../shared/session/dispatch.ts";
 import { dialogAsks, dispositionOf, lastAnswerOf } from "../../../shared/session/sessionStatus.ts";
-import type { PullRequest, RenderMsg, Snapshot } from "../../../shared/wire.ts";
+import type { RenderMsg, Snapshot } from "../../../shared/wire.ts";
 import { largeHistory } from "../../shared/large-history.ts";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "piano-status-")));
@@ -227,7 +229,7 @@ test("a session's changes name its branch and linked pull request, with state on
     Effect.gen(function* () {
       const registry = yield* Registry;
       const status = yield* SessionStatus;
-      yield* registry.saveProject({ id: "launch", name: "Launch" });
+      yield* saveProject(registry, { id: "launch", name: "Launch" });
       for (const [id, number] of [
         ["linked", 7],
         ["unreadable", 8],

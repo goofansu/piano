@@ -15,6 +15,7 @@ import { join } from "node:path";
 import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Deferred, Effect, Fiber, Layer, Queue, type Scope, Stream } from "effect";
+import { saveProject } from "../../../features/projects/server/ProjectCommands.ts";
 import { makeClientSessions } from "../../../features/sessions/server/ClientSessions.ts";
 import {
   CreationAttempts,
@@ -1063,7 +1064,7 @@ test("INV-01/02: creating registers the folder, reference and project, attaches,
     Effect.gen(function* () {
       const hosts = yield* SessionHosts,
         registry = yield* Registry;
-      yield* registry.saveProject({ id: "launch", name: "Launch" });
+      yield* saveProject(registry, { id: "launch", name: "Launch" });
       const log: string[] = [];
       yield* registry.onChange((before, after) =>
         Effect.gen(function* () {
@@ -1127,7 +1128,7 @@ test("INV-01/02/07: an interrupted creation keeps its project membership and sen
     Effect.gen(function* () {
       const hosts = yield* SessionHosts,
         registry = yield* Registry;
-      yield* registry.saveProject({ id: "launch", name: "Launch" });
+      yield* saveProject(registry, { id: "launch", name: "Launch" });
       const published: Array<string | undefined> = [];
       yield* registry.onChange((before, after) =>
         Effect.sync(() => {

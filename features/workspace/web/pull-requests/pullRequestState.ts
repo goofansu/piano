@@ -1,12 +1,12 @@
-import type {
-  SessionPullRequestLink as RegistryLink,
-  SessionPullRequest,
-  SessionPullRequestAction,
-} from "@shared/wire";
+import type { SessionPullRequestLink as RegistryLink } from "@shared/wire";
 import {
   createObservation,
   type ObservationEnvironment,
 } from "../../../../web/src/shared/lib/observation.ts";
+import type {
+  SessionPullRequest,
+  SessionPullRequestAction,
+} from "../../contracts/pull-requests/http.ts";
 
 export type PullRequestSurface = "closed" | "link-form" | "details" | "editing";
 

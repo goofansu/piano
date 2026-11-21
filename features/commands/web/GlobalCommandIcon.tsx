@@ -20,7 +20,7 @@ import {
 } from "@/shared/components/ProjectCommandIcon";
 import { SettingsSectionIcon } from "@/shared/components/SettingsSectionFrame";
 import type { SettingsSectionIconName } from "@/shared/navigation/routes";
-import type { ProjectCommandIcon } from "@/shared/state/projectActions";
+import type { ProjectCommandIcon } from "@/shared/state/projectCommandTypes";
 
 const ICONS: Record<Exclude<IconId, SettingsSectionIconName | ProjectCommandIcon>, LucideIcon> = {
   home: HomeIcon,

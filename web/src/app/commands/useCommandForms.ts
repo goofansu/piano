@@ -1,18 +1,14 @@
+import type { ProjectFormPage } from "@features/projects/web/projectForms";
 import type { ClientCommand, ServerMessage } from "@shared/wire";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { AppState } from "@/shared/state/state";
-import type { SendDisposition } from "../../../shared/transport/ws.ts";
-import {
-  type CommandForms,
-  type CommandFormsState,
-  createCommandForms,
-  type FormPage,
-} from "./commandForms.ts";
+import type { SendDisposition } from "../../../../shared/transport/ws.ts";
+import { type CommandForms, type CommandFormsState, createCommandForms } from "./commandForms.ts";
 
 export function useCommandForms(deps: {
   state: AppState;
   send: (command: ClientCommand) => SendDisposition;
-  openPage: (page: FormPage) => void;
+  openPage: (page: ProjectFormPage) => void;
   listen: (listener: (message: ServerMessage) => void) => () => void;
 }): CommandForms & CommandFormsState {
   const latest = useRef(deps);

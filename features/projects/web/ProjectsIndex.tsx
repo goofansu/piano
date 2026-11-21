@@ -15,9 +15,10 @@ import { PaneBody, PaneHeader, PaneHeading } from "@/shared/components/Pane";
 import { ListRow } from "@/shared/components/RowActions";
 import { SettingsList } from "@/shared/components/SettingsSectionFrame";
 import { timeAgo } from "@/shared/lib/format";
-import { type ProjectCommand, projectCommands } from "@/shared/state/projectActions";
+import type { ProjectCommand } from "@/shared/state/projectCommandTypes";
 import type { AppState } from "@/shared/state/state";
 import { isProjectDone } from "../../../web/src/shared/lib/projects.ts";
+import { projectCommands } from "./projectActions";
 
 function ProjectRow({
   state,

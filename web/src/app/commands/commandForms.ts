@@ -1,27 +1,26 @@
-import type { SendDisposition } from "../../../shared/transport/ws.ts";
-import { type ClientCommand, SESSION_TITLE_MAX, type ServerMessage } from "../../../shared/wire.ts";
-import { findProject } from "../../../web/src/shared/lib/projects.ts";
-import { screenKey } from "../../../web/src/shared/navigation/pageAddress.ts";
+import type { CommandForm } from "../../../../features/commands/web/commands.ts";
+import { canRenameSession } from "../../../../features/commands/web/sessionCommands.ts";
 import {
-  checkProjectDraft,
+  saveNewProject,
+  deleteProject,
+  projectDeletionConfirmation,
+  type ProjectFormPage,
   EMPTY_PROJECT_DRAFT,
   type ProjectDraft,
   type ProjectDraftCheck,
   projectSettingsSave,
-} from "../../../web/src/shared/state/projectActions.ts";
+} from "../../../../features/projects/web/projectForms.ts";
+import type { SendDisposition } from "../../../../shared/transport/ws.ts";
 import {
-  inSidebarGroups,
-  sessionCatalog,
-  sessionLabel,
-} from "../../../web/src/shared/state/sessionCatalog.ts";
-import {
-  sessionMutable,
-  sessionReferenceChangeable,
-  sessionWorking,
-} from "../../../web/src/shared/state/sessionContext.ts";
-import type { AppState } from "../../../web/src/shared/state/state.ts";
-import type { CommandForm } from "./commands.ts";
-import { canRenameSession } from "./sessionCommands.ts";
+  type ClientCommand,
+  SESSION_TITLE_MAX,
+  type ServerMessage,
+} from "../../../../shared/wire.ts";
+import { findProject } from "../../shared/lib/projects.ts";
+import { screenKey } from "../../shared/navigation/pageAddress.ts";
+import { sessionLabel } from "../../shared/state/sessionCatalog.ts";
+import { sessionMutable, sessionWorking } from "../../shared/state/sessionContext.ts";
+import type { AppState } from "../../shared/state/state.ts";
 
 export type FormAnswer = {
   projectCheck?: ProjectDraftCheck;
@@ -30,14 +29,9 @@ export type FormAnswer = {
   | {
       allowed: true;
       command: ClientCommand;
-      open?: FormPage;
+      open?: ProjectFormPage;
     }
 );
-
-export type FormPage =
-  | { kind: "project"; projectId: string }
-  | { kind: "new"; projectId: string }
-  | { kind: "projects" };
 
 export interface AnswerContext {
   newId?: () => string;
@@ -82,33 +76,11 @@ export function answerForm(
       if (!state.connected) return { allowed: false };
       return { allowed: true, command: { _tag: "remove_folder", path: form.folder.path } };
     case "delete-project":
-      if (!state.connected) return { allowed: false };
-      return {
-        allowed: true,
-        command: { _tag: "delete_project", id: form.project.id },
-        ...("projectId" in state.view && state.view.projectId === form.project.id
-          ? { open: { kind: "projects" } }
-          : {}),
-      };
-    case "project": {
-      const { assign, newPage } = form.dialog;
-      const saved = typeof input === "string" ? undefined : checkProjectDraft(input).saved;
-      if (!state.connected || !saved || (assign && !sessionReferenceChangeable(state, assign)))
-        return { allowed: false };
-      const { name, instructions } = saved;
-      const id = newId();
-      return {
-        allowed: true,
-        command: {
-          _tag: "save_project",
-          project: { id, name, ...(instructions ? { instructions } : {}) },
-          assign: assign && { cwd: assign.cwd, sessionId: assign.sessionId },
-        },
-        ...(!assign
-          ? { open: newPage ? { kind: "new", projectId: id } : { kind: "project", projectId: id } }
-          : {}),
-      };
-    }
+      return deleteProject(state, form.project);
+    case "project":
+      return typeof input === "string"
+        ? { allowed: false }
+        : saveNewProject(state, form.dialog, input, newId);
     case "project-settings": {
       if (typeof input === "string") return { allowed: false };
       return projectSettingsSave(state, form.projectId, input, opened);
@@ -151,25 +123,8 @@ export function confirmation(state: AppState, form: CommandForm): Confirmation |
         confirmLabel: "Close",
         destructive: false,
       };
-    case "delete-project": {
-      const { id } = form.project;
-      const count = sessionCatalog({
-        ...state,
-        projects: state.projects.filter((p) => p.id !== id),
-      }).filter((s) => s.projectId === id && inSidebarGroups(s)).length;
-      const moved =
-        count === 0
-          ? ""
-          : count === 1
-            ? "; its session moves to No project"
-            : `; its ${count} sessions move to No project`;
-      return {
-        title: "Delete project?",
-        description: `"${form.project.name}" is deleted${moved}. This cannot be undone.`,
-        confirmLabel: "Delete",
-        destructive: true,
-      };
-    }
+    case "delete-project":
+      return projectDeletionConfirmation(state, form.project);
     case "rename-session":
     case "project":
     case "project-settings":
@@ -186,7 +141,7 @@ export interface CommandFormsState {
 export interface CommandFormsOptions {
   getState: () => AppState;
   send: (command: ClientCommand) => SendDisposition;
-  openPage: (page: FormPage) => void;
+  openPage: (page: ProjectFormPage) => void;
   newId?: () => string;
 }
 
@@ -229,7 +184,7 @@ export function createCommandForms({
 }: CommandFormsOptions): CommandForms {
   let state = CLOSED;
   let opened: ProjectDraft | undefined;
-  let waiting: { page: FormPage; command: ClientCommand; from: string } | null = null;
+  let waiting: { page: ProjectFormPage; command: ClientCommand; from: string } | null = null;
   const screen = () => screenKey(getState());
   const listeners = new Set<() => void>();
   const set = (next: CommandFormsState) => {

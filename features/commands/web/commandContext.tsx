@@ -27,7 +27,7 @@ import {
 import { createContext, useContext } from "react";
 import { DropdownMenuItem } from "@/shared/components/PianoDropdownMenu";
 import type { SessionLayout } from "@/shared/navigation/navigation";
-import { sessionProjectMenu } from "@/shared/state/projectActions";
+import type { ProjectDestination, SessionProjectMenu } from "@/shared/state/projectCommandTypes";
 import type { AppState } from "@/shared/state/state";
 
 const ICONS: Record<SessionCommandIcon, LucideIcon> = {
@@ -60,6 +60,11 @@ interface CommandsValue {
   codeWrap: boolean;
   state: AppState;
   global: GlobalCommandContext;
+  openProjectCommands: (state: AppState) => ProjectDestination[];
+  sessionProjectMenu: (
+    state: AppState,
+    session: { cwd: string; sessionId: string },
+  ) => SessionProjectMenu;
 }
 export const CommandsContext = createContext<CommandsValue | null>(null);
 
@@ -79,7 +84,7 @@ export function useSessionCommands(target?: SessionTarget) {
 }
 
 export function useSessionProjectMenu() {
-  const { state } = useCommands();
+  const { state, sessionProjectMenu } = useCommands();
   const session = state.session;
   return session?.sessionId
     ? sessionProjectMenu(state, { cwd: session.cwd, sessionId: session.sessionId })

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { DirListing } from "../../../../shared/wire.ts";
 import type { ObservationEnvironment } from "../../../../web/src/shared/lib/observation.ts";
+import type { DirListing } from "../../contracts/folders/http.ts";
 import { createFolderBrowser } from "../../web/folders/folderBrowser.ts";
 
 const environment: ObservationEnvironment = {

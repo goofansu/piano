@@ -1,4 +1,4 @@
-import type { DirListing } from "../../../../shared/wire.ts";
+import type { DirListing } from "../../contracts/folders/http.ts";
 
 type DirEntry = DirListing["entries"][number];
 

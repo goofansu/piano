@@ -1,16 +1,11 @@
-import {
-  type BranchHome,
-  type Checkout,
-  type Upstream,
-  worktreeInstance,
-} from "../../../../server/shared/GitCheckout.ts";
+import type { ChangesScope } from "../../../../shared/wire.ts";
 import type {
-  ChangesScope,
   Comparison,
   ComparisonTarget,
   ScopeAvailability,
-} from "../../../../shared/wire.ts";
+} from "../../contracts/changes/http.ts";
 import type { PullRequestBranches } from "../../contracts/pull-requests/pullRequestBranches.ts";
+import { type BranchHome, type Checkout, type Upstream, worktreeInstance } from "../GitCheckout.ts";
 import {
   type BranchHead,
   branchRemote,

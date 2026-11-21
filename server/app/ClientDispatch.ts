@@ -2,6 +2,13 @@ import { Cause, Effect, Stream } from "effect";
 import { SessionStatus } from "../../features/dispatch/server/SessionStatus.ts";
 import { SidebarView } from "../../features/navigation/server/SidebarView.ts";
 import {
+  saveProject,
+  updateProject,
+  deleteProject,
+  setProjectDone,
+  assignProject,
+} from "../../features/projects/server/ProjectCommands.ts";
+import {
   type ClientOutput,
   InputNotSent,
   makeClientSessions,
@@ -37,7 +44,7 @@ type Admission = "immediate" | "ordinary" | "control" | "claim";
 
 type RequestPolicy<R extends ClientRequest> = {
   readonly unanswered: (request: R, reason: Unanswered) => ServerMessage;
-  readonly confirmed: string | ((request: R) => Effect.Effect<string>) | null;
+  readonly confirmed: string | null;
 } & (
   | {
       readonly admission: Exclude<Admission, "claim"> | ((request: R) => "ordinary" | "control");
@@ -80,6 +87,18 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
   const status = yield* SessionStatus;
   const sessions = yield* makeClientSessions(output);
   const { send } = output;
+
+  const projectRequest = <R extends ClientRequest>(
+    run: (request: R) => Effect.Effect<string, unknown>,
+  ): RequestPolicy<R> => ({
+    admission: "ordinary",
+    run: (request) =>
+      run(request).pipe(
+        Effect.flatMap((message) => send({ _tag: "toast", level: "success", message })),
+      ),
+    unanswered: plainError,
+    confirmed: null,
+  });
 
   const requests: RequestPolicies = {
     ping: {
@@ -213,42 +232,15 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
       }),
       confirmed: null,
     },
-    save_project: {
-      admission: "ordinary",
-      run: ({ project, assign }) => registry.saveProject(project, assign),
-      unanswered: plainError,
-      confirmed: "Project created",
-    },
-    delete_project: {
-      admission: "ordinary",
-      run: ({ id }) => registry.deleteProject(id),
-      unanswered: plainError,
-      confirmed: "Project deleted",
-    },
-    update_project: {
-      admission: "ordinary",
-      run: ({ id, name, instructions }) => registry.updateProject(id, { name, instructions }),
-      unanswered: plainError,
-      confirmed: "Project saved",
-    },
-    set_project_done: {
-      admission: "ordinary",
-      run: ({ id, done }) => registry.setProjectDone(id, done),
-      unanswered: plainError,
-      confirmed: ({ done }) => Effect.succeed(done ? "Project marked done" : "Project reopened"),
-    },
-    assign_project: {
-      admission: "ordinary",
-      run: ({ cwd, sessionId, projectId }) => registry.assignProject(cwd, sessionId, projectId),
-      unanswered: plainError,
-      confirmed: ({ projectId }) =>
-        projectId === null
-          ? Effect.succeed("Session removed from project")
-          : registry.requireProject(projectId).pipe(
-              Effect.map((project) => `Session moved to ${project.name}`),
-              Effect.orElseSucceed(() => "Session moved"),
-            ),
-    },
+    save_project: projectRequest(({ project, assign }) => saveProject(registry, project, assign)),
+    delete_project: projectRequest(({ id }) => deleteProject(registry, id)),
+    update_project: projectRequest(({ id, name, instructions }) =>
+      updateProject(registry, id, { name, instructions }),
+    ),
+    set_project_done: projectRequest(({ id, done }) => setProjectDone(registry, id, done)),
+    assign_project: projectRequest(({ cwd, sessionId, projectId }) =>
+      assignProject(registry, cwd, sessionId, projectId),
+    ),
     remove_folder: {
       admission: "ordinary",
       run: ({ path }) => registry.removeFolder(path),
@@ -380,10 +372,7 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
   const confirm = (request: ClientRequest): Effect.Effect<void> => {
     const { confirmed } = policyOf(request);
     if (confirmed === null) return Effect.void;
-    const message = typeof confirmed === "string" ? Effect.succeed(confirmed) : confirmed(request);
-    return message.pipe(
-      Effect.flatMap((message) => send({ _tag: "toast", level: "success", message })),
-    );
+    return send({ _tag: "toast", level: "success", message: confirmed });
   };
 
   const answered =

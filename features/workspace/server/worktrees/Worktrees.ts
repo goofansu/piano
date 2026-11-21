@@ -3,18 +3,13 @@ import { realpath } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import { Effect } from "effect";
 import { WorktreeError } from "../../../../server/shared/FolderWorktrees.ts";
-import {
-  type BranchHome,
-  branchHomes,
-  gitText,
-  observeGit,
-} from "../../../../server/shared/GitCheckout.ts";
 import { cutText } from "../../../../shared/cutText.ts";
 import {
   WORKTREE_CREATION_MS,
   type WorktreeDiscovery,
   type WorktreeFacts,
 } from "../../../../shared/wire.ts";
+import { type BranchHome, branchHomes, gitText, observeGit } from "../GitCheckout.ts";
 import { branchRemote, githubRemote } from "../pull-requests/GitHubPullRequests.ts";
 
 const git = (cwd: string, args: string[]): Effect.Effect<string, WorktreeError> =>
