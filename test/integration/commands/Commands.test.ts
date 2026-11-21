@@ -175,7 +175,7 @@ test("enabled commands reach the effect their intent names", () => {
     assert.deepEqual(effectsOf(command), { ran: true, calls: [call] }, command.label);
 });
 
-test("Artifacts is offered once the session published one, and opens the header's menu", () => {
+test("Artifacts opens the menu for direct publications and receipt-only hosted or stopped sessions", () => {
   const artifacts = (state: AppState) =>
     sessionCommands(state, undefined, { hasArtifacts: hasSessionArtifacts }).find(
       (c) => c.id === "artifacts",
@@ -203,10 +203,28 @@ test("Artifacts is offered once the session published one, and opens the header'
       ],
     },
   };
-  const command = artifacts(published);
-  assert.equal(command.label, "Artifacts");
-  assert.ok(command.enabled && !command.hidden);
-  assert.deepEqual(effectsOf(command), { ran: true, calls: [["openArtifacts"]] });
+  const receipt = {
+    artifactId: "report",
+    title: "Report",
+    url: "https://radius.pi.dev/artifacts/report",
+    revision: 1,
+    operationKey: "report",
+  };
+  const receiptOnly = (hosted: boolean): AppState => ({
+    ...selected,
+    session: {
+      ...selected.session!,
+      hosted,
+      messages: [],
+      state: { ...selected.session!.state, artifacts: [receipt] },
+    },
+  });
+  for (const state of [published, receiptOnly(true), receiptOnly(false)]) {
+    const command = artifacts(state);
+    assert.equal(command.label, "Artifacts");
+    assert.ok(command.enabled && !command.hidden);
+    assert.deepEqual(effectsOf(command), { ran: true, calls: [["openArtifacts"]] });
+  }
 });
 
 test("archiving a working background session asks before sending a destructive command", () => {
