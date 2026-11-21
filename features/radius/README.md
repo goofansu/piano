@@ -1,19 +1,15 @@
-# Radius setup in Piano
+# Set up Radius
 
-[Radius artifacts](radius-artifacts.md) covers publication, updates and links to confirmed results.
+Sign in to Radius to publish documents from a conversation or share a saved session.
 
-A Radius organization owner/admin must enable **Web search** separately in Radius; installation
-does not change organization permissions or billing settings. See
-[Radius's official setup guide](https://radius.earendil.com/docs/extensions).
+1. Open **Settings → Providers** and find **Radius**.
+2. Beside **Account**, choose **Sign in** and complete the sign-in prompt. If Piano runs on a remote machine, choose the device-code method.
+3. When the account shows **Signed in**, start a new session to publish your first artifact. To share a conversation you already have, use **Share** in that session’s menu.
 
-## Boundaries
+[Publish a Radius artifact](radius-artifacts.md) · [Share a saved session](../sharing/README.md)
 
-- `features/radius/server/RadiusSetup.ts` owns the narrow setup policy (INV-01/02/11/12); provider OAuth
-  continues to use `ProviderLogin`.
-- Pi does not export its provider-auth MCP writer publicly, so the adapter imports the locked
-  helper through `McpConfigEntries`. Recheck it on every Pi upgrade; see
-  [MCP setup](../mcp/README.md#boundaries).
-- Conflicting names, duplicate endpoints, malformed configuration, disabled/hidden servers and
-  custom package filters are not silently overwritten by setup.
-- Pi's helper does not coordinate writes from external editors/processes; do not edit the same
-  `mcp.json` concurrently.
+## Add Radius tools
+
+Under **Radius MCP**, choose **Install** if you want Pi to manage Radius resources for you. Under **Web search**, choose **Install** if you want the web-search extension. An owner or admin must also enable web search for your Radius organization. [Radius setup guide](https://radius.earendil.com/docs/extensions)
+
+Start a new session to use newly installed tools. If installation is unavailable, read the message beneath the tool, follow its instructions, then choose **Refresh setup**. To remove an installed tool from this machine, open its row menu and choose **Uninstall**.

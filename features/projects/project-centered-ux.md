@@ -1,15 +1,21 @@
-# Project-centered UX
+# Review project activity
 
-The index and a project's home draw only from what the browser holds (`projects`, the session
-catalog): no request, no Git, no Pi (PIN-83).
+Open **Projects** in the sidebar to see your active projects. Each row shows the folders in use, the session count, and the most recent session activity. Select a project name to open its home. You can also jump straight to an active project by searching for `!p` followed by its name in the [command palette](../commands/README.md).
 
-A home's session row leads its second line with the catalog's activity as a `StatusDot` beside its
-word: Working, Idle or Finished, and nothing when Pi is off. Finished is the catalog's `done`: Pi's
-turn ended while the session was not open. It says nothing about whether the work passed
-verification, so the row does not say "Done" (PIN-164). A starting session's row says Starting
-alone.
+## Pick up a session
 
-The catalog decides activity once, and the sidebar rows and the sidebar button's working indicator
-read the same answer: a starting session has none. While the connection is lost, and until the
-reconnected server sends its host snapshot, no session is Working or Idle, since the cached snapshot
-may be stale; Finished stays, because that turn was seen to end.
+Under **Sessions**, use the title, folder, branch, or linked pull request to identify the conversation you want. Select its title to open it. To start another session in the project, choose a directory and enter a first message at the top of the project page.
+
+| Session activity | What it tells you |
+| --- | --- |
+| Working | Pi is responding or using tools. |
+| Idle | Pi is running and waiting for input. |
+| Finished | Pi finished a turn while you were away from the session. Open it to review the result. |
+
+During a disconnection, live activity can disappear until Piano reconnects.
+
+## Finish or reopen a project
+
+Choose **Mark project done** in the project's menu. The project appears under **Done** on the Projects page, where you can still open its sessions. Choose **Reopen project** to return it to the active list. Starting a new session from a done project's home also reopens the project.
+
+Choose **Delete project** to remove the grouping permanently. Its sessions appear under **No project** when the sidebar is grouped by project, and their conversations remain available.

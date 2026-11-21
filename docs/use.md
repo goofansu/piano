@@ -1,53 +1,36 @@
 # Using Piano
 
-For local installation and startup, see [Use](../README.md#use).
-For storage, backups and browser origins, see [configuration](configuration.md).
+To start your first session, open **Settings → Providers** and sign in if Pi does not already have credentials. Choose **Home**, then **New session** in the sidebar. Select the folder you want Pi to work in, write your request, and send it. [Install Piano](../README.md#use) · [Start and continue sessions](../features/sessions/README.md)
 
-## Sign in to a model provider
+## Work in a session
 
-Open **Settings** at the bottom of the sidebar, then click **Sign in** next to a provider under
-**Providers**. Start a new session afterwards, because a running session keeps the models it started
-with. For remote sign-in and limits, see [provider sign-in](../features/providers/README.md).
+| I want to… | Guide |
+| --- | --- |
+| Continue a conversation, attach an image, or read an earlier answer | [Sessions](../features/sessions/README.md) |
+| Choose a model or change how much effort it spends on an answer | [Models and effort](../features/models/README.md) |
+| Dictate a message and edit it before sending | [Voice input](../features/voice-input/README.md) |
+| Read a file, inspect a diff, or check a pull request | [Workspace](../features/workspace/README.md) |
+| Give part of a task to a separate session | [Dispatch work](../features/dispatch/README.md) |
 
-## Search sessions, projects and commands
+## Find and organize work
 
-Click the sidebar’s **Search sessions, projects and commands** button or press **Cmd+K / Ctrl+K**
-to open search. Type `!p` to browse active projects, or `!p <name>` to search project names.
-Press **Enter** to open the selected project.
+| I want to… | Guide |
+| --- | --- |
+| Group related sessions or give them common instructions | [Projects](../features/projects/README.md) |
+| Switch between sessions or rearrange my view | [Navigation](../features/navigation/README.md) |
+| Find a project, session, or action with the keyboard | [Search and commands](../features/commands/README.md) |
+| Clear old sessions from the sidebar and restore them later | [Data controls](../features/data-controls/README.md) |
 
-Type `!` on its own to list available filters: currently only **Projects only · !p**. Selecting it
-with Enter or a click inserts `!p` followed by a space, keeping the dialog open and the search
-field focused so you can type a project name.
+## Set up tools and share results
 
-## Archive and restore sessions
+| I want to… | Guide |
+| --- | --- |
+| Find a setting | [Settings](../features/settings/README.md) |
+| Sign in to a model provider or use an API key | [Providers](../features/providers/README.md) |
+| Give Pi access to tools on an MCP server | [MCP](../features/mcp/README.md) |
+| Reuse instructions or a prompt across sessions | [Skills and prompts](../features/library/README.md) |
+| Publish a report or another artifact to Radius | [Radius](../features/radius/README.md) |
+| Share a copy of a saved conversation | [Session sharing](../features/sharing/README.md) |
+| Receive a notification when a session needs attention | [Webhooks](../features/webhooks/README.md) |
 
-A session's **Archive** action stops its Pi and hides it, keeping the transcript.
-In **Settings → Data controls**, use **Unarchive** to restore its listing without starting Pi;
-a closed folder stays closed. **Archive all** keeps pinned sessions and every running or starting
-Pi, including idle sessions. It never stops work.
-
-## Preview local files
-
-Click a local file link in a session to read it beside the conversation. Markdown offers
-**Preview / Source**; code, images, audio, video and PDFs use type-aware viewers. **Download**
-saves the file as it is on disk. Click the link again to reread. See
-[ownership and privacy](../features/workspace/README.md#ownership-and-privacy).
-
-## Publish an artifact
-
-With Radius signed in, ask **“Create an artifact containing this report.”** The agent publishes it
-privately to Radius and returns a confirmed viewing link. Ask to update or view the same artifact
-on later turns. See [confirmation and failure handling](../features/radius/radius-artifacts.md#confirmation-and-uncertainty).
-
-## Dispatch work to another session
-
-Ask **“Dispatch this work in a new session.”** The agent starts a fresh, visible session with a
-self-contained brief, returns an **Open session** link, and can wait for its answer. Use separate
-prepared worktrees for concurrent writing tasks. See [session dispatch](../features/dispatch/README.md)
-or run `node scripts/dispatch-session.ts --help` for the bundled terminal script.
-
-## Send session events to a webhook
-
-Open **Settings → Webhooks**, click **New webhook**, enter your receiver URL and optional Bearer
-token, and choose the events to send. Use **Test** in the webhook's menu to check delivery. See
-[receiver requirements](../features/webhooks/README.md).
+For storage, backups, and access from another machine, see [Piano configuration](configuration.md).
