@@ -38,6 +38,7 @@ import type { DraftKey } from "@/lib/messageDraft";
 import { createPreference } from "@/lib/preference";
 import type { SessionNotice } from "@/lib/sessionNotices";
 import { composerInput, footerPicker, footerPickerMenu } from "@/lib/styles";
+import type { TranscriptRow } from "@/lib/transcript";
 import { useModelCatalog } from "@/lib/useModelCatalog";
 import { useModelChoice } from "@/lib/useModelChoice";
 import { usePreference } from "@/lib/usePreference";
@@ -45,6 +46,7 @@ import type { SessionView } from "@/store";
 
 interface Props {
   session: SessionView | null;
+  history: ReadonlyArray<TranscriptRow>;
   draftKey: DraftKey | null;
   completion?: CompletionContext;
   place?: VoiceHints;
@@ -62,6 +64,7 @@ const queueModePreference = createPreference<DeliveryMode>({
 
 export function Composer({
   session: t,
+  history,
   draftKey,
   completion,
   place,
@@ -281,7 +284,7 @@ export function Composer({
           role="group"
           aria-label="Session usage"
         >
-          <JumpTo messages={messages} working={streaming} />
+          <JumpTo history={history} />
           <Popover>
             <PopoverTrigger
               render={

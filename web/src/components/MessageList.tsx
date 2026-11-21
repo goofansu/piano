@@ -1,5 +1,5 @@
 import { LIBRARY_KINDS, LIBRARY_REACH, type LibraryResult } from "@shared/library";
-import type { RenderMsg, ToolExecution } from "@shared/wire";
+import type { RenderMsg } from "@shared/wire";
 import { cn } from "cn";
 import {
   ArrowDownIcon,
@@ -21,7 +21,6 @@ import {
   useDeferredValue,
   useId,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -54,7 +53,6 @@ import {
   BOTTOM_ENTRY,
   type ContextFacts,
   contextFacts,
-  createTranscriptProjector,
   type DispatchFacts,
   messageAnchorId,
   type NestedCall as NestedCallLine,
@@ -62,6 +60,7 @@ import {
   type QuestionAnswers,
   type ToolOutcome,
   type ToolRow,
+  type TranscriptProjection,
   type TranscriptRow,
 } from "@/lib/transcript";
 import { domFoldEdges } from "@/lib/transcriptViewport";
@@ -99,29 +98,23 @@ function useRowRemeasure(
 
 interface Props {
   workspaceId?: string;
-  messages: ReadonlyArray<RenderMsg>;
-  pending: RenderMsg | null;
+  projection: TranscriptProjection;
+  messageCount: number;
   submittedInput?: Pick<RenderMsg, "text" | "attachments"> | null;
-  tools: Record<string, ToolExecution>;
   activity?: "starting" | "working";
-  working?: boolean;
   placeholder?: string;
   className?: string;
-  showTools?: boolean;
   dispatchedFrom?: SessionDestination | "unlisted";
 }
 
 export function MessageList({
   workspaceId,
-  messages,
-  pending,
+  projection,
+  messageCount,
   submittedInput,
-  tools,
   activity,
-  working = false,
   placeholder,
   className,
-  showTools = true,
   dispatchedFrom,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
@@ -135,11 +128,6 @@ export function MessageList({
   const own = useNewTranscriptViewport();
   const viewport = useTranscriptViewport() ?? own;
   const atBottom = useSyncExternalStore(viewport.subscribe, viewport.atBottom, () => true);
-  const [project] = useState(createTranscriptProjector);
-  const projection = useMemo(
-    () => project(messages, { pending, tools, showTools, working }),
-    [project, messages, pending, tools, showTools, working],
-  );
   const rowAt = (index: number) =>
     projection.history[index] ??
     (index === projection.history.length ? projection.pending : undefined);
@@ -196,7 +184,7 @@ export function MessageList({
         onTouchMoveCapture={budget.input}
         onKeyDownCapture={budget.input}
         data-slot="transcript"
-        data-message-count={messages.length}
+        data-message-count={messageCount}
         data-window-pending={window.some((item) => !isReady(item)) ? "" : undefined}
         className="h-full overflow-y-auto pl-(--gutter) pr-[calc(var(--gutter)+var(--rail-inset))] [overflow-anchor:none]"
       >

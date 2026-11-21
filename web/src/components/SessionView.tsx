@@ -1,5 +1,5 @@
 import { isWorking } from "@shared/sessionProjection";
-import type { ExtensionState } from "@shared/wire";
+import type { ExtensionState, RenderMsg } from "@shared/wire";
 import { cn } from "cn";
 import { MessagesSquareIcon } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -40,6 +40,7 @@ import {
   sessionWorking,
 } from "@/lib/sessionContext";
 import { type SessionNotice, sessionNotices } from "@/lib/sessionNotices";
+import { createTranscriptProjector } from "@/lib/transcript";
 import { useLibraryToasts } from "@/lib/useLibraryToasts";
 import { useMessagesOnly } from "@/lib/useMessagesOnly";
 import { useNavigation } from "@/lib/useNavigation";
@@ -53,6 +54,7 @@ interface Props {
   send: Client["send"];
 }
 
+const NO_MESSAGES: ReadonlyArray<RenderMsg> = [];
 const AREA_ID = { agent: "session-agent-area", surface: "session-surface-area" } as const;
 const tabId = (value: string) => `session-area-tab-${encodeURIComponent(value)}`;
 
@@ -94,6 +96,14 @@ export function SessionView({ state, send }: Props) {
     [t?.tools],
   );
   useLibraryToasts(t?.tools);
+  const messages = t?.messages ?? NO_MESSAGES;
+  const pending = t?.pending ?? null;
+  const working = !!t && isWorking(t.state);
+  const [project] = useState(createTranscriptProjector);
+  const projection = useMemo(
+    () => project(messages, { pending, tools, showTools: !messagesOnly, working }),
+    [project, messages, pending, tools, messagesOnly, working],
+  );
   const input = state.pendingCreate;
   const context = sessionContext(state);
   const { workspace, pullRequestTarget, draftKey, pullRequest: link } = context;
@@ -207,13 +217,10 @@ export function SessionView({ state, send }: Props) {
                     <MessageList
                       key={t ? sessionKey(t) : draftKey}
                       workspaceId={workspace?.id}
-                      showTools={!messagesOnly}
-                      messages={t?.messages ?? []}
-                      pending={t?.pending ?? null}
+                      projection={projection}
+                      messageCount={messages.length}
                       submittedInput={input}
-                      tools={tools}
                       activity={replyActivity}
-                      working={!!t && isWorking(t.state)}
                       placeholder={pane.placeholder}
                       dispatchedFrom={dispatchedFrom}
                     />
@@ -260,6 +267,7 @@ export function SessionView({ state, send }: Props) {
               </LocalFileContext>
               <Composer
                 session={t}
+                history={projection.history}
                 draftKey={draftKey}
                 completion={completionTarget(state)}
                 place={place}

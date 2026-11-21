@@ -6,7 +6,13 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createServer } from "vite";
 import type { RenderMsg, ToolExecution } from "../shared/wire.ts";
 import type { PageStores } from "../web/src/lib/pageStores.ts";
-import { jumpEntries, transcriptRows } from "../web/src/lib/transcript.ts";
+import {
+  createTranscriptProjector,
+  jumpEntries,
+  type TranscriptOptions,
+  type TranscriptProjection,
+  transcriptRows,
+} from "../web/src/lib/transcript.ts";
 import { pageStores } from "./fixtures/pageStores.ts";
 
 const vite = await createServer({
@@ -18,14 +24,21 @@ const vite = await createServer({
 after(() => vite.close());
 const { MessageList } = (await vite.ssrLoadModule("/src/components/MessageList.tsx")) as {
   MessageList: ComponentType<{
-    messages: RenderMsg[];
-    pending: RenderMsg | null;
-    tools: Record<string, ToolExecution>;
-    showTools?: boolean;
+    projection: TranscriptProjection;
+    messageCount: number;
     activity?: "starting" | "working";
-    working?: boolean;
   }>;
 };
+const list = (
+  messages: RenderMsg[],
+  options: TranscriptOptions,
+  activity?: "starting" | "working",
+) =>
+  createElement(MessageList, {
+    projection: createTranscriptProjector()(messages, options),
+    messageCount: messages.length,
+    activity,
+  });
 const { PageStoresContext } = (await vite.ssrLoadModule("/src/lib/usePageStores.ts")) as {
   PageStoresContext: Context<PageStores | null>;
 };
@@ -39,7 +52,7 @@ const render = (
     createElement(
       PageStoresContext.Provider,
       { value: pageStores() },
-      createElement(MessageList, { messages, tools, pending, showTools }),
+      list(messages, { tools, pending, showTools }),
     ),
   );
 const apiError =
@@ -140,14 +153,7 @@ test("messages-only never flashes a completed intermediate message while the age
       createElement(
         PageStoresContext.Provider,
         { value: pageStores() },
-        createElement(MessageList, {
-          messages,
-          pending,
-          tools: {},
-          showTools,
-          activity: "working",
-          working: true,
-        }),
+        list(messages, { pending, showTools, working: true }, "working"),
       ),
     );
   assert.doesNotMatch(working(history), /Let me investigate/);
