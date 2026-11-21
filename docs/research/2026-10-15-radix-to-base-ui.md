@@ -1,6 +1,8 @@
 # Moving Piano's shadcn layer from Radix to Base UI
 
-Research date: 2026-10-15. Status: recommendation, not an implemented migration.
+Research date: 2026-10-15. Status: superseded. The migration was carried out on 2026-11-21 with
+the Positioner patch that §5 weighs; [shadcn ownership](../shadcn-ui.md#patches-in-ui) describes
+the result, and the line references below predate it.
 Piano inspected at `23788064ab6b42eb59591adec27fe011f6cef206` (Node v24.19.0, npm 11.17.0).
 Upstream checkouts: shadcn-ui/ui `4233ed1` (2026-10-14) and mui/base-ui `cd7829f` (2026-10-14),
 cached under `~/.cache/checkouts/github.com/`. Registry items fetched live from `ui.shadcn.com`.

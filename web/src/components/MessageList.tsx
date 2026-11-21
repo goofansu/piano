@@ -149,7 +149,7 @@ export function MessageList({
   const measureRow = useCallback(
     (row: HTMLElement) => {
       if (unmeasured.size === 0)
-        // Radix unmounts closed content in a nested commit; measure in the next microtask.
+        // Base UI unmounts a closed panel in a nested commit; measure in the next microtask.
         queueMicrotask(() => {
           const rows = [...unmeasured].filter((row) => row.isConnected);
           unmeasured.clear();

@@ -149,12 +149,14 @@ browser.
 
 ## Gotchas
 
-- Radix menus and popovers open on pointer events: use `ab.sh ... click` / `find ... click`, never
-  a DOM `.click()` from `eval`. Before clicking a submenu item, wait for its entrance animation:
+- Menus and popovers open on pointer events: use `ab.sh ... click` / `find ... click`, never
+  a DOM `.click()` from `eval`. An opened menu reaches the accessibility tree a frame later, so
+  wait for an item's text before `find role menuitem click`. Before clicking a submenu item, wait
+  for its entrance animation:
   `ab.sh "$RUN" wait --fn "[...document.querySelectorAll('[role=menu]')].every(e => e.getAnimations({subtree:true}).every(a => a.playState !== 'running'))"`.
   A click during motion can hit another item. After choosing or Escape, wait for the menu's
-  `[role=menu]` (or the specific popover) to disappear, not every Radix popper wrapper: a tooltip
-  can remain on the focused trigger.
+  `[role=menu]` (or the specific popover's `data-slot`) to disappear: a tooltip can remain on the
+  focused trigger.
 - A toast can cover a toolbar or row action. Dismiss its "Close toast" button, then wait for
   `!document.querySelector('[data-sonner-toast]')` before retrying; hovering a toast pauses its
   expiry, so waiting alone may not clear it.
