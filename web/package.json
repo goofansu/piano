@@ -10,6 +10,7 @@
     "typecheck": "tsc -b"
   },
   "dependencies": {
+    "@base-ui/react": "1.9.0",
     "@earendil-works/pi-schema": "^1.5.2",
     "@pierre/diffs": "^1.6.4",
     "@tailwindcss/vite": "^4.3.3",

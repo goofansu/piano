@@ -23,3 +23,7 @@ export function pointerLast(): boolean {
 export function returnFocusForKeyboard(event: Pick<Event, "preventDefault">) {
   if (pointer) event.preventDefault();
 }
+
+export function keyboardFocusReturn(): boolean {
+  return !pointer;
+}

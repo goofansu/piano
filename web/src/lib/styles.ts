@@ -1,5 +1,5 @@
 export const picker =
-  "inline-flex h-11 max-w-[16rem] items-center gap-1 rounded-md px-2 text-sm font-normal text-ink-2 hover:bg-fill-hover hover:text-ink data-[state=open]:bg-fill-hover data-[state=open]:text-ink compact:h-8 pointer-coarse:min-w-11";
+  "inline-flex h-11 max-w-[16rem] items-center gap-1 rounded-md px-2 text-sm font-normal text-ink-2 hover:bg-fill-hover hover:text-ink aria-expanded:bg-fill-hover aria-expanded:text-ink compact:h-8 pointer-coarse:min-w-11";
 
 export const footerPicker = `${picker} font-mono text-xs`;
 export const footerPickerMenu = "font-mono max-md:[--type-label:var(--type-caption)]";

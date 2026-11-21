@@ -223,35 +223,35 @@ function EnvironmentRow({
   );
   return (
     <DropdownMenu modal={false} open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
-        <Item
-          size="sm"
-          className={cn(
-            railRow,
-            "cursor-pointer text-left hover:bg-fill-hover data-[state=open]:bg-fill-hover",
-          )}
-          title={open ? undefined : (description ?? cwd ?? (isName ? children : name))}
-          asChild
-        >
-          <button type="button" aria-label={`${name}: ${children}`}>
-            {content}
-            <ItemMedia variant="icon" className="text-ink-3">
-              <ChevronDownIcon aria-hidden />
-            </ItemMedia>
-          </button>
-        </Item>
-      </DropdownMenuTrigger>
+      <DropdownMenuTrigger
+        render={
+          <Item
+            size="sm"
+            className={cn(
+              railRow,
+              "cursor-pointer text-left hover:bg-fill-hover aria-expanded:bg-fill-hover",
+            )}
+            title={open ? undefined : (description ?? cwd ?? (isName ? children : name))}
+            asChild
+          >
+            <button type="button" aria-label={`${name}: ${children}`}>
+              {content}
+              <ItemMedia variant="icon" className="text-ink-3">
+                <ChevronDownIcon aria-hidden />
+              </ItemMedia>
+            </button>
+          </Item>
+        }
+      />
       <DropdownMenuContent align="end">
         <DropdownMenuGroup>
           {environmentRowMenu(commands, menu).map((c) => (
             <SessionCommandMenuItem key={c.id} command={c} run={run} />
           ))}
           {href && (
-            <DropdownMenuItem asChild>
-              <a href={href} target="_blank" rel="noreferrer">
-                <ExternalLinkIcon aria-hidden />
-                Open {menu}
-              </a>
+            <DropdownMenuItem render={<a href={href} target="_blank" rel="noreferrer" />}>
+              <ExternalLinkIcon aria-hidden />
+              Open {menu}
             </DropdownMenuItem>
           )}
         </DropdownMenuGroup>

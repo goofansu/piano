@@ -106,14 +106,14 @@ export function PreferencesSettings() {
                 voice.hasKey && (
                   <RowMenu label="Voice input actions" disabled={busy}>
                     <DropdownMenuGroup>
-                      <DropdownMenuItem onSelect={() => setEditing("replace")}>
+                      <DropdownMenuItem onClick={() => setEditing("replace")}>
                         Replace key
                       </DropdownMenuItem>
                     </DropdownMenuGroup>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       variant="destructive"
-                      onSelect={() => actions.confirm("remove-key")}
+                      onClick={() => actions.confirm("remove-key")}
                     >
                       Remove key
                     </DropdownMenuItem>

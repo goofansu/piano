@@ -275,21 +275,15 @@ export function ViewMenu() {
     <DropdownMenu>
       <Tooltip>
         <TooltipTrigger asChild>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="header" aria-label="View options">
-              <SlidersHorizontalIcon />
-            </Button>
+          <DropdownMenuTrigger
+            render={<Button variant="ghost" size="header" aria-label="View options" />}
+          >
+            <SlidersHorizontalIcon />
           </DropdownMenuTrigger>
         </TooltipTrigger>
         <TooltipContent>View options</TooltipContent>
       </Tooltip>
-      <DropdownMenuContent
-        align="end"
-        className={cn(
-          "min-w-48",
-          narrow && "max-h-(--radix-dropdown-menu-content-available-height) overflow-y-auto",
-        )}
-      >
+      <DropdownMenuContent align="end" className="min-w-48">
         {section(
           "Group by",
           radio(groupBy, (c) => (
@@ -554,14 +548,16 @@ function FolderGroup({
           </IconButton>
         ),
         <DropdownMenu key="menu">
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="row" aria-label={`Folder menu for ${folder.name}`}>
-              <MoreHorizontalIcon />
-            </Button>
+          <DropdownMenuTrigger
+            render={
+              <Button variant="ghost" size="row" aria-label={`Folder menu for ${folder.name}`} />
+            }
+          >
+            <MoreHorizontalIcon />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuGroup>
-              <DropdownMenuItem disabled={!close.enabled} onSelect={() => run(close)}>
+              <DropdownMenuItem disabled={!close.enabled} onClick={() => run(close)}>
                 <XIcon /> {close.label}
               </DropdownMenuItem>
             </DropdownMenuGroup>

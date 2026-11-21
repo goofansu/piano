@@ -77,7 +77,7 @@ function ProjectCommandMenuItem({
     <DropdownMenuItem
       variant={command.destructive ? "destructive" : undefined}
       disabled={!command.enabled}
-      onSelect={() => run(command)}
+      onClick={() => run(command)}
     >
       <ProjectCommandIconView icon={command.icon} /> {command.label}
     </DropdownMenuItem>
@@ -100,17 +100,19 @@ export function ProjectCommandsMenu({
   const menu = projectMenu(commands);
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <PianoButton
-          variant="ghost"
-          size={size}
-          trailing={trailing}
-          className={cn(trailing && "-mr-(--glyph-pad)")}
-          aria-label={`Project menu for ${project.name}`}
-          data-project-menu
-        >
-          <MoreHorizontalIcon />
-        </PianoButton>
+      <DropdownMenuTrigger
+        render={
+          <PianoButton
+            variant="ghost"
+            size={size}
+            trailing={trailing}
+            className={cn(trailing && "-mr-(--glyph-pad)")}
+            aria-label={`Project menu for ${project.name}`}
+            data-project-menu
+          />
+        }
+      >
+        <MoreHorizontalIcon />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {menu.manage.length > 0 && (
@@ -152,7 +154,7 @@ export function ProjectDestinationItems<D extends { project: Project; command?: 
     <>
       {create && (
         <DropdownMenuGroup>
-          <DropdownMenuItem disabled={!create.enabled} onSelect={() => onCreate(create)}>
+          <DropdownMenuItem disabled={!create.enabled} onClick={() => onCreate(create)}>
             <ProjectCommandIconView icon={create.icon} /> {create.label}
           </DropdownMenuItem>
         </DropdownMenuGroup>
@@ -165,7 +167,7 @@ export function ProjectDestinationItems<D extends { project: Project; command?: 
               <DropdownMenuItem
                 key={d.project.id}
                 disabled={d.command ? !d.command.enabled : false}
-                onSelect={() => onPick(d)}
+                onClick={() => onPick(d)}
               >
                 <TargetIcon />
                 <span className="truncate">{d.project.name}</span>
@@ -208,7 +210,7 @@ export function ProjectMenu({
         </DropdownMenuSubContent>
       </DropdownMenuSub>
       {remove && (
-        <DropdownMenuItem disabled={!remove.enabled} onSelect={() => run(remove)}>
+        <DropdownMenuItem disabled={!remove.enabled} onClick={() => run(remove)}>
           <ProjectCommandIconView icon={remove.icon} /> {remove.label}
         </DropdownMenuItem>
       )}

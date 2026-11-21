@@ -205,18 +205,20 @@ export function Composer({
         delivery={
           showDelivery && (
             <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  data-motion="fade"
-                  variant="ghost"
-                  size="sm"
-                  className={cn(footerPicker, "shrink-0")}
-                  aria-label={`Delivery: ${DELIVERY[queueMode].label}`}
-                  disabled={disabled}
-                >
-                  {DELIVERY[queueMode].label}
-                  <ChevronDownIcon className="text-ink-3" aria-hidden />
-                </Button>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    data-motion="fade"
+                    variant="ghost"
+                    size="sm"
+                    className={cn(footerPicker, "shrink-0")}
+                    aria-label={`Delivery: ${DELIVERY[queueMode].label}`}
+                    disabled={disabled}
+                  />
+                }
+              >
+                {DELIVERY[queueMode].label}
+                <ChevronDownIcon className="text-ink-3" aria-hidden />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className={cn("w-56", footerPickerMenu)}>
                 <DropdownMenuRadioGroup

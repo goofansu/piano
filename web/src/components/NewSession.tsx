@@ -269,20 +269,22 @@ function ProjectSelect({
   };
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-label="Project"
-          className={cn(
-            picker,
-            "ml-auto max-w-[45%] shrink-0 max-md:ml-0 max-md:max-w-full",
-            current ? "text-ink-2" : "text-ink-3",
-          )}
-        >
-          <TargetIcon className="text-ink-3" />
-          <span className="truncate">{current ? current.name : "Project"}</span>
-        </Button>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label="Project"
+            className={cn(
+              picker,
+              "ml-auto max-w-[45%] shrink-0 max-md:ml-0 max-md:max-w-full",
+              current ? "text-ink-2" : "text-ink-3",
+            )}
+          />
+        }
+      >
+        <TargetIcon className="text-ink-3" />
+        <span className="truncate">{current ? current.name : "Project"}</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
@@ -298,7 +300,7 @@ function ProjectSelect({
         />
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuItem onSelect={() => pick(undefined)}>
+          <DropdownMenuItem onClick={() => pick(undefined)}>
             <CircleOffIcon /> No project
             <PickerCheck selected={!current} />
           </DropdownMenuItem>

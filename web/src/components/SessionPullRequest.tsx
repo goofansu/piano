@@ -185,30 +185,30 @@ function LinkedPullRequestRow({
         )}
       </div>
       <DropdownMenu modal={false}>
-        <DropdownMenuTrigger asChild>
-          <IconButton
-            data-pull-request-trigger
-            size="list"
-            label="Pull request actions"
-            disabled={pr.busy}
-          >
-            <MoreHorizontalIcon />
-          </IconButton>
+        <DropdownMenuTrigger
+          render={
+            <IconButton
+              data-pull-request-trigger
+              size="list"
+              label="Pull request actions"
+              disabled={pr.busy}
+            />
+          }
+        >
+          <MoreHorizontalIcon />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem asChild>
-            <a href={row.url} target="_blank" rel="noopener noreferrer">
-              Open pull request <ExternalLinkIcon data-icon="inline-end" aria-hidden />
-            </a>
+          <DropdownMenuItem render={<a href={row.url} target="_blank" rel="noopener noreferrer" />}>
+            Open pull request <ExternalLinkIcon data-icon="inline-end" aria-hidden />
           </DropdownMenuItem>
-          <DropdownMenuItem disabled={!pr.changeable} onSelect={pr.open}>
+          <DropdownMenuItem disabled={!pr.changeable} onClick={() => pr.open()}>
             Change link…
           </DropdownMenuItem>
-          <DropdownMenuItem disabled={!pr.changeable} onSelect={() => void pr.discover()}>
+          <DropdownMenuItem disabled={!pr.changeable} onClick={() => void pr.discover()}>
             Find from branch
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem disabled={!pr.changeable} onSelect={() => void pr.remove()}>
+          <DropdownMenuItem disabled={!pr.changeable} onClick={() => void pr.remove()}>
             Remove link
           </DropdownMenuItem>
         </DropdownMenuContent>

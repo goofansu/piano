@@ -692,7 +692,7 @@
   --tw-animation-duration: 200ms;
   --tw-ease: var(--ease-out);
 }
-:is([data-motion], [data-slot="dialog-overlay"])[data-state="closed"] {
+:is([data-motion], [data-slot="dialog-overlay"]):is([data-state="closed"], [data-closed]) {
   --tw-animation-duration: 120ms;
   --tw-ease: ease-out;
 }
@@ -767,7 +767,7 @@
   );
   transition: --yield 100ms ease-out;
 }
-[data-row]:where(:hover, :has(:focus-visible), :has([aria-haspopup="menu"][data-state="open"])) {
+[data-row]:where(:hover, :has(:focus-visible), :has([aria-haspopup="menu"][aria-expanded="true"])) {
   & [data-motion="reveal"] {
     opacity: 1;
   }

@@ -227,12 +227,12 @@ function McpServerItem({
       {editable && (
         <>
           <DropdownMenuGroup>
-            <DropdownMenuItem onSelect={edit}>Edit</DropdownMenuItem>
+            <DropdownMenuItem onClick={edit}>Edit</DropdownMenuItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
         </>
       )}
-      <DropdownMenuItem variant="destructive" onSelect={remove}>
+      <DropdownMenuItem variant="destructive" onClick={remove}>
         {removeVerb}
       </DropdownMenuItem>
     </RowMenu>

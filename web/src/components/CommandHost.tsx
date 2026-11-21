@@ -165,7 +165,7 @@ export function SessionCommandMenuItem({
     <DropdownMenuItem
       variant={command.destructive ? "destructive" : undefined}
       disabled={!command.enabled}
-      onSelect={() => run(command)}
+      onClick={() => run(command)}
     >
       <CommandIcon icon={command.icon} /> {command.label}
     </DropdownMenuItem>

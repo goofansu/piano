@@ -108,7 +108,7 @@ export function SessionHeader({
     </Sheet>
   ) : (
     <DropdownMenu modal={false}>
-      <DropdownMenuTrigger asChild>{menuButton}</DropdownMenuTrigger>
+      <DropdownMenuTrigger render={menuButton} />
       <DropdownMenuContent
         align="start"
         collisionPadding={16}
@@ -117,10 +117,16 @@ export function SessionHeader({
         <DropdownMenuGroup className="flex items-center">
           <SessionIdDetails className="px-2" sessionId={sessionId} />
           {menu.details.map((c) => (
-            <DropdownMenuItem key={c.id} asChild disabled={!c.enabled} onSelect={() => run(c)}>
-              <IconButton variant="ghost" size="row" className="shrink-0" label={c.label}>
-                <CommandIcon icon={c.icon} />
-              </IconButton>
+            <DropdownMenuItem
+              key={c.id}
+              nativeButton
+              disabled={!c.enabled}
+              onClick={() => run(c)}
+              render={
+                <IconButton variant="ghost" size="row" className="shrink-0" label={c.label} />
+              }
+            >
+              <CommandIcon icon={c.icon} />
             </DropdownMenuItem>
           ))}
         </DropdownMenuGroup>

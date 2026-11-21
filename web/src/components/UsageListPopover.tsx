@@ -54,7 +54,7 @@ export function UsageListPopover({
             aria-description={`${count} ${word} ${description}`}
             aria-haspopup="dialog"
             aria-expanded={open}
-            className="gap-1 px-1.5 font-mono text-xs font-normal text-ink-2 data-[state=open]:bg-fill-hover data-[state=open]:text-ink"
+            className="gap-1 px-1.5 font-mono text-xs font-normal text-ink-2 aria-expanded:bg-fill-hover aria-expanded:text-ink"
           >
             <Icon aria-hidden className="size-3.5 md:hidden" />
             {count}

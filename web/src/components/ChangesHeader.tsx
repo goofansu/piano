@@ -28,17 +28,19 @@ export function ChangesScopeMenu({
 }) {
   return (
     <DropdownMenu modal={false}>
-      <DropdownMenuTrigger asChild>
-        <PianoButton
-          variant="ghost"
-          size="xs"
-          disabled={disabled}
-          aria-label={`Comparison: ${scope.label}`}
-          className="-ml-2 min-w-0 text-ink pointer-coarse:min-h-11"
-        >
-          <span className="truncate">{scope.label}</span>
-          <ChevronDownIcon className="shrink-0 text-ink-3" aria-hidden />
-        </PianoButton>
+      <DropdownMenuTrigger
+        render={
+          <PianoButton
+            variant="ghost"
+            size="xs"
+            disabled={disabled}
+            aria-label={`Comparison: ${scope.label}`}
+            className="-ml-2 min-w-0 text-ink pointer-coarse:min-h-11"
+          />
+        }
+      >
+        <span className="truncate">{scope.label}</span>
+        <ChevronDownIcon className="shrink-0 text-ink-3" aria-hidden />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-72">
         <DropdownMenuRadioGroup

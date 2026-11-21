@@ -36,6 +36,7 @@ import { RailList, RailRowTitle, railRow } from "@/components/SessionRailList";
 import { StatusDot, type StatusTone } from "@/components/StatusDot";
 import { Button } from "@/components/ui/button";
 import { Item, ItemContent, ItemDescription } from "@/components/ui/item";
+import { keyboardFocusReturn } from "@/lib/pointerClose";
 import { claimedPreview, seenDetails, seenPreview } from "@/lib/previewObservation";
 import { sessionReady } from "@/lib/sessionContext";
 import {
@@ -133,20 +134,16 @@ export function PreviewRailRow({ preview }: { preview: SessionPreview }) {
               }
             }}
           >
-            <DropdownMenuTrigger asChild>
-              <IconButton size="list" label="More preview actions">
-                <MoreHorizontalIcon />
-              </IconButton>
+            <DropdownMenuTrigger render={<IconButton size="list" label="More preview actions" />}>
+              <MoreHorizontalIcon />
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
-              onCloseAutoFocus={(event) => {
-                if (handOff.current) event.preventDefault();
-              }}
+              finalFocus={() => !handOff.current && keyboardFocusReturn()}
             >
               <DropdownMenuGroup>
                 <DropdownMenuItem
-                  onSelect={() => {
+                  onClick={() => {
                     handOff.current = true;
                     commands.details();
                   }}
@@ -160,7 +157,7 @@ export function PreviewRailRow({ preview }: { preview: SessionPreview }) {
                 <DropdownMenuItem
                   variant="destructive"
                   disabled={!commands.canStop}
-                  onSelect={() => {
+                  onClick={() => {
                     handOff.current = true;
                     commands.stop();
                   }}
