@@ -1,15 +1,17 @@
 # Projects
 
-The [project index and home](project-centered-ux.md) describe how Piano presents member sessions and their activity.
+Use a project to keep sessions for the same goal together. For example, a release project can group one session updating the API and another updating its documentation, even if they work in different repositories.
 
-[ADR 0002](../../docs/adr/0002-outcome-projects.md) records the boundary decision. The
-[glossary](../../docs/glossary.md#projects) defines the vocabulary.
+## Create a project
 
-The [browser project actions](web/projectActions.ts) decide which actions the project page, sidebar and command palette can offer. The [project forms](web/projectForms.ts) validate edits and prepare saves. The [server project commands](server/ProjectCommands.ts) apply edits and membership changes in one registry transaction.
+1. Open **Projects** in the sidebar and select **New project**.
+2. Enter a **Name**. Add **Instructions** if you want Pi to follow the same guidance across the project's sessions.
+3. Select **Create project**. Open the project, choose the directory for your first session, and send a message.
+
+To add an existing session, open its menu, choose **Add to project**, and select the project name. Use **Move to project** to change its membership, or **Remove from project** to keep the session on its own. The session keeps its working directory and conversation history.
 
 ## Project instructions
 
-Each time Piano starts Pi for a member session it passes the project's current instructions in
-the child's environment, and the `piano-project` extension adds them as a `project_instructions`
-system prompt section. Pi's `--append-system-prompt` is not used because it replaces the user's
-and the checkout's `APPEND_SYSTEM.md`.
+Open the project's menu and choose **Project settings** to edit its name or instructions. For example, use the instructions to tell Pi which release checklist to follow. Pi picks up the current instructions when it starts for a member session. A session whose Pi is already running picks up edits the next time Pi starts for it.
+
+To review recent work or finish a project, see [Review project activity](project-centered-ux.md).

@@ -1,24 +1,17 @@
-# Provider sign-in
+# Connect a model provider
 
-Pi runs the authorization and saves credentials in its usual `auth.json`. Piano keeps tokens and
-pasted codes out of session history, the registry and browser storage.
+Open **Settings → Providers** to connect the account or API key you want Pi to use on the machine running Piano.
 
-## Sign in to a remote Piano
+## Sign in with an account
 
-When Piano runs on another machine, choose a device-code or copy-code method. A browser method
-needs a callback that reaches the Piano server. Radius's browser method has that requirement, and
-its device-code method works remotely. See [Radius setup](../radius/README.md) for the Radius section.
+1. Under **Accounts**, choose **Sign in** beside your provider. Radius has its own section on the same page.
+2. Follow the provider’s prompt. If it gives you a device code, open the sign-in link and enter the code there.
+3. Once the provider shows **Signed in**, start a new session and choose a model from that provider. [Choose a model](../models/README.md)
 
-Provider accounts and MCP servers use the same [sign-in dialog](../../web/src/shared/sign-in/SignInDialog.tsx).
-Each feature supplies its own endpoint so opening or cancelling a dialog operates on the right sign-in attempt.
+When Piano runs on another machine, use a device-code or copy-code method if the provider offers one. A browser redirect works only when it can reach the Piano machine. [Set up Radius](../radius/README.md)
 
-## API keys
+## Use an API key
 
-Adding another single-key provider requires a catalog entry in `features/providers/contracts/providerApiKeys.ts`
-(kept alphabetical) and a bundled logo, not another settings flow.
+Under **API keys**, find your provider, choose **Add key**, paste the key, and select **Save**. The row shows **Saved**. Start a new session to use the key.
 
-## Verification
-
-Scratch Piano is signed out: `test/integration/providers/ProviderLogin.test.ts`, `test/SignInAttempts.test.ts` and the
-[Settings recipe](../../.agents/skills/verify-piano/features/settings-other.md) do not show a real
-provider accepting an OAuth sign-in or an API key.
+To rotate a key, open the provider’s API key menu and choose **Replace key**. To remove the saved credential from this machine, choose **Remove key**. For an account login, use **Sign out** in the account’s menu.

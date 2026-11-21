@@ -1,17 +1,9 @@
-# Image attachment policy
+# Attach an image
 
-Decision: Pi's events are the source of truth for its queue. Piano does not filter, hide or
-reinterpret entries Pi reports, track the queue locally, patch Pi or send operations Pi lacks to
-work around this; the fix belongs upstream in Pi.
+Use a screenshot, photo, or diagram to show Pi what you mean. In a new or existing session, choose the paperclip (**Attach images**), paste an image from your clipboard, or drop an image onto the composer.
 
-## Pi owns model preparation
+You can send up to **10 images in one message**. Choose PNG, JPEG, GIF, or WebP files, up to **10 MiB per image** and **50 MiB total**. To remove one before sending, select the remove button beside its name.
 
-Piano passes accepted images through PiSessions; Pi's preprocessing fits them for the model. Do
-not duplicate those policies or modify the user's Pi settings to meet Piano's upload policy. See
-the [version-pinned research and sources](../../docs/research/2026-10-06-pi-image-restrictions.md).
+After you send the message, select a thumbnail in the transcript to open the full image in a new tab. If you see **Preview unavailable**, reopen the session to reload it.
 
-## Future changes
-
-Constants live in `shared/session/attachments.ts`; the wire schema and browser use them. Future increases
-need concrete user examples plus large-upload checks and a memory/transport review. General file
-support needs its own type and policy, not a broader image MIME allowlist.
+[Back to sessions](README.md)

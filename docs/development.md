@@ -26,6 +26,12 @@ Node options go before the test path; `npm test -- --test-name-pattern=…` does
 node --test --test-name-pattern='<pattern>' --import ./test/setup.ts features/<feature>/tests/<name>.test.ts
 ```
 
+## Maintaining Pi sessions
+
+On Pi upgrades, keep saved-history reads read-only. Pi’s `SessionManager.open` can append a missing newline to a history file. Check the history parser and `SessionManager.inMemory` against the new SDK, then run the history compatibility checks and open a saved session. The loader currently relies on Pi’s internal session-manager path to avoid loading interactive modules in the history worker.
+
+Keep publication updates within the callback passed to `SessionPublication.transaction`. Calling `apply` or `patchState` inside that callback tries to acquire a lock the callback already holds. Passing the callback’s capabilities to a forked task can let it publish after the transaction ends.
+
 ## CI and merging
 
 [Quality CI](../.github/workflows/quality.yml) defines the jobs. No branch protection enforces
