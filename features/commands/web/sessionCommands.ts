@@ -1,7 +1,6 @@
 import { pullRequestLabel } from "../../../shared/git/pullRequestIdentity.ts";
-import type { ClientCommand } from "../../../shared/wire.ts";
+import type { ClientCommand, Snapshot } from "../../../shared/wire.ts";
 import type { SessionLayout } from "../../../web/src/shared/navigation/navigation.ts";
-import { sessionArtifacts } from "../../../web/src/shared/state/sessionArtifacts.ts";
 import {
   checkoutMissingAt,
   isSelectedSession,
@@ -163,6 +162,7 @@ export function sessionCommands(
   state: AppState,
   target: SessionTarget | undefined,
   options: {
+    hasArtifacts?: (session: Snapshot) => boolean;
     messagesOnly?: boolean;
     codeWrap?: boolean;
     layout?: SessionLayout;
@@ -180,7 +180,7 @@ export function sessionCommands(
     const sessionPath = session.state.sessionFile;
     const linked = !!ctx.pullRequest;
     const pullRequest = pullRequestLabel(ctx.pullRequest);
-    const hasArtifacts = sessionArtifacts(session.messages, session.state.artifacts).length > 0;
+    const hasArtifacts = options.hasArtifacts?.(session) ?? false;
     commands.push(
       {
         id: "copy-working-directory",

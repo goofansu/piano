@@ -1,17 +1,20 @@
-import type { ProjectTrust, ServerMessage } from "../../../shared/wire.ts";
-import type { Notify, NotifyLevel } from "../../../web/src/shared/state/client.ts";
-import { canDecideTrust } from "../../../web/src/shared/state/directoryTrust.ts";
+import type { ProjectTrust, ServerMessage } from "../../../../shared/wire.ts";
+import type { Notify, NotifyLevel } from "../../../../web/src/shared/state/client.ts";
 import {
+  canDecideTrust,
   directoryTrust,
   type TrustObservation,
-} from "../../../web/src/shared/state/directoryTrust.ts";
-import type { TrustDecision, TrustDecisionAction } from "../../../web/src/shared/state/state.ts";
-import type { AppState } from "../../../web/src/shared/state/state.ts";
+} from "../../../../web/src/shared/state/directoryTrust.ts";
+import type {
+  AppState,
+  TrustDecision,
+  TrustDecisionAction,
+} from "../../../../web/src/shared/state/state.ts";
 import {
   type CorrelatedRequestOptions,
   correlatedRequests,
   type RequestOutcome,
-} from "../../../web/src/shared/transport/correlatedRequest.ts";
+} from "../../../../web/src/shared/transport/correlatedRequest.ts";
 
 type TrustAnswer = { status: "ok"; trust: ProjectTrust } | { status: "error"; message: string };
 

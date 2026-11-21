@@ -19,7 +19,6 @@ import { SessionHosts, SessionNotCreated } from "../../features/sessions/server/
 import { WorkspaceCommands } from "../../features/workspace/server/WorkspaceCommands.ts";
 import type { ClientMessage, ServerMessage } from "../../shared/wire.ts";
 import { DirectoryFacts } from "../shared/DirectoryFacts.ts";
-import { errorText } from "../shared/ErrorText.ts";
 import { inboundLimits, makeInboundCapacity } from "../shared/InboundCapacity.ts";
 import { inputBytes } from "../shared/InputBytes.ts";
 import { Registry } from "../shared/registry/Registry.ts";
@@ -34,6 +33,17 @@ export interface ClientDispatch {
 type Unanswered =
   | { readonly _tag: "refused" }
   | { readonly _tag: "failed"; readonly error: unknown };
+
+const errorText = (error: unknown): string => {
+  const details =
+    error && typeof error === "object"
+      ? (error as { detail?: unknown; message?: unknown; _tag?: unknown })
+      : undefined;
+  if (typeof details?.detail === "string") return details.detail;
+  if (typeof details?.message === "string" && details.message) return details.message;
+  if (typeof details?._tag === "string") return details._tag;
+  return String(error);
+};
 
 const unansweredText = (reason: Unanswered) =>
   reason._tag === "refused"

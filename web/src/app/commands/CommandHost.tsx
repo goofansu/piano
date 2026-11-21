@@ -14,6 +14,7 @@ import {
 } from "@features/projects/web/projectActions";
 import { ProjectDialogView } from "@features/projects/web/Projects";
 import { ProjectSettingsDialog } from "@features/projects/web/ProjectSettings";
+import { hasSessionArtifacts } from "@features/radius/web/artifactList";
 import { artifactsMenu } from "@features/radius/web/artifactsMenu";
 import { useMessagesOnly } from "@features/sessions/web/transcript/useMessagesOnly";
 import { ShareSessionDialog, type ShareTarget } from "@features/sharing/web/ShareSessionDialog";
@@ -156,6 +157,7 @@ export function CommandHost({
         layout,
         codeWrap,
         state,
+        hasArtifacts: hasSessionArtifacts,
         sessionProjectMenu,
         openProjectCommands,
         global: {

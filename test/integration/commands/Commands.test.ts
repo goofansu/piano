@@ -15,6 +15,7 @@ import {
   projectCommands,
   projectPageActions,
 } from "../../../features/projects/web/projectActions.ts";
+import { hasSessionArtifacts } from "../../../features/radius/web/artifactList.ts";
 import type { Project, SessionState } from "../../../shared/wire.ts";
 import { type AppState, initialState } from "../../../web/src/shared/state/state.ts";
 import { sessionReference } from "../../shared/sessionReference.ts";
@@ -176,7 +177,9 @@ test("enabled commands reach the effect their intent names", () => {
 
 test("Artifacts is offered once the session published one, and opens the header's menu", () => {
   const artifacts = (state: AppState) =>
-    sessionCommands(state, undefined, {}).find((c) => c.id === "artifacts")!;
+    sessionCommands(state, undefined, { hasArtifacts: hasSessionArtifacts }).find(
+      (c) => c.id === "artifacts",
+    )!;
   assert.equal(artifacts(selected).hidden, true, "nothing to list before the first artifact");
   const published: AppState = {
     ...selected,

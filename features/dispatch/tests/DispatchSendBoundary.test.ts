@@ -9,7 +9,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { nodeSocketEnvironment } from "../../../server/shared/NodeSocket.ts";
 import type { SocketEnvironment } from "../../../shared/transport/ws.ts";
-import { startSession } from "../extension/SessionDispatch.ts";
+import { startSession } from "../server/SessionDispatch.ts";
 
 const freePort = async () => {
   const reservation = createServer();

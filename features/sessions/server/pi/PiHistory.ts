@@ -6,10 +6,6 @@ import type { FileEntry, SessionHeader } from "@earendil-works/pi-coding-agent";
 import { Effect, type Scope } from "effect";
 import { readLocalFile } from "../../../../server/shared/LocalFile.ts";
 import { agentDir, directoryPath, sessionDirFor } from "../../../../server/shared/PiEnv.ts";
-import {
-  RADIUS_ARTIFACT_FILE_BYTES,
-  RADIUS_ARTIFACT_FILE_LIMIT,
-} from "../../../../shared/radius/radiusArtifacts.ts";
 import { emptySnapshot } from "../../../../shared/session/sessionProjection.ts";
 import type { Snapshot } from "../../../../shared/wire.ts";
 import { fileVersion } from "./PiHistoryFile.ts";
@@ -29,7 +25,11 @@ export interface PiHistory {
     options?: { readonly confirmAbsent?: boolean },
   ) => Effect.Effect<HistoryLocation, PiSessionError>;
   readonly sessionIds: (cwd: string) => Effect.Effect<ReadonlySet<string>>;
-  readonly savedJsonl: (sessionId: string, file: string) => Effect.Effect<string, PiSessionError>;
+  readonly savedJsonl: (
+    sessionId: string,
+    file: string,
+    limit: number,
+  ) => Effect.Effect<string, PiSessionError>;
   readonly peek: (sessionId: string, file: string | undefined) => Effect.Effect<Snapshot>;
   readonly metadata: (
     sessionId: string,
@@ -211,11 +211,11 @@ export const makePiHistory = Effect.fn("PiHistory.make")(function* (): Effect.fn
       Effect.orElseSucceed(() => new Set<string>()),
     );
 
-  const savedJsonl = (sessionId: string, file: string) =>
+  const savedJsonl = (sessionId: string, file: string, limit: number) =>
     Effect.tryPromise({
       try: async (signal) => {
         const before = fileVersion(await stat(file, { bigint: true }));
-        const bytes = await readLocalFile(file, { limit: RADIUS_ARTIFACT_FILE_BYTES, signal });
+        const bytes = await readLocalFile(file, { limit, signal });
         if (!bytes.length || fileVersion(await stat(file, { bigint: true })) !== before)
           throw new Error("changed");
         const content = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
@@ -232,10 +232,7 @@ export const makePiHistory = Effect.fn("PiHistory.make")(function* (): Effect.fn
         }
         return content;
       },
-      catch: () =>
-        rejected(
-          `Could not read a complete saved session (${RADIUS_ARTIFACT_FILE_LIMIT} maximum). Let Pi finish saving and check the history file before sharing again.`,
-        ),
+      catch: () => rejected("Could not read a complete saved session."),
     });
 
   return {

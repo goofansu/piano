@@ -6,19 +6,33 @@ import { providerLogin } from "@features/providers/web/providerApi";
 import { ProvidersSettings } from "@features/providers/web/ProvidersSettings";
 import { providerAccounts } from "@features/providers/web/useProviderAccounts";
 import { RadiusSection } from "@features/radius/web/RadiusSection";
-import { SettingsMenu } from "@features/settings/web/SettingsMenu";
 import { PreferencesSettings } from "@features/voice-input/web/PreferencesSettings";
 import { WebhookSettings } from "@features/webhooks/web/WebhookSettings";
+import { cn } from "cn";
 import { HomeIcon } from "lucide-react";
 import { PageHeaderActions } from "@/app/commands/PageHeaderActions";
-import { SidebarContent, SidebarGroup, SidebarGroupContent } from "@/components/ui/sidebar";
+import {
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@/components/ui/sidebar";
 import { PianoButton } from "@/shared/components/PianoButton";
-import type { SettingsSection } from "@/shared/navigation/routes";
+import { SettingsSectionIcon } from "@/shared/components/SettingsSectionFrame";
+import { sidebarRowClassName } from "@/shared/lib/styles";
+import { SETTINGS_SECTIONS, type SettingsSection } from "@/shared/navigation/routes";
 import type { Client } from "@/shared/state/client";
 import type { AppState } from "@/shared/state/state";
 import { PAGE_EDITORS } from "./settingsEditors";
 
 export type { SettingsSection } from "@/shared/navigation/routes";
+
+const sectionRow = cn(
+  sidebarRowClassName,
+  "gap-1.5 text-ink-2 data-active:bg-(--selected) data-active:text-ink hover:data-active:bg-(--selected)",
+);
 
 export function SettingsNavigation({
   section,
@@ -35,7 +49,24 @@ export function SettingsNavigation({
       <SidebarContent>
         <SidebarGroup className="px-(--row-inset)">
           <SidebarGroupContent>
-            <SettingsMenu section={section} onSelect={onSelect} />
+            <nav aria-label="Settings sections">
+              <SidebarMenu>
+                {SETTINGS_SECTIONS.map((item) => (
+                  <SidebarMenuItem key={item.id}>
+                    <SidebarMenuButton
+                      className={sectionRow}
+                      isActive={section === item.id}
+                      aria-current={section === item.id ? "page" : undefined}
+                      aria-label={item.label}
+                      onClick={() => onSelect(item.id)}
+                    >
+                      <SettingsSectionIcon icon={item.icon} />
+                      <span>{item.label}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </nav>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>

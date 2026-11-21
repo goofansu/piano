@@ -4,6 +4,10 @@ import { Context, Data, Effect, Layer, Schema } from "effect";
 import { agentDir } from "../../../server/shared/PiEnv.ts";
 import type { SessionEntry } from "../../../server/shared/registry/Registry.ts";
 import {
+  RADIUS_ARTIFACT_FILE_BYTES,
+  RADIUS_ARTIFACT_FILE_LIMIT,
+} from "../../../shared/radius/radiusArtifacts.ts";
+import {
   SessionShare,
   type SessionShareResult,
   SHARE_NOT_SENT,
@@ -51,10 +55,7 @@ const Reply = Schema.Struct({
 
 interface ShareSources {
   resolve: (cwd: string, sessionId: string) => Effect.Effect<{ readonly file?: string }, unknown>;
-  savedJsonl: (
-    sessionId: string,
-    file: string,
-  ) => Effect.Effect<string, { readonly detail: string }>;
+  savedJsonl: (sessionId: string, file: string, limit: number) => Effect.Effect<string, unknown>;
   openClient: (
     token: string,
     signal: AbortSignal,
@@ -99,8 +100,17 @@ export const sessionSharingLayer = <R>(sources: Effect.Effect<ShareSources, neve
               return yield* new SessionShareError({
                 detail: "This session has no saved history to share yet.",
               });
-            const content = yield* savedJsonl(session.sessionId, location.file).pipe(
-              Effect.mapError((error) => new SessionShareError({ detail: error.detail })),
+            const content = yield* savedJsonl(
+              session.sessionId,
+              location.file,
+              RADIUS_ARTIFACT_FILE_BYTES,
+            ).pipe(
+              Effect.mapError(
+                () =>
+                  new SessionShareError({
+                    detail: `Could not read a complete saved session (${RADIUS_ARTIFACT_FILE_LIMIT} maximum). Let Pi finish saving and check the history file before sharing again.`,
+                  }),
+              ),
             );
             const token = yield* Effect.tryPromise({
               try: (signal) => auth(signal),
