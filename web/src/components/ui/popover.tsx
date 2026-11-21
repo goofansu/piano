@@ -18,16 +18,15 @@ function PopoverContent({
   alignOffset = 0,
   side = "bottom",
   sideOffset = 4,
-  // Piano patch: Base UI takes the anchor, collision padding and stacking on the Positioner, which shadcn's wrapper does not expose.
+  // Piano patch: Base UI takes the anchor and collision padding on the Positioner, which shadcn's wrapper does not expose.
   anchor,
   collisionPadding,
-  positionerClassName,
   ...props
 }: PopoverPrimitive.Popup.Props &
   Pick<
     PopoverPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset" | "anchor" | "collisionPadding"
-  > & { positionerClassName?: string }) {
+  >) {
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Positioner
@@ -37,7 +36,7 @@ function PopoverContent({
         sideOffset={sideOffset}
         anchor={anchor}
         collisionPadding={collisionPadding}
-        className={cn("isolate z-50", positionerClassName)}
+        className="isolate z-50"
       >
         <PopoverPrimitive.Popup
           data-slot="popover-content"

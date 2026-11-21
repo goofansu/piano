@@ -117,11 +117,7 @@ export function SessionHeader({
   ) : (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger render={menuButton} />
-      <DropdownMenuContent
-        align="start"
-        collisionPadding={16}
-        className="w-96 max-w-[calc(100vw-2rem)]"
-      >
+      <DropdownMenuContent align="start" className="w-96 max-w-[calc(100vw-2rem)]">
         <DropdownMenuGroup className="flex items-center">
           <SessionIdDetails className="px-2" sessionId={sessionId} />
           {menu.details.map((c) => (

@@ -30,15 +30,13 @@ function TooltipContent({
   sideOffset = 4,
   align = "center",
   alignOffset = 0,
-  // Piano patch: Base UI stacks the Positioner, which shadcn's wrapper does not expose.
-  positionerClassName,
   children,
   ...props
 }: TooltipPrimitive.Popup.Props &
   Pick<
     TooltipPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset"
-  > & { positionerClassName?: string }) {
+  >) {
   return (
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Positioner
@@ -46,7 +44,7 @@ function TooltipContent({
         alignOffset={alignOffset}
         side={side}
         sideOffset={sideOffset}
-        className={cn("isolate z-50", positionerClassName)}
+        className="isolate z-50"
       >
         <TooltipPrimitive.Popup
           data-slot="tooltip-content"

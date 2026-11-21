@@ -1,6 +1,5 @@
 import type { ComponentProps } from "react";
 import { SelectContent as BaseContent } from "@/components/ui/select";
-import { raisedLayer } from "@/lib/overlayStyles";
 
 export {
   Select,
@@ -22,7 +21,6 @@ export function SelectContent({
   return (
     <BaseContent
       data-motion="anchored"
-      positionerClassName={raisedLayer}
       {...props}
       alignItemWithTrigger={alignItemWithTrigger}
       sideOffset={sideOffset}

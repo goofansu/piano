@@ -62,12 +62,15 @@ browser font baseline. Neither upstream consumer owns session capacity.
 Each is marked `Piano patch` in its source and must be restored after an upgrade overwrites the
 file.
 
-**Positioner props.** Base UI positions and stacks an overlay on its `Positioner`, which the
-stock wrappers neither expose nor let a caller style. `ui/popover.tsx`, `ui/dropdown-menu.tsx`,
-`ui/tooltip.tsx` and `ui/select.tsx` forward `positionerClassName`, which carries Piano's raised
-layer (`raisedLayer`). `ui/popover.tsx` and `ui/dropdown-menu.tsx` also forward
-`collisionPadding`, and `ui/popover.tsx` forwards `anchor`. Drop a patch when upstream forwards
-the same prop.
+**Popover Positioner props.** Base UI positions an overlay on its `Positioner`, which the stock
+wrappers do not expose. `ui/popover.tsx` forwards two of its props. `anchor` places a popover that
+has no trigger: the slash-command list against the composer and the quote pill against a text
+selection. `collisionPadding` keeps the full-width model picker and usage list centred on a
+phone; without it they sit 5px from one screen edge. Drop the patch when upstream forwards them.
+
+Menus, tooltips and selects are stock and use Base UI's defaults: a 5px collision padding and
+the `z-50` layer. A popup opened from inside a dialog or the sidebar reveal still lands on top
+because its portal is added to the page later.
 
 **Unused import.** `ui/scroll-area.tsx` ships `import * as React` without using it, which fails
 `noUnusedLocals`; the line is removed.

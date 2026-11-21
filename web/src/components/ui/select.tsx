@@ -63,14 +63,12 @@ function SelectContent({
   align = "center",
   alignOffset = 0,
   alignItemWithTrigger = true,
-  // Piano patch: Base UI stacks the Positioner, which shadcn's wrapper does not expose.
-  positionerClassName,
   ...props
 }: SelectPrimitive.Popup.Props &
   Pick<
     SelectPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset" | "alignItemWithTrigger"
-  > & { positionerClassName?: string }) {
+  >) {
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Positioner
@@ -79,7 +77,7 @@ function SelectContent({
         align={align}
         alignOffset={alignOffset}
         alignItemWithTrigger={alignItemWithTrigger}
-        className={cn("isolate z-50", positionerClassName)}
+        className="isolate z-50"
       >
         <SelectPrimitive.Popup
           data-slot="select-content"

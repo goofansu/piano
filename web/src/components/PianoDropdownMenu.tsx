@@ -10,7 +10,6 @@ import {
   DropdownMenuSubContent as BaseSubContent,
   DropdownMenuSubTrigger as BaseSubTrigger,
 } from "@/components/ui/dropdown-menu";
-import { raisedLayer } from "@/lib/overlayStyles";
 import { keyboardFocusReturn } from "@/lib/pointerClose";
 
 export {
@@ -50,8 +49,6 @@ export function DropdownMenuContent({
 }: ComponentProps<typeof BaseContent>) {
   return (
     <BaseContent
-      collisionPadding={8}
-      positionerClassName={raisedLayer}
       data-motion="anchored"
       {...props}
       finalFocus={finalFocus}
@@ -69,8 +66,6 @@ export function DropdownMenuSubContent({
   return (
     <BaseSubContent
       alignOffset={alignOffset}
-      collisionPadding={8}
-      positionerClassName={raisedLayer}
       data-motion="anchored"
       {...props}
       finalFocus={finalFocus}
