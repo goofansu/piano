@@ -76,7 +76,8 @@ for (let repeat = 0; repeat < repeats; repeat++)
         return { folders: [cwd], sessions };
       },
       async (page) => {
-        await page.open("/");
+        await page.open("/new");
+        await page.until(`!!document.querySelector('[aria-label="First message"]')`);
         const socket = new WebSocket(await page.ab("get", "cdp-url"));
         await new Promise((done, fail) => {
           socket.addEventListener("open", done, { once: true });
