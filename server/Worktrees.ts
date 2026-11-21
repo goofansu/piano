@@ -186,27 +186,27 @@ export const mainCheckoutOf = Effect.fn("Worktrees.mainCheckoutOf")(function* (
   return owner?.main ?? checkout.toplevel;
 });
 
-const localBranch = (folder: string, name: string) =>
-  git(folder, ["rev-parse", "--verify", "--quiet", `refs/heads/${name}^{commit}`]).pipe(
+const localBranch = (folder: string, ref: string) =>
+  git(folder, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]).pipe(
     Effect.as(true),
     Effect.orElseSucceed(() => false),
   );
-const defaultBranch = Effect.fn("Worktrees.defaultBranch")(function* (main: string) {
-  const remoteHead = yield* git(main, [
-    "symbolic-ref",
-    "--quiet",
-    "--short",
-    "refs/remotes/origin/HEAD",
-  ]).pipe(
-    Effect.map((out) => out.trim().replace(/^origin\//, "")),
-    Effect.orElseSucceed(() => ""),
-  );
-  const current = yield* git(main, ["symbolic-ref", "--quiet", "--short", "HEAD"]).pipe(
+const symbolicRef = (folder: string, ref: string) =>
+  git(folder, ["symbolic-ref", "--quiet", ref]).pipe(
     Effect.map((out) => out.trim()),
     Effect.orElseSucceed(() => ""),
   );
-  for (const name of [remoteHead, "main", "master", current])
-    if (name && (yield* localBranch(main, name))) return name;
+const defaultBranch = Effect.fn("Worktrees.defaultBranch")(function* (main: string) {
+  const remoteHead = yield* symbolicRef(main, "refs/remotes/origin/HEAD");
+  const current = yield* symbolicRef(main, "HEAD");
+  const candidates = [
+    remoteHead.replace(/^refs\/remotes\/origin\//, "refs/heads/"),
+    "refs/heads/main",
+    "refs/heads/master",
+    current,
+  ];
+  for (const ref of candidates)
+    if (ref.startsWith("refs/heads/") && (yield* localBranch(main, ref))) return ref;
   return yield* new WorktreeError({
     detail:
       "No base branch found: origin has no default branch here, and there is no local main or master. Check out the base branch in the main checkout, then try again.",
@@ -236,14 +236,16 @@ export const createWorktree = Effect.fn("Worktrees.createWorktree")(function* (
     return yield* new WorktreeError({
       detail: `Branch ${branch} already exists. Enter a new branch name.`,
     });
-  const baseBranch = yield* defaultBranch(main);
+  const baseRef = yield* defaultBranch(main);
   const path = `${main}.${branch.replace(/[\\/]/g, "-")}`;
   if (existsSync(path))
     return yield* new WorktreeError({
       detail: `${path} already exists. Remove it or choose another branch name.`,
     });
-  yield* gitText(main, ["worktree", "add", "--quiet", "-b", branch, path, baseBranch], {
+  yield* gitText(main, ["worktree", "add", "--quiet", "-b", branch, path, baseRef], {
     timeout: WORKTREE_CREATION_MS,
+    userConfig: true,
+    config: ["-c", "core.hooksPath=/dev/null"],
   }).pipe(
     Effect.mapError(
       (e) =>
@@ -253,5 +255,5 @@ export const createWorktree = Effect.fn("Worktrees.createWorktree")(function* (
         }),
     ),
   );
-  return { path, branch, baseBranch };
+  return { path, branch, baseBranch: baseRef.slice("refs/heads/".length) };
 });

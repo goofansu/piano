@@ -190,7 +190,7 @@ export function createClient({
   };
 
   const onStatus = (connected: boolean, reason?: DisconnectReason) => {
-    apply({ type: "connected", connected });
+    apply({ type: "connected", connected, reason });
     if (connected) {
       const pending = state.pendingCreate;
       if (pending && pending.outcome === "uncertain" && !state.session?.sessionId)

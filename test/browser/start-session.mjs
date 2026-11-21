@@ -17,7 +17,20 @@ await run(
     await page.ab("fill", 'input[type="password"]', "sk-fixture-no-provider-call");
     await page.click("button", "Save");
     await page.see("Voice input turned on");
-    await page.open("/new");
+    if (process.env.PIANO_BROWSER_PRODUCTION === "1") {
+      await page.open("/new");
+    } else {
+      // Vite keeps serving the page while the scratch backend is down.
+      const retrying = "Can’t connect to Piano. Retrying…";
+      await page.restartBackend({
+        beforeRestart: async () => {
+          await page.open("/new");
+          await page.see(retrying);
+          await page.capture("backend-unavailable");
+        },
+      });
+      await page.until(`!document.body.innerText.includes(${JSON.stringify(retrying)})`);
+    }
 
     await page.choose("Directory", "web");
     await page.until("document.querySelector('[aria-label^=\"Model:\"]')?.disabled === false");

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { AppLayout, LayoutView } from "@/components/AppLayout";
 import { CommandHost } from "@/components/CommandHost";
 import { CommandPalette } from "@/components/CommandPalette";
@@ -40,6 +40,7 @@ import {
 import { useSidebarList } from "@/lib/useSidebarList";
 import { useSidebarSessionNavigation } from "@/lib/useSidebarSessionNavigation";
 import { useSidebarView } from "@/lib/useSidebarView";
+import { voiceInputSettings } from "@/lib/useVoiceInput";
 import { type AppState, initialState } from "@/store";
 
 const stores = createPageStores(notify);
@@ -68,6 +69,11 @@ function PianoApp() {
     { lastDirectory: storedLastDirectory() },
   );
   const { dispatch, send } = client;
+  const wasReconnecting = useRef(false);
+  useEffect(() => {
+    if (state.connected && wasReconnecting.current) void voiceInputSettings.refresh();
+    wasReconnecting.current = state.reconnecting;
+  }, [state.connected, state.reconnecting]);
   useEffect(() => providerAccounts.follow(client), [client]);
   useEffect(() => modelCatalogs.follow(client), [client, modelCatalogs]);
   useEffect(() => checkoutRefresh.follow(client), [client]);

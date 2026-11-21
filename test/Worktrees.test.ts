@@ -214,9 +214,17 @@ test("INV-06: inherited GIT_* state cannot redirect discovery or directory hints
   }
 });
 
-test("INV-06/INV-07: creation ignores inherited Git redirection", async (t) => {
+test("INV-06/INV-07: creation uses configured checkout filters and ignores inherited Git redirection and setup hooks", async (t) => {
   const { root, repo } = fixture(t);
   const { repo: other } = fixture(t);
+  const configHome = join(root, "config");
+  mkdirSync(join(configHome, "git"), { recursive: true });
+  const config = join(configHome, "git", "config");
+  git(repo, "config", "--file", config, "filter.piano-test.smudge", "tr a-z A-Z");
+  git(repo, "config", "--file", config, "core.hooksPath", root);
+  writeFileSync(join(root, "post-checkout"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
+  writeFileSync(join(repo, ".gitattributes"), "identity filter=piano-test\n");
+  git(repo, "add", ".gitattributes");
   for (const [path, identity] of [
     [repo, "requested"],
     [other, "unrelated"],
@@ -240,6 +248,7 @@ test("INV-06/INV-07: creation ignores inherited Git redirection", async (t) => {
     worktrees: git(other, "worktree", "list", "--porcelain"),
   };
   const inherited = {
+    XDG_CONFIG_HOME: configHome,
     GIT_DIR: join(other, ".git"),
     GIT_WORK_TREE: other,
     GIT_COMMON_DIR: join(other, ".git"),
@@ -260,7 +269,7 @@ test("INV-06/INV-07: creation ignores inherited Git redirection", async (t) => {
       join(repo, ".git"),
     );
     assert.equal(git(created.path, "rev-parse", "HEAD"), git(repo, "rev-parse", "HEAD"));
-    assert.equal(readFileSync(join(created.path, "identity"), "utf8"), "requested");
+    assert.equal(readFileSync(join(created.path, "identity"), "utf8"), "REQUESTED");
     assert.equal(created.path, `${repo}.requested-branch`);
     assert.equal(git(repo, "rev-parse", "requested-branch"), git(repo, "rev-parse", "HEAD"));
     assert.ok(git(repo, "worktree", "list", "--porcelain").includes(`worktree ${created.path}\n`));
@@ -295,9 +304,11 @@ test("INV-06: creation puts a new branch beside the main checkout on the default
   git(repo, ...identity, "commit", "--quiet", "--allow-empty", "-m", "release");
   git(repo, "checkout", "--quiet", "-b", "elsewhere");
 
+  git(repo, "tag", "main", "release");
   const first = await made(repo, "feat/one");
   assert.deepEqual(first, { path: `${repo}.feat-one`, branch: "feat/one", baseBranch: "main" });
-  assert.equal(git(first.path, "rev-parse", "HEAD"), git(repo, "rev-parse", "main"));
+  assert.equal(git(first.path, "rev-parse", "HEAD"), git(repo, "rev-parse", "refs/heads/main"));
+  git(repo, "tag", "-d", "main");
   assert.equal(git(first.path, "symbolic-ref", "--short", "HEAD"), "feat/one");
 
   const nested = await made(first.path, "two");
@@ -340,8 +351,10 @@ test("INV-06: creation puts a new branch beside the main checkout on the default
 test("INV-06: creation without a remote default, main or master starts from the main checkout's branch", async (t) => {
   const { repo } = fixture(t);
   git(repo, "branch", "-m", "main", "trunk");
+  git(repo, "tag", "trunk");
   const created = await Effect.runPromise(createWorktree(repo, "topic"));
   assert.equal(created.baseBranch, "trunk");
+  git(repo, "tag", "-d", "trunk");
   git(repo, "worktree", "remove", "--force", created.path);
   git(repo, "branch", "-D", "topic");
   git(repo, "checkout", "--quiet", "--detach");

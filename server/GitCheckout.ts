@@ -68,13 +68,13 @@ export class GitReadError extends Data.TaggedError("GitReadError")<{ readonly de
 export const gitText = Effect.fn("GitCheckout.gitText")(function* (
   cwd: string,
   args: readonly string[],
-  options: Pick<GitOptions, "timeout" | "userConfig"> = {},
+  options: Pick<GitOptions, "timeout" | "userConfig" | "config"> = {},
 ): Effect.fn.Return<string, GitReadError> {
   const git = yield* GitCommand;
-  const { timeout = 20_000, userConfig } = options;
+  const { timeout = 20_000, ...settings } = options;
   const result = yield* Effect.tryPromise({
     try: (signal) =>
-      runGit(git, args, { cwd, timeout, userConfig, limit: 8 * 1024 * 1024 }, signal),
+      runGit(git, args, { cwd, timeout, ...settings, limit: 8 * 1024 * 1024 }, signal),
     catch: (error) =>
       new GitReadError({ detail: error instanceof Error ? error.message : String(error) }),
   });
