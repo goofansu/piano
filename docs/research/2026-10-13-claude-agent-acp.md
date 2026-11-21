@@ -276,6 +276,6 @@ are pinned so later protocol changes do not silently alter the evidence.
 - [H3 — Anthropic Help Center: SDK with a Claude plan](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan)
 - L1 — [ADR 0001](../adr/0001-pi-rpc-workspace-workbench.md), [invariants](../development-invariants.md), [roadmap](../roadmap.md), [testing policy](../testing.md)
 - L2 — [`PiSessions.ts`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/PiSessions.ts), [`shared/wire.ts`](../../shared/wire.ts)
-- L3 — [Runtime ownership](../runtime-ownership.md)
+- L3 — [Runtime ownership](https://github.com/goofansu/piano/blob/346a64bbb22d9f321e27f771f68b6180e11e3427/docs/runtime-ownership.md)
 - L4 — [`SessionHosts.ts`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/SessionHosts.ts), [`PiHistory.ts`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/PiHistory.ts)
 - L5 — [`Registry.ts`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/Registry.ts)

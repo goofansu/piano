@@ -1,4 +1,4 @@
-import type { FilePreview } from "../../../../shared/features/workspace/files/files.ts";
+import type { FilePreview } from "../../../../shared/workspace/files.ts";
 import { mayPreviewAsImage, previewImage } from "./previewImage.ts";
 
 export const markdownImageLimit = 8;

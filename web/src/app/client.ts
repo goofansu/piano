@@ -1,31 +1,25 @@
 import type { ClientCommand, ServerMessage } from "@shared/wire";
-import { refusedAttempt } from "../../../shared/features/sessions/creationVerdict.ts";
-import { closureNeedsAttention } from "../../../shared/features/sessions/sessionStatus.ts";
-import { projectStartDirectory } from "../features/projects/projectHomeView.ts";
-import { createTrustDecisions, trustNotice } from "../features/projects/trustDecision.ts";
-import {
-  checkoutMissingAt,
-  focusedDirectory,
-  sessionReady,
-} from "../features/sessions/sessionContext.ts";
-import { startPage } from "../features/sessions/start/startPage.ts";
-import { browserMemory } from "../shared/lib/browserMemory.ts";
+import { projectStartDirectory } from "../../../features/projects/web/projectHomeView.ts";
+import { createTrustDecisions, trustNotice } from "../../../features/projects/web/trustDecision.ts";
+import { refusedAttempt } from "../../../shared/session/creationVerdict.ts";
+import { closureNeedsAttention } from "../../../shared/session/sessionStatus.ts";
 import type {
   Connection,
   ConnectionHandlers,
   DisconnectReason,
   SendDisposition,
-} from "../shared/transport/ws.ts";
-import { browserTimers, type RequestTimers } from "./requests/correlatedRequest.ts";
-import { type Action, type AppState, reduce, sessionDelivery } from "./store.ts";
-
-export type NotifyLevel = "success" | "info" | "warning" | "error";
-export type Notify = (message: string, level?: NotifyLevel) => void;
-
-export type LocalAction = Exclude<
-  Action,
-  { type: "connected" | "server" | "selecting" | "trust_decision" | "trust_settled" }
->;
+} from "../../../shared/transport/ws.ts";
+import { browserMemory } from "../shared/lib/browserMemory.ts";
+import type { Notify, NotifyLevel, Client, ClientUpdate } from "../shared/state/client.ts";
+import {
+  checkoutMissingAt,
+  focusedDirectory,
+  sessionReady,
+} from "../shared/state/sessionContext.ts";
+import { startPage } from "../shared/state/startPage.ts";
+import { type Action, type AppState } from "../shared/state/state.ts";
+import { browserTimers, type RequestTimers } from "../shared/transport/correlatedRequest.ts";
+import { reduce, sessionDelivery } from "./store.ts";
 
 export interface LastDirectory {
   read: () => string | null;
@@ -69,19 +63,6 @@ export interface ClientOptions {
   newSelectionId?: () => string;
   lastDirectory?: LastDirectory;
   timers?: RequestTimers;
-}
-
-export type ClientUpdate = "live" | "immediate";
-
-export interface Client {
-  getState: () => AppState;
-  subscribe: (listener: (update: ClientUpdate) => void) => () => void;
-  start: () => () => void;
-  send: (command: ClientCommand) => SendDisposition;
-  decideTrust: (path: string, trusted: boolean) => void;
-  select: (cwd: string, sessionId: string | null) => void;
-  dispatch: (action: LocalAction) => void;
-  listen: (listener: (message: ServerMessage) => void) => () => void;
 }
 
 export function createClient({

@@ -1,4 +1,4 @@
-import { LAUNCH_ENV } from "../../shared/features/dispatch/dispatch.ts";
+import { LAUNCH_ENV } from "../../shared/session/dispatch.ts";
 
 export function childEnvironment(): NodeJS.ProcessEnv {
   const env = { ...process.env };

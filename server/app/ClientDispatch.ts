@@ -1,16 +1,16 @@
 import { Cause, Effect, Stream } from "effect";
-import type { ClientMessage, ServerMessage } from "../../shared/wire.ts";
-import { SessionStatus } from "../features/dispatch/SessionStatus.ts";
-import { SidebarView } from "../features/navigation/SidebarView.ts";
+import { SessionStatus } from "../../features/dispatch/server/SessionStatus.ts";
+import { SidebarView } from "../../features/navigation/server/SidebarView.ts";
 import {
   type ClientOutput,
   InputNotSent,
   makeClientSessions,
-} from "../features/sessions/ClientSessions.ts";
-import { CreationAttempts } from "../features/sessions/CreationAttempts.ts";
-import { sessionActionPolicy } from "../features/sessions/pi/PiSessions.ts";
-import { SessionHosts, SessionNotCreated } from "../features/sessions/SessionHosts.ts";
-import { WorkspaceCommands } from "../features/workspace/WorkspaceCommands.ts";
+} from "../../features/sessions/server/ClientSessions.ts";
+import { CreationAttempts } from "../../features/sessions/server/CreationAttempts.ts";
+import { sessionActionPolicy } from "../../features/sessions/server/pi/PiSessions.ts";
+import { SessionHosts, SessionNotCreated } from "../../features/sessions/server/SessionHosts.ts";
+import { WorkspaceCommands } from "../../features/workspace/server/WorkspaceCommands.ts";
+import type { ClientMessage, ServerMessage } from "../../shared/wire.ts";
 import { DirectoryFacts } from "../shared/DirectoryFacts.ts";
 import { errorText } from "../shared/ErrorText.ts";
 import { inboundLimits, makeInboundCapacity } from "../shared/InboundCapacity.ts";

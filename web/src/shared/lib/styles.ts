@@ -20,3 +20,5 @@ export const disclosureRow =
 
 export const listRow =
   "flex w-full items-center gap-2 text-left text-sm outline-none hover:bg-fill-hover focus-visible:bg-fill-hover";
+
+export const sidebarRowClassName = "h-8 pointer-coarse:h-11 max-md:h-12";

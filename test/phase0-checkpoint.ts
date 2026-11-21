@@ -4,15 +4,18 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { Deferred, Effect, Fiber, Layer, type Scope, Stream } from "effect";
-import { PiCli, type PiCliConfig } from "../server/features/sessions/pi/PiCli.ts";
+import { PiCli, type PiCliConfig } from "../features/sessions/server/pi/PiCli.ts";
 import {
   PiRequestTimeoutMs,
   type PiSession,
   PiSessions,
   PiSessionsLive,
-} from "../server/features/sessions/pi/PiSessions.ts";
+} from "../features/sessions/server/pi/PiSessions.ts";
+import {
+  createPiCompatibilityFixture,
+  sentinelTool,
+} from "../features/sessions/tests/fixtures/PiCompatibility.ts";
 import type { SessionEvent } from "../shared/wire.ts";
-import { createPiCompatibilityFixture, sentinelTool } from "./fixtures/PiCompatibility.ts";
 
 const evidence = resolve(process.argv[2] ?? "/tmp/piano-phase0-evidence/runtime");
 mkdirSync(evidence, { recursive: true });

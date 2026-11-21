@@ -7,7 +7,7 @@ For storage, backups and browser origins, see [configuration](configuration.md).
 
 Open **Settings** at the bottom of the sidebar, then click **Sign in** next to a provider under
 **Providers**. Start a new session afterwards, because a running session keeps the models it started
-with. For remote sign-in and limits, see [provider sign-in](provider-sign-in.md).
+with. For remote sign-in and limits, see [provider sign-in](../features/providers/README.md).
 
 ## Search sessions, projects and commands
 
@@ -31,23 +31,23 @@ Pi, including idle sessions. It never stops work.
 Click a local file link in a session to read it beside the conversation. Markdown offers
 **Preview / Source**; code, images, audio, video and PDFs use type-aware viewers. **Download**
 saves the file as it is on disk. Click the link again to reread. See
-[ownership and privacy](file-previews.md#ownership-and-privacy).
+[ownership and privacy](../features/workspace/README.md#ownership-and-privacy).
 
 ## Publish an artifact
 
 With Radius signed in, ask **“Create an artifact containing this report.”** The agent publishes it
 privately to Radius and returns a confirmed viewing link. Ask to update or view the same artifact
-on later turns. See [confirmation and failure handling](radius-artifacts.md#confirmation-and-uncertainty).
+on later turns. See [confirmation and failure handling](../features/radius/radius-artifacts.md#confirmation-and-uncertainty).
 
 ## Dispatch work to another session
 
 Ask **“Dispatch this work in a new session.”** The agent starts a fresh, visible session with a
 self-contained brief, returns an **Open session** link, and can wait for its answer. Use separate
-prepared worktrees for concurrent writing tasks. See [session dispatch](session-dispatch.md)
+prepared worktrees for concurrent writing tasks. See [session dispatch](../features/dispatch/README.md)
 or run `node scripts/dispatch-session.ts --help` for the bundled terminal script.
 
 ## Send session events to a webhook
 
 Open **Settings → Webhooks**, click **New webhook**, enter your receiver URL and optional Bearer
 token, and choose the events to send. Use **Test** in the webhook's menu to check delivery. See
-[receiver requirements](webhooks.md).
+[receiver requirements](../features/webhooks/README.md).

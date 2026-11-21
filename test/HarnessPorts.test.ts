@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { Server, type AddressInfo } from "node:net";
 import { test } from "node:test";
-import { freePorts } from "./fixtures/ports.ts";
+import { freePorts } from "./shared/ports.ts";
 
 test("one journey gets distinct, released ports even when the OS reuses closed listeners", async (t) => {
   const listen = Server.prototype.listen;

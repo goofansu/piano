@@ -9,7 +9,7 @@ import { test } from "node:test";
 import * as NodeWS from "@effect/platform-node/NodeWS";
 import { inboundLimits } from "../server/shared/InboundCapacity.ts";
 import { configuredOrigins } from "../server/shared/OriginPolicy.ts";
-import { freePort } from "./fixtures/ports.ts";
+import { freePort } from "./shared/ports.ts";
 
 test("origin configuration fails closed and does not implicitly extend explicit origins", () => {
   assert.deepEqual(

@@ -177,7 +177,7 @@ For fences, Piano keeps:
 - **Highlighter.** The generated `lib/highlighter.tsx` runs Shiki's JavaScript engine on the main
   thread with 13 bundled languages; `lib/file-highlight.ts` already runs Shiki in a worker for
   file previews. Choose deliberately between the generated loader and one shared grammar loader,
-  and measure a long transcript with many fences ([session performance](../session-performance.md)).
+  and measure a long transcript with many fences ([session performance](https://github.com/goofansu/piano/blob/346a64bbb22d9f321e27f771f68b6180e11e3427/docs/session-performance.md)).
 - **Look.** CodeBlock's border, `dark:bg-input/30` and padding differ from `.prose-chat pre`
   (`index.css`). Settle differences in a Piano wrapper or tokens and compare style shots.
 

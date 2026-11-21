@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import * as NodeWS from "@effect/platform-node/NodeWS";
-import { freePort } from "./fixtures/ports.ts";
+import { freePort } from "./shared/ports.ts";
 
 test(
   "INV-11: a message Pi did not produce is redacted at socket egress; the directories it names and the session title it carries are not",

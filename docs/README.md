@@ -8,30 +8,30 @@ Read these in order:
 
 ## Feature inventory
 
-The directory name identifies the owner across the [browser](../web/src/features), [server](../server/features), [wire contracts](../shared/features), and [feature tests](../test/features). A feature has a directory in each runtime that implements it.
+Each feature has a single source root. Open its guide to find its behavior, implementation and checks.
 
 | Directory | What it owns |
 | --- | --- |
-| `projects` | Project index, project home, membership and settings |
-| `navigation` | Browser routes and history, sidebar, session switching and panel layout |
-| `commands` | Command palette, search, shortcuts and contextual actions |
-| `sessions` | Starting and continuing sessions, drafts, attachments, agent questions, transcripts, Pi lifecycle and saved history |
-| `dispatch` | Creating child sessions, waiting for their results and reporting their status |
-| `workspace` | Folder selection and trust checks, Git worktrees, changes, pull requests and file previews |
-| `models` | Model discovery, model and effort selection, and defaults |
-| `sharing` | Confirming and sharing a saved session |
-| `radius` | Radius setup, artifact publication and artifact access |
-| `library` | Skills, prompts and review of agent-proposed edits |
-| `providers` | Provider sign-in, API keys and account management |
-| `mcp` | MCP server setup and authorization |
-| `webhooks` | Webhook configuration, testing and session event delivery |
-| `voice-input` | Microphone setup, recording and transcription into a draft |
-| `data-controls` | Archiving sessions and restoring archived sessions |
-| `settings` | Settings sections and their navigation |
+| [projects](../features/projects/README.md) | Project index, project home, membership and settings |
+| [navigation](../features/navigation/README.md) | Browser routes and history, sidebar, session switching and panel layout |
+| [commands](../features/commands/README.md) | Command palette, search, shortcuts and contextual actions |
+| [sessions](../features/sessions/README.md) | Starting and continuing sessions, drafts, attachments, agent questions, transcripts, Pi lifecycle and saved history |
+| [dispatch](../features/dispatch/README.md) | Creating child sessions, waiting for their results and reporting their status |
+| [workspace](../features/workspace/README.md) | Folder selection and trust checks, Git worktrees, changes, pull requests and file previews |
+| [models](../features/models/README.md) | Model discovery, model and effort selection, and defaults |
+| [sharing](../features/sharing/README.md) | Confirming and sharing a saved session |
+| [radius](../features/radius/README.md) | Radius setup, artifact publication and artifact access |
+| [library](../features/library/README.md) | Skills, prompts and review of agent-proposed edits |
+| [providers](../features/providers/README.md) | Provider sign-in, API keys and account management |
+| [mcp](../features/mcp/README.md) | MCP server setup and authorization |
+| [webhooks](../features/webhooks/README.md) | Webhook configuration, testing and session event delivery |
+| [voice-input](../features/voice-input/README.md) | Microphone setup, recording and transcription into a draft |
+| [data-controls](../features/data-controls/README.md) | Archiving sessions and restoring archived sessions |
+| [settings](../features/settings/README.md) | Settings sections and their navigation |
 
-Pi loads its tool entry points from [extensions](../extensions). The browser and server assemble features in [web/src/app](../web/src/app) and [server/app](../server/app). The HTTP endpoint registry and WebSocket protocol remain in [shared](../shared). Reusable browser controls and transport live in [web/src/shared](../web/src/shared). The shadcn CLI owns [components/ui](../web/src/components/ui). The server shares storage and runtime utilities through [server/shared](../server/shared).
+A feature keeps its browser code in `web/`, server services in `server/`, wire contracts in `contracts/`, Pi extensions in `extension/` and focused tests in `tests/`. Only the directories the feature uses are present.
 
-Keep `web → shared ← server`. Put feature-specific behavior and its tests under its owner. Keep runtime-shared modules independent of application wiring and feature implementations. Use distinct module names within a directory, including when extensions or capitalization differ. The [verification map](../.agents/skills/verify-piano/features/README.md#features) connects the inventory to user journeys.
+The [browser](../web/src/app) and [server](../server/app) compose features. Reusable code lives in [browser shared](../web/src/shared), [server shared](../server/shared) and the [portable protocol](../shared). Oxlint checks runtime boundaries and feature ownership for imports, including type imports and re-exports. The [verification map](../.agents/skills/verify-piano/features/README.md#features) lists the browser journeys.
 
 Changes to these decisions belong in a new or superseding ADR, with the affected invariant IDs
 and verification consequences made explicit. Routine implementation choices remain within the

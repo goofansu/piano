@@ -38,38 +38,37 @@ then labeled bullets pairing each action with an exact command and the observabl
 `Gotchas`. Keep implementation details out; name user paths, handles, required state, commands and
 proof.
 
-In the Features list below, give each feature with an existing `docs/` page one short link to that
-page; keep file maps there, not in the feature files. New or substantially changed features follow
+In the Features list below, link to the owning feature README or a topic in that directory. Keep the implementation map in the feature root. New or substantially changed features follow
 the [feature verification mapping policy](../../../../docs/testing.md#feature-verification-map).
 
 ## Features
 
 - [Start a session](./start-session.md).
-  Docs: [Session creation and recovery](../../../../docs/runtime-ownership.md#developer-navigation-session-creation-and-recovery),
-  [Image attachments](../../../../docs/image-attachments.md).
+  Docs: [Session creation and recovery](../../../../features/sessions/README.md#developer-navigation-session-creation-and-recovery),
+  [Image attachments](../../../../features/sessions/image-attachments.md).
 - [Open and continue a session](./open-session.md).
-  Docs: [Session navigation](../../../../docs/sidebar-session-navigation.md#developer-navigation),
-  [Transcript performance](../../../../docs/session-performance.md),
-  [Radius artifacts](../../../../docs/radius-artifacts.md).
+  Docs: [Session navigation](../../../../features/navigation/README.md#developer-navigation),
+  [Transcript performance](../../../../features/sessions/session-performance.md),
+  [Radius artifacts](../../../../features/radius/radius-artifacts.md).
 - [Share a session](./session-sharing.md).
-  Docs: [Session sharing](../../../../docs/session-sharing.md).
+  Docs: [Session sharing](../../../../features/sharing/README.md).
 - [Projects index](./projects-index.md).
-  Docs: [Projects UX](../../../../docs/project-centered-ux.md).
+  Docs: [Projects UX](../../../../features/projects/project-centered-ux.md).
 - [Project home](./project-home.md).
-  Docs: [Project grouping](../../../../docs/outcome-projects.md).
+  Docs: [Project grouping](../../../../features/projects/README.md).
 - [Session dispatch](./session-dispatch.md).
-  Docs: [Session dispatch](../../../../docs/session-dispatch.md),
-  [Session creation and recovery](../../../../docs/runtime-ownership.md#developer-navigation-session-creation-and-recovery).
+  Docs: [Session dispatch](../../../../features/dispatch/README.md),
+  [Session creation and recovery](../../../../features/sessions/README.md#developer-navigation-session-creation-and-recovery).
 - [Changes and files](./changes-and-files.md).
-  Docs: [File previews](../../../../docs/file-previews.md).
+  Docs: [File previews](../../../../features/workspace/README.md).
 - [Settings › Skills and Prompts](./settings-skills-prompts.md).
-  Docs: [Prompts](../../../../docs/prompts.md).
+  Docs: [Prompts](../../../../features/library/README.md).
 - [Settings › Providers, Webhooks and Preferences](./settings-other.md).
-  Docs: [Provider sign-in](../../../../docs/provider-sign-in.md),
-  [Radius setup](../../../../docs/radius-setup.md), [Webhooks](../../../../docs/webhooks.md).
+  Docs: [Provider sign-in](../../../../features/providers/README.md),
+  [Radius setup](../../../../features/radius/README.md), [Webhooks](../../../../features/webhooks/README.md).
 - [Settings › Data controls](./data-controls.md).
 - [Settings › MCP](./settings-mcp.md).
-  Docs: [MCP setup](../../../../docs/mcp-setup.md).
+  Docs: [MCP setup](../../../../features/mcp/README.md).
 
 ## Coverage boundaries
 

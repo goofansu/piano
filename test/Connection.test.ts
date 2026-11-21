@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { MAX_MESSAGE_BYTES } from "../shared/features/sessions/attachments/attachments.ts";
-import { type ClientMessage, encodeServerMessage, type ServerMessage } from "../shared/wire.ts";
+import { MAX_MESSAGE_BYTES } from "../shared/session/attachments.ts";
+import { openConnection } from "../shared/transport/ws.ts";
 import {
   type DisconnectReason,
-  openConnection,
   type SocketEnvironment,
   type SocketEvents,
-} from "../web/src/shared/transport/ws.ts";
+} from "../shared/transport/ws.ts";
+import { type ClientMessage, encodeServerMessage, type ServerMessage } from "../shared/wire.ts";
 
 interface FakeSocket {
   url: string;

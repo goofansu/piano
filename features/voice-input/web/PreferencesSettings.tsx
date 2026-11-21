@@ -1,0 +1,129 @@
+import { useVoiceInput, voiceInputSettings } from "@features/voice-input/web/useVoiceInput";
+import { useState } from "react";
+import { toast } from "sonner";
+import { Switch } from "@/components/ui/switch";
+import { ApiKeyDialog } from "@/shared/components/ApiKeyDialog";
+import {
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/shared/components/PianoDropdownMenu";
+import { RemovalDialog } from "@/shared/components/RemovalDialog";
+import { ListRow, RowMenu } from "@/shared/components/RowActions";
+import {
+  SettingsList,
+  SettingsLoadState,
+  SettingsSectionFrame,
+} from "@/shared/components/SettingsSectionFrame";
+import { settingsLoadView } from "@/shared/lib/settingsLoadView";
+import { useSetupActions } from "@/shared/lib/useSetupActions";
+
+type KeyEditing = "turn-on" | "replace";
+
+export function PreferencesSettings() {
+  const observed = useVoiceInput();
+  const [editing, setEditing] = useState<KeyEditing>();
+  const actions = useSetupActions<"remove-key">({
+    refresh: () => void voiceInputSettings.refresh(),
+    success: (text) => toast.success(text),
+  });
+  const busy = actions.running !== undefined;
+  const voice = observed.value;
+  const setEnabled = (enabled: boolean) => {
+    if (!voice) return;
+    if (enabled && !voice.hasKey) {
+      setEditing("turn-on");
+      return;
+    }
+    void actions.run({
+      id: "voice-input",
+      run: () => voiceInputSettings.save({ enabled }),
+      done: enabled ? "Voice input turned on" : "Voice input turned off",
+      fallback: "Could not save voice input.",
+    });
+  };
+  return (
+    <SettingsSectionFrame
+      section="preferences"
+      dialogs={
+        <>
+          {editing && voice && (
+            <ApiKeyDialog
+              title="OpenAI API key"
+              description="Voice input sends recordings and session context through Piano to OpenAI."
+              save={(key) =>
+                voiceInputSettings.save({ enabled: editing === "turn-on" || voice.enabled, key })
+              }
+              done={editing === "turn-on" ? "Voice input turned on" : "OpenAI API key saved"}
+              fallback="Could not save API key."
+              close={() => setEditing(undefined)}
+              refresh={() => void voiceInputSettings.refresh()}
+            />
+          )}
+          <RemovalDialog
+            open={actions.confirmation === "remove-key"}
+            title="Remove OpenAI API key?"
+            description="Turns voice input off and deletes the key from Piano, without revoking it at OpenAI."
+            action="Remove key"
+            progress="Removing…"
+            busy={busy}
+            cancel={actions.cancel}
+            confirm={() =>
+              void actions.run({
+                id: "remove-key",
+                run: () => voiceInputSettings.save({ enabled: false, key: null }),
+                done: "OpenAI API key removed",
+                fallback: "Could not remove API key.",
+              })
+            }
+          />
+        </>
+      }
+    >
+      <SettingsLoadState
+        view={settingsLoadView(observed)}
+        noun="preferences"
+        retry={() => void voiceInputSettings.refresh()}
+        skeletonRows={1}
+      >
+        {(voice) => (
+          <SettingsList>
+            <ListRow
+              title="Voice input"
+              titleId="voice-input-title"
+              actions={
+                <span className="flex min-h-8 items-center pointer-coarse:min-h-11">
+                  <Switch
+                    size="sm"
+                    aria-labelledby="voice-input-title"
+                    checked={voice.enabled}
+                    disabled={busy}
+                    onCheckedChange={setEnabled}
+                  />
+                </span>
+              }
+              menu={
+                voice.hasKey && (
+                  <RowMenu label="Voice input actions" disabled={busy}>
+                    <DropdownMenuGroup>
+                      <DropdownMenuItem onClick={() => setEditing("replace")}>
+                        Replace key
+                      </DropdownMenuItem>
+                    </DropdownMenuGroup>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onClick={() => actions.confirm("remove-key")}
+                    >
+                      Remove key
+                    </DropdownMenuItem>
+                  </RowMenu>
+                )
+              }
+            />
+          </SettingsList>
+        )}
+      </SettingsLoadState>
+    </SettingsSectionFrame>
+  );
+}

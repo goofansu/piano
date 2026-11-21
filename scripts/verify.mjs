@@ -13,9 +13,9 @@ const cwd = resolve(import.meta.dirname, "..");
 if (process.argv.includes("--help")) {
   console.log(`Usage: npm run verify -- [evidence-directory]
 Runs npm run typecheck, npm run lint, npm test. No browser or model calls.
-Reports lines changed under test/ since origin/main, uncommitted and new files included.
+Reports lines changed in the test directories since origin/main, uncommitted and new files included.
 Fresh checkout: npm ci (see docs/development.md).
-Focused: node --test --import ./test/setup.ts test/<path>.test.ts
+Focused: node --test --import ./test/setup.ts features/<feature>/tests/<name>.test.ts
 Browser: npm run test:browser (or node test/browser/<journey>.mjs <evidence-directory>)
 Policy, prerequisites and manual scratch checks: docs/testing.md, .agents/skills/verify-piano/SKILL.md
 Evidence defaults to .scratch/verify/<timestamp>-<pid>; a pass covers only this baseline.`);
@@ -159,7 +159,7 @@ Evidence defaults to .scratch/verify/<timestamp>-<pid>; a pass covers only this 
   console.log(
     lines.unavailable
       ? `Test lines since ${lines.base}: unavailable — ${lines.unavailable}`
-      : `Test lines since ${lines.base}: +${lines.added} −${lines.removed} in ${lines.files} file(s) under test/.`,
+      : `Test lines since ${lines.base}: +${lines.added} −${lines.removed} in ${lines.files} file(s) in the test directories.`,
   );
   console.log(
     "Pass means command exit 0; skipped subtests are not coverage (see logs). Browser journeys and acceptance claims are not evaluated here.",

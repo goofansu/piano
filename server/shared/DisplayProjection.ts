@@ -1,5 +1,5 @@
 import { stripVTControlCharacters } from "node:util";
-import { readProposal } from "../../shared/features/library/library.ts";
+import { readProposal } from "../../shared/session/libraryTools.ts";
 import type {
   Dialog,
   ServerMessage,

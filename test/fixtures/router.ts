@@ -5,11 +5,11 @@ import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { HttpRouter } from "effect/http";
+import type { ProviderLogin } from "../../features/providers/server/ProviderLogin.ts";
+import { PiCli } from "../../features/sessions/server/pi/PiCli.ts";
+import type { SessionHosts } from "../../features/sessions/server/SessionHosts.ts";
 import { PianoAdaptersLive, PianoServicesLive } from "../../server/app/PianoServices.ts";
 import { AppRouter } from "../../server/app/Router.ts";
-import type { ProviderLogin } from "../../server/features/providers/ProviderLogin.ts";
-import { PiCli } from "../../server/features/sessions/pi/PiCli.ts";
-import type { SessionHosts } from "../../server/features/sessions/SessionHosts.ts";
 import { AllowedOrigins } from "../../server/shared/OriginPolicy.ts";
 import {
   Registry,

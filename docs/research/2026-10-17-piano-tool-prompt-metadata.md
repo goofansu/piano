@@ -49,7 +49,7 @@ Important boundaries:
 ## Piano audit
 
 Current definitions: [extensions/piano-sessions/index.ts](../../extensions/piano-sessions/index.ts).
-Behavioral reference: [session dispatch](../session-dispatch.md).
+Behavioral reference: [session dispatch](https://github.com/goofansu/piano/blob/346a64bbb22d9f321e27f771f68b6180e11e3427/docs/session-dispatch.md).
 
 | Tool | Current configuration | Recommendation |
 | --- | --- | --- |

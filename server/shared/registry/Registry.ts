@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { Context, Data, Effect, Layer, Ref, Schema, type Scope, Semaphore } from "effect";
 import { cutText } from "../../../shared/cutText.ts";
-import type { WebhookEvent } from "../../../shared/features/webhooks/webhooks.ts";
+import type { WebhookEvent } from "../../../shared/session/webhookEvents.ts";
 import {
   ChangesScope,
   Project,

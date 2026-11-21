@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { type Client, type Notify } from "../shared/state/client.ts";
+import type { AppState } from "../shared/state/state.ts";
 import { openConnection } from "../shared/transport/ws.ts";
-import { type Client, type ClientOptions, createClient, type Notify } from "./client.ts";
-import type { AppState } from "./store.ts";
+import { type ClientOptions, createClient } from "./client.ts";
 
 export function useClient(
   initial: () => AppState,

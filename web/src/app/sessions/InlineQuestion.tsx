@@ -1,0 +1,35 @@
+import { LibraryProposalCard } from "@features/library/web/LibraryProposal";
+import { Question } from "@features/sessions/web/dialogs/InlineQuestion";
+import type { PendingDialogs } from "@features/sessions/web/dialogs/piDialogs";
+import { readProposal } from "@shared/session/libraryTools";
+import type { Client } from "@/shared/state/client";
+export function InlineQuestion({
+  pending: { head, surface, more, attachment, session },
+  send,
+}: {
+  pending: PendingDialogs;
+  send: Client["send"];
+}) {
+  if (!head || surface !== "inline") return null;
+  const proposal = readProposal(head);
+  if (proposal)
+    return (
+      <LibraryProposalCard
+        key={`${head.generation}/${head.id}`}
+        dialog={head}
+        proposal={proposal}
+        attachment={attachment}
+        send={send}
+      />
+    );
+  return (
+    <Question
+      key={`${head.generation}/${head.id}`}
+      dialog={head}
+      more={more}
+      attachment={attachment}
+      session={session}
+      send={send}
+    />
+  );
+}

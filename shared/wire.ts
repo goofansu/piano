@@ -1,5 +1,4 @@
 import { Schema, type Types } from "effect";
-import { DISPOSITIONS } from "./features/dispatch/dispatch.ts";
 import {
   base64Bytes,
   IMAGE_TYPES,
@@ -7,7 +6,8 @@ import {
   MAX_ATTACHMENT_NAME_LENGTH,
   MAX_ATTACHMENTS,
   MAX_IMAGE_BYTES,
-} from "./features/sessions/attachments/attachments.ts";
+} from "./session/attachments.ts";
+import { DISPOSITIONS } from "./session/dispatch.ts";
 
 export const Attachment = Schema.Struct({
   kind: Schema.Literal("image"),

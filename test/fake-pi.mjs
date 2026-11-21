@@ -763,7 +763,7 @@ function handle(cmd) {
           ? ["Use api_key: staging-111 for $1", "Use api_key: production-999 for $1"]
           : ["Deploy $1", "Deploy $1 to staging"];
         const file = (body) => `---\ndescription: "Deploy"\n---\n${body}\n`;
-        import("../shared/features/library/library.ts").then(({ proposalDialog }) =>
+        import("../features/library/contracts/library.ts").then(({ proposalDialog }) =>
           out({
             type: "extension_ui_request",
             id: "p1",

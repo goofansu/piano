@@ -1,7 +1,0 @@
-import type { AppState, Page } from "../../../app/store.ts";
-
-export type StartPage = Extract<Page, { kind: "new" | "project" }>;
-
-export function startPage(view: AppState["view"]): StartPage | undefined {
-  return view.kind === "new" || view.kind === "project" ? view : undefined;
-}

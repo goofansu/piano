@@ -34,11 +34,21 @@ test("oxlint enforces layer edges, including types, aliases and a shared bridge"
     }
     const config = JSON.parse(readFileSync(join(root, "web/tsconfig.app.json"), "utf8"));
     config.compilerOptions.paths["@backend/*"] = ["../server/*"];
+    config.compilerOptions.paths["@features/*"] = ["../features/*"];
     put("web/tsconfig.app.json", JSON.stringify(config));
     symlinkSync(join(ROOT, "node_modules"), join(root, "node_modules"), "dir");
     put("server/Thing.ts", "export type Thing = string;\n");
     put("shared/Thing.ts", "export type Thing = string;\n");
     put("web/src/Thing.ts", "export type Thing = string;\n");
+    for (const owner of ["sessions", "navigation"])
+      for (const runtime of ["web", "server", "extension", "contracts", "tests"])
+        put(`features/${owner}/${runtime}/Thing.ts`, "export type Thing = string;\n");
+    mkdirSync(join(root, "features/sessions/node_modules"), { recursive: true });
+    symlinkSync(
+      join(root, "features/navigation"),
+      join(root, "features/sessions/node_modules/navigation-fixture"),
+      "dir",
+    );
     const lint = (files: string[]) =>
       spawnSync(
         join(ROOT, "node_modules/.bin/oxlint"),
@@ -50,21 +60,127 @@ test("oxlint enforces layer edges, including types, aliases and a shared bridge"
       ["server/check.ts", 'export type { Thing } from "@shared/Thing";', true],
       [
         "server/shared/check.ts",
-        'export type { Thing } from "../features/sessions/Thing.ts";',
+        'export type { Thing } from "../../features/sessions/server/Thing.ts";',
         false,
       ],
       ["server/shared/check.ts", 'export type { Thing } from "../app/Thing.ts";', false],
       [
-        "server/features/sessions/check.ts",
-        'export type { Thing } from "../../shared/Thing.ts";',
-        true,
+        "web/src/shared/check.ts",
+        'export type { Thing } from "@features/sessions/web/Thing";',
+        false,
       ],
-      ["web/src/shared/check.ts", 'export type { Thing } from "@/features/sessions/Thing";', false],
       ["web/src/shared/check.ts", 'export type { Thing } from "@/app/Thing";', false],
       [
-        "web/src/shared/check.ts",
-        'export type { Thing } from "@shared/features/sessions/Thing";',
+        "shared/check.ts",
+        'export type { Thing } from "../features/sessions/contracts/Thing.ts";',
+        false,
+      ],
+      [
+        "server/app/check.ts",
+        'export type { Thing } from "../../features/sessions/server/Thing.ts";',
         true,
+      ],
+      ["web/src/app/check.ts", 'export type { Thing } from "@features/sessions/web/Thing";', true],
+      [
+        "features/sessions/web/check.ts",
+        'export type { Thing } from "../contracts/Thing.ts";',
+        true,
+      ],
+      [
+        "features/sessions/web/check.ts",
+        'export type { Thing } from "@features/sessions/server/Thing";',
+        false,
+      ],
+      [
+        "features/sessions/web/check.ts",
+        'export type { Thing } from "@features/navigation/web/Thing";',
+        false,
+      ],
+      [
+        "features/sessions/web/check.ts",
+        'export type T = import("@features/navigation/contracts/Thing").Thing;',
+        false,
+      ],
+      ["features/sessions/web/check.ts", 'export type { Thing } from "@/app/Thing";', false],
+      [
+        "features/sessions/server/check.ts",
+        'export type { Thing } from "../../../server/shared/Thing.ts";',
+        true,
+      ],
+      [
+        "features/sessions/server/check.ts",
+        "export const load = () => import(`../../navigation/server/Thing.ts`);",
+        false,
+      ],
+      ["features/sessions/server/check.ts", 'export * from "../tests/Thing.ts";', false],
+      ["features/sessions/contracts/check.ts", 'export * from "node:fs";', false],
+      ["features/sessions/contracts/check.ts", 'export * from "../server/Thing.ts";', false],
+      [
+        "features/sessions/extension/check.ts",
+        'export type { Thing } from "../../../server/shared/Thing.ts";',
+        true,
+      ],
+      [
+        "features/sessions/extension/check.ts",
+        'export const load = () => require("../../navigation/extension/Thing.ts");',
+        false,
+      ],
+      ["features/sessions/tests/check.ts", 'export * from "../server/Thing.ts";', true],
+      ["features/sessions/tests/check.ts", 'export * from "../../../test/shared/Thing.ts";', true],
+      [
+        "features/sessions/tests/check.ts",
+        'export * from "../../navigation/contracts/Thing.ts";',
+        false,
+      ],
+      ["features/sessions/tests/check.ts", 'export * from "../../../server/app/Thing.ts";', false],
+      ["test/shared/check.ts", 'export * from "../../features/sessions/tests/Thing.ts";', false],
+      ["features/sessions/web/check.ts", 'export * from "node:fs";', false],
+      ["features/sessions/extension/check.ts", 'export * from "../server/Thing.ts";', true],
+      [
+        "features/sessions/extension/check.ts",
+        'export * from "../../navigation/server/Thing.ts";',
+        false,
+      ],
+      [
+        "features/sessions/server/check.ts",
+        'export type { Thing } from "@features/navigation/contracts/Thing";',
+        false,
+      ],
+      ["features/sessions/tests/check.ts", 'export type { Thing } from "@/app/Thing";', false],
+      [
+        "features/sessions/server/check.ts",
+        'export type { Thing } from "navigation-fixture/server/Thing.ts";',
+        false,
+      ],
+      [
+        "features/sessions/server/check.ts",
+        'export const location = import.meta.resolve("../../navigation/server/Thing.ts");',
+        false,
+      ],
+      [
+        "features/sessions/web/check.ts",
+        'export const worker = new Worker(new URL("../../navigation/web/Thing.ts", import.meta.url));',
+        false,
+      ],
+      [
+        "features/sessions/web/check.ts",
+        'export const own = import.meta.glob(["./*.ts", "!./check.ts"]);',
+        true,
+      ],
+      [
+        "features/sessions/web/check.ts",
+        'export const peer = import.meta.glob("@features/navigation/web/**/*.ts");',
+        false,
+      ],
+      [
+        "features/sessions/web/check.ts",
+        'export const peers = import.meta.glob("@features/*/web/*.ts");',
+        false,
+      ],
+      [
+        "features/sessions/web/check.ts",
+        'export type T = import("@features/navigation/web/Thing?worker").Thing;',
+        false,
       ],
       ["server/check.ts", "export const load = (path: string) => import(path);", false],
       [

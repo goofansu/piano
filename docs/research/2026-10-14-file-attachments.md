@@ -27,7 +27,7 @@ current Piano support.
 
 ## What exists today
 
-- Piano's [attachment policy](../image-attachments.md) allows PNG/JPEG/GIF/WebP,
+- Piano's [attachment policy](https://github.com/goofansu/piano/blob/346a64bbb22d9f321e27f771f68b6180e11e3427/docs/image-attachments.md) allows PNG/JPEG/GIF/WebP,
   four images, 10 MiB each and 20 MiB combined. These are original-upload limits,
   not provider limits. [Validation](https://github.com/goofansu/piano/blob/bf0116bc8c2800e229d22c16170f88ce006f5703/shared/attachments.ts) recognizes raster
   signatures; [wire types](../../shared/wire.ts) admit only image attachments.
@@ -47,7 +47,7 @@ current Piano support.
 - RPC `clear_queue` returns text only. At the research baseline,
   [PiSessions](https://github.com/goofansu/piano/blob/bf0116bc8c2800e229d22c16170f88ce006f5703/server/PiSessions.ts) rejected image-bearing submissions while Pi
   was working. Piano now allows queued images with explicitly text-only restoration
-  (see [attachment policy](../image-attachments.md)); this does not add PDF/video support.
+  (see [attachment policy](https://github.com/goofansu/piano/blob/346a64bbb22d9f321e27f771f68b6180e11e3427/docs/image-attachments.md)); this does not add PDF/video support.
   Text converted entirely into the message can use text queue semantics, but restoring
   a file chip would need separate, durable attachment identity. [Source][pi-commands].
 

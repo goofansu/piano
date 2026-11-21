@@ -1,16 +1,16 @@
-import { saveDefaults } from "../features/models/modelApi.ts";
+import { saveDefaults } from "../../../features/models/web/modelApi.ts";
 import {
   browserCatalogStorage,
   type CatalogStorage,
   createModelCatalogs,
   type ModelCatalogs,
-} from "../features/models/modelCatalogs.ts";
-import { createDrafts, type Drafts } from "../features/sessions/composer/messageDraft.ts";
+} from "../../../features/models/web/modelCatalogs.ts";
+import { createDrafts, type Drafts } from "../../../features/sessions/web/composer/messageDraft.ts";
 import {
   createQuestionReplies,
   type QuestionReplies,
-} from "../features/sessions/dialogs/piDialogs.ts";
-import type { Notify } from "./client.ts";
+} from "../../../features/sessions/web/dialogs/piDialogs.ts";
+import type { Notify } from "../shared/state/client.ts";
 
 export interface PageStores {
   drafts: Drafts;

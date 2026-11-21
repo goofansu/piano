@@ -190,7 +190,7 @@ for this note; runtime and browser verification remain outstanding.
 - **L2:** [InlineQuestion](https://github.com/goofansu/piano/blob/0865c849befd2021490679f96a8dee58c84ac857/web/src/components/InlineQuestion.tsx),
   [answer controller](https://github.com/goofansu/piano/blob/0865c849befd2021490679f96a8dee58c84ac857/web/src/lib/useDialogAnswer.ts), and [PR #354][pr].
 - **L3:** [SessionDialogs](https://github.com/goofansu/piano/blob/0865c849befd2021490679f96a8dee58c84ac857/server/SessionDialogs.ts),
-  [PiSessions](https://github.com/goofansu/piano/blob/0865c849befd2021490679f96a8dee58c84ac857/server/PiSessions.ts), and [runtime ownership](../runtime-ownership.md).
+  [PiSessions](https://github.com/goofansu/piano/blob/0865c849befd2021490679f96a8dee58c84ac857/server/PiSessions.ts), and [runtime ownership](https://github.com/goofansu/piano/blob/346a64bbb22d9f321e27f771f68b6180e11e3427/docs/runtime-ownership.md).
 - **L4:** [Dialog/DialogResolution wire contracts](../../shared/wire.ts).
 - **L5:** [AnsweredQuestion](https://github.com/goofansu/piano/blob/0865c849befd2021490679f96a8dee58c84ac857/web/src/components/AnsweredQuestion.tsx).
 - **L6:** [Bundled extension loading](https://github.com/goofansu/piano/blob/0865c849befd2021490679f96a8dee58c84ac857/server/PiCli.ts).

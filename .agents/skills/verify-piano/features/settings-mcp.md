@@ -19,7 +19,7 @@ command fixture and refused URLs below stay local.
     ab find role textbox fill --name "Name" --exact verify-command;
     ab find role radio click --name "Command" --exact;
     ab find role textbox fill --name "Command" --exact node;
-    ab find role textbox fill --name "Arguments One per line" --exact "$(printf '%s\n%s' "$ROOT/test/fixtures/phase0-mcp.mjs" "$RUN/mcp-command.log")"`.
+    ab find role textbox fill --name "Arguments One per line" --exact "$(printf '%s\n%s' "$ROOT/features/sessions/tests/fixtures/phase0-mcp.mjs" "$RUN/mcp-command.log")"`.
     Capture `04-command-draft`, then `ab find role button click --name "Add MCP server" --exact;
     ab wait '[aria-label="MCP verify-command actions"]'`.
   - Result: toast `MCP server added`, Connected row, and `verify-command` in

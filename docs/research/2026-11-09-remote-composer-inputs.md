@@ -60,7 +60,7 @@ An implementation must amend that boundary decision, not quietly widen it. Prese
 | Transcript → browser | PiRecords projects image blocks to `/api/image-previews/<sha256>`. `ImagePreviews` is a **64 MiB** disposable byte cache, repopulated from Pi history; saved-history workers return preview bytes to the backend. Router serves image bytes with `private, no-store` and `nosniff`, or 404 after eviction. The cache currently has no session-membership binding. [C11], [C23], [C30], [C31] |
 | Remote thumbnail/full image | `MessageAttachments` hides the whole group remotely. Removing that guard alone would fetch the **main's** root-relative image URL. Neither `peerApiPath` nor the gateway HTTP allowlist accepts image reads. Both the thumbnail and its Open attached image link need a machine-owned URL. Workspace-file links remain independently disabled. [C7], [C19], [C22] |
 
-The accepted [image policy](../image-attachments.md) is PNG/JPEG/WebP/GIF, **ten images,
+The accepted [image policy](https://github.com/goofansu/piano/blob/346a64bbb22d9f321e27f771f68b6180e11e3427/docs/image-attachments.md) is PNG/JPEG/WebP/GIF, **ten images,
 10 MiB each, 50 MiB total original bytes**; all limits apply, including exact boundaries.
 Base64 is about 66.67 MiB before JSON. No SVG, HEIC, PDF, text, audio or arbitrary binary
 kind is accepted by the image wire type. Valid raster signatures are not proof of successful

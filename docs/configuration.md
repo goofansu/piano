@@ -6,16 +6,16 @@ Read where they are used: `grep -rn "process\.env\." server scripts web/vite.con
 
 ## Piano's extensions
 
-`server/features/sessions/pi/PiCli.ts` loads the extensions under `extensions/` by absolute path from the Piano
+`server/app/PiLaunch.ts` registers each bundled feature’s Pi extension by absolute path from the Piano
 installation, before the session arguments, so a repository cannot supply or shadow them and a
 `-e` in `PIANO_PI_ARGS` adds an extension instead of replacing Piano's.
 
 ## Session dispatch
 
-`server/features/dispatch/SessionEndpoint.ts` gives each Pi child `PIANO_SESSION_WS_URL` and
+`features/dispatch/server/SessionEndpoint.ts` gives each Pi child `PIANO_SESSION_WS_URL` and
 `PIANO_SESSION_ORIGIN`. The origin is chosen from the configured set, never added to it, so
 starting a child cannot widen the [origin policy](#browser-origins). See
-[session dispatch](session-dispatch.md).
+[session dispatch](../features/dispatch/README.md).
 
 ## Browser origins
 

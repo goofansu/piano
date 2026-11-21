@@ -15,7 +15,7 @@ npm run build
 npm start
 ```
 
-Open <http://127.0.0.1:7070>. [Sign in to a model provider](docs/provider-sign-in.md) in
+Open <http://127.0.0.1:7070>. [Sign in to a model provider](features/providers/README.md) in
 **Settings → Providers**, or reuse existing Pi credentials in `~/.pi/agent`.
 Then start a new session.
 

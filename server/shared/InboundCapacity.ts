@@ -1,4 +1,4 @@
-import { MAX_MESSAGE_BYTES } from "../../shared/features/sessions/attachments/attachments.ts";
+import { MAX_MESSAGE_BYTES } from "../../shared/session/attachments.ts";
 
 const MiB = 1024 * 1024;
 

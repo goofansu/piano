@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { FilePreview } from "../shared/features/workspace/files/files.ts";
+import type { FilePreview } from "../shared/workspace/files.ts";
 import { markdownImageLoader } from "../web/src/shared/markdown/markdownImageLoader.ts";
 
 const MiB = 1024 * 1024;

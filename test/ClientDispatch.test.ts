@@ -5,22 +5,25 @@ import { join } from "node:path";
 import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Deferred, Effect, Fiber, Layer, Queue, type Scope } from "effect";
+import { type SessionStatus } from "../features/dispatch/server/SessionStatus.ts";
+import { createModelCatalogs } from "../features/models/web/modelCatalogs.ts";
+import { SidebarView } from "../features/navigation/server/SidebarView.ts";
+import type { CreationAttempts } from "../features/sessions/server/CreationAttempts.ts";
+import { PiCli } from "../features/sessions/server/pi/PiCli.ts";
+import { SessionHosts } from "../features/sessions/server/SessionHosts.ts";
+import { messageCommand } from "../features/sessions/web/composer/composerControl.ts";
+import { createDrafts, EMPTY_DRAFT } from "../features/sessions/web/composer/messageDraft.ts";
+import { sessionActivity, sessionPane } from "../features/sessions/web/sessionScreen.ts";
+import { WorkspaceChangesLive } from "../features/workspace/server/changes/WorkspaceChanges.ts";
+import { GitHubPullRequestsLive } from "../features/workspace/server/pull-requests/GitHubPullRequests.ts";
+import type { WorkspaceCommands } from "../features/workspace/server/WorkspaceCommands.ts";
 import { type ClientRequest, makeClientDispatch } from "../server/app/ClientDispatch.ts";
+import { SessionStatusLive } from "../server/app/FeatureServices.ts";
 import { PianoCoreLive } from "../server/app/PianoServices.ts";
-import {
-  type SessionStatus,
-  SessionStatusLive,
-} from "../server/features/dispatch/SessionStatus.ts";
-import { SidebarView } from "../server/features/navigation/SidebarView.ts";
-import type { CreationAttempts } from "../server/features/sessions/CreationAttempts.ts";
-import { PiCli } from "../server/features/sessions/pi/PiCli.ts";
-import { SessionHosts } from "../server/features/sessions/SessionHosts.ts";
-import { WorkspaceChangesLive } from "../server/features/workspace/changes/WorkspaceChanges.ts";
-import { GitHubPullRequestsLive } from "../server/features/workspace/pull-requests/GitHubPullRequests.ts";
-import type { WorkspaceCommands } from "../server/features/workspace/WorkspaceCommands.ts";
 import { DirectoryFacts } from "../server/shared/DirectoryFacts.ts";
 import { inboundLimits } from "../server/shared/InboundCapacity.ts";
 import { Registry, RegistryDatabasePath } from "../server/shared/registry/Registry.ts";
+import type { ConnectionHandlers } from "../shared/transport/ws.ts";
 import type {
   ClientMessage,
   Dialog,
@@ -29,16 +32,8 @@ import type {
   WorktreeDiscovery,
 } from "../shared/wire.ts";
 import { createClient } from "../web/src/app/client.ts";
-import { initialState } from "../web/src/app/store.ts";
-import { createModelCatalogs } from "../web/src/features/models/modelCatalogs.ts";
-import { messageCommand } from "../web/src/features/sessions/composer/composerControl.ts";
-import {
-  createDrafts,
-  EMPTY_DRAFT,
-  sessionDraftKey,
-} from "../web/src/features/sessions/composer/messageDraft.ts";
-import { sessionActivity, sessionPane } from "../web/src/features/sessions/sessionContext.ts";
-import type { ConnectionHandlers } from "../web/src/shared/transport/ws.ts";
+import { sessionDraftKey } from "../web/src/shared/state/draftKey.ts";
+import { initialState } from "../web/src/shared/state/state.ts";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "piano-client-dispatch-")));
 const cwd = join(root, "checkout");

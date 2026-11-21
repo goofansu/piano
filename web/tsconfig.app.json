@@ -19,8 +19,9 @@
     "noFallthroughCasesInSwitch": true,
     "paths": {
       "@/*": ["./src/*"],
+      "@features/*": ["../features/*"],
       "@shared/*": ["../shared/*"]
     }
   },
-  "include": ["src", "../shared"]
+  "include": ["src", "../shared", "../features/*/web/**/*", "../features/*/contracts/**/*"]
 }

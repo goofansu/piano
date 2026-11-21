@@ -13,7 +13,7 @@ import {
   loadMcpConfig,
   removeMcpServerConfig,
 } from "../../node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/config.js";
-import type { McpField } from "../../shared/features/mcp/mcp.ts";
+import type { McpField } from "../../shared/mcpFields.ts";
 import { DirectoryFacts } from "./DirectoryFacts.ts";
 
 export interface McpCatalogEntry {

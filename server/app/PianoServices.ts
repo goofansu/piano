@@ -1,34 +1,38 @@
-import { Layer } from "effect";
-import { SessionStatusLive } from "../features/dispatch/SessionStatus.ts";
-import { PromptsLive } from "../features/library/Prompts.ts";
-import { UserSkillsLive } from "../features/library/UserSkills.ts";
-import { McpSetupLive } from "../features/mcp/McpSetup.ts";
-import { PiSettingsLive } from "../features/models/PiSettings.ts";
-import { SidebarViewLive, type SidebarViewOptions } from "../features/navigation/SidebarView.ts";
-import { ProviderLoginLive } from "../features/providers/ProviderLogin.ts";
-import { RadiusSetupLive } from "../features/radius/RadiusSetup.ts";
-import { CreationAttemptsLive } from "../features/sessions/CreationAttempts.ts";
-import { PiSessionsLive } from "../features/sessions/pi/PiSessions.ts";
-import { SessionHostsLive } from "../features/sessions/SessionHosts.ts";
-import { SessionReferencesLive } from "../features/sessions/SessionReferences.ts";
-import { SessionSharingLive } from "../features/sharing/SessionSharing.ts";
-import { VoiceInputLive } from "../features/voice-input/VoiceInput.ts";
-import { WebhooksLive } from "../features/webhooks/Webhooks.ts";
-import { SessionChangesLive } from "../features/workspace/changes/SessionChanges.ts";
-import { WorkspaceChangesLive } from "../features/workspace/changes/WorkspaceChanges.ts";
-import { DirectoryFactsLive } from "../features/workspace/DirectoryFactsLive.ts";
-import { GitHubPullRequestsLive } from "../features/workspace/pull-requests/GitHubPullRequests.ts";
-import { SessionPullRequestsLive } from "../features/workspace/pull-requests/SessionPullRequests.ts";
-import { WorkspaceCommandsLive } from "../features/workspace/WorkspaceCommands.ts";
-import { FolderWorktreesLive } from "../features/workspace/worktrees/FolderWorktrees.ts";
+import { Effect, Layer } from "effect";
+import { PromptsLive } from "../../features/library/server/Prompts.ts";
+import { UserSkillsLive } from "../../features/library/server/UserSkills.ts";
+import { McpSetupLive } from "../../features/mcp/server/McpSetup.ts";
+import { PiSettingsLive } from "../../features/models/server/PiSettings.ts";
+import { type SidebarViewOptions } from "../../features/navigation/server/SidebarView.ts";
+import { ProviderLoginLive } from "../../features/providers/server/ProviderLogin.ts";
+import { RadiusSetupLive } from "../../features/radius/server/RadiusSetup.ts";
+import { CreationAttemptsLive } from "../../features/sessions/server/CreationAttempts.ts";
+import { PiSessionsLive } from "../../features/sessions/server/pi/PiSessions.ts";
+import { SessionHostsLive } from "../../features/sessions/server/SessionHosts.ts";
+import { SessionReferencesLive } from "../../features/sessions/server/SessionReferences.ts";
+import { VoiceInputLive } from "../../features/voice-input/server/VoiceInput.ts";
+import { Webhooks, WebhooksLive } from "../../features/webhooks/server/Webhooks.ts";
+import { SessionChangesLive } from "../../features/workspace/server/changes/SessionChanges.ts";
+import { WorkspaceChangesLive } from "../../features/workspace/server/changes/WorkspaceChanges.ts";
+import { GitHubPullRequestsLive } from "../../features/workspace/server/pull-requests/GitHubPullRequests.ts";
+import { SessionPullRequestsLive } from "../../features/workspace/server/pull-requests/SessionPullRequests.ts";
+import { WorkspaceCommandsLive } from "../../features/workspace/server/WorkspaceCommands.ts";
+import { FolderWorktreesLive } from "../../features/workspace/server/worktrees/FolderWorktrees.ts";
 import { RegistryLive } from "../shared/registry/Registry.ts";
+import { SessionStatusLive } from "./FeatureServices.ts";
+import { SidebarViewLive } from "./FeatureServices.ts";
+import { SessionSharingLive } from "./FeatureServices.ts";
+import { DirectoryFactsLive } from "./FeatureServices.ts";
 
 export interface PianoServicesOptions extends SidebarViewOptions {
   readonly idleMs: number;
 }
 
 export const SessionServicesLive = (options: { idleMs: number }) =>
-  SessionHostsLive(options).pipe(
+  SessionHostsLive(
+    options,
+    Effect.map(Webhooks, (hooks) => hooks.observe),
+  ).pipe(
     Layer.provideMerge(SessionReferencesLive),
     Layer.provideMerge(WebhooksLive),
     Layer.provideMerge(FolderWorktreesLive),

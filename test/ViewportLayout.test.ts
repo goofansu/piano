@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   browserSidebarEnvironment,
   createSidebarLayout,
-} from "../web/src/features/navigation/sidebar/sidebarLayout.ts";
+} from "../features/navigation/web/sidebar/sidebarLayout.ts";
 import { useNarrowViewport } from "../web/src/shared/lib/useNarrowViewport.ts";
 import { isWideViewport, subscribeViewport } from "../web/src/shared/lib/viewportLayout.ts";
 

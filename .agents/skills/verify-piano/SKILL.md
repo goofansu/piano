@@ -161,7 +161,7 @@ browser.
 - Fake Pi writes no history: a session started on it is empty again after a backend restart.
   Seeded sessions keep their history.
 - A detached Vite stops picking up edits after a while. If the UI shows old markup, compare
-  `curl "$WEB_URL/src/features/projects/ProjectHome.tsx"` with the same URL plus `?t=1`; when they differ,
+  `curl "$WEB_URL/@fs$PWD/features/projects/web/ProjectHome.tsx"` with the same URL plus `?t=1`; when they differ,
   relaunch (cleanup, launch). A new browser session does not help.
 - One backend per database: never point two launches, or the user's Piano, at the same `DB`.
 - The origin check is not a login. Scripts must send `Origin: $ORIGIN` to change state; a 403 means

@@ -1,0 +1,638 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import type { SendDisposition } from "../../../shared/transport/ws.ts";
+import {
+  type ClientCommand,
+  decodeClientMessage,
+  type FolderView,
+  type Project,
+  PROJECT_NAME_MAX,
+  SESSION_TITLE_MAX,
+  type SessionReference,
+  type SessionState,
+} from "../../../shared/wire.ts";
+import { sessionReference } from "../../../test/shared/sessionReference.ts";
+import {
+  type AppState,
+  initialState,
+  type SessionView,
+} from "../../../web/src/shared/state/state.ts";
+import { answerForm, confirmation, createCommandForms } from "../web/commandForms.ts";
+import type { CommandForm } from "../web/commands.ts";
+import { type SessionTarget, sessionCommands } from "../web/sessionCommands.ts";
+
+const selected = { cwd: "/repo", sessionId: "s1", title: "Selected" };
+const other = { cwd: "/repo", sessionId: "s2", title: "Other" };
+const session: SessionView = {
+  cwd: "/repo",
+  sessionId: "s1",
+  hosted: true,
+  cursor: null,
+  state: { sessionId: "s1" } as SessionState,
+  messages: [],
+  dialogs: [],
+};
+const online: AppState = {
+  ...initialState,
+  connected: true,
+  selectionId: "sel",
+  view: { kind: "session" },
+  session,
+  sessionReferences: [sessionReference("/repo", "s1"), sessionReference("/repo", "s2")],
+};
+const offline: AppState = { ...online, connected: false };
+const resyncing: AppState = { ...online, resync: true };
+const launch: Project = { id: "p1", name: "Launch" };
+const repoFolder: FolderView = {
+  path: "/repo",
+  name: "repo",
+  worktrees: [
+    {
+      workspace: { id: "ws:/repo", folder: "/repo", path: "/repo" },
+      trust: { required: false, trusted: false },
+      branch: "main",
+      path: "/repo",
+      root: true,
+      status: "current",
+    },
+  ],
+  discovery: { status: "ready", observedAt: "", currentPath: "/repo", worktrees: [] },
+};
+const newId = () => "new-id";
+const withWorkspace: AppState = {
+  ...online,
+  workspaces: [{ id: "ws:/repo", folder: "/repo", path: "/repo" }],
+};
+
+const rename = (target: SessionTarget = other): CommandForm => ({ kind: "rename-session", target });
+const del = (target: SessionTarget = other): CommandForm => ({ kind: "delete-session", target });
+const archive = (target: SessionTarget = other): CommandForm => ({
+  kind: "archive-session",
+  target,
+});
+const closeFolder: CommandForm = { kind: "close-folder", folder: { path: "/repo", name: "repo" } };
+const deleteProject: CommandForm = { kind: "delete-project", project: launch };
+
+test("rename sends the trimmed new title, and refuses an empty or unchanged one", () => {
+  assert.deepEqual(answerForm(online, rename(), "  Renamed  "), {
+    allowed: true,
+    command: { _tag: "rename_session", cwd: "/repo", sessionId: "s2", title: "Renamed" },
+  });
+  for (const title of ["Other", " Other ", "   ", ""])
+    assert.deepEqual(answerForm(online, rename(), title), { allowed: false }, title);
+  assert.equal(answerForm(online, rename({ cwd: "/repo", sessionId: "s2" }), "").allowed, false);
+});
+
+test("a form answered after the connection drops is refused", () => {
+  for (const form of [rename(), del(), archive(), closeFolder, deleteProject])
+    assert.deepEqual(answerForm(offline, form, "Renamed"), { allowed: false }, form.kind);
+});
+
+test("the selected session's forms wait for its resync; other sessions do not", () => {
+  assert.equal(answerForm(resyncing, rename(selected), "Renamed").allowed, false);
+  assert.equal(answerForm(resyncing, del(selected)).allowed, false);
+  assert.equal(answerForm(resyncing, archive(selected)).allowed, false);
+  assert.equal(answerForm(resyncing, archive(other)).allowed, true);
+  assert.equal(answerForm(resyncing, rename(other), "Renamed").allowed, true);
+  assert.equal(answerForm(resyncing, del(other)).allowed, true);
+  assert.equal(answerForm(online, rename(selected), "Renamed").allowed, true);
+});
+
+test("a session title saves up to its limit, counted trimmed, in the form and on the wire alike", () => {
+  const atLimit = ` ${"t".repeat(SESSION_TITLE_MAX)} `;
+  const over = "t".repeat(SESSION_TITLE_MAX + 1);
+  assert.deepEqual(answerForm(online, rename(), atLimit), {
+    allowed: true,
+    command: {
+      _tag: "rename_session",
+      cwd: "/repo",
+      sessionId: "s2",
+      title: "t".repeat(SESSION_TITLE_MAX),
+    },
+  });
+  assert.deepEqual(answerForm(online, rename(), over), { allowed: false });
+  const wire = (title: string) =>
+    JSON.stringify({ _tag: "rename_session", cwd: "/repo", sessionId: "s2", title });
+  assert.equal(decodeClientMessage(wire(atLimit))._tag, "rename_session");
+  assert.throws(() => decodeClientMessage(wire(over)));
+});
+
+test("rename's form follows the descriptor's rule when the checkout is gone", () => {
+  const unavailable: AppState = {
+    ...online,
+    sessionReferences: [sessionReference("/repo", "s2", { unavailable: "checkout" })],
+  };
+  const descriptor = sessionCommands(unavailable, other, {}).find((c) => c.id === "rename")!;
+  assert.equal(descriptor.enabled, false);
+  assert.equal(answerForm(unavailable, rename(), "Renamed").allowed, false);
+});
+
+test("archive, delete and close folder send their registry change", () => {
+  assert.deepEqual(answerForm(online, archive()), {
+    allowed: true,
+    command: { _tag: "archive_session", cwd: "/repo", sessionId: "s2" },
+  });
+  assert.deepEqual(answerForm(online, del()), {
+    allowed: true,
+    command: { _tag: "delete_session", cwd: "/repo", sessionId: "s2" },
+  });
+  assert.deepEqual(answerForm(online, closeFolder), {
+    allowed: true,
+    command: { _tag: "remove_folder", path: "/repo" },
+  });
+});
+
+test("deleting a working session says it stops the work; an idle one just deletes", () => {
+  const working: AppState = { ...online, hosts: [{ ...other, working: true }] };
+  assert.deepEqual(confirmation(working, del()), {
+    title: "Delete session?",
+    description:
+      'This will stop the session and interrupt its current work. "Other" and its transcript are removed from Pi\'s session store. This cannot be undone.',
+    confirmLabel: "Stop and delete",
+    destructive: true,
+  });
+  assert.deepEqual(confirmation(online, del()), {
+    title: "Delete session?",
+    description:
+      '"Other" and its transcript are removed from Pi\'s session store. This cannot be undone.',
+    confirmLabel: "Delete",
+    destructive: true,
+  });
+});
+
+test("archive and close folder name their subject; an untitled session reads Untitled", () => {
+  const untitled = { cwd: "/repo", sessionId: "s2" };
+  assert.deepEqual(confirmation(online, archive(untitled)), {
+    title: "Stop and archive this session?",
+    description:
+      'This will stop any work still running in "Untitled" and remove it from the sidebar. Its transcript will be kept. Changes already made to files will not be undone.',
+    confirmLabel: "Stop and archive",
+    destructive: false,
+  });
+  assert.match(confirmation(online, archive())?.description ?? "", /running in "Other"/);
+  assert.match(confirmation(online, del(untitled))?.description ?? "", /^"Untitled"/);
+  assert.deepEqual(confirmation(online, closeFolder), {
+    title: "Close this folder?",
+    description:
+      '"repo" will be removed from the sidebar. Files and session history will not be deleted.',
+    confirmLabel: "Close",
+    destructive: false,
+  });
+  assert.equal(confirmation(online, rename()), undefined);
+  assert.equal(confirmation(online, { kind: "project", dialog: {} }), undefined);
+});
+
+test("project answers: a new project opens its home, create-and-assign stays put", () => {
+  const newProject = (draft: { name: string; instructions?: string }, s = online, dialog = {}) =>
+    answerForm(s, { kind: "project", dialog }, { instructions: "", ...draft }, { newId });
+  assert.deepEqual(newProject({ name: " Ship " }), {
+    allowed: true,
+    command: { _tag: "save_project", project: { id: "new-id", name: "Ship" }, assign: undefined },
+    open: { kind: "project", projectId: "new-id" },
+  });
+  assert.deepEqual(newProject({ name: "Ship" }, online, { assign: other }), {
+    allowed: true,
+    command: {
+      _tag: "save_project",
+      project: { id: "new-id", name: "Ship" },
+      assign: { cwd: "/repo", sessionId: "s2" },
+    },
+  });
+  assert.deepEqual(newProject({ name: "  " }), { allowed: false });
+  assert.deepEqual(newProject({ name: "Ship", instructions: "\n Reply in French. \n" }), {
+    allowed: true,
+    command: {
+      _tag: "save_project",
+      project: { id: "new-id", name: "Ship", instructions: "Reply in French." },
+      assign: undefined,
+    },
+    open: { kind: "project", projectId: "new-id" },
+  });
+  assert.deepEqual(newProject({ name: "Ship", instructions: "  " }), {
+    allowed: true,
+    command: { _tag: "save_project", project: { id: "new-id", name: "Ship" }, assign: undefined },
+    open: { kind: "project", projectId: "new-id" },
+  });
+  assert.equal(newProject({ name: "Ship", instructions: "x".repeat(20_001) }).allowed, false);
+  assert.deepEqual(newProject({ name: "Ship" }, offline), { allowed: false });
+});
+
+test("deleting a project asks first, counting the sessions that move to No project", () => {
+  const members = (...extras: Array<Partial<SessionReference>>): AppState => ({
+    ...online,
+    folders: [repoFolder],
+    projects: [launch],
+    sessionReferences: extras.map((extra, i) =>
+      sessionReference("/repo", `m${i}`, { projectId: "p1", ...extra }),
+    ),
+  });
+  assert.deepEqual(confirmation(members({}, {}, { archived: true }), deleteProject), {
+    title: "Delete project?",
+    description: '"Launch" is deleted; its 2 sessions move to No project. This cannot be undone.',
+    confirmLabel: "Delete",
+    destructive: true,
+  });
+  assert.equal(
+    confirmation(members({}), deleteProject)!.description,
+    '"Launch" is deleted; its session moves to No project. This cannot be undone.',
+  );
+  assert.equal(
+    confirmation(members(), deleteProject)!.description,
+    '"Launch" is deleted. This cannot be undone.',
+  );
+  assert.equal(
+    confirmation(members({}, { cwd: "/closed" }, { pinned: true }), deleteProject)!.description,
+    '"Launch" is deleted; its session moves to No project. This cannot be undone.',
+  );
+  assert.equal(
+    confirmation(members({ cwd: "/closed" }, { pinned: true }), deleteProject)!.description,
+    '"Launch" is deleted. This cannot be undone.',
+  );
+});
+
+test("deleting the project on screen leaves for the Projects index once it is gone; deleting another stays put", () => {
+  for (const [view, leaves] of [
+    [{ kind: "project", projectId: "p1" }, true],
+    [{ kind: "new", projectId: "p1" }, true],
+    [{ kind: "project", projectId: "p2" }, false],
+    [{ kind: "session" }, false],
+    [{ kind: "projects" }, false],
+  ] as const) {
+    const { subject, sent, opened, setState } = forms();
+    setState({ ...withWorkspace, view, projects: [launch] });
+    subject.open(deleteProject);
+    assert.equal(subject.submit(), true);
+    assert.deepEqual(sent, [{ _tag: "delete_project", id: "p1" }]);
+    subject.settle();
+    assert.deepEqual(opened, [], JSON.stringify(view));
+    setState({ ...withWorkspace, view, projects: [] });
+    subject.settle();
+    subject.settle();
+    assert.deepEqual(opened, leaves ? ["/projects"] : [], JSON.stringify(view));
+  }
+});
+
+test("a delete the server refuses, or one cut off by a lost connection, stays on the project's page", () => {
+  const view = { kind: "project", projectId: "p1" } as const;
+  for (const fail of ["error", "disconnect"] as const) {
+    const { subject, opened, setState } = forms();
+    setState({ ...withWorkspace, view, projects: [launch] });
+    subject.open(deleteProject);
+    assert.equal(subject.submit(), true);
+    if (fail === "error") subject.hear({ _tag: "error", message: "Project not deleted" });
+    else {
+      setState({ ...withWorkspace, view, projects: [launch], connected: false });
+      subject.settle();
+    }
+    setState({ ...withWorkspace, view, projects: [] });
+    subject.settle();
+    assert.deepEqual(opened, [], fail);
+  }
+});
+
+test("a submitted form opens no page once the user has moved to another screen", () => {
+  const home = { kind: "project", projectId: "p1" } as const;
+  const deleted = forms();
+  deleted.setState({ ...withWorkspace, view: home, projects: [launch] });
+  deleted.subject.open(deleteProject);
+  assert.equal(deleted.subject.submit(), true);
+  deleted.setState({ ...withWorkspace, view: { kind: "projects" }, projects: [launch] });
+  deleted.subject.settle();
+  deleted.setState({ ...withWorkspace, view: { kind: "projects" }, projects: [] });
+  deleted.subject.settle();
+  deleted.setState({ ...withWorkspace, view: home, projects: [] });
+  deleted.subject.settle();
+  assert.deepEqual(deleted.opened, [], "returning later is not the submit's answer either");
+
+  const created = forms();
+  created.subject.open({ kind: "project", dialog: {} });
+  created.subject.editProject({ name: "Ship", instructions: "" });
+  assert.equal(created.subject.submit(), true);
+  created.setState({
+    ...withWorkspace,
+    view: { kind: "project", projectId: "p1" },
+    projects: [launch, { id: "new-id", name: "Ship" }],
+  });
+  created.subject.settle();
+  assert.deepEqual(created.opened, [], "the new project's home does not replace the page opened");
+
+  const started = forms();
+  started.setState({ ...withWorkspace, view: { kind: "new" }, session: null });
+  started.subject.open({ kind: "project", dialog: {} });
+  started.subject.editProject({ name: "Ship", instructions: "" });
+  assert.equal(started.subject.submit(), true);
+  const creating: AppState = {
+    ...withWorkspace,
+    view: { kind: "session" },
+    session: null,
+    selecting: { cwd: "/repo", sessionId: null },
+  };
+  started.setState(creating);
+  started.subject.settle();
+  started.setState({ ...creating, projects: [{ id: "new-id", name: "Ship" }] });
+  started.subject.settle();
+  assert.deepEqual(started.opened, [], "the creation keeps the screen");
+});
+
+function forms(disposition: SendDisposition = "sent") {
+  let state = withWorkspace;
+  const sent: ClientCommand[] = [];
+  const opened: string[] = [];
+  const subject = createCommandForms({
+    getState: () => state,
+    send: (command) => {
+      sent.push(command);
+      return disposition;
+    },
+    openPage: (page) =>
+      opened.push(
+        page.kind === "project"
+          ? `/projects/${page.projectId}`
+          : page.kind === "new"
+            ? `/projects/${page.projectId}/new`
+            : "/projects",
+      ),
+    newId,
+  });
+  return {
+    subject,
+    sent,
+    opened,
+    setState: (next: AppState) => {
+      state = next;
+    },
+  };
+}
+
+test("a form submitted after the connection drops stays open and sends nothing", () => {
+  const newProject: CommandForm = { kind: "project", dialog: {} };
+  const settings: CommandForm = { kind: "project-settings", projectId: "p1" };
+  for (const form of [
+    rename(),
+    del(),
+    archive(),
+    closeFolder,
+    newProject,
+    deleteProject,
+    settings,
+  ]) {
+    const { subject, sent, setState } = forms();
+    setState({ ...withWorkspace, projects: [launch] });
+    subject.open(form);
+    subject.edit("Renamed");
+    subject.editProject({ name: "Renamed", instructions: "" });
+    assert.equal(subject.answer().allowed, true, form.kind);
+    setState({ ...withWorkspace, projects: [launch], connected: false });
+    assert.equal(subject.submit(), false, form.kind);
+    assert.equal(subject.getState().form, form, form.kind);
+    assert.deepEqual(sent, [], form.kind);
+  }
+});
+
+test("an allowed form sends its answer once, then closes", () => {
+  for (const form of [rename(), del(), archive(), closeFolder]) {
+    const { subject, sent } = forms();
+    subject.open(form);
+    subject.edit("Renamed");
+    assert.equal(subject.submit(), true, form.kind);
+    assert.equal(subject.getState().form, null, form.kind);
+    const answered = answerForm(withWorkspace, form, "Renamed");
+    assert.ok(answered.allowed, form.kind);
+    assert.deepEqual(sent, [answered.command], form.kind);
+    assert.equal(subject.submit(), false, form.kind);
+    assert.equal(sent.length, 1, form.kind);
+  }
+});
+
+test("a form whose answer was not sent stays open with its input and opens no page; an uncertain one closes", () => {
+  const submittable: CommandForm[] = [
+    rename(),
+    del(),
+    closeFolder,
+    { kind: "project", dialog: {} },
+    { kind: "project-settings", projectId: "p1" },
+  ];
+  for (const form of submittable) {
+    const { subject, sent, opened, setState } = forms("not-sent");
+    setState({ ...withWorkspace, projects: [launch] });
+    subject.open(form);
+    subject.edit("Renamed");
+    subject.editProject({ name: "Ship", instructions: "" });
+    const input = subject.getState();
+    assert.equal(subject.submit(), false, form.kind);
+    assert.equal(sent.length, 1, form.kind);
+    assert.deepEqual(subject.getState(), input, form.kind);
+    setState({ ...withWorkspace, projects: [launch, { id: "new-id", name: "Ship" }] });
+    subject.settle();
+    assert.deepEqual(opened, [], form.kind);
+  }
+  for (const form of submittable) {
+    const { subject, setState } = forms("uncertain");
+    setState({ ...withWorkspace, projects: [launch] });
+    subject.open(form);
+    subject.edit("Renamed");
+    subject.editProject({ name: "Ship", instructions: "" });
+    assert.equal(subject.submit(), true, form.kind);
+    assert.equal(subject.getState().form, null, form.kind);
+  }
+});
+
+test("rename starts from the session's title, and a new project from nothing", () => {
+  const { subject } = forms();
+  subject.open(rename());
+  assert.equal(subject.getState().text, "Other");
+  assert.equal(subject.answer().allowed, false);
+  subject.open(rename({ cwd: "/repo", sessionId: "s2" }));
+  assert.equal(subject.getState().text, "");
+  subject.open({ kind: "project", dialog: {} });
+  assert.equal(subject.getState().text, "");
+  subject.open(del());
+  assert.equal(subject.getState().text, "");
+});
+
+test("an untitled selected session renames from the same empty title in the header and its sidebar row", () => {
+  const renameTarget = (target?: SessionTarget) => {
+    const intent = sessionCommands(withWorkspace, target, {}).find(
+      (c) => c.id === "rename",
+    )?.intent;
+    assert.equal(intent?.kind, "rename");
+    return intent.kind === "rename" ? intent.target : undefined;
+  };
+  const row = { cwd: "/repo", sessionId: "s1", title: undefined };
+  assert.deepEqual(renameTarget(), renameTarget(row));
+  const { subject } = forms();
+  subject.open({ kind: "rename-session", target: renameTarget()! });
+  assert.equal(subject.getState().text, "");
+  subject.edit("Untitled");
+  assert.equal(subject.answer().allowed, true);
+});
+
+test("creating a project opens its home; from the New page's picker, the New page for it; for a session, nothing", () => {
+  const created = forms();
+  created.subject.open({ kind: "project", dialog: {} });
+  created.subject.editProject({ name: " Ship ", instructions: "Reply in French." });
+  assert.equal(created.subject.submit(), true);
+  assert.deepEqual(created.sent, [
+    {
+      _tag: "save_project",
+      project: { id: "new-id", name: "Ship", instructions: "Reply in French." },
+      assign: undefined,
+    },
+  ]);
+  assert.equal(created.subject.getState().form, null);
+  created.subject.settle();
+  assert.deepEqual(created.opened, []);
+  const ship: Project = { id: "new-id", name: "Ship", instructions: "Reply in French." };
+  created.setState({ ...withWorkspace, projects: [ship] });
+  created.subject.settle();
+  created.subject.settle();
+  assert.deepEqual(created.opened, ["/projects/new-id"]);
+  created.subject.open({ kind: "project", dialog: {} });
+  assert.equal(created.subject.answer().allowed, false);
+
+  const picked = forms();
+  picked.subject.open({ kind: "project", dialog: { newPage: true } });
+  picked.subject.editProject({ name: "Ship", instructions: "" });
+  assert.equal(picked.subject.submit(), true);
+  picked.setState({ ...withWorkspace, projects: [{ id: "new-id", name: "Ship" }] });
+  picked.subject.settle();
+  assert.deepEqual(picked.opened, ["/projects/new-id/new"]);
+
+  for (const dialog of [{ assign: other }]) {
+    const { subject, opened, sent } = forms();
+    subject.open({ kind: "project", dialog });
+    subject.editProject({ name: "Ship", instructions: "" });
+    assert.equal(subject.submit(), true);
+    assert.equal(sent.length, 1);
+    subject.settle();
+    assert.deepEqual(opened, []);
+  }
+});
+
+test("a new project the server fails to save opens nothing", () => {
+  const { subject, opened, setState } = forms();
+  subject.open({ kind: "project", dialog: {} });
+  subject.editProject({ name: "Ship", instructions: "" });
+  assert.equal(subject.submit(), true);
+  subject.hear({ _tag: "error", message: "Session not started", selectionId: "sel" });
+  subject.hear({ _tag: "error", message: "Project not saved" });
+  setState({ ...withWorkspace, projects: [{ id: "new-id", name: "Ship" }] });
+  subject.settle();
+  assert.deepEqual(opened, []);
+});
+
+test("Project settings starts from the project as saved and sends only what changed", () => {
+  const saved: Project = { id: "p1", name: "Launch", instructions: "Reply in French." };
+  const { subject, sent, setState } = forms();
+  setState({ ...withWorkspace, projects: [saved] });
+  const settings: CommandForm = { kind: "project-settings", projectId: "p1" };
+  subject.open(settings);
+  assert.deepEqual(subject.getState().projectDraft, {
+    name: "Launch",
+    instructions: "Reply in French.",
+  });
+  assert.equal(subject.submit(), false);
+  assert.equal(subject.getState().form, settings);
+
+  subject.editProject({ name: " Ship ", instructions: "Reply in French." });
+  assert.equal(subject.submit(), true);
+  assert.deepEqual(sent, [{ _tag: "update_project", id: "p1", name: "Ship" }]);
+  assert.equal(subject.getState().form, null);
+
+  subject.open(settings);
+  assert.deepEqual(subject.getState().projectDraft, {
+    name: "Launch",
+    instructions: "Reply in French.",
+  });
+  subject.editProject({ name: "Launch", instructions: "" });
+  assert.equal(subject.submit(), true);
+  assert.deepEqual(sent[1], { _tag: "update_project", id: "p1", instructions: null });
+});
+
+test("Project settings edits and clears instructions without rewriting an unchanged legacy name", () => {
+  const name = "n".repeat(PROJECT_NAME_MAX + 1);
+  for (const instructions of ["  After\n", "  "]) {
+    const { subject, sent, setState } = forms();
+    setState({ ...withWorkspace, projects: [{ id: "p1", name, instructions: "Before" }] });
+    subject.open({ kind: "project-settings", projectId: "p1" });
+    assert.equal(subject.submit(), false, "an untouched legacy project is a no-op");
+    assert.equal(subject.answer().projectCheck?.name.over, false);
+    subject.editProject({ name: ` ${name} `, instructions });
+    assert.equal(subject.answer().allowed, true);
+    assert.equal(subject.answer().projectCheck?.name.over, false);
+    assert.equal(subject.submit(), true);
+    assert.deepEqual(sent, [
+      {
+        _tag: "update_project",
+        id: "p1",
+        instructions: instructions.trim() || null,
+      },
+    ]);
+  }
+});
+
+test("Project settings refuses an over-limit rename even with new instructions, but accepts shortening", () => {
+  const name = "n".repeat(PROJECT_NAME_MAX + 2);
+  const { subject, sent, setState } = forms();
+  setState({ ...withWorkspace, projects: [{ id: "p1", name, instructions: "Before" }] });
+  subject.open({ kind: "project-settings", projectId: "p1" });
+  for (const instructions of ["Before", "After"]) {
+    subject.editProject({ name: name.slice(1), instructions });
+    assert.equal(subject.answer().projectCheck?.name.over, true);
+    assert.equal(subject.submit(), false);
+    assert.deepEqual(sent, []);
+  }
+  subject.editProject({ name: " Short name ", instructions: "Before" });
+  assert.equal(subject.answer().projectCheck?.name.over, false);
+  assert.equal(subject.submit(), true);
+  assert.deepEqual(sent, [{ _tag: "update_project", id: "p1", name: "Short name" }]);
+  subject.open({ kind: "project", dialog: {} });
+  subject.editProject({ name, instructions: "After" });
+  assert.equal(subject.submit(), false, "creation still writes and validates the full name");
+});
+
+test("Project settings keeps a change another tab saved while it was open", () => {
+  for (const name of ["Alpha", "n".repeat(PROJECT_NAME_MAX + 1)]) {
+    const { subject, sent, setState } = forms();
+    setState({ ...withWorkspace, projects: [{ id: "p1", name }] });
+    subject.open({ kind: "project-settings", projectId: "p1" });
+    setState({ ...withWorkspace, projects: [{ id: "p1", name: "Beta" }] });
+    assert.equal(subject.submit(), false, "an untouched dialog has nothing to save");
+    subject.editProject({ name, instructions: "New" });
+    assert.equal(subject.submit(), true);
+    assert.deepEqual(sent, [{ _tag: "update_project", id: "p1", instructions: "New" }]);
+  }
+});
+
+test("Project settings for a project deleted while open stays open and sends nothing", () => {
+  const { subject, sent, setState } = forms();
+  setState({ ...withWorkspace, projects: [launch] });
+  const settings: CommandForm = { kind: "project-settings", projectId: "p1" };
+  subject.open(settings);
+  subject.editProject({ name: "Renamed", instructions: "" });
+  assert.equal(subject.answer().allowed, true);
+  setState({ ...withWorkspace, projects: [] });
+  assert.equal(subject.submit(), false);
+  assert.equal(subject.getState().form, settings);
+  assert.deepEqual(sent, []);
+});
+
+test("opening Project settings replaces the open form, and another form replaces it", () => {
+  const { subject, sent, setState } = forms();
+  setState({ ...withWorkspace, projects: [launch] });
+  subject.open(deleteProject);
+  subject.open({ kind: "project-settings", projectId: "p1" });
+  assert.equal(subject.getState().form?.kind, "project-settings");
+  assert.equal(subject.getState().projectDraft.name, "Launch");
+  subject.editProject({ name: "Renamed", instructions: "" });
+  subject.submit();
+  assert.deepEqual(sent, [{ _tag: "update_project", id: "p1", name: "Renamed" }]);
+
+  subject.open({ kind: "project-settings", projectId: "p1" });
+  subject.editProject({ name: "Draft", instructions: "" });
+  subject.open(rename());
+  assert.equal(subject.getState().form?.kind, "rename-session");
+  assert.equal(subject.getState().text, "Other");
+  subject.open({ kind: "project", dialog: {} });
+  assert.deepEqual(subject.getState().projectDraft, { name: "", instructions: "" });
+});

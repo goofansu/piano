@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import type { SendDisposition } from "../shared/transport/ws.ts";
 import type { ClientCommand, ServerMessage } from "../shared/wire.ts";
 import {
   correlatedRequests,
   RECEIPT_TIMEOUT_MS,
   type RequestOutcome,
-} from "../web/src/app/requests/correlatedRequest.ts";
-import type { SendDisposition } from "../web/src/shared/transport/ws.ts";
+} from "../web/src/shared/transport/correlatedRequest.ts";
 
 type Result = Extract<ServerMessage, { _tag: "data_controls_result" }>["result"];
 

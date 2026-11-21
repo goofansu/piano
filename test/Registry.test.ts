@@ -14,7 +14,7 @@ import {
 } from "../server/shared/registry/Registry.ts";
 import { openRegistryDatabase } from "../server/shared/registry/RegistryDatabase.ts";
 import { decodeClientMessage, PROJECT_NAME_MAX, SESSION_TITLE_MAX } from "../shared/wire.ts";
-import { seedRegistry } from "./fixtures/registry.ts";
+import { seedRegistry } from "./shared/registry.ts";
 
 function fixture(t: TestContext) {
   const root = mkdtempSync(join(tmpdir(), "piano-sqlite-")),

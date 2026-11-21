@@ -1,54 +1,54 @@
-import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
-import { storedLastDirectory } from "@/app/client";
-import { createPageStores } from "@/app/pageStores";
-import { type AppState, initialState } from "@/app/store";
-import { toastNotify as notify } from "@/app/toastNotify";
-import { useClient } from "@/app/useClient";
-import { PageStoresContext } from "@/app/usePageStores";
-import { Button } from "@/components/ui/button";
-import { Toaster } from "@/components/ui/sonner";
-import { CommandHost } from "@/features/commands/CommandHost";
-import { CommandPalette } from "@/features/commands/CommandPalette";
-import { AppLayout, LayoutView } from "@/features/navigation/AppLayout";
-import { initialView } from "@/features/navigation/navigation";
-import { parseRoute } from "@/features/navigation/routes";
+import { CommandPalette } from "@features/commands/web/CommandPalette";
+import { AppLayout, LayoutView } from "@features/navigation/web/AppLayout";
+import { initialView } from "@features/navigation/web/navigation";
 import {
   SidebarActivityContext,
   SidebarPaneLead,
-} from "@/features/navigation/sidebar/ShowSidebarButton";
-import { Sidebar } from "@/features/navigation/sidebar/Sidebar";
+} from "@features/navigation/web/sidebar/ShowSidebarButton";
 import {
   SidebarLayoutContext,
   useSidebarLayout,
   useSidebarLayoutController,
   useSidebarShortcut,
-} from "@/features/navigation/sidebar/useSidebarLayout";
-import { useSidebarList } from "@/features/navigation/sidebar/useSidebarList";
-import { useSidebarSessionNavigation } from "@/features/navigation/sidebar/useSidebarSessionNavigation";
-import { useSidebarView } from "@/features/navigation/sidebar/useSidebarView";
-import { NavigationContext, useNavigationController } from "@/features/navigation/useNavigation";
-import { ProjectHome } from "@/features/projects/ProjectHome";
-import { projectRowActions } from "@/features/projects/Projects";
-import { ProjectsIndex } from "@/features/projects/ProjectsIndex";
-import { providerAccounts } from "@/features/providers/useProviderAccounts";
-import { DialogHost } from "@/features/sessions/dialogs/DialogHost";
-import { pendingDialogs } from "@/features/sessions/dialogs/piDialogs";
+} from "@features/navigation/web/sidebar/useSidebarLayout";
+import { useSidebarList } from "@features/navigation/web/sidebar/useSidebarList";
+import { useSidebarSessionNavigation } from "@features/navigation/web/sidebar/useSidebarSessionNavigation";
+import { useSidebarView } from "@features/navigation/web/sidebar/useSidebarView";
+import { useNavigationController } from "@features/navigation/web/useNavigation";
+import { providerAccounts } from "@features/providers/web/useProviderAccounts";
+import { DialogHost } from "@features/sessions/web/dialogs/DialogHost";
+import { pendingDialogs } from "@features/sessions/web/dialogs/piDialogs";
+import { observeDictationPage } from "@features/voice-input/web/browserDictation";
+import { voiceInputSettings } from "@features/voice-input/web/useVoiceInput";
+import { checkoutRefresh } from "@features/workspace/web/changes/checkoutRefresh";
+import { workspaceFile } from "@features/workspace/web/files/fileApi";
+import {
+  SessionFilesContext,
+  useSessionFilesController,
+} from "@features/workspace/web/files/useSessionFiles";
+import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
+import { storedLastDirectory } from "@/app/client";
+import { CommandHost } from "@/app/commands/CommandHost";
+import { createPageStores } from "@/app/pageStores";
+import { PageStoresProvider } from "@/app/PageStoresProvider";
+import { NewSession } from "@/app/sessions/NewSession";
+import { SessionView } from "@/app/sessions/SessionView";
+import { SettingsNavigation, SettingsPage } from "@/app/SettingsPage";
+import { useClient } from "@/app/useClient";
+import { Button } from "@/components/ui/button";
+import { Toaster } from "@/components/ui/sonner";
+import { PaneLeadContext, PaneNotFound } from "@/shared/components/Pane";
+import { toastNotify as notify } from "@/shared/lib/toastNotify";
+import { parseRoute } from "@/shared/navigation/routes";
+import { NavigationContext } from "@/shared/navigation/useNavigation";
 import {
   anySessionWorking,
   type UnavailableSessionPage,
   unavailableSessionPage,
-} from "@/features/sessions/sessionCatalog";
-import { SessionView } from "@/features/sessions/SessionView";
-import { NewSession } from "@/features/sessions/start/NewSession";
-import { SettingsNavigation, SettingsPage } from "@/features/settings/SettingsPage";
-import { observeDictationPage } from "@/features/voice-input/browserDictation";
-import { voiceInputSettings } from "@/features/voice-input/useVoiceInput";
-import { checkoutRefresh } from "@/features/workspace/changes/checkoutRefresh";
-import {
-  SessionFilesContext,
-  useSessionFilesController,
-} from "@/features/workspace/files/useSessionFiles";
-import { PaneLeadContext, PaneNotFound } from "@/shared/components/Pane";
+} from "@/shared/state/sessionCatalog";
+import { type AppState, initialState } from "@/shared/state/state";
+import { ProjectHomePage, ProjectsPage } from "./ProjectPages";
+import { SessionSidebar } from "./SessionSidebar";
 
 const stores = createPageStores(notify);
 
@@ -57,9 +57,9 @@ export default function App() {
   return (
     <SidebarLayoutContext.Provider value={layout}>
       <PaneLeadContext value={<SidebarPaneLead />}>
-        <PageStoresContext value={stores}>
+        <PageStoresProvider value={stores}>
           <PianoApp />
-        </PageStoresContext>
+        </PageStoresProvider>
       </PaneLeadContext>
     </SidebarLayoutContext.Provider>
   );
@@ -92,7 +92,7 @@ function PianoApp() {
   useSidebarShortcut();
   const sessionFiles = useSessionFilesController(state);
 
-  const navigation = useNavigationController(client, layout.closeMobile);
+  const navigation = useNavigationController(client, layout.closeMobile, workspaceFile);
   const { settings } = useSyncExternalStore(navigation.subscribe, navigation.getState);
   const { openNew, openSettings, closeSettings } = navigation;
   const { view: sidebarView } = useSidebarView();
@@ -125,7 +125,7 @@ function PianoApp() {
                     onHome={closeSettings}
                   />
                 ) : (
-                  <Sidebar state={state} {...sidebar} projectActions={projectRowActions} />
+                  <SessionSidebar state={state} {...sidebar} />
                 )
               }
               content={
@@ -139,9 +139,9 @@ function PianoApp() {
                         onProjectChange={(id) => openNew(undefined, id)}
                       />
                     ) : state.view.kind === "projects" ? (
-                      <ProjectsIndex state={state} openProject={navigation.openProject} />
+                      <ProjectsPage state={state} openProject={navigation.openProject} />
                     ) : state.view.kind === "project" ? (
-                      <ProjectHome
+                      <ProjectHomePage
                         state={state}
                         client={client}
                         chooseDirectory={chooseDirectory}

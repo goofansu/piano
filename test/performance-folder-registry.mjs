@@ -14,7 +14,7 @@ import {
   RegistryLive,
 } from "../server/shared/registry/Registry.ts";
 import { openRegistryDatabase } from "../server/shared/registry/RegistryDatabase.ts";
-import { seedRegistry } from "./fixtures/registry.ts";
+import { seedRegistry } from "./shared/registry.ts";
 
 const output = resolve(process.argv[2] ?? "/tmp/piano-performance.json");
 const root = mkdtempSync(join(tmpdir(), "piano-performance-"));

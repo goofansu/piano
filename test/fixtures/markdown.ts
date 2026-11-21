@@ -1,17 +1,8 @@
-import path from "node:path";
-import { after } from "node:test";
 import { Tooltip } from "@base-ui/react/tooltip";
 import { type ComponentType, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { createServer } from "vite";
+import { vite } from "../shared/vite.ts";
 
-const vite = await createServer({
-  root: path.resolve("web"),
-  server: { middlewareMode: true, watch: null, ws: false },
-  appType: "custom",
-  optimizeDeps: { noDiscovery: true, include: [] },
-});
-after(() => vite.close());
 const { Markdown } = (await vite.ssrLoadModule("/src/shared/markdown/Markdown.tsx")) as {
   Markdown: ComponentType<{
     text: string;
@@ -39,14 +30,4 @@ export const renderMarkdown = (
         preserveLineBreaks,
       }),
     ),
-  );
-
-const { QuestionText } = (await vite.ssrLoadModule(
-  "/src/features/sessions/dialogs/QuestionText.tsx",
-)) as {
-  QuestionText: ComponentType<{ text: string }>;
-};
-export const renderQuestion = (text: string) =>
-  renderToStaticMarkup(
-    createElement(Tooltip.Provider, null, createElement(QuestionText, { text })),
   );

@@ -1,7 +1,4 @@
-import {
-  type FilePreview,
-  previewKindByName,
-} from "../../../../shared/features/workspace/files/files.ts";
+import { type FilePreview, previewKindByName } from "../../../../shared/workspace/files.ts";
 
 export function previewImageBytes(
   preview: FilePreview,

@@ -33,13 +33,19 @@
   "overrides": [
     {
       // Effect's `HttpRouter.use` is not a React hook.
-      "files": ["server/**", "shared/**", "extensions/**", "scripts/**", "test/**"],
+      "files": [
+        "server/**",
+        "shared/**",
+        "features/*/{server,contracts,extension,tests}/**",
+        "scripts/**",
+        "test/**"
+      ],
       "rules": {
         "react-hooks/rules-of-hooks": "off"
       }
     },
     {
-      "files": ["web/src/**/*.{ts,tsx}"],
+      "files": ["web/src/**/*.{ts,tsx}", "features/*/web/**/*.{ts,tsx}"],
       "jsPlugins": ["@shadcn/lint"],
       "rules": {
         // shadcn's Sonner wrapper uses this as a non-utility marker.

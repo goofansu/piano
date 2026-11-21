@@ -4,12 +4,16 @@ import { fileURLToPath } from "node:url";
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
 import { HttpRouter } from "effect/http";
+import {
+  sessionEndpoint,
+  sessionEnvironment,
+} from "../features/dispatch/server/SessionEndpoint.ts";
+import { ensurePianoFolders, pianoFolder } from "../features/library/server/PianoFolders.ts";
+import { PiCli } from "../features/sessions/server/pi/PiCli.ts";
 import { PianoAdaptersLive, PianoServicesLive } from "./app/PianoServices.ts";
+import { defaultPiCli } from "./app/PiLaunch.ts";
 import { AppRouter } from "./app/Router.ts";
 import { staticAssets } from "./app/StaticAssets.ts";
-import { sessionEndpoint, sessionEnvironment } from "./features/dispatch/SessionEndpoint.ts";
-import { ensurePianoFolders, pianoFolder } from "./features/library/PianoFolders.ts";
-import { defaultPiCli, PiCli } from "./features/sessions/pi/PiCli.ts";
 import { inboundLimits } from "./shared/InboundCapacity.ts";
 import {
   AllowedOrigins,

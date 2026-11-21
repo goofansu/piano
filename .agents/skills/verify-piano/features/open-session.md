@@ -3,7 +3,7 @@
 ## Driving it with agent-browser
 
 Preconditions: a seeded launch. Run `node test/browser/open-session.mjs <evidence-directory>`
-first. It includes the [transcript fidelity contract](../../../../docs/session-transcripts.md):
+first. It includes the [transcript fidelity contract](../../../../features/sessions/session-transcripts.md):
 three ordinary lines stay separate while settled, streaming and reloaded, token-like text stays
 original, and Copy response retains the source (clipboard observation on Linux).
 

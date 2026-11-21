@@ -27,7 +27,7 @@ The initial scope is intent → implementation → verification → review → i
 operations or a prescribed development methodology. Use the [glossary](../glossary.md) for domain terms.
 
 1. **Keep the process boundary.** One active session has at most one server-owned
-   `pi --mode rpc` child. Keep Pi protocol details behind `server/features/sessions/pi/PiSessions.ts` and its
+   `pi --mode rpc` child. Keep Pi protocol details behind `features/sessions/server/pi/PiSessions.ts` and its
    `SessionAction` / `SessionEvent` vocabulary. Keep the Effect-native adapter; adopting Pi's
    exported `RpcClient` is not required. Browser tabs observe and control server-owned work.
 2. **Preserve the user's Pi environment.** Use normal CLI configuration and resource loading in the
