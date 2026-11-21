@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Layer, ManagedRuntime } from "effect";
-import { PiSessions, PiSessionsLive } from "../server/PiSessions.ts";
-import { largeHistory } from "./fixtures/large-history.ts";
+import { PiSessions, PiSessionsLive } from "../features/sessions/server/pi/PiSessions.ts";
+import { largeHistory } from "./shared/large-history.ts";
 
 const output = resolve(process.argv[2] ?? ".scratch/saved-history.json");
 const root = mkdtempSync(join(tmpdir(), "piano-history-benchmark-"));

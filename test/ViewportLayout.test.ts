@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { browserSidebarEnvironment, createSidebarLayout } from "../web/src/lib/sidebarLayout.ts";
-import { useNarrowViewport } from "../web/src/lib/useNarrowViewport.ts";
-import { isWideViewport, subscribeViewport } from "../web/src/lib/viewportLayout.ts";
+import {
+  browserSidebarEnvironment,
+  createSidebarLayout,
+} from "../features/navigation/web/sidebar/sidebarLayout.ts";
+import { useNarrowViewport } from "../web/src/shared/lib/useNarrowViewport.ts";
+import { isWideViewport, subscribeViewport } from "../web/src/shared/lib/viewportLayout.ts";
 
 function browser(t: TestContext) {
   let matches = true;

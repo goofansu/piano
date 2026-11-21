@@ -21,8 +21,8 @@ import {
   encodeClientMessage,
   type ServerMessage,
 } from "../../shared/wire.ts";
-import { freePort } from "./ports.ts";
-import { seedRegistry } from "./registry.ts";
+import { freePort } from "../shared/ports.ts";
+import { seedRegistry } from "../shared/registry.ts";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const installedCli = join(ROOT, "node_modules/@earendil-works/pi-coding-agent/dist/cli.js");

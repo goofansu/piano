@@ -1,6 +1,6 @@
 # Outcome projects — Step 1 implementation evidence
 
-Date: 2026-10-08. Scope: [Step 1](../outcome-projects.md#step-1--organize-sessions-across-repositories),
+Date: 2026-10-08. Scope: [Step 1](https://github.com/goofansu/piano/blob/346a64bbb22d9f321e27f771f68b6180e11e3427/docs/outcome-projects.md#step-1--organize-sessions-across-repositories),
 not shared instructions or orchestration. Preserves INV-01–02, INV-05–07 and INV-11–13;
 organization does not confer verification or approval (INV-09–10).
 

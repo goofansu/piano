@@ -5,13 +5,17 @@ import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { HttpRouter } from "effect/http";
-import { AllowedOrigins } from "../../server/OriginPolicy.ts";
-import { PianoAdaptersLive, PianoServicesLive } from "../../server/PianoServices.ts";
-import { PiCli } from "../../server/PiCli.ts";
-import type { ProviderLogin } from "../../server/ProviderLogin.ts";
-import { Registry, RegistryDatabasePath, RegistryLive } from "../../server/Registry.ts";
-import { AppRouter } from "../../server/Router.ts";
-import type { SessionHosts } from "../../server/SessionHosts.ts";
+import type { ProviderLogin } from "../../features/providers/server/ProviderLogin.ts";
+import { PiCli } from "../../features/sessions/server/pi/PiCli.ts";
+import type { SessionHosts } from "../../features/sessions/server/SessionHosts.ts";
+import { PianoAdaptersLive, PianoServicesLive } from "../../server/app/PianoServices.ts";
+import { AppRouter } from "../../server/app/Router.ts";
+import { AllowedOrigins } from "../../server/shared/OriginPolicy.ts";
+import {
+  Registry,
+  RegistryDatabasePath,
+  RegistryLive,
+} from "../../server/shared/registry/Registry.ts";
 
 export interface RouterFixture {
   readonly root: string;

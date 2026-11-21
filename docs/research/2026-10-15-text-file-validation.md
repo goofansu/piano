@@ -22,8 +22,8 @@ copying it. Previewable audio/video/PDF files do not thereby become valid compos
 
 | Surface | Current checks | Source |
 | --- | --- | --- |
-| Composer | PNG/JPEG/GIF/WebP signature; browser MIME, when supplied, must agree; nonempty; 10 MiB each, four images, 20 MiB total | [messageDraft.ts](../../web/src/lib/messageDraft.ts), [shared policy](../../shared/attachments.ts), [wire schema](../../shared/wire.ts) |
-| Workspace preview/download | Supported binary classification, otherwise NUL-free strict UTF-8; text up to 1 MiB; workspace containment and regular-file checks | [WorkspaceFiles.ts](../../server/WorkspaceFiles.ts) |
+| Composer | PNG/JPEG/GIF/WebP signature; browser MIME, when supplied, must agree; nonempty; 10 MiB each, four images, 20 MiB total | [messageDraft.ts](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/lib/messageDraft.ts), [shared policy](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/shared/attachments.ts), [wire schema](../../shared/wire.ts) |
+| Workspace preview/download | Supported binary classification, otherwise NUL-free strict UTF-8; text up to 1 MiB; workspace containment and regular-file checks | [WorkspaceFiles.ts](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/WorkspaceFiles.ts) |
 
 Preview first examines 8 KiB. NUL-free UTF-8 under a non-binary name takes priority over short
 magic signatures, avoiding false rejections of prose starting `BM25`, `MZ`, `ID3` or `%PDF`.
@@ -31,7 +31,7 @@ A multibyte character cut by that sample boundary is permitted provisionally; th
 must subsequently decode successfully. Empty text files are accepted. Supported binary names
 include PNG/JPEG/GIF/WebP, the listed audio/video extensions, and PDF—not every binary extension
 in existence. Unknown text names remain eligible. These details come from the implementation
-above and its [observable contract tests](../../test/WorkspaceFiles.test.ts).
+above and its [observable contract tests](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/test/WorkspaceFiles.test.ts).
 
 This is not a universal binary detector: some binary formats can consist of valid UTF-8 bytes.
 Eligibility means safe treatment as inert source, not certification of the file's intended format.

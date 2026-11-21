@@ -1,0 +1,264 @@
+import {
+  reduceTrustDecision,
+  trustObserved,
+} from "../../../features/projects/web/trustDecision.ts";
+import * as FirstMessage from "../../../features/sessions/web/start/firstMessage.ts";
+import {
+  type CreationContext,
+  creationVerdictOf,
+} from "../../../shared/session/creationVerdict.ts";
+import { applySessionEvent, cursorStep } from "../../../shared/session/sessionProjection.ts";
+import { type ServerMessage, sameSession } from "../../../shared/wire.ts";
+import { observeTrust } from "../shared/state/directoryTrust.ts";
+import { startPage } from "../shared/state/startPage.ts";
+import type { Page, PendingCreate } from "../shared/state/state.ts";
+import { type Action, type AppState, sessionKey } from "../shared/state/state.ts";
+
+export function reduce(s: AppState, a: Action): AppState {
+  const next = reduceAction(s, a);
+  if (next === s) return s;
+  const pendingCreate = FirstMessage.reconcile(next.pendingCreate, next.session);
+  return pendingCreate === next.pendingCreate ? next : { ...next, pendingCreate };
+}
+
+const creationContext = (s: AppState, pending: PendingCreate): CreationContext => ({
+  attemptId: pending.attemptId,
+  sessionNamed: !!s.session,
+});
+
+function disconnected(s: AppState, reconnecting: boolean): AppState {
+  return {
+    ...s,
+    connected: false,
+    reconnecting,
+    hostsCurrent: false,
+    selectionId: null,
+    selecting: s.pendingCreate ? null : s.selecting,
+    pendingCreate: FirstMessage.connectionLost(s.pendingCreate),
+  };
+}
+
+function reduceAction(s: AppState, a: Action): AppState {
+  switch (a.type) {
+    case "connected":
+      return a.connected
+        ? {
+            ...s,
+            connected: true,
+            reconnecting: false,
+            hostsCurrent: s.connected && s.hostsCurrent,
+          }
+        : disconnected(s, a.reason !== "too-large");
+    case "dismiss_creation":
+      return { ...s, selectionFailure: null, pendingCreate: null };
+    case "trust_decision":
+    case "trust_settled":
+      return reduceTrustDecision(s, a);
+    case "selecting": {
+      const next: AppState = {
+        ...s,
+        selectionId: a.selectionId,
+        resync: false,
+        view: { kind: "session" },
+        selecting: { cwd: a.cwd, sessionId: a.sessionId },
+        selectionFailure: null,
+        pendingCreate: a.reconciling
+          ? s.pendingCreate
+          : a.firstMessage
+            ? {
+                ...FirstMessage.started(a.attemptId ?? a.selectionId, a.cwd, a.firstMessage),
+                ...(a.projectId === undefined ? {} : { projectId: a.projectId }),
+                ...(a.options === undefined ? {} : { options: a.options }),
+              }
+            : s.session && sessionKey(s.session) === sessionKey(a)
+              ? s.pendingCreate
+              : null,
+        session: s.session && sessionKey(s.session) === sessionKey(a) ? s.session : null,
+        done: s.done.filter((k) => k !== sessionKey(a)),
+      };
+      return s.connected ? next : disconnected(next, s.reconnecting);
+    }
+    case "open":
+      return {
+        ...s,
+        selectionId: null,
+        resync: false,
+        selectionFailure: null,
+        view: opened(s.view, a.page),
+        selecting: null,
+        session: null,
+        pendingCreate: null,
+      };
+    case "new_directory": {
+      const page = startPage(s.view);
+      return page && page.cwd !== a.cwd ? { ...s, view: { ...page, cwd: a.cwd } } : s;
+    }
+    case "server":
+      return applyServer(s, a.message);
+  }
+}
+
+function opened(view: AppState["view"], page: Page): Page {
+  if (page.kind === "new")
+    return {
+      kind: "new",
+      cwd: page.cwd ?? (view.kind === "new" ? view.cwd : undefined),
+      projectId: page.projectId,
+    };
+  if (page.kind === "project" && view.kind === "project" && view.projectId === page.projectId)
+    return view;
+  return page;
+}
+
+export function sessionDelivery(
+  s: AppState,
+  m: Extract<ServerMessage, { _tag: "session" }>,
+): "apply" | "ignore" | "resync" {
+  const t = s.session;
+  if (
+    !t ||
+    !s.connected ||
+    s.resync ||
+    s.selecting ||
+    m.selectionId !== s.selectionId ||
+    m.cursor.cwd !== t.cwd ||
+    m.cursor.sessionId !== t.sessionId
+  )
+    return "ignore";
+  switch (cursorStep(t.cursor, m.cursor)) {
+    case "next":
+      return "apply";
+    case "duplicate":
+      return "ignore";
+    default:
+      return "resync";
+  }
+}
+
+function applyServer(s: AppState, m: ServerMessage): AppState {
+  switch (m._tag) {
+    case "registry":
+      return {
+        ...s,
+        folders: [...m.folders],
+        projects: [...(m.projects ?? [])],
+        sessionReferences: [...(m.sessionReferences ?? [])],
+        workspaces: [...(m.workspaces ?? [])],
+        registryLoaded: true,
+      };
+    case "hosts": {
+      const viewing = s.session
+        ? sessionKey(s.session)
+        : s.selecting
+          ? sessionKey(s.selecting)
+          : null;
+      const done = new Set(s.done);
+      for (const prev of s.hosts) {
+        if (!prev.working) continue;
+        const now = m.hosts.find((h) => sameSession(h, prev));
+        const k = sessionKey(prev);
+        if (now && !now.working && k !== viewing) done.add(k);
+      }
+      return { ...s, hosts: [...m.hosts], hostsCurrent: s.connected, done: [...done] };
+    }
+    case "models":
+      return { ...s, catalogs: { ...s.catalogs, [m.catalog.cwd]: m.catalog } };
+    case "catalogs_invalidated":
+      return { ...s, catalogRevision: s.catalogRevision + 1 };
+    case "trust":
+      return trustObserved(observeTrust(s, m), m);
+    case "selected":
+      if (m.selectionId !== s.selectionId || s.resync) return s;
+      if (
+        m.cursor &&
+        (m.cursor.cwd !== m.cwd ||
+          m.cursor.sessionId !== m.sessionId ||
+          m.snapshot.state.sessionId !== m.sessionId)
+      )
+        return { ...s, resync: true };
+      if (!s.selecting && s.session?.cursor && m.cursor) {
+        const step = cursorStep(s.session.cursor, m.cursor);
+        if (step === "other-generation") return { ...s, resync: true };
+        if (step === "duplicate") return s;
+      }
+      if (m.sessionId === null)
+        return {
+          ...s,
+          view: { kind: "new", cwd: m.cwd },
+          selecting: null,
+          session: null,
+          pendingCreate: null,
+        };
+      return {
+        ...s,
+        view: { kind: "session" },
+        selecting: null,
+        done: s.done.filter((k) => k !== sessionKey(m)),
+        session: {
+          ...m.snapshot,
+          cwd: m.cwd,
+          sessionId: m.sessionId,
+          hosted: m.hosted,
+          cursor: m.cursor,
+        },
+      };
+    case "selection_failed":
+    case "selection_rejected": {
+      if (m.selectionId !== s.selectionId || !s.selecting) return s;
+      const pending = s.pendingCreate;
+      const verdict =
+        pending && m._tag === "selection_rejected"
+          ? creationVerdictOf(m, creationContext(s, pending))
+          : undefined;
+      return {
+        ...s,
+        selectionId: null,
+        selectionFailure: { ...s.selecting, message: m.message },
+        ...(pending && verdict?.kind === "refused"
+          ? {
+              view: { kind: "new" as const, cwd: pending.cwd, projectId: pending.projectId },
+              session: null,
+            }
+          : {}),
+        selecting: null,
+        pendingCreate: !pending
+          ? s.pendingCreate
+          : verdict?.kind === "refused"
+            ? FirstMessage.rejected(pending, verdict.detail)
+            : verdict?.kind === "uncertain" && pending.outcome === "starting"
+              ? FirstMessage.failed(pending, verdict)
+              : pending,
+      };
+    }
+    case "error":
+      if (!m.selectionId || m.selectionId !== s.selectionId || !s.pendingCreate) return s;
+      return {
+        ...s,
+        selecting: null,
+        pendingCreate: FirstMessage.failed(
+          s.pendingCreate,
+          creationVerdictOf(m, creationContext(s, s.pendingCreate)),
+        ),
+      };
+    case "session": {
+      const disposition = sessionDelivery(s, m);
+      if (disposition === "ignore") return s;
+      if (disposition === "resync") return { ...s, resync: true };
+      const t = s.session!;
+      const e = m.event;
+      const hosted = e._tag === "snapshot" ? true : e._tag === "closed" ? false : t.hosted;
+      return {
+        ...s,
+        session: {
+          ...applySessionEvent(t, e),
+          cwd: t.cwd,
+          sessionId: t.sessionId,
+          hosted,
+          cursor: m.cursor,
+        },
+      };
+    }
+    default:
+      return s;
+  }
+}

@@ -15,7 +15,7 @@ npm run build
 npm start
 ```
 
-Open <http://127.0.0.1:7070>. [Sign in to a model provider](docs/provider-sign-in.md) in
+Open <http://127.0.0.1:7070>. [Sign in to a model provider](features/providers/README.md) in
 **Settings → Providers**, or reuse existing Pi credentials in `~/.pi/agent`.
 Then start a new session.
 
@@ -27,6 +27,7 @@ storage, backups and browser origins.
 
 ## Develop
 
+See the [feature inventory and source layout](docs/README.md#feature-inventory) to find an owner.
 Install development dependencies with `npm ci`, then run `npm run verify` for the required
 typecheck, lint and module-test baseline. See [development setup and checks](docs/development.md)
 for tool prerequisites, focused checks and scratch browser journeys.

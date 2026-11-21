@@ -5,7 +5,7 @@
 // Usage: node seed.ts <database> <repo> <pi-session-dir>
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { seedRegistry } from "../../../../test/fixtures/registry.ts";
+import { seedRegistry } from "../../../../test/shared/registry.ts";
 
 const [database, repo, sessionDir] = process.argv.slice(2);
 if (!database || !repo || !sessionDir) throw new Error("usage: node seed.ts <database> <repo> <pi-session-dir>");

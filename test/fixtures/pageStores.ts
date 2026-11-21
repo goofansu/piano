@@ -1,3 +1,3 @@
-import { createPageStores } from "../../web/src/lib/pageStores.ts";
+import { createPageStores } from "../../web/src/app/pageStores.ts";
 
 export const pageStores = () => createPageStores(() => {});

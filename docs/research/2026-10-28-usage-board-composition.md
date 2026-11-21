@@ -136,16 +136,16 @@ Validate the proposed layout with a scratch browser journey before treating it a
 
 ### Local primary sources
 
-- **L1:** [sidebarView.ts](../../web/src/lib/sidebarView.ts), `DATE_LABELS`, `dateLabel`, `dateGroups` — actual date labels, local-midnight boundaries and `updatedAt` grouping.
+- **L1:** [sidebarView.ts](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/lib/sidebarView.ts), `DATE_LABELS`, `dateLabel`, `dateGroups` — actual date labels, local-midnight boundaries and `updatedAt` grouping.
 - **L2:** Installed `node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js`, `getSessionStats()` — all-entry accounting, including standalone usage, compaction/branch summaries, tool results and assistants; not just current context.
-- **L3:** [contextUsage.ts](../../web/src/lib/contextUsage.ts) and [wire.ts](../../shared/wire.ts) — existing token categories, weighted cache hit, per-response physical model and cumulative usage semantics.
+- **L3:** [contextUsage.ts](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/lib/contextUsage.ts) and [wire.ts](../../shared/wire.ts) — existing token categories, weighted cache hit, per-response physical model and cumulative usage semantics.
 - **L4:** [Glossary](../glossary.md) — session, task and acceptance distinctions.
-- **L5:** [SettingsSectionFrame.tsx](../../web/src/components/SettingsSectionFrame.tsx), [SettingsPage.tsx](../../web/src/components/SettingsPage.tsx) — shared Settings layout and current sections.
+- **L5:** [SettingsSectionFrame.tsx](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/SettingsSectionFrame.tsx), [SettingsPage.tsx](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/SettingsPage.tsx) — shared Settings layout and current sections.
 - **L6:** Installed `node_modules/@earendil-works/pi-ai/dist/types.d.ts`, `Usage` — cost components and token subset definitions.
 - **L7:** Installed `node_modules/@earendil-works/pi-ai/dist/models.js`, `calculateCost` — per-category rates, tier selection and cache-write pricing.
-- **L8:** [PiRecords.ts](../../server/PiRecords.ts), `usageOf` — absent-field zero normalization and flattened cost.
+- **L8:** [PiRecords.ts](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/PiRecords.ts), `usageOf` — absent-field zero normalization and flattened cost.
 - **L9:** Installed `node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.d.ts`, `SessionEntryBase`, `UsageEntry`, `CompactionEntry`, `BranchSummaryEntry`; installed `node_modules/@earendil-works/pi-ai/dist/types.d.ts`, `AssistantMessage` — entry timestamps, request-start timestamps, optional duration and model-attribution limits.
-- **L10:** [PiHistory.ts](../../server/PiHistory.ts), `savedEntries`, `savedFacts` — all-entry read path versus context-oriented snapshot.
+- **L10:** [PiHistory.ts](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/PiHistory.ts), `savedEntries`, `savedFacts` — all-entry read path versus context-oriented snapshot.
 - **R1 (earlier research, not a fresh audit):** [Practical usage dashboard](2026-10-12-usage-dashboard.md) — broader history accounting feasibility and limitations.
 
 ### External first-party sources

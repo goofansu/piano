@@ -177,7 +177,7 @@ For fences, Piano keeps:
 - **Highlighter.** The generated `lib/highlighter.tsx` runs Shiki's JavaScript engine on the main
   thread with 13 bundled languages; `lib/file-highlight.ts` already runs Shiki in a worker for
   file previews. Choose deliberately between the generated loader and one shared grammar loader,
-  and measure a long transcript with many fences ([session performance](../session-performance.md)).
+  and measure a long transcript with many fences ([session performance](https://github.com/goofansu/piano/blob/346a64bbb22d9f321e27f771f68b6180e11e3427/docs/session-performance.md)).
 - **Look.** CodeBlock's border, `dark:bg-input/30` and padding differ from `.prose-chat pre`
   (`index.css`). Settle differences in a Piano wrapper or tokens and compare style shots.
 
@@ -197,19 +197,19 @@ Primary upstream sources (mutable; inspected 2026-10-29):
 
 Piano sources at the revision above:
 
-- **S3:** [`Changes.tsx`](../../web/src/components/Changes.tsx), especially `LiveFile`, `Hunks`
-  and `DiffRowView`; [`diff.ts`](../../web/src/lib/diff.ts).
-- **S4:** [`changesView.ts`](../../web/src/lib/changesView.ts),
-  [`ChangesHeader.tsx`](../../web/src/components/ChangesHeader.tsx).
+- **S3:** [`Changes.tsx`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/Changes.tsx), especially `LiveFile`, `Hunks`
+  and `DiffRowView`; [`diff.ts`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/lib/diff.ts).
+- **S4:** [`changesView.ts`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/lib/changesView.ts),
+  [`ChangesHeader.tsx`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/ChangesHeader.tsx).
 - **S5:** [`components.json`](../../web/components.json), [`web/package.json`](../../web/package.json).
 - **S6:** [`lineBlocks.ts`](../../web/src/lib/lineBlocks.ts), [`index.css`](../../web/src/index.css).
 - **S7:** [Development invariants](../development-invariants.md).
 - **S8:** [shadcn ownership and upgrades](../shadcn-ui.md), [project instructions](../../AGENTS.md).
 - **S10:** [`file-highlight.ts`](../../web/src/lib/file-highlight.ts).
-- **S11:** [Testing policy](../testing.md), [`Diff.test.ts`](../../test/Diff.test.ts).
-- **S12:** [`Markdown.tsx`](../../web/src/components/Markdown.tsx) (`MarkdownPre`, `CopyCode`),
-  [`MessageList.tsx`](../../web/src/components/MessageList.tsx) (`Tool`, `FoldedOutput`,
-  `ContextCard`, `ErrorMessage`, `DispatchRow`), [`transcript.ts`](../../web/src/lib/transcript.ts),
+- **S11:** [Testing policy](../testing.md), [`Diff.test.ts`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/test/Diff.test.ts).
+- **S12:** [`Markdown.tsx`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/Markdown.tsx) (`MarkdownPre`, `CopyCode`),
+  [`MessageList.tsx`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/MessageList.tsx) (`Tool`, `FoldedOutput`,
+  `ContextCard`, `ErrorMessage`, `DispatchRow`), [`transcript.ts`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/lib/transcript.ts),
   `.prose-chat pre` in [`index.css`](../../web/src/index.css).
 
 Successful read-only CLI observations, from `web/` except the initial docs lookup:

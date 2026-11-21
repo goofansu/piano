@@ -1,7 +1,7 @@
 # Pi image restrictions: upload policy versus image processing
 
 Historical research: the Piano limits quoted below describe the initial implementation. The
-subsequent [accepted upload policy](../image-attachments.md) raises them to 10 MiB per image,
+subsequent [accepted upload policy](https://github.com/goofansu/piano/blob/346a64bbb22d9f321e27f771f68b6180e11e3427/docs/image-attachments.md) raises them to 10 MiB per image,
 four images, and 20 MiB combined; the Pi findings remain unchanged.
 
 ## Scope and conclusion

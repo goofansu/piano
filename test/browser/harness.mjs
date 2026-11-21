@@ -19,8 +19,8 @@ import {
   revisionOutcome,
   saveRun,
 } from "../../scripts/verification-evidence.mjs";
-import { freePorts } from "../fixtures/ports.ts";
-import { seedRegistry } from "../fixtures/registry.ts";
+import { freePorts } from "../shared/ports.ts";
+import { seedRegistry } from "../shared/registry.ts";
 
 const ROOT = resolve(import.meta.dirname, "../..");
 

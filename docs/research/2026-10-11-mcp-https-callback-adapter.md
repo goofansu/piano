@@ -480,7 +480,7 @@ this bounded feasibility result.
 
 These observations/recommendations are attributed, not additional Pi findings:
 
-- [`server/Router.ts`](../../server/Router.ts) has GET/POST/PUT/DELETE
+- [`server/Router.ts`](https://github.com/goofansu/piano/blob/45a835dab6bed4b3a2b284c2c5171452679b7992/server/Router.ts) has GET/POST/PUT/DELETE
   `/api/settings/mcp/login`, but no callback route. [`server/main.ts`](../../server/main.ts)
   uses `HttpRouter.serve` with `disableLogger: true`; no trusted public-origin setting
   exists. [`web/vite.config.ts`](../../web/vite.config.ts) proxies only `/api` and `/ws`.

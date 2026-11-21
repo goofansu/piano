@@ -24,7 +24,7 @@ rung that holds:
    that differ only in shape or size, such as path names, counts or encodings, share one table.
 3. **Add a test** for a contract no existing test title states, at the smallest reliable boundary.
 
-`npm run verify` prints the lines changed under `test/` since `origin/main`. A behavior-preserving
+`npm run verify` prints the lines changed in `test/` and `features/*/tests/` since `origin/main`. A behavior-preserving
 refactor adds no more test lines than it removes; when it adds more, name the uncovered risk each
 added test protects.
 
@@ -72,7 +72,7 @@ rule, coverage target or requirement that every PR add tests applies.
 | Change or risk | Useful evidence |
 | --- | --- |
 | Domain rule, translation or state transition | Focused unit/module test if the behavior is consequential and not already covered. |
-| Browser–server request or reply (`ClientMessage`/`ServerMessage` in `shared/wire.ts`, endpoints in `shared/http.ts`) | Module test through the handler: `test/ClientDispatch.test.ts` for socket messages, `test/Api.test.ts` for HTTP. |
+| Browser–server request or reply (`ClientMessage`/`ServerMessage` in `shared/wire.ts`, feature HTTP endpoints assembled in `server/app/Endpoints.ts`) | Module test through the handler: `test/ClientDispatch.test.ts` for socket messages, `test/Api.test.ts` for HTTP. |
 | RPC lifecycle, reconnect, dialog race | Deterministic fake-Pi contract test through PiSessions; browser observation when UI behavior changes. |
 | Git lifecycle semantics | Integration check in a throwaway repository against real Git; a mocked CLI alone cannot establish compatibility. |
 | User interaction, rendering or preview identity | Observe the affected browser journey, including relevant error/empty states; retain a regression test when recurrence warrants it. |
@@ -86,8 +86,8 @@ a different purpose.
 
 ## Feature verification map
 
-For a new or substantially changed feature, give verification one starting place: a
-`docs/<feature>.md` page, or the existing owning page, linking:
+For a new or substantially changed feature, give verification one starting place: its
+`features/<feature>/README.md`, linking:
 
 - the owning modules per runtime and their public interfaces;
 - the relevant module tests;
@@ -95,8 +95,8 @@ For a new or substantially changed feature, give verification one starting place
 
 Link that page from the feature's entry in the [verification map](../.agents/skills/verify-piano/features/README.md#features).
 Keep implementation maps in the owning doc and user-facing steps in the feature recipe. Choose
-coverage by the risk rules above; the map does not itself require new tests, a folder migration or
-retroactive documentation of unchanged features.
+coverage by the risk rules above; the map does not itself require new tests, duplicate tests or
+separate guides for each runtime.
 
 ## UI evidence scope
 

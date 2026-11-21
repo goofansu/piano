@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isImeKey, sessionNavigationKey } from "../web/src/lib/keys.ts";
+import { isImeKey, sessionNavigationKey } from "../web/src/shared/lib/keys.ts";
 
 const key = (isComposing: boolean, keyCode: number) => ({ isComposing, keyCode });
 

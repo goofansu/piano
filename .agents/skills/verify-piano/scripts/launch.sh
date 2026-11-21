@@ -39,7 +39,7 @@ EVIDENCE=${VERIFY_EVIDENCE:-${TMPDIR:-/tmp}/verify-piano-evidence}/$RUN_ID
 
 # Both ports come from one batch so the OS cannot hand the same port to the backend and the UI.
 read -r FREE_PORT FREE_WEB_PORT < <(cd "$ROOT" && node --input-type=module -e \
-  'const { freePorts } = await import("./test/fixtures/ports.ts"); console.log((await freePorts(2)).join(" "))') || true
+  'const { freePorts } = await import("./test/shared/ports.ts"); console.log((await freePorts(2)).join(" "))') || true
 PORT=${VERIFY_PORT:-$FREE_PORT}
 WEB_PORT=${VERIFY_WEB_PORT:-$FREE_WEB_PORT}
 [ -n "$PORT" ] && [ -n "$WEB_PORT" ] || die "could not select free ports"
@@ -94,7 +94,7 @@ export PIANO_SESSION_ORIGIN=$WEB_URL
 EOF
 
 cd "$ROOT"
-# The server passes no launch variable on to its children (server/ChildEnvironment.ts); see Gotchas
+# The server passes no launch variable on to its children (server/shared/ChildEnvironment.ts); see Gotchas
 # for PIANO_API_SOCKET.
 detach env -u PIANO_API_SOCKET \
   HOME="$RUN/home" HOST=127.0.0.1 PORT="$PORT" PIANO_DB_PATH="$DB" \

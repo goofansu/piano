@@ -1,0 +1,1000 @@
+/// <reference lib="dom" />
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import type {
+  SessionHandle,
+  SessionStatus,
+  StartArguments,
+  StartToolResult,
+  WaitArguments,
+  WaitToolResult,
+} from "../../../../shared/session/dispatch.ts";
+import type { RenderMsg, ToolExecution } from "../../../../shared/wire.ts";
+import { messageError } from "../../web/transcript/messageError.ts";
+import {
+  jumpEntries,
+  type TranscriptOptions,
+  type TranscriptRow,
+  transcriptRows,
+} from "../../web/transcript/transcript.ts";
+
+const jumps = (messages: ReadonlyArray<RenderMsg>) => jumpEntries(transcriptRows(messages));
+const ids = (rows: TranscriptRow[]) => rows.map((row) => row.msg.id);
+const reply = (rows: TranscriptRow[], id: string) => {
+  const row = rows.find((r) => r.msg.id === id);
+  assert.ok(row?.kind === "reply", `${id} is a reply row`);
+  return row;
+};
+
+test("ask_user joins persisted answers to question text in order, including empty and unanswered items", () => {
+  const questions = [
+    { id: "database", question: "Which database?", options: ["PostgreSQL", "SQLite"] },
+    { id: "requirements", question: "What should change?" },
+    { id: "schedule", question: "When?" },
+  ];
+  const asked: RenderMsg = {
+    id: "asked",
+    role: "assistant",
+    text: "",
+    toolCalls: [{ id: "q", name: "ask_user", args: JSON.stringify({ questions }) }],
+  };
+  const result = (value: unknown): RenderMsg => ({
+    id: "answered",
+    role: "tool_result",
+    toolCallId: "q",
+    text: JSON.stringify(value),
+  });
+  const facts = (response?: RenderMsg) =>
+    reply(transcriptRows(response ? [asked, response] : [asked]), "asked").tools[0]?.answers;
+  assert.equal(facts(), undefined, "unanswered calls keep the generic running tool row");
+  assert.deepEqual(
+    facts(
+      result({
+        status: "answered",
+        answers: {
+          schedule: "",
+          requirements: "Keep the API\nChange the layout",
+          database: "SQLite",
+        },
+      }),
+    ),
+    {
+      status: "answered",
+      items: [
+        { id: "database", question: "Which database?", answer: "SQLite" },
+        {
+          id: "requirements",
+          question: "What should change?",
+          answer: "Keep the API\nChange the layout",
+        },
+        { id: "schedule", question: "When?", answer: "" },
+      ],
+    },
+  );
+  assert.deepEqual(facts(result({ status: "cancelled", answers: { database: "SQLite" } })), {
+    status: "cancelled",
+    items: [
+      { id: "database", question: "Which database?", answer: "SQLite" },
+      { id: "requirements", question: "What should change?" },
+      { id: "schedule", question: "When?" },
+    ],
+  });
+  for (const value of [
+    { status: "answered", answers: {} },
+    { status: "cancelled", answers: { database: true } },
+    { status: "cancelled", answers: { unknown: "Do not hide this output" } },
+  ])
+    assert.equal(
+      facts(result(value)),
+      undefined,
+      "malformed/unmatched results retain their raw output",
+    );
+  assert.equal(
+    facts({ ...result({ status: "cancelled", answers: {} }), isError: true }),
+    undefined,
+  );
+  const invalid = { ...asked, toolCalls: [{ ...asked.toolCalls![0]!, args: "{" }] };
+  assert.equal(
+    reply(transcriptRows([invalid, result({ status: "cancelled", answers: {} })]), "asked").tools[0]
+      ?.answers,
+    undefined,
+  );
+});
+
+test("ask_user reads question IDs the model sent as numbers as Pi converts them", () => {
+  const asked: RenderMsg = {
+    id: "asked",
+    role: "assistant",
+    text: "",
+    toolCalls: [
+      {
+        id: "q",
+        name: "ask_user",
+        args: JSON.stringify({ questions: [{ id: 1, question: "Proceed?" }] }),
+      },
+    ],
+  };
+  const answered: RenderMsg = {
+    id: "answered",
+    role: "tool_result",
+    toolCallId: "q",
+    text: JSON.stringify({ status: "answered", answers: { "1": "Yes" } }),
+  };
+  assert.deepEqual(reply(transcriptRows([asked, answered]), "asked").tools[0]?.answers, {
+    status: "answered",
+    items: [{ id: "1", question: "Proceed?", answer: "Yes" }],
+  });
+});
+
+const apiError =
+  'exe-dev-openai API error (429): {"type":"usage_limit_reached","message":"The usage limit has been reached","retry_after":123}';
+const failure = (errorMessage = apiError): RenderMsg => ({
+  id: "error",
+  role: "assistant",
+  text: "",
+  stopReason: "error",
+  errorMessage,
+});
+const call: RenderMsg = {
+  id: "call",
+  role: "assistant",
+  text: "",
+  toolCalls: [{ id: "sleep", name: "bash", args: '{"command":"sleep 30"}' }],
+};
+const result: RenderMsg = {
+  id: "result",
+  role: "tool_result",
+  toolCallId: "sleep",
+  text: "Command aborted",
+  isError: true,
+};
+const abort = failure("This operation was aborted");
+const errorOf = (messages: RenderMsg[], options: TranscriptOptions = {}) => {
+  const row = transcriptRows(messages, options).find((r) => r.msg.id === "error");
+  return row?.kind === "reply" ? row.error?.summary : undefined;
+};
+
+test("jumper previews prompts and final replies, not tool-only or intermediate assistant turns", () => {
+  const messages: RenderMsg[] = [
+    { id: "u1", role: "user", text: "Inspect the files" },
+    {
+      id: "a1",
+      role: "assistant",
+      text: "",
+      toolCalls: [{ id: "call", name: "bash", args: "{}" }],
+    },
+    { id: "r1", role: "tool_result", text: "files", toolCallId: "call" },
+    { id: "intermediate", role: "assistant", text: "Inspecting the files now" },
+    { id: "a2", role: "assistant", text: "Here are the files" },
+    { id: "u2", role: "user", text: "Thanks" },
+    { id: "a3", role: "assistant", text: "You're welcome" },
+  ];
+  const destinations = jumps(messages).filter((entry) => "messageId" in entry);
+  assert.deepEqual(
+    destinations.map((entry) => entry.id),
+    ["u1", "a2", "u2", "a3"],
+  );
+  assert.equal(destinations[1]!.label, "Here are the files");
+});
+
+test("a prompt is reachable before the first assistant response", () => {
+  assert.deepEqual(
+    jumps([{ id: "u1", role: "user", text: "Hello" }]).map((entry) => entry.kind),
+    ["top", "user", "bottom"],
+  );
+});
+
+test("a skill prompt is listed as the command that was typed, never as Pi's expansion markup", () => {
+  const skill = {
+    name: "research",
+    location: "/home/me/.pi/agent/skills/research/SKILL.md",
+    body: "# Research\n\nLook things up.",
+  };
+  const entries = jumps([
+    { id: "u1", role: "user", text: "the changelog", skill },
+    { id: "u2", role: "user", text: "", skill },
+  ]);
+  assert.deepEqual(
+    entries.filter((entry) => entry.kind === "user").map((entry) => entry.label),
+    ["/skill:research the changelog", "/skill:research"],
+  );
+});
+
+test("a tool result folds under its call wherever the call sits; an orphan stands alone", () => {
+  const orphan: RenderMsg = {
+    id: "orphan",
+    role: "tool_result",
+    toolCallId: "gone",
+    toolName: "read",
+    text: "Hidden tool output",
+  };
+  const rows = transcriptRows([result, call, orphan]);
+  assert.deepEqual(ids(rows), ["call", "orphan"]);
+  assert.equal(reply(rows, "call").tools[0]!.result, result);
+  const alone = rows[1]!;
+  assert.ok(alone.kind === "orphan");
+  assert.deepEqual(alone.tool.call, { id: "gone", name: "read", args: "" });
+});
+
+test("a pending reply's unanswered call is running until an execution or result says otherwise", () => {
+  const pending = {
+    ...call,
+    id: "pending",
+    toolCalls: ["a", "b", "c"].map((id) => ({ id, name: "bash", args: "" })),
+  };
+  const tools: Record<string, ToolExecution> = {
+    b: { id: "b", name: "bash", args: "", text: "", status: "success", outputKind: "final" },
+  };
+  const rows = transcriptRows([{ id: "rc", role: "tool_result", toolCallId: "c", text: "done" }], {
+    pending,
+    tools,
+  });
+  assert.deepEqual(
+    reply(rows, "pending").tools.map((tool) => tool.outcome),
+    ["running", "pending", "done"],
+  );
+  const final = { ...pending, id: "e2" };
+  const streaming = transcriptRows([], { pending: final }).at(-1)!;
+  const ended = transcriptRows([final]).at(-1)!;
+  assert.equal(streaming.key, ended.key, "a reply keeps its row key when it stops streaming");
+  assert.deepEqual(
+    transcriptRows([final], { pending: final }).map((row) => row.key),
+    ["e2"],
+    "a partial already in history is shown once",
+  );
+});
+
+test("a call's outcome, verb and visible output come from its result, else its execution", () => {
+  const calls = ["ok", "err", "cut", "live", "quiet"].map((id) => ({
+    id,
+    name: id === "quiet" ? "fetch" : "bash",
+    args: '{"command":"make test"}',
+  }));
+  const tools: Record<string, ToolExecution> = {
+    err: { id: "err", name: "bash", args: "", text: "boom", status: "error", outputKind: "final" },
+    cut: {
+      id: "cut",
+      name: "bash",
+      args: "",
+      text: "partial",
+      status: "incomplete",
+      outputKind: "latest-update",
+    },
+    live: {
+      id: "live",
+      name: "bash",
+      args: "",
+      text: "",
+      status: "running",
+      outputKind: "latest-update",
+    },
+  };
+  const rows = transcriptRows(
+    [
+      { id: "a", role: "assistant", text: "", toolCalls: calls },
+      { id: "r", role: "tool_result", toolCallId: "ok", text: "passed" },
+    ],
+    { tools },
+  );
+  const facts = reply(rows, "a").tools.map(({ outcome, verb, output, knownTool }) => ({
+    outcome,
+    verb,
+    output,
+    knownTool,
+  }));
+  assert.deepEqual(facts, [
+    { outcome: "done", verb: "Ran", output: "passed", knownTool: true },
+    { outcome: "failed", verb: "Failed", output: "boom", knownTool: true },
+    { outcome: "incomplete", verb: "Incomplete", output: "partial", knownTool: true },
+    { outcome: "running", verb: "Running", output: "", knownTool: true },
+    { outcome: "pending", verb: "Called", output: undefined, knownTool: false },
+  ]);
+  assert.equal(reply(rows, "a").tools[0]!.summary, "make test");
+  assert.equal(
+    reply(transcriptRows([call, result]), "call").tools[0]!.outcome,
+    "failed",
+    "an error result fails the call",
+  );
+});
+
+test("a call's nested calls are those its result recorded plus live executions it parents, and no others", () => {
+  const exec = (id: string, parentId?: string): ToolExecution => ({
+    id,
+    ...(parentId ? { parentId } : {}),
+    name: "read",
+    args: "",
+    text: id,
+    status: "running",
+    outputKind: "latest-update",
+  });
+  const recorded = exec("task/1");
+  const tools = {
+    task: exec("task"),
+    "task/1": { ...recorded, text: "newer" },
+    "task/2": exec("task/2"),
+    child: exec("child", "task"),
+    other: exec("other"),
+    "taskish/1": exec("taskish/1"),
+  };
+  const history: RenderMsg[] = [
+    {
+      id: "a",
+      role: "assistant",
+      text: "",
+      toolCalls: [
+        { id: "task", name: "task", args: "{}" },
+        { id: "other", name: "bash", args: "{}" },
+      ],
+    },
+    {
+      id: "r",
+      role: "tool_result",
+      toolCallId: "task",
+      text: "",
+      nestedCalls: [recorded],
+      nestedCallsLost: "details",
+    },
+  ];
+  const [task, other] = reply(transcriptRows(history, { tools }), "a").tools;
+  assert.deepEqual(
+    task!.nested.calls.map(({ call }) => [call.id, call.text]),
+    [
+      ["task/1", "newer"],
+      ["task/2", "task/2"],
+      ["child", "child"],
+    ],
+  );
+  assert.equal(task!.nested.complete, false);
+  assert.deepEqual([other!.nested.calls, other!.nested.complete], [[], true]);
+});
+
+test("omitted saved inputs are contextual, not a codemode warning or a tool failure", () => {
+  const child: ToolExecution = {
+    id: "code/1",
+    name: "radius_artifact_create",
+    args: "",
+    argsOmitted: "size",
+    text: "",
+    status: "success",
+    outputKind: "unavailable",
+  };
+  const messages: RenderMsg[] = [
+    {
+      id: "a",
+      role: "assistant",
+      text: "",
+      toolCalls: [{ id: "code", name: "codemode", args: "{}" }],
+    },
+    {
+      id: "r",
+      role: "tool_result",
+      text: "confirmed",
+      toolCallId: "code",
+      nestedCalls: [child],
+      nestedCallsLost: "arguments",
+    },
+  ];
+  const executions: Record<string, ToolExecution>[] = [
+    {},
+    { "code/1": { ...child, args: "{}", text: "confirmed", outputKind: "final" } },
+  ];
+  for (const tools of executions) {
+    const tool = reply(transcriptRows(messages, { tools }), "a").tools[0];
+    assert.equal(tool.nested.warning, undefined);
+    assert.equal(tool.outcome, "done");
+    assert.equal(tool.nested.calls[0].outcome, "done");
+    assert.equal(
+      tool.nested.calls[0].inputNote,
+      tools[child.id] ? undefined : "Input too large to retain in history.",
+    );
+  }
+  messages[1] = {
+    ...messages[1],
+    nestedCallsLost: "details",
+    nestedCalls: [
+      { ...child, status: "error" },
+      { ...child, id: "code/2", argsOmitted: undefined, status: "incomplete" },
+    ],
+  };
+  const tool = reply(transcriptRows(messages), "a").tools[0];
+  assert.equal(tool.nested.warning, "Some tool details are unavailable.");
+  assert.deepEqual(
+    tool.nested.calls.map(({ outcome, inputNote }) => ({ outcome, inputNote })),
+    [
+      { outcome: "failed", inputNote: "Input too large to retain in history." },
+      { outcome: "incomplete", inputNote: undefined },
+    ],
+    "known size omissions remain contextual even when other details are unknown",
+  );
+});
+
+const script = (statuses: ReadonlyArray<ToolExecution["status"]>): ToolExecution[] =>
+  statuses.map((status, i) => ({
+    id: `code/${i + 1}`,
+    parentId: "code",
+    name: "bash",
+    args: JSON.stringify({ command: `step ${i + 1}` }),
+    text: "",
+    status,
+    outputKind: "unavailable",
+  }));
+const nestedOf = (
+  statuses: ReadonlyArray<ToolExecution["status"]>,
+  { running = false }: { running?: boolean } = {},
+) => {
+  const calls = script(statuses);
+  const history: RenderMsg[] = [
+    {
+      id: "a",
+      role: "assistant",
+      text: "",
+      toolCalls: [{ id: "code", name: "code", args: "{}" }],
+    },
+  ];
+  if (!running)
+    history.push({
+      id: "r",
+      role: "tool_result",
+      toolCallId: "code",
+      text: "",
+      nestedCalls: calls,
+    });
+  const parent: ToolExecution = {
+    id: "code",
+    name: "code",
+    args: "{}",
+    text: "",
+    status: "running",
+    outputKind: "latest-update",
+  };
+  const tools = running
+    ? Object.fromEntries([parent, ...calls].map((call) => [call.id, call]))
+    : {};
+  return reply(transcriptRows(history, { tools }), "a").tools[0]!.nested;
+};
+const numbers = (calls: ReadonlyArray<{ call: ToolExecution }>) =>
+  calls.map(({ call }) => Number(call.id.slice(5)));
+
+test("a nested call's dot reads as a top-level tool's would, beside what it acted on", () => {
+  const { calls } = nestedOf(["running", "success", "error", "incomplete"], { running: true });
+  assert.deepEqual(
+    calls.map((c) => [c.outcome, c.summary]),
+    [
+      ["running", "step 1"],
+      ["done", "step 2"],
+      ["failed", "step 3"],
+      ["incomplete", "step 4"],
+    ],
+  );
+});
+
+test("a script's nested calls fold to its last 8, with the rest counted on the fold line", () => {
+  const statuses = Array.from({ length: 40 }, (_, i) =>
+    [3, 10, 38].includes(i + 1) ? ("error" as const) : ("success" as const),
+  );
+  const nested = nestedOf(statuses);
+  assert.deepEqual(numbers(nested.folded), [33, 34, 35, 36, 37, 38, 39, 40]);
+  assert.equal(nested.calls.length, 40);
+  assert.deepEqual(nested.fold, {
+    showAll: "Show all 40 tool calls",
+    showFewer: "Show last 8 tool calls",
+  });
+  assert.equal(nested.failed, 3, "every failure counts, folded or shown");
+});
+
+test("eight or fewer nested calls all show, with no fold line", () => {
+  for (const n of [0, 1, 8]) {
+    const nested = nestedOf(Array.from({ length: n }, () => "success" as const));
+    assert.deepEqual([nested.folded.length, nested.fold, nested.failed], [n, undefined, 0]);
+  }
+  const nine = nestedOf(Array.from({ length: 9 }, () => "success" as const));
+  assert.deepEqual(numbers(nine.folded), [2, 3, 4, 5, 6, 7, 8, 9]);
+  assert.equal(nine.fold?.showAll, "Show all 9 tool calls");
+});
+
+test("a nested call still running stays in view however old, and folding back says so", () => {
+  const statuses = Array.from({ length: 20 }, (_, i) =>
+    i + 1 === 2 ? ("running" as const) : ("success" as const),
+  );
+  const nested = nestedOf(statuses, { running: true });
+  assert.deepEqual(numbers(nested.folded), [2, 13, 14, 15, 16, 17, 18, 19, 20]);
+  assert.equal(nested.fold?.showFewer, "Show 9 tool calls");
+});
+
+test("a running script's closed row names the call it is on and counts its calls", () => {
+  const nested = nestedOf(["success", "error", "success", "running"], { running: true });
+  assert.equal(nested.latest?.call.id, "code/4");
+  assert.equal(nested.latest?.summary, "step 4");
+  assert.deepEqual([nested.calls.length, nested.failed], [4, 1]);
+  assert.equal(nestedOf(["success", "success"], { running: true }).latest?.call.id, "code/2");
+  assert.equal(
+    nestedOf(["running", "running", "success"], { running: true }).latest?.call.id,
+    "code/2",
+  );
+});
+
+test("a finished script's closed row counts its calls without naming one", () => {
+  const nested = nestedOf(["success", "error", "error"]);
+  assert.deepEqual([nested.calls.length, nested.failed, nested.latest], [3, 2, undefined]);
+  assert.equal(nestedOf([], { running: true }).calls.length, 0, "a call that made no calls");
+});
+
+test("a failed aborted tool replaces only the duplicated abort, including pending and reload views", () => {
+  assert.equal(errorOf([call, result, abort]), undefined);
+  assert.equal(errorOf([call, result], { pending: abort }), undefined);
+  assert.equal(errorOf([{ ...call, ...abort, toolCalls: call.toolCalls }, result]), undefined);
+  const execution: ToolExecution = {
+    id: "sleep",
+    name: "bash",
+    args: call.toolCalls![0]!.args,
+    text: "Command aborted",
+    status: "error",
+    outputKind: "final",
+  };
+  assert.equal(errorOf([call, abort], { tools: { sleep: execution } }), undefined);
+  assert.equal(
+    errorOf([], {
+      tools: { sleep: execution },
+      pending: { ...call, ...abort, toolCalls: call.toolCalls },
+    }),
+    undefined,
+  );
+  assert.deepEqual(
+    ids(transcriptRows([call, result, abort])),
+    ["call"],
+    "no empty row is left where the abort was",
+  );
+});
+
+test("unrelated genuine errors and unrepresented aborts remain visible", () => {
+  const aborted = "This operation was aborted";
+  assert.equal(errorOf([call, result, failure()]), "The usage limit has been reached");
+  assert.equal(errorOf([abort]), aborted);
+  assert.equal(errorOf([call, { ...result, text: "Permission denied" }, abort]), aborted);
+  assert.equal(errorOf([call, { ...result, isError: false }, abort]), aborted);
+  assert.equal(
+    errorOf([call, result, { id: "next", role: "user", text: "Next turn" }, abort]),
+    aborted,
+  );
+  assert.equal(
+    errorOf([call, result, { id: "reply", role: "assistant", text: "Continuing" }, abort]),
+    aborted,
+  );
+  assert.match(
+    errorOf([call, result, failure("The operation was aborted because credentials expired")]) ?? "",
+    /credentials expired/,
+  );
+  assert.equal(errorOf([call, { ...result, toolCallId: "unrelated" }, abort]), aborted);
+});
+
+test("messages-only keeps prompts, final replies and errors, and hides activity and intermediate prose", () => {
+  const history: RenderMsg[] = [
+    { id: "user", role: "user", text: "My question" },
+    { ...call, text: "Partial reply" },
+    result,
+    { id: "orphan", role: "tool_result", toolName: "read", text: "Hidden tool output" },
+    { id: "context", role: "context", label: "Compaction summary", text: "Summary" },
+    { ...abort, id: "abort" },
+    failure(),
+  ];
+  const pending = { ...call, id: "pending", text: "Streaming reply" };
+  const rows = transcriptRows(history, { pending, showTools: false });
+  assert.deepEqual(ids(rows), ["user", "abort", "error"]);
+  assert.equal(reply(rows, "abort").error?.summary, "This operation was aborted");
+  for (const row of rows)
+    if (row.kind === "reply") assert.deepEqual([row.text, row.tools], ["", []]);
+  assert.deepEqual(transcriptRows([call], { pending: call, showTools: false }), []);
+  assert.deepEqual(ids(transcriptRows(history, { pending })), [
+    "user",
+    "call",
+    "orphan",
+    "context",
+    "error",
+    "pending",
+  ]);
+});
+
+test("both displays list every Jump to destination as a row, and messages-only lists nothing else", () => {
+  const history: RenderMsg[] = [
+    { id: "user", role: "user", text: "My question" },
+    { id: "commentary", role: "assistant", text: "Intermediate commentary" },
+    call,
+    result,
+    { id: "final", role: "assistant", text: "Final answer" },
+    {
+      id: "image",
+      role: "user",
+      text: "",
+      attachments: [{ kind: "image", url: "data:image/png;base64,abc" }],
+    },
+    { id: "next", role: "assistant", text: "Next final answer" },
+  ];
+  const destinations = ["user", "final", "image", "next"];
+  assert.deepEqual(
+    jumps(history).flatMap((entry) => ("messageId" in entry ? [entry.messageId] : [])),
+    destinations,
+  );
+  assert.deepEqual(ids(transcriptRows(history, { showTools: false })), destinations);
+  const all = transcriptRows(history, {
+    pending: { id: "pending", role: "assistant", text: "Unfinished reply" },
+  });
+  assert.deepEqual(
+    all.flatMap((row) => ("jump" in row && row.jump ? [row.msg.id] : [])),
+    destinations,
+    "a pending reply is never a destination",
+  );
+});
+
+test("summarization retains exact raw details and safely falls back for unknown payloads", () => {
+  const present = (raw: string) => messageError(failure(raw), [], new Map(), {});
+  assert.deepEqual(present(apiError), {
+    summary: "The usage limit has been reached",
+    details: apiError,
+  });
+  const nested = 'provider API error (500): {"error":{"message":"Try again later"}}';
+  assert.deepEqual(present(nested), { summary: "Try again later", details: nested });
+  for (const raw of [
+    "Connection refused",
+    "provider API error (500): {broken",
+    'provider API error (500): {"message":42}',
+    "provider API error (500): null",
+  ]) {
+    assert.deepEqual(present(raw), { summary: raw });
+  }
+  const long = `Provider failed: ${"details ".repeat(100)}`;
+  assert.equal(present(long)?.details, long);
+  assert.ok(present(long)!.summary.length <= 240);
+});
+
+test("a reply that tool calls interrupt is not a Jump to destination", () => {
+  const messages: RenderMsg[] = [
+    { id: "u1", role: "user", text: "Deploy it" },
+    {
+      id: "a1",
+      role: "assistant",
+      text: "Reading the docs first",
+      toolCalls: [{ id: "t1", name: "bash", args: "{}" }],
+    },
+    { id: "r1", role: "tool_result", text: "ok", toolCallId: "t1" },
+    { id: "a2", role: "assistant", text: "Done" },
+    { id: "u2", role: "user", text: "Thanks" },
+  ];
+  const entries = jumpEntries(transcriptRows(messages));
+  assert.deepEqual(
+    entries.map((e) => e.id),
+    ["top", "u1", "a2", "u2", "bottom"],
+    "the intermediate reply is not a destination",
+  );
+});
+
+test("a multi-line command's summary is its first line and how many lines follow", () => {
+  const command = "python3 - <<'PY'\nimport json\n    print(json.dumps(1))\nPY";
+  const rows = transcriptRows([
+    {
+      id: "a",
+      role: "assistant",
+      text: "",
+      toolCalls: [{ id: "t", name: "bash", args: JSON.stringify({ command }) }],
+    },
+  ]);
+  assert.equal(reply(rows, "a").tools[0]!.summary, "python3 - <<'PY' (+3 lines)");
+  const long = transcriptRows([
+    {
+      id: "b",
+      role: "assistant",
+      text: "",
+      toolCalls: [{ id: "t", name: "bash", args: JSON.stringify({ command: "x".repeat(200) }) }],
+    },
+  ]);
+  const summary = reply(long, "b").tools[0]!.summary;
+  assert.equal(summary.length, 160);
+  assert.ok(summary.endsWith("…"));
+});
+
+test("a tool's output shows as text: terminal colours, hyperlink escapes and \\r go", () => {
+  const rows = transcriptRows([
+    {
+      id: "a",
+      role: "assistant",
+      text: "",
+      toolCalls: [{ id: "t", name: "bash", args: '{"command":"gh pr view"}' }],
+    },
+    {
+      id: "r",
+      role: "tool_result",
+      toolCallId: "t",
+      text: "\x1b[0m\x1b[1mPR:\x1b[0m #149\r\n\x1b]8;;https://x.test\x1b\\\x1b[38;2;1;2;3mlink\x1b[0m\x1b]8;;\x1b\\\n",
+      isError: false,
+    },
+  ]);
+  assert.equal(reply(rows, "a").tools[0]!.output, "PR: #149\nlink\n");
+});
+
+test("a dispatch names each session it started or waited on, with the parent's observation", () => {
+  const handle: SessionHandle = {
+    cwd: "/repo",
+    sessionId: "child-1",
+    generation: "g1",
+    submissionId: 1,
+    baselineMessages: 0,
+    baselineFingerprint: "b",
+    inputFingerprint: "i",
+    anchorMessageId: null,
+  };
+  const brief = "Review the current diff.\nDo not edit files.";
+  const params = `prompt:\n${brief}`;
+  const start: RenderMsg = {
+    id: "start",
+    role: "assistant",
+    text: "",
+    toolCalls: [
+      {
+        id: "s",
+        name: "piano_start_session",
+        args: JSON.stringify({ prompt: brief } satisfies StartArguments),
+      },
+    ],
+  };
+  const started: RenderMsg = {
+    id: "started",
+    role: "tool_result",
+    toolCallId: "s",
+    text: JSON.stringify({
+      cwd: "/repo",
+      creation: "created",
+      submission: "started",
+      handle,
+      worktree: null,
+      link: "http://x/s/child-1",
+    } satisfies StartToolResult),
+  };
+  const wait: RenderMsg = {
+    id: "wait",
+    role: "assistant",
+    text: "",
+    toolCalls: [
+      {
+        id: "w",
+        name: "piano_wait_sessions",
+        args: JSON.stringify({ sessions: [handle] } satisfies WaitArguments),
+      },
+    ],
+  };
+  const waited: RenderMsg = {
+    id: "waited",
+    role: "tool_result",
+    toolCallId: "w",
+    text: JSON.stringify({
+      results: [
+        {
+          handle,
+          status: "settled",
+          ending: "observed",
+          answer: "No findings.",
+          attribution: "attributed",
+          link: "http://x/s/child-1",
+        },
+      ],
+    } satisfies WaitToolResult),
+  };
+  const dispatch = (messages: RenderMsg[], id: string) =>
+    reply(transcriptRows(messages), id).tools[0]?.dispatch;
+
+  assert.deepEqual(dispatch([start], "start"), [
+    {
+      sessionId: null,
+      title: "Review the current diff. Do not edit files.",
+      status: "Starting",
+      badge: "secondary",
+      params,
+    },
+  ]);
+  assert.deepEqual(dispatch([start, started], "start")?.[0], {
+    sessionId: "child-1",
+    title: "Review the current diff. Do not edit files.",
+    status: "Started",
+    badge: "secondary",
+    params,
+  });
+  assert.deepEqual(
+    dispatch([start, started, wait], "wait")?.map((s) => [s.sessionId, s.title, s.status]),
+    [["child-1", "Review the current diff. Do not edit files.", "Waiting"]],
+    "a running wait names its sessions by the brief that started them",
+  );
+  for (const [message, callId] of [
+    [start, "s"],
+    [wait, "w"],
+  ] as const) {
+    const tool = reply(
+      transcriptRows(callId === "s" ? [start] : [start, started, wait], {
+        tools: {
+          [callId]: {
+            id: callId,
+            name: message.toolCalls![0]!.name,
+            args: message.toolCalls![0]!.args,
+            text: "",
+            status: "incomplete",
+            outputKind: "unavailable",
+          },
+        },
+      }),
+      message.id,
+    ).tools[0]!;
+    assert.equal(tool.outcome, "incomplete");
+    assert.equal(tool.dispatch?.[0]?.status, "Incomplete", "the parent call is no longer active");
+    assert.equal(tool.dispatch?.[0]?.badge, "warning");
+    assert.equal(tool.dispatch?.[0]?.sessionId, callId === "w" ? "child-1" : null);
+  }
+  const finished = dispatch([start, started, wait, waited], "wait")?.[0];
+  assert.equal(finished?.status, "Finished", "settlement is not called success");
+  assert.equal(finished?.answer, "No findings.");
+
+  const refused: RenderMsg = {
+    id: "refused",
+    role: "tool_result",
+    toolCallId: "s",
+    text: "A non-empty, self-contained work brief is required.",
+    isError: true,
+  };
+  assert.equal(
+    dispatch([start, refused], "start"),
+    undefined,
+    "a failure the tool reported as text stays an ordinary tool call",
+  );
+});
+
+test("a dispatch into a new worktree names its branch, and a status read reports what the session needs", () => {
+  const handle: SessionHandle = {
+    cwd: "/repo/.worktrees/task-a",
+    sessionId: "child-a",
+    generation: "g1",
+    submissionId: 1,
+    baselineMessages: 0,
+    baselineFingerprint: "b",
+    inputFingerprint: "i",
+    anchorMessageId: null,
+  };
+  const call = (id: string, name: string, args: unknown): RenderMsg => ({
+    id,
+    role: "assistant",
+    text: "",
+    toolCalls: [{ id, name, args: JSON.stringify(args) }],
+  });
+  const result = (id: string, value: unknown): RenderMsg => ({
+    id: `${id}-result`,
+    role: "tool_result",
+    toolCallId: id,
+    text: JSON.stringify(value),
+  });
+  const start = call("s", "piano_start_session", {
+    prompt: "Fix the login bug.",
+    worktree: { branch: "task-a" },
+  } satisfies StartArguments);
+  const started = result("s", {
+    cwd: handle.cwd,
+    creation: "created",
+    submission: "started",
+    handle,
+    worktree: { path: handle.cwd, branch: "task-a" },
+    link: "http://x/s/child-a",
+  } satisfies StartToolResult);
+  const wait = call("w", "piano_wait_sessions", { sessions: [handle] } satisfies WaitArguments);
+  const status = call("q", "piano_session_status", { sessionId: "child-a" });
+  const read = (
+    needs: SessionStatus["needs"],
+    lastAnswer: string | null,
+    changes: SessionStatus["changes"] = { branch: "task-a", files: 2, pullRequest: null },
+  ) =>
+    result("q", {
+      sessionId: "child-a",
+      cwd: handle.cwd,
+      projectId: null,
+      disposition: needs ? "needs_input" : "settled",
+      since: "2026-10-21T00:00:00.000Z",
+      needs,
+      lastAnswer,
+      changes,
+      link: "http://x/s/child-a",
+    } satisfies SessionStatus);
+  const dispatch = (messages: RenderMsg[], id: string) =>
+    reply(transcriptRows(messages), id).tools[0]?.dispatch?.[0];
+
+  assert.equal(
+    dispatch([start], "s")?.branch,
+    "task-a",
+    "the requested branch shows while starting",
+  );
+  assert.equal(dispatch([start, started], "s")?.branch, "task-a");
+  assert.deepEqual(
+    [dispatch([start, started, wait], "w")?.title, dispatch([start, started, wait], "w")?.branch],
+    ["Fix the login bug.", "task-a"],
+    "a wait names the branch beside the brief",
+  );
+  const needs = dispatch(
+    [
+      start,
+      started,
+      status,
+      read({ title: "Allow rm -rf?", kind: "confirm", link: "http://x/s/child-a" }, null),
+    ],
+    "q",
+  );
+  assert.deepEqual(
+    [needs?.title, needs?.branch, needs?.status, needs?.badge, needs?.detail],
+    ["Fix the login bug.", "task-a", "Needs input", "warning", "Allow rm -rf?"],
+  );
+  const settled = dispatch([status, read(null, "Fixed.")], "q");
+  assert.deepEqual(
+    [settled?.sessionId, settled?.title, settled?.status, settled?.answer],
+    ["child-a", "Session", "Finished", "Fixed."],
+    "a session this transcript did not start is still named by its ID's row",
+  );
+  const detached = { branch: null, files: 0, pullRequest: null };
+  assert.equal(
+    dispatch([start, started, status, read(null, "Fixed.", detached)], "q")?.branch,
+    "Detached HEAD",
+    "a checkout Git lists on no branch is labelled as Changes labels it, not by the dispatched branch",
+  );
+  assert.equal(
+    dispatch([start, started, status, read(null, "Fixed.", null)], "q")?.branch,
+    "task-a",
+    "outside a Git checkout the dispatched branch still names the row",
+  );
+  assert.equal(
+    dispatch([status, { ...read(null, null), text: "Piano lists no session child-a." }], "q"),
+    undefined,
+    "an unknown session stays an ordinary tool call",
+  );
+});
+
+test("a session saved when start and wait said waiting_for_input still shows Needs input", () => {
+  const handle: SessionHandle = {
+    cwd: "/repo",
+    sessionId: "child-a",
+    generation: "g1",
+    submissionId: 1,
+    baselineMessages: 0,
+    baselineFingerprint: "b",
+    inputFingerprint: "i",
+    anchorMessageId: null,
+  };
+  const messages = (submission: string, status: string): RenderMsg[] => [
+    {
+      id: "s",
+      role: "assistant",
+      text: "",
+      toolCalls: [{ id: "s", name: "piano_start_session", args: '{"prompt":"Fix it."}' }],
+    },
+    {
+      id: "s-result",
+      role: "tool_result",
+      toolCallId: "s",
+      text: JSON.stringify({ cwd: "/repo", creation: "created", submission, handle }),
+    },
+    {
+      id: "w",
+      role: "assistant",
+      text: "",
+      toolCalls: [
+        { id: "w", name: "piano_wait_sessions", args: JSON.stringify({ sessions: [handle] }) },
+      ],
+    },
+    {
+      id: "w-result",
+      role: "tool_result",
+      toolCallId: "w",
+      text: JSON.stringify({ results: [{ handle, status, ending: "observed", answer: null }] }),
+    },
+  ];
+  const shown = (rows: RenderMsg[]) =>
+    ["s", "w"].map((id) => {
+      const row = reply(transcriptRows(rows), id).tools[0]?.dispatch?.[0];
+      return [row?.status, row?.badge];
+    });
+  const needsInput = [
+    ["Needs input", "warning"],
+    ["Needs input", "warning"],
+  ];
+  assert.deepEqual(shown(messages("needs_input", "needs_input")), needsInput);
+  assert.deepEqual(shown(messages("waiting_for_input", "waiting_for_input")), needsInput);
+});

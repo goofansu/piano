@@ -99,7 +99,7 @@ models, not the seed's.
     `keep this draft`, still on `/new`, and the audit has no prompt with that text.
     Capture `04-disconnected-draft`, then Cleanup. No warning is required for an already-disabled
     send. The browser harness covers successful send/reload, not this case; the delivery-race
-    warning is separately protected by `test/DraftSubmission.test.ts`.
+    warning is separately protected by `test/integration/sessions/composer/DraftSubmission.test.ts`.
 
 ## Gotchas
 

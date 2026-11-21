@@ -6,8 +6,8 @@ import {
   MAX_ATTACHMENT_NAME_LENGTH,
   MAX_ATTACHMENTS,
   MAX_IMAGE_BYTES,
-} from "./attachments.ts";
-import { DISPOSITIONS } from "./dispatch.ts";
+} from "./session/attachments.ts";
+import { DISPOSITIONS } from "./session/dispatch.ts";
 
 export const Attachment = Schema.Struct({
   kind: Schema.Literal("image"),
@@ -372,102 +372,10 @@ export const Workspace = Schema.Struct({
 });
 export type Workspace = typeof Workspace.Type;
 
-export const CHANGES_INITIAL_PATCH_BYTES = 120_000;
-export const CHANGES_FILE_PATCH_BYTES = 1024 * 1024;
-export const CHANGES_ANSWER_BYTES = 4 * 1024 * 1024;
-export const CHECKOUT_TIMEOUT_MS = 30_000;
-export const PULL_REQUEST_TIMEOUT_MS = 45_000;
 export const SLASH_COMMANDS_TIMEOUT_MS = 45_000;
 
-export const ChangeFile = Schema.Struct({
-  path: Schema.String,
-  additions: Schema.Number,
-  deletions: Schema.Number,
-  binary: Schema.Boolean,
-  staged: Schema.optional(Schema.Literal(true)),
-});
-export type ChangeFile = typeof ChangeFile.Type;
 export const ChangesScope = Schema.Literals(["branch", "uncommitted"]);
 export type ChangesScope = typeof ChangesScope.Type;
-export const ComparisonTarget = Schema.Struct({
-  name: Schema.String,
-  ref: Schema.String,
-  commit: Schema.String,
-  from: Schema.Literals(["pull-request", "worktree", "remote-default", "assumed"]),
-});
-export type ComparisonTarget = typeof ComparisonTarget.Type;
-export const Comparison = Schema.Struct({
-  scope: ChangesScope,
-  base: Schema.String,
-  target: Schema.optional(ComparisonTarget),
-});
-export type Comparison = typeof Comparison.Type;
-export const ScopeAvailability = Schema.Struct({
-  scope: ChangesScope,
-  available: Schema.Boolean,
-  reason: Schema.optional(Schema.String),
-  target: Schema.optional(ComparisonTarget),
-});
-export type ScopeAvailability = typeof ScopeAvailability.Type;
-export const LocalWork = Schema.Struct({
-  commitsNotPushed: Schema.NullOr(Schema.Number),
-  uncommitted: Schema.Boolean,
-});
-export type LocalWork = typeof LocalWork.Type;
-export const WorkspaceChanges = Schema.Struct({
-  workspace: Workspace,
-  observedAt: Schema.String,
-  result: Schema.Union([
-    Schema.Struct({
-      status: Schema.Literal("ready"),
-      head: Schema.NullOr(Schema.String),
-      branch: Schema.NullOr(Schema.String),
-      pullRequestFromBranch: Schema.Boolean,
-      comparison: Comparison,
-      scopes: Schema.Array(ScopeAvailability),
-      local: LocalWork,
-      files: Schema.Array(ChangeFile),
-      diff: Schema.String,
-      truncated: Schema.Boolean,
-    }),
-    Schema.Struct({
-      status: Schema.Literal("unavailable"),
-      head: Schema.NullOr(Schema.String),
-      branch: Schema.NullOr(Schema.String),
-      pullRequestFromBranch: Schema.Boolean,
-      scope: ChangesScope,
-      detail: Schema.String,
-      scopes: Schema.Array(ScopeAvailability),
-      local: LocalWork,
-    }),
-    Schema.Struct({ status: Schema.Literal("error"), detail: Schema.String }),
-  ]),
-});
-export type WorkspaceChanges = typeof WorkspaceChanges.Type;
-
-export const WrittenFile = Schema.Union([
-  Schema.Struct({ path: Schema.String, verdict: Schema.Literal("outside") }),
-  Schema.Struct({
-    path: Schema.String,
-    verdict: Schema.Literals(["listed", "ignored", "missing"]),
-    placed: Schema.String,
-  }),
-]);
-export type WrittenFile = typeof WrittenFile.Type;
-
-export const WorkspaceWrittenFiles = Schema.Struct({
-  workspace: Workspace,
-  observedAt: Schema.String,
-  result: Schema.Union([
-    Schema.Struct({ status: Schema.Literal("ready"), files: Schema.Array(WrittenFile) }),
-    Schema.Struct({ status: Schema.Literal("error"), detail: Schema.String }),
-  ]),
-});
-export type WorkspaceWrittenFiles = typeof WorkspaceWrittenFiles.Type;
-
-export const sameWorkspace = (a: Workspace, b: Workspace) =>
-  a.id === b.id && a.path === b.path && a.folder === b.folder;
-
 const trimmedFit = (max: number) => Schema.makeFilter((t: string) => t.trim().length <= max);
 export const PROJECT_NAME_MAX = 80;
 export const SESSION_TITLE_MAX = 200;
@@ -593,54 +501,6 @@ export const SessionDefaults = Schema.Struct({
   thinkingLevel: ThinkingLevel,
 });
 export type SessionDefaults = typeof SessionDefaults.Type;
-
-export const DirEntry = Schema.Struct({
-  name: Schema.String,
-  path: Schema.String,
-  gitSubject: Schema.optional(Schema.String),
-});
-export const DirListing = Schema.Struct({
-  path: Schema.String,
-  parent: Schema.NullOr(Schema.String),
-  home: Schema.String,
-  gitSubject: Schema.optional(Schema.String),
-  gitRoot: Schema.optional(Schema.String),
-  entries: Schema.Array(DirEntry),
-});
-export type DirListing = typeof DirListing.Type;
-
-export const PullRequest = Schema.Struct({
-  url: Schema.String,
-  repo: Schema.String,
-  number: Schema.Number,
-  title: Schema.String,
-  state: Schema.Literals(["open", "draft", "merged", "closed"]),
-  checks: Schema.Literals(["none", "unknown", "pending", "success", "failure"]),
-  review: Schema.Literals(["none", "approved", "changes_requested", "review_required"]),
-  author: Schema.optional(Schema.String),
-  head: Schema.optional(Schema.String),
-  base: Schema.optional(Schema.String),
-  headRepo: Schema.optional(Schema.String),
-  baseRepo: Schema.optional(Schema.String),
-  additions: Schema.optional(Schema.Number),
-  deletions: Schema.optional(Schema.Number),
-  changedFiles: Schema.optional(Schema.Number),
-  at: Schema.optional(Schema.String),
-});
-export type PullRequest = typeof PullRequest.Type;
-
-export const SessionPullRequest = Schema.Struct({
-  link: Schema.NullOr(SessionPullRequestLink),
-  pullRequest: Schema.NullOr(PullRequest),
-  error: Schema.optional(Schema.String),
-});
-export type SessionPullRequest = typeof SessionPullRequest.Type;
-export const SessionPullRequestAction = Schema.Union([
-  Schema.Struct({ action: Schema.Literal("link"), url: Schema.String }),
-  Schema.Struct({ action: Schema.Literal("remove") }),
-  Schema.Struct({ action: Schema.Literal("discover") }),
-]);
-export type SessionPullRequestAction = typeof SessionPullRequestAction.Type;
 
 export const HostInfo = Schema.Struct({
   cwd: Schema.String,

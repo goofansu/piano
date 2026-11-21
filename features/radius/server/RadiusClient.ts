@@ -1,0 +1,240 @@
+import { isUtf8 } from "node:buffer";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { z } from "zod";
+import {
+  RADIUS_ARTIFACT_FILE_BYTES,
+  RADIUS_ARTIFACT_FILE_LIMIT,
+} from "../../../shared/radius/radiusArtifacts.ts";
+import { isRadiusUrl, RADIUS_MCP_URL } from "../../../shared/radius/radiusUrl.ts";
+
+export const ARTIFACT_PAGE_BYTES = 16 * 1024;
+export const ARTIFACT_MAX_PAGE_BYTES = 32 * 1024;
+
+export class RadiusError extends Error {}
+export class RadiusAuthenticationError extends RadiusError {}
+const invalid = () => new RadiusError("Radius returned an invalid artifact response.");
+const identifier = z.string().min(1).max(256);
+export const Artifact = z.object({
+  id: identifier,
+  canonical_url: z.string().refine((value) => isRadiusUrl(value)),
+  latest_version: z.number().int().nonnegative(),
+  visibility: z.enum(["private", "organization", "public"]),
+  expires_at: z.string().refine((value) => Number.isFinite(Date.parse(value))),
+  title: z.string().nullable(),
+});
+export type Artifact = z.infer<typeof Artifact>;
+const Revision = z.object({
+  artifact_id: identifier,
+  version: z.number().int().positive(),
+  note: z.string().nullable(),
+  files: z.array(
+    z.object({
+      path: z.string(),
+      content_type: z.string(),
+      stored_bytes: z.number().int().nonnegative(),
+    }),
+  ),
+});
+
+export class RadiusClient {
+  private readonly client = new Client({ name: "pi-radius-artifacts", version: "0.1.0" });
+  private readonly names = new Map<string, string>();
+  private readonly signal: AbortSignal;
+  private readonly transport: StreamableHTTPClientTransport;
+
+  constructor(token: string, signal?: AbortSignal) {
+    this.signal = AbortSignal.any([AbortSignal.timeout(60_000), ...(signal ? [signal] : [])]);
+    this.transport = new StreamableHTTPClientTransport(new URL(RADIUS_MCP_URL), {
+      requestInit: { headers: { authorization: `Bearer ${token}` }, redirect: "error" },
+      reconnectionOptions: {
+        maxRetries: 0,
+        initialReconnectionDelay: 1000,
+        maxReconnectionDelay: 1000,
+        reconnectionDelayGrowFactor: 1,
+      },
+      fetch: async (url, init) => {
+        const response = await fetch(url, {
+          ...init,
+          redirect: "error",
+          signal: init?.signal ? AbortSignal.any([this.signal, init.signal]) : this.signal,
+        });
+        if (response.status === 401 || response.status === 403) {
+          await response.body?.cancel();
+          throw new RadiusAuthenticationError(
+            "Radius authentication or permission failed. Sign in to Radius and check access.",
+          );
+        }
+        if (!response.body) return response;
+        let bytes = 0;
+        const bounded = response.body.pipeThrough(
+          new TransformStream<Uint8Array, Uint8Array>({
+            transform(chunk, controller) {
+              bytes += chunk.byteLength;
+              if (bytes > 4 * 1024 * 1024) {
+                controller.error(invalid());
+                return;
+              }
+              controller.enqueue(chunk);
+            },
+          }),
+        );
+        return new Response(bounded, { status: response.status, headers: response.headers });
+      },
+    });
+  }
+
+  async connect() {
+    await this.client.connect(this.transport, { signal: this.signal, timeout: 30_000 });
+    let cursor: string | undefined;
+    do {
+      const page = await this.client.listTools({ cursor }, { signal: this.signal });
+      for (const tool of page.tools) {
+        const name = tool.name.replace(/[^a-zA-Z0-9_]/g, "_");
+        if (this.names.has(name)) throw invalid();
+        this.names.set(name, tool.name);
+      }
+      cursor = page.nextCursor;
+    } while (cursor);
+  }
+
+  async close() {
+    await this.client.close().catch(() => {});
+  }
+
+  operation(name: string): string {
+    const actual = this.names.get(name);
+    if (!actual)
+      throw new RadiusError("Radius does not advertise the required artifact operation.");
+    return actual;
+  }
+
+  async call(name: string, args: Record<string, unknown>): Promise<unknown> {
+    const actual = this.operation(name);
+    const result = await this.client.callTool({ name: actual, arguments: args }, undefined, {
+      signal: this.signal,
+      timeout: 30_000,
+    });
+    if (result.isError)
+      throw new RadiusError(
+        "Radius rejected the artifact operation. Check Radius authentication and permissions; no local fallback was made.",
+      );
+    if (result.structuredContent) return result.structuredContent;
+    const content = result.content;
+    if (Array.isArray(content) && content.length === 1 && content[0].type === "text") {
+      try {
+        return JSON.parse(content[0].text);
+      } catch {
+        throw invalid();
+      }
+    }
+    throw invalid();
+  }
+
+  async artifact(name: string, args: Record<string, unknown>) {
+    const result = z
+      .object({ ok: z.literal(true), artifact: Artifact })
+      .safeParse(await this.call(name, args));
+    if (!result.success) throw invalid();
+    return result.data.artifact;
+  }
+
+  read(id: string) {
+    return this.artifact("artifacts_read", { slug: id });
+  }
+
+  async revision(id: string, version: number) {
+    const result = Revision.safeParse(
+      await this.call("artifacts_versions_read", { slug: id, version: String(version) }),
+    );
+    if (!result.success || result.data.artifact_id !== id || result.data.version !== version)
+      throw invalid();
+    return result.data;
+  }
+
+  async content(
+    id: string,
+    version: number,
+    path: string,
+    offset = 0,
+    maxBytes = ARTIFACT_PAGE_BYTES,
+  ) {
+    const transfer = z
+      .object({
+        method: z.literal("GET"),
+        url: z.string().refine((value) => isRadiusUrl(value, "download")),
+        headers: z.record(z.string(), z.string()),
+      })
+      .safeParse(
+        await this.call("artifacts_files_download", { slug: id, version: String(version), path }),
+      );
+    if (!transfer.success) throw invalid();
+    const response = await fetch(transfer.data.url, {
+      method: "GET",
+      headers: transfer.data.headers,
+      redirect: "error",
+      signal: this.signal,
+    });
+    if (!response.ok || !response.body) {
+      await response.body?.cancel();
+      throw new RadiusError("Radius artifact content could not be read.");
+    }
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let bytes = 0;
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        bytes += value.length;
+        if (bytes > RADIUS_ARTIFACT_FILE_BYTES)
+          throw new RadiusError(
+            `Artifact content exceeds the ${RADIUS_ARTIFACT_FILE_LIMIT} download limit; open its Radius viewing URL.`,
+          );
+        chunks.push(value);
+      }
+    } finally {
+      await reader.cancel().catch(() => {});
+    }
+    const buffer = Buffer.concat(chunks);
+    if (!isUtf8(buffer)) throw new RadiusError("Artifact content is not valid UTF-8 text.");
+    if (offset > bytes) throw new RadiusError("Requested offset is beyond the end of the file.");
+    const continuationByte = (index: number) => (buffer[index] & 0xc0) === 0x80;
+    if (offset < bytes && continuationByte(offset))
+      throw new RadiusError(
+        "Requested offset is inside a UTF-8 codepoint; use a returned nextOffset.",
+      );
+    let end = Math.min(offset + maxBytes, bytes);
+    while (end < bytes && continuationByte(end)) end--;
+    let jsonBytes = 0;
+    for (let i = offset; i < end; i++) {
+      const byte = buffer[i];
+      jsonBytes +=
+        byte < 0x20
+          ? [8, 9, 10, 12, 13].includes(byte)
+            ? 2
+            : 6
+          : byte === 0x22 || byte === 0x5c
+            ? 2
+            : 1;
+      if (jsonBytes > ARTIFACT_MAX_PAGE_BYTES) {
+        end = i;
+        while (continuationByte(end)) end--;
+        break;
+      }
+    }
+    return {
+      content: buffer.toString("utf8", offset, end),
+      path,
+      offset,
+      nextOffset: end < bytes ? end : null,
+      totalBytes: bytes,
+    };
+  }
+}
+
+export function safeError(error: unknown): string {
+  return error instanceof RadiusError
+    ? error.message
+    : "Radius request failed or was interrupted. Provider details were withheld.";
+}

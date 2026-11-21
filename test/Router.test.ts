@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { Effect, Layer } from "effect";
-import { PiSettings, PiSettingsError } from "../server/PiSettings.ts";
-import { ProviderLoginRuntime } from "../server/ProviderLogin.ts";
-import { RadiusSetup } from "../server/RadiusSetup.ts";
-import { SessionHosts } from "../server/SessionHosts.ts";
-import { type Endpoint, Endpoints } from "../shared/http.ts";
+import { PiSettings, PiSettingsError } from "../features/models/server/PiSettings.ts";
+import { ProviderLoginRuntime } from "../features/providers/server/ProviderLogin.ts";
+import { RadiusSetup } from "../features/radius/server/RadiusSetup.ts";
+import { SessionHosts } from "../features/sessions/server/SessionHosts.ts";
+import { Endpoints } from "../server/app/Endpoints.ts";
+import { type Endpoint } from "../shared/endpoint.ts";
 import { type RouterFixture, startRouter } from "./fixtures/router.ts";
 
 let server: RouterFixture;

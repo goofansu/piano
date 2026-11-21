@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { middleEllipsis } from "../web/src/lib/middleEllipsis.ts";
+import { middleEllipsis } from "../web/src/shared/lib/middleEllipsis.ts";
 
 const monospace = (text: string) => [...text].length * 8;
 

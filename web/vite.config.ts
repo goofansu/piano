@@ -105,6 +105,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "./src"),
+      "@features": path.resolve(import.meta.dirname, "../features"),
       "@shared": path.resolve(import.meta.dirname, "../shared"),
       "decode-named-character-reference": fileURLToPath(
         import.meta.resolve("decode-named-character-reference"),

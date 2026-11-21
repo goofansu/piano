@@ -18,7 +18,7 @@ startup-support observations remain blocked. The results below preserve the orig
   `PiSessions.open/events/act/state`, with an isolated agent/session directory and scratch Git projects.
   It records every result, including failures, outside the registry. Exit codes: **0** all pass,
   **2** known compatibility gaps, **1** unexpected check/fixture/cleanup failure.
-- [`test/fixtures/PiCompatibility.ts`](../../test/fixtures/PiCompatibility.ts) creates disposable Pi inputs,
+- [`test/fixtures/PiCompatibility.ts`](https://github.com/goofansu/piano/blob/346a64bbb22d9f321e27f771f68b6180e11e3427/test/fixtures/PiCompatibility.ts) creates disposable Pi inputs,
   user/project extensions, model settings and a local stdio MCP sentinel. These are fixture inputs,
   not a second production settings/MCP loader. Pi itself reports effective trust, settings, model,
   effort, tools and command identities; `/mcp` supplies built-in connection status.
@@ -26,7 +26,7 @@ startup-support observations remain blocked. The results below preserve the orig
   loopback backend/dev UI. It answers a supported dialog after reload, reads selected-checkout facts,
   aborts a local synthetic provider wait, observes explicit exit/read-only reload, and observes a
   bounded startup failure without resubmission.
-- Fixed a readiness deadline bug in [`server/PiSessions.ts`](../../server/PiSessions.ts): `open` and
+- Fixed a readiness deadline bug in [`server/PiSessions.ts`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/PiSessions.ts): `open` and
   `probe` now use `Effect.raceFirst`, not `Effect.race`. On pinned Effect v4, `race` waits for the first
   **successful** result; it suppresses a readiness timeout while the other branch waits for a live
   child's exit. `raceFirst` returns the first completion, including a typed timeout. The regression

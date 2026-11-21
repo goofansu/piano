@@ -8,9 +8,14 @@ import { monitorEventLoopDelay } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
 import { Layer, ManagedRuntime } from "effect";
 import WebSocket from "ws";
-import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
-import { openRegistryDatabase } from "../server/RegistryDatabase.ts";
-import { seedRegistry } from "./fixtures/registry.ts";
+import { updateProject } from "../features/projects/server/ProjectCommands.ts";
+import {
+  Registry,
+  RegistryDatabasePath,
+  RegistryLive,
+} from "../server/shared/registry/Registry.ts";
+import { openRegistryDatabase } from "../server/shared/registry/RegistryDatabase.ts";
+import { seedRegistry } from "./shared/registry.ts";
 
 const output = resolve(process.argv[2] ?? "/tmp/piano-performance.json");
 const root = mkdtempSync(join(tmpdir(), "piano-performance-"));
@@ -221,7 +226,7 @@ try {
             if (phase === "registry-write") {
               const name = `Rename ${i}`;
               await writer.request(
-                { _tag: "save_project", project: { id: "bench", name } },
+                { _tag: "update_project", id: "bench", name },
                 (m) =>
                   m._tag === "registry" &&
                   m.projects?.some((p) => p.id === "bench" && p.name === name),
@@ -276,7 +281,7 @@ try {
       eventLoop.reset();
       for (let i = 0; i < 40; i++) {
         const start = performance.now();
-        await runtime.runPromise(registry.saveProject({ id: "bench", name: `Direct ${i}` }));
+        await runtime.runPromise(updateProject(registry, "bench", { name: `Direct ${i}` }));
         operations.push(performance.now() - start);
         await delay(20);
       }

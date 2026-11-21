@@ -235,8 +235,8 @@ Upstream links are pinned to the inspected revision, not moving `main`:
 - **S6 — Reviewer example:**
   https://github.com/earendil-works/pi/blob/ea448f454af474f3e2fe9733b331e17b0662f5d6/packages/durable/test/examples/28-reviewer.ts
 - **P1 — Current dependency and runtime:** [package.json](../../package.json),
-  [package-lock.json](../../package-lock.json), [PiSessions](../../server/PiSessions.ts),
-  [PiRecords](../../server/PiRecords.ts), at the Piano revision above.
+  [package-lock.json](../../package-lock.json), [PiSessions](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/PiSessions.ts),
+  [PiRecords](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/PiRecords.ts), at the Piano revision above.
 - **P2 — Architecture:** [ADR 0001](../adr/0001-pi-rpc-workspace-workbench.md).
 - **P3 — Priorities and adoption gate:** [roadmap](../roadmap.md), especially “Current priority” and §5.
 - **P4 — Ownership, recovery, evidence and compatibility:** [development invariants](../development-invariants.md).

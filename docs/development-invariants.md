@@ -68,7 +68,7 @@ write. Extension UI responses have no RPC acknowledgement. A question raised by 
 `ask_user` tool call has no answer deadline: Pi's native end record for that call closes it, and only
 the result Pi stored for the call may label a submitted answer accepted. An answer the result does
 not hold for its question, or one arriving after closure, is kept as rejected and never resent (see
-`server/SessionDialogs.ts`).
+`features/sessions/server/pi/SessionDialogs.ts`).
 
 ## INV-05 — Reconnect creates a consistent view
 

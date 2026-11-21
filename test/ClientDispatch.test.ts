@@ -5,19 +5,26 @@ import { join } from "node:path";
 import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Deferred, Effect, Fiber, Layer, Queue, type Scope } from "effect";
-import { type ClientRequest, makeClientDispatch } from "../server/ClientDispatch.ts";
-import type { CreationAttempts } from "../server/CreationAttempts.ts";
-import { DirectoryFacts } from "../server/DirectoryFacts.ts";
-import { GitHubPullRequestsLive } from "../server/GitHubPullRequests.ts";
-import { inboundLimits } from "../server/InboundCapacity.ts";
-import { PianoCoreLive } from "../server/PianoServices.ts";
-import { PiCli } from "../server/PiCli.ts";
-import { Registry, RegistryDatabasePath } from "../server/Registry.ts";
-import { SessionHosts } from "../server/SessionHosts.ts";
-import { type SessionStatus, SessionStatusLive } from "../server/SessionStatus.ts";
-import { SidebarView } from "../server/SidebarView.ts";
-import { WorkspaceChangesLive } from "../server/WorkspaceChanges.ts";
-import type { WorkspaceCommands } from "../server/WorkspaceCommands.ts";
+import { type SessionStatus } from "../features/dispatch/server/SessionStatus.ts";
+import { createModelCatalogs } from "../features/models/web/modelCatalogs.ts";
+import { SidebarView } from "../features/navigation/server/SidebarView.ts";
+import { deleteProject, saveProject } from "../features/projects/server/ProjectCommands.ts";
+import type { CreationAttempts } from "../features/sessions/server/CreationAttempts.ts";
+import { PiCli } from "../features/sessions/server/pi/PiCli.ts";
+import { SessionHosts } from "../features/sessions/server/SessionHosts.ts";
+import { messageCommand } from "../features/sessions/web/composer/composerControl.ts";
+import { createDrafts, EMPTY_DRAFT } from "../features/sessions/web/composer/messageDraft.ts";
+import { sessionActivity, sessionPane } from "../features/sessions/web/sessionScreen.ts";
+import { WorkspaceChangesLive } from "../features/workspace/server/changes/WorkspaceChanges.ts";
+import { GitHubPullRequestsLive } from "../features/workspace/server/pull-requests/GitHubPullRequests.ts";
+import type { WorkspaceCommands } from "../features/workspace/server/WorkspaceCommands.ts";
+import { type ClientRequest, makeClientDispatch } from "../server/app/ClientDispatch.ts";
+import { SessionStatusLive } from "../server/app/FeatureServices.ts";
+import { PianoCoreLive } from "../server/app/PianoServices.ts";
+import { DirectoryFacts } from "../server/shared/DirectoryFacts.ts";
+import { inboundLimits } from "../server/shared/InboundCapacity.ts";
+import { Registry, RegistryDatabasePath } from "../server/shared/registry/Registry.ts";
+import type { ConnectionHandlers } from "../shared/transport/ws.ts";
 import type {
   ClientMessage,
   Dialog,
@@ -25,13 +32,9 @@ import type {
   SessionAction,
   WorktreeDiscovery,
 } from "../shared/wire.ts";
-import { createClient } from "../web/src/lib/client.ts";
-import { messageCommand } from "../web/src/lib/composerControl.ts";
-import { createDrafts, EMPTY_DRAFT, sessionDraftKey } from "../web/src/lib/messageDraft.ts";
-import { createModelCatalogs } from "../web/src/lib/modelCatalogs.ts";
-import { sessionActivity, sessionPane } from "../web/src/lib/sessionContext.ts";
-import type { ConnectionHandlers } from "../web/src/lib/ws.ts";
-import { initialState } from "../web/src/store.ts";
+import { createClient } from "../web/src/app/client.ts";
+import { sessionDraftKey } from "../web/src/shared/state/draftKey.ts";
+import { initialState } from "../web/src/shared/state/state.ts";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "piano-client-dispatch-")));
 const cwd = join(root, "checkout");
@@ -1042,7 +1045,7 @@ test("deleting a project tells its browser so; deleting an unknown one is answer
   await run(
     Effect.gen(function* () {
       const registry = yield* Registry;
-      yield* registry.saveProject({ id: "launch", name: "Launch" });
+      yield* saveProject(registry, { id: "launch", name: "Launch" });
       const { receive } = yield* client;
       const from = sent.length;
       yield* yield* receive({ _tag: "delete_project", id: "launch" });
@@ -1067,7 +1070,7 @@ test("INV-01: saving a project's settings is one write answered with a toast; an
   await run(
     Effect.gen(function* () {
       const registry = yield* Registry;
-      yield* registry.saveProject({ id: "launch", name: "Launch" });
+      yield* saveProject(registry, { id: "launch", name: "Launch" });
       const { receive } = yield* client;
       const from = sent.length;
       yield* yield* receive({
@@ -1082,7 +1085,7 @@ test("INV-01: saving a project's settings is one write answered with a toast; an
       assert.deepEqual((yield* registry.get).projects, [
         { id: "launch", name: "Relaunch", instructions: "Answer in French." },
       ]);
-      yield* registry.deleteProject("launch");
+      yield* deleteProject(registry, "launch");
       const again = sent.length;
       yield* yield* receive({ _tag: "update_project", id: "launch", name: "Back" });
       assert.deepEqual(answers(again), [
@@ -1222,7 +1225,7 @@ test("every change ends with one toast naming it after it succeeds; a failed cha
     Effect.gen(function* () {
       const registry = yield* Registry;
       yield* registry.addFolder(cwd);
-      yield* registry.saveProject({ id: "launch", name: "Launch" });
+      yield* saveProject(registry, { id: "launch", name: "Launch" });
       for (const sessionId of ["kept", "archived", "deleted"])
         yield* registry.addSession(cwd, sessionId);
       const { receive } = yield* client;

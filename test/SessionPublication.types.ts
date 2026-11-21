@@ -1,7 +1,7 @@
 import { Effect } from "effect";
-import type { DialogRequest } from "../server/PiRecords.ts";
-import type { makeSessionDialogs } from "../server/SessionDialogs.ts";
-import type { SessionPublication } from "../server/SessionPublication.ts";
+import type { DialogRequest } from "../features/sessions/server/pi/PiRecords.ts";
+import type { makeSessionDialogs } from "../features/sessions/server/pi/SessionDialogs.ts";
+import type { SessionPublication } from "../features/sessions/server/pi/SessionPublication.ts";
 
 export const publicationContract = (
   publication: SessionPublication,

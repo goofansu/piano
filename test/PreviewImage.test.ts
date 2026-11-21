@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mayPreviewAsImage, previewImage } from "../web/src/lib/previewImage.ts";
+import { mayPreviewAsImage, previewImage } from "../web/src/shared/markdown/previewImage.ts";
 
 const identity = { workspaceId: "w", path: "p" };
 

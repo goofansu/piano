@@ -3,11 +3,6 @@ import { closeSync, openSync, readFileSync, statSync, writeFileSync } from "node
 import { parseArgs } from "node:util";
 import { z } from "zod";
 import {
-  dispatchConfiguration,
-  type DispatchConfiguration,
-  nodeSocketEnvironment,
-} from "../extensions/piano-dispatch/NodeSocket.ts";
-import {
   readStatus,
   type StartRequest,
   type StatusReply,
@@ -16,8 +11,13 @@ import {
   startDirectory,
   startSession,
   withLinks,
-} from "../extensions/piano-dispatch/SessionDispatch.ts";
-import { sessionLink } from "../shared/sessionLink.ts";
+} from "../features/dispatch/extension/SessionDispatch.ts";
+import {
+  dispatchConfiguration,
+  type DispatchConfiguration,
+  nodeSocketEnvironment,
+} from "../server/shared/NodeSocket.ts";
+import { sessionLink } from "../shared/session/sessionLink.ts";
 
 const usage = `Usage: node scripts/dispatch-session.ts --json < request.json
        node scripts/dispatch-session.ts <prompt-file> <cwd> [out-file] [options]

@@ -1,7 +1,7 @@
 # Image attachments
 
 Initial implementation report. Its upload size limits are superseded by the
-[accepted attachment policy](../image-attachments.md); the count and formats are unchanged.
+[accepted attachment policy](https://github.com/goofansu/piano/blob/346a64bbb22d9f321e27f771f68b6180e11e3427/docs/image-attachments.md); the count and formats are unchanged.
 
 Implemented against `6029dc9` plus this change, Node 24.21.0 and the locked dependencies.
 

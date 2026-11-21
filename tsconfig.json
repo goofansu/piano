@@ -12,6 +12,7 @@
     "skipLibCheck": true,
     "types": ["node"],
     "paths": {
+      "@features/*": ["./features/*.ts"],
       "@shared/*": ["./shared/*.ts"]
     },
     "lib": ["es2023"]
@@ -19,7 +20,10 @@
   "include": [
     "server/**/*.ts",
     "shared/**/*.ts",
-    "extensions/**/*.ts",
+    "features/*/extension/**/*.ts",
+    "features/*/server/**/*.ts",
+    "features/*/contracts/**/*.ts",
+    "features/*/tests/**/*.ts",
     "scripts/**/*.ts",
     "test/**/*.ts"
   ]

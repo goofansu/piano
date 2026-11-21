@@ -2,7 +2,7 @@
 
 A design for asking the agent, in a session, to create or change what two Piano screens show:
 **Settings › Skills** and **Settings › Prompts**. It shipped with PIN-144
-([saving from a session](../configuration.md#saving-from-a-session)). It follows [prompts](../prompts.md) and
+([saving from a session](../configuration.md#saving-from-a-session)). It follows [prompts](https://github.com/goofansu/piano/blob/346a64bbb22d9f321e27f771f68b6180e11e3427/docs/prompts.md) and
 [Piano's prompts and skills](../configuration.md#pianos-prompts-and-skills).
 
 A project's instructions (Project settings › Instructions) stay the user's to write: the user

@@ -186,14 +186,14 @@ for this note; runtime and browser verification remain outstanding.
 - **P3:** [Pi 1.4.0 Q&A example][qna].
 - **P4:** [Pi extension lifecycle and UI/modes guide][pi-extensions].
 - **P5:** [Pi MIT license][pi-license].
-- **L1:** [Piano message projection](../../server/PiRecords.ts), custom-message branch.
-- **L2:** [InlineQuestion](../../web/src/components/InlineQuestion.tsx),
-  [answer controller](../../web/src/lib/useDialogAnswer.ts), and [PR #354][pr].
-- **L3:** [SessionDialogs](../../server/SessionDialogs.ts),
-  [PiSessions](../../server/PiSessions.ts), and [runtime ownership](../runtime-ownership.md).
+- **L1:** [Piano message projection](https://github.com/goofansu/piano/blob/0865c849befd2021490679f96a8dee58c84ac857/server/PiRecords.ts), custom-message branch.
+- **L2:** [InlineQuestion](https://github.com/goofansu/piano/blob/0865c849befd2021490679f96a8dee58c84ac857/web/src/components/InlineQuestion.tsx),
+  [answer controller](https://github.com/goofansu/piano/blob/0865c849befd2021490679f96a8dee58c84ac857/web/src/lib/useDialogAnswer.ts), and [PR #354][pr].
+- **L3:** [SessionDialogs](https://github.com/goofansu/piano/blob/0865c849befd2021490679f96a8dee58c84ac857/server/SessionDialogs.ts),
+  [PiSessions](https://github.com/goofansu/piano/blob/0865c849befd2021490679f96a8dee58c84ac857/server/PiSessions.ts), and [runtime ownership](https://github.com/goofansu/piano/blob/346a64bbb22d9f321e27f771f68b6180e11e3427/docs/runtime-ownership.md).
 - **L4:** [Dialog/DialogResolution wire contracts](../../shared/wire.ts).
-- **L5:** [AnsweredQuestion](../../web/src/components/AnsweredQuestion.tsx).
-- **L6:** [Bundled extension loading](../../server/PiCli.ts).
+- **L5:** [AnsweredQuestion](https://github.com/goofansu/piano/blob/0865c849befd2021490679f96a8dee58c84ac857/web/src/components/AnsweredQuestion.tsx).
+- **L6:** [Bundled extension loading](https://github.com/goofansu/piano/blob/0865c849befd2021490679f96a8dee58c84ac857/server/PiCli.ts).
 - **L7:** [Piano MIT license](../../LICENSE).
 - **I1:** [Development invariants](../development-invariants.md),
   [ADR 0001](../adr/0001-pi-rpc-workspace-workbench.md), and [roadmap](../roadmap.md).

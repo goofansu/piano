@@ -6,21 +6,24 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { configuredOrigins, sessionLinkOrigin } from "../server/OriginPolicy.ts";
-import { defaultPiCli } from "../server/PiCli.ts";
-import { sessionEndpoint, sessionEnvironment } from "../server/SessionEndpoint.ts";
-import { freePort } from "./fixtures/ports.ts";
+import {
+  sessionEndpoint,
+  sessionEnvironment,
+} from "../features/dispatch/server/SessionEndpoint.ts";
+import { defaultPiCli } from "../server/app/PiLaunch.ts";
+import { configuredOrigins, sessionLinkOrigin } from "../server/shared/OriginPolicy.ts";
+import { freePort } from "./shared/ports.ts";
 
 test("Piano's extensions are resolved from the installation, never from the session's cwd", () => {
   const installed = (name: string) =>
-    fileURLToPath(new URL(`../extensions/${name}/index.ts`, import.meta.url));
+    fileURLToPath(new URL(`../features/${name}/index.ts`, import.meta.url));
   const expected = [
-    installed("piano-session"),
-    installed("piano-project"),
-    installed("piano-dispatch"),
-    installed("piano-ask-user"),
-    installed("piano-library"),
-    installed("radius-artifacts"),
+    installed("sessions/extension/piano-session"),
+    installed("projects/extension"),
+    installed("dispatch/extension"),
+    installed("sessions/extension/piano-ask-user"),
+    installed("library/extension"),
+    installed("radius/extension"),
   ];
   assert.deepEqual(defaultPiCli().extensions, expected);
   const installation = process.cwd();

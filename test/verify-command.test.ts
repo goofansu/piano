@@ -88,7 +88,7 @@ test("baseline retains exact checks and diagnostics; failed and blocked are not 
   }
 });
 
-test("baseline reports lines changed under test/ since origin/main, uncommitted and new files included", () => {
+test("baseline reports changes in feature and shared tests since origin/main, uncommitted and new files included", () => {
   const f = fixture();
   try {
     f.configure("node -e \"console.log('linted')\"");
@@ -111,7 +111,8 @@ test("baseline reports lines changed under test/ since origin/main, uncommitted 
       ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "branch"],
     ])
       execFileSync("git", args, { cwd: f.root });
-    writeFileSync(join(f.root, "test/new.test.ts"), "x\ny\nz\n");
+    mkdirSync(join(f.root, "features/demo/tests"), { recursive: true });
+    writeFileSync(join(f.root, "features/demo/tests/new.test.ts"), "x\ny\nz\n");
     const result = f.run("changed");
     const { added, removed, files } = f.record("changed").testLines;
     assert.deepEqual({ added, removed, files }, { added: 7, removed: 1, files: 3 });

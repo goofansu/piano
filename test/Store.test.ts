@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ServerMessage } from "../shared/wire.ts";
-import { initialState, reduce, sessionDelivery, sessionKey } from "../web/src/store.ts";
+import { reduce, sessionDelivery } from "../web/src/app/store.ts";
+import { initialState, sessionKey } from "../web/src/shared/state/state.ts";
 
 const selection = (
   sessionId: string,

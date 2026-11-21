@@ -11,6 +11,7 @@
   "compilerOptions": {
     "paths": {
       "@/*": ["./src/*"],
+      "@features/*": ["../features/*"],
       "@shared/*": ["../shared/*"]
     }
   }

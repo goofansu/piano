@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { abbrevPath, branchLabel, formatTokenCount, toolArgsText } from "../web/src/lib/format.ts";
+import {
+  abbrevPath,
+  branchLabel,
+  formatTokenCount,
+  toolArgsText,
+} from "../web/src/shared/lib/format.ts";
 
 test("token counts use compact units without misleading thousand-unit boundaries", () => {
   for (const [tokens, label] of [

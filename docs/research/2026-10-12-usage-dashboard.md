@@ -103,9 +103,9 @@ Primary sources inspected locally; package paths below refer to the installed Pi
 - **S1:** `node_modules/@earendil-works/pi-coding-agent/docs/session-format.md` — entry kinds, timestamps, physical models, context projection and parentSession.
 - **S2:** `node_modules/@earendil-works/pi-ai/dist/types.d.ts`, `Usage` and `AssistantMessage` — accounting fields, subset semantics, request-start timestamp.
 - **S3:** `node_modules/@earendil-works/pi-ai/dist/models.js`, `calculateCost` — rate-based USD estimates, tiers and cache writes.
-- **S4:** [PiHistory](../../server/PiHistory.ts), [PiEnv](../../server/PiEnv.ts) — discovery, aliases and context-only snapshots.
-- **S5:** [wire schemas](../../shared/wire.ts), [PiRecords](../../server/PiRecords.ts) — cumulative response usage, normalization and exposed fields.
-- **S6:** [ContextDetails](../../web/src/components/ContextDetails.tsx), [contextUsage](../../web/src/lib/contextUsage.ts) — existing usage display and cache-hit calculation.
+- **S4:** [PiHistory](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/PiHistory.ts), [PiEnv](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/PiEnv.ts) — discovery, aliases and context-only snapshots.
+- **S5:** [wire schemas](../../shared/wire.ts), [PiRecords](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/PiRecords.ts) — cumulative response usage, normalization and exposed fields.
+- **S6:** [ContextDetails](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/ContextDetails.tsx), [contextUsage](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/lib/contextUsage.ts) — existing usage display and cache-hit calculation.
 - **S7:** `node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js`, `getSessionStats` — authoritative session-total inclusion rules.
 - **S8:** `node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js`, `forkFrom` — copied entries and parent provenance.
 - **S9:** [RunLedger](../../server/RunLedger.ts) — repeated deliveries, latest usage and profile totals.

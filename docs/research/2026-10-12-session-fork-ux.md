@@ -190,7 +190,7 @@ Baseline: [`71912f1e5f3d5dfa0716ba29ae6ad817cf9d5f34`](https://github.com/goofan
 This is not just a button plus an existing action. Piano currently has no conversation fork/clone
 variant in [`SessionAction`](../../shared/wire.ts). Its runtime validates the initial session ID
 and builds event cursors from the immutable opening spec in
-[`PiSessions.ts`](../../server/PiSessions.ts); [`SessionHosts.ts`](../../server/SessionHosts.ts)
+[`PiSessions.ts`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/PiSessions.ts); [`SessionHosts.ts`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/SessionHosts.ts)
 keys ownership by canonical folder/session identity. Sending `clone` into that host without a
 lifecycle transition would leave the child serving a new Pi session under the old Piano identity.
 

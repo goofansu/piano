@@ -1,0 +1,909 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { folderCommands } from "../../../features/commands/web/folderCommands.ts";
+import { trustCommand } from "../../../features/commands/web/globalCommands.ts";
+import { sessionCommands } from "../../../features/commands/web/sessionCommands.ts";
+import { sessionProjectMenu } from "../../../features/projects/web/projectActions.ts";
+import { completionTarget } from "../../../features/sessions/web/composer/completionTarget.ts";
+import {
+  sessionActivity,
+  sessionPane,
+  sessionPlace,
+} from "../../../features/sessions/web/sessionScreen.ts";
+import {
+  directoryChoices,
+  startPlace,
+} from "../../../features/sessions/web/start/startDirectory.ts";
+import type { FolderView, SessionState, WorktreeView } from "../../../shared/wire.ts";
+import { directoryTrust } from "../../../web/src/shared/state/directoryTrust.ts";
+import { sessionDraftKey } from "../../../web/src/shared/state/draftKey.ts";
+import { catalogEntry, sessionDirectories } from "../../../web/src/shared/state/sessionCatalog.ts";
+import {
+  checkoutMissingAt,
+  focusedDirectory,
+  hostOf,
+  isSelectedSession,
+  sessionCheckoutMissing,
+  sessionContext,
+  sessionMutable,
+  sessionReady,
+  sessionWorking,
+} from "../../../web/src/shared/state/sessionContext.ts";
+import {
+  type AppState,
+  initialState,
+  type SessionView,
+} from "../../../web/src/shared/state/state.ts";
+import { sessionReference } from "../../shared/sessionReference.ts";
+
+const ws = (path: string) => ({ id: `ws:${path}`, folder: "/repo", path });
+const worktree = (
+  path: string,
+  branch: string | null,
+  extra: Partial<WorktreeView> = {},
+): WorktreeView => ({
+  workspace: ws(path),
+  trust: { required: true, trusted: false },
+  branch,
+  path,
+  root: path === "/repo",
+  status: "current",
+  ...extra,
+});
+const folder: FolderView = {
+  path: "/repo",
+  name: "repo",
+  worktrees: [worktree("/repo", "main"), worktree("/work/repo.feature", "feature")],
+  discovery: { status: "ready", observedAt: "", currentPath: "/repo", worktrees: [] },
+};
+const session = (
+  cwd: string,
+  state: Partial<SessionState> = {},
+  extra: Partial<SessionView> = {},
+): SessionView => ({
+  cwd,
+  sessionId: "s1",
+  hosted: true,
+  cursor: null,
+  state: { sessionId: "s1", ...state } as SessionState,
+  messages: [],
+  dialogs: [],
+  ...extra,
+});
+const base: AppState = {
+  ...initialState,
+  connected: true,
+  selectionId: "sel",
+  view: { kind: "session" },
+  folders: [folder],
+  workspaces: [ws("/repo"), ws("/work/repo.feature"), ws("/closed")],
+  projects: [{ id: "p1", name: "Launch" }],
+  sessionReferences: [
+    sessionReference("/work/repo.feature", "s1", {
+      title: "Registry title",
+      projectId: "p1",
+      branch: "feature",
+    }),
+  ],
+};
+
+test("a worktree session reads its branch and workspace from one place", () => {
+  const ctx = sessionContext({ ...base, session: session("/work/repo.feature") });
+  assert.equal(ctx.branch, "feature");
+  assert.equal(ctx.workspace?.id, "ws:/work/repo.feature");
+  assert.equal(ctx.canOpenChanges, true);
+  assert.equal(ctx.title, "Registry title", "an unnamed Pi session shows its registry title");
+  assert.equal(
+    sessionContext({ ...base, session: session("/repo", { sessionName: "Named" }) }).title,
+    "Named",
+  );
+});
+
+test("the rail shows the detached commit and the server's branch, and omits Git for non-Git folders", () => {
+  const path = "/work/repo.feature";
+  const head = "d4449bb7183bb577791acab4f6fc4f52f78d02b0";
+  const selected = (checkout: WorktreeView) =>
+    sessionContext({
+      ...base,
+      session: session(path),
+      folders: [{ ...folder, worktrees: [checkout] }],
+      sessionReferences: [sessionReference(path, "s1", { branch: checkout.branch })],
+    });
+  const detached = selected(
+    worktree(path, null, {
+      facts: { path, branch: null, detached: true, prunable: false, head },
+    }),
+  );
+  assert.equal(detached.detachedHead, head);
+  assert.equal(detached.branch, undefined);
+  const attached = selected(worktree(path, "feature"));
+  assert.equal(attached.branch, "feature");
+  assert.equal(attached.detachedHead, undefined);
+  const nonGit = selected(worktree(path, null, { status: "non-git" }));
+  assert.equal(nonGit.branch, undefined);
+  assert.equal(nonGit.detachedHead, undefined);
+});
+
+test("the branch link is the shown branch where discovery found it on GitHub, else none", () => {
+  const path = "/work/repo.feature";
+  const facts = (branch: string, github?: { repo: string; branch: string }) => ({
+    path,
+    branch,
+    detached: false,
+    prunable: false,
+    ...(github ? { github } : {}),
+  });
+  const branchUrl = (checkout: WorktreeView, branch = "local-fix") =>
+    sessionContext({
+      ...base,
+      session: session(path),
+      folders: [{ ...folder, worktrees: [checkout] }],
+      sessionReferences: [sessionReference(path, "s1", { branch })],
+    }).branchUrl;
+  const pushed = facts("local-fix", { repo: "me/repo", branch: "feature/a#b" });
+  assert.equal(
+    branchUrl(worktree(path, "local-fix", { facts: pushed })),
+    "https://github.com/me/repo/tree/feature/a%23b",
+  );
+  assert.equal(branchUrl(worktree(path, "local-fix", { facts: facts("local-fix") })), undefined);
+  assert.equal(branchUrl(worktree(path, "local-fix", { facts: pushed }), "other"), undefined);
+});
+
+const closed: AppState = {
+  ...base,
+  sessionReferences: [sessionReference("/closed", "s1", { branch: "saved-branch" })],
+};
+
+test("a session whose folder was closed keeps its registry workspace for Changes and its pull request", () => {
+  const ctx = sessionContext({ ...closed, session: session("/closed") });
+  assert.equal(ctx.folder, undefined);
+  assert.equal(ctx.branch, "saved-branch", "the header shows the reference's saved branch");
+  assert.equal(ctx.workspace?.id, "ws:/closed");
+  assert.equal(ctx.changesWorkspace?.id, "ws:/closed");
+  assert.equal(ctx.canOpenChanges, true);
+  assert.deepEqual(ctx.pullRequestTarget, { workspaceId: "ws:/closed", sessionId: "s1" });
+  const starting = sessionContext({
+    ...closed,
+    session: { ...session("/closed"), sessionId: null },
+  });
+  assert.equal(starting.canOpenChanges, true);
+  assert.equal(starting.pullRequestTarget, undefined);
+});
+
+test("only a session whose composer accepts input has a writable draft", () => {
+  const live = sessionContext({ ...base, session: session("/work/repo.feature") });
+  assert.equal(live.draftKey, sessionDraftKey({ cwd: "/work/repo.feature", sessionId: "s1" }));
+  const missing = sessionContext({
+    ...base,
+    session: session("/work/repo.feature", { checkoutMissing: true }),
+  });
+  assert.equal(missing.draftKey, null, "a read-only session's draft takes no additions");
+  assert.equal(sessionContext({ ...base, session: null }).draftKey, null);
+});
+
+test("a removed checkout keeps its workspace identity but cannot open Changes or its pull request; a non-Git folder has neither", () => {
+  const missing = sessionContext({
+    ...base,
+    session: session("/work/repo.feature", { checkoutMissing: true }),
+  });
+  assert.equal(missing.checkoutMissing, true);
+  assert.equal(missing.workspace?.id, "ws:/work/repo.feature");
+  assert.equal(missing.canOpenChanges, false);
+  assert.equal(missing.changesUnavailable, "Checkout removed");
+  assert.equal(missing.pullRequestTarget, undefined);
+  const plain: FolderView = {
+    ...folder,
+    worktrees: [worktree("/repo", null, { status: "non-git" })],
+    discovery: { status: "non-git", observedAt: "" },
+  };
+  const nonGitState: AppState = {
+    ...base,
+    folders: [plain],
+    sessionReferences: [sessionReference("/repo", "s1", { branch: null, title: "Plain" })],
+  };
+  const nonGit = sessionContext({ ...nonGitState, session: session("/repo") });
+  assert.equal(nonGit.workspace?.id, "ws:/repo");
+  assert.equal(nonGit.changesWorkspace, undefined);
+  assert.equal(nonGit.canOpenChanges, false);
+  assert.equal(nonGit.changesUnavailable, "Not a Git repository");
+  assert.equal(nonGit.pullRequestTarget, undefined);
+  assert.equal(nonGit.branch, undefined);
+  assert.equal(nonGit.title, "Plain", "the context read this session's reference");
+});
+
+test("a session whose directory has no registry workspace says why Changes cannot open", () => {
+  const ctx = sessionContext({ ...base, workspaces: [], session: session("/work/repo.feature") });
+  assert.equal(ctx.workspace, undefined);
+  assert.equal(ctx.canOpenChanges, false);
+  assert.equal(ctx.changesUnavailable, "Changes unavailable");
+  assert.equal(sessionContext({ ...base, session: null }).changesUnavailable, undefined);
+});
+
+test("the session's context and its catalog row agree on its branch, project and title", () => {
+  const plain: FolderView = {
+    ...folder,
+    worktrees: [worktree("/repo", null, { status: "non-git" })],
+    discovery: { status: "non-git", observedAt: "" },
+  };
+  const cases: Array<[string, AppState, string]> = [
+    ["a worktree", base, "/work/repo.feature"],
+    ["a closed folder", closed, "/closed"],
+    [
+      "a non-Git folder",
+      { ...base, folders: [plain], sessionReferences: [sessionReference("/repo", "s1")] },
+      "/repo",
+    ],
+  ];
+  for (const [name, state, cwd] of cases) {
+    const selected = { ...state, session: session(cwd) };
+    const ctx = sessionContext(selected);
+    const row = catalogEntry(state, "s1");
+    assert.ok(row, name);
+    assert.deepEqual(
+      {
+        branch: ctx.branch ?? "",
+        project: sessionProjectMenu(selected, { cwd, sessionId: "s1" }).current,
+        title: ctx.title,
+      },
+      {
+        branch: row.branch,
+        project: row.project,
+        title: row.title || "Untitled",
+      },
+      name,
+    );
+  }
+});
+
+test("readiness needs a connected, settled attachment", () => {
+  const current = { ...base, session: session("/repo") };
+  assert.equal(sessionReady(current), true);
+  for (const state of [
+    { ...current, connected: false },
+    { ...current, resync: true },
+    { ...current, selecting: { cwd: "/repo", sessionId: "s2" } },
+    { ...current, selectionId: null },
+  ]) {
+    assert.equal(sessionReady(state), false);
+    assert.equal(sessionActivity(state, false).status, "Reconnecting");
+  }
+});
+
+test("status precedence: startup, delivery, reconnecting, read-only, exited, then activity", () => {
+  const status = (state: AppState) => sessionActivity(state, false).status;
+  const pending = { attemptId: "create", cwd: "/repo", text: "hi", outcome: "starting" as const };
+  assert.equal(status({ ...base, pendingCreate: pending }), "Starting");
+  assert.equal(
+    status({
+      ...base,
+      pendingCreate: pending,
+      session: session(
+        "/repo",
+        {},
+        { dialogs: [{ id: "d", method: "confirm", title: "Q" } as never] },
+      ),
+    }),
+    "Waiting for input",
+    "a dialog outranks startup",
+  );
+  assert.equal(
+    status({ ...base, pendingCreate: { ...pending, outcome: "uncertain" } }),
+    "Delivery uncertain",
+  );
+  assert.equal(
+    status({ ...base, pendingCreate: { ...pending, outcome: "rejected" } }),
+    "Message rejected",
+    "a rejected selection is known not to have delivered",
+  );
+  assert.equal(status({ ...base }), "Loading");
+  assert.equal(
+    status({
+      ...base,
+      session: session("/repo", {
+        checkoutMissing: true,
+        closure: { _tag: "failed", detail: "x" },
+      }),
+    }),
+    "Read-only",
+  );
+  assert.equal(
+    status({ ...base, session: session("/repo", { closure: { _tag: "failed", detail: "x" } }) }),
+    "Exited",
+  );
+  assert.equal(
+    status({ ...base, session: session("/repo", { isCompacting: true, isRetrying: true }) }),
+    "Compacting · Retrying",
+  );
+  assert.equal(status({ ...base, session: session("/repo", { isStreaming: true }) }), "Working");
+  for (const working of [
+    { submission: { id: 1, outcome: "submitting" as const } },
+    { queuedMessages: [{ kind: "follow-up" as const, text: "next" }] },
+    { isStopping: true },
+    {
+      dialogResolution: {
+        id: "d1",
+        generation: "g",
+        reason: "answered" as const,
+        delivery: "pending" as const,
+        detail: "",
+      },
+    },
+  ])
+    assert.equal(status({ ...base, session: session("/repo", working) }), "Working");
+  assert.equal(status({ ...base, session: session("/repo") }), "Ready");
+  assert.equal(
+    status({ ...base, session: session("/repo", {}, { hosted: false }) }),
+    "Not running",
+  );
+});
+
+test("reply activity yields to visible pending text, except in Messages display", () => {
+  const streaming = {
+    ...base,
+    session: session(
+      "/repo",
+      { isStreaming: true },
+      { pending: { id: "p", role: "assistant", text: "partial" } },
+    ),
+  };
+  assert.equal(sessionActivity(streaming, false).replyActivity, undefined);
+  assert.equal(sessionActivity(streaming, true).replyActivity, "working");
+  assert.equal(
+    sessionActivity(
+      {
+        ...base,
+        pendingCreate: { attemptId: "create", cwd: "/repo", text: "", outcome: "starting" },
+      },
+      false,
+    ).replyActivity,
+    "starting",
+  );
+});
+
+test("the session pane: a loading session shows the skeleton and nothing else", () => {
+  assert.deepEqual(sessionPane({ ...base, selecting: { cwd: "/repo", sessionId: "s1" } }), {
+    list: false,
+    skeleton: true,
+    placeholder: undefined,
+    composerDisabled: true,
+    editorDisabled: true,
+  });
+});
+
+test("the session pane: a first message shows at once, without skeleton, until Pi has the session", () => {
+  const input = { attemptId: "create", cwd: "/repo", text: "hi", outcome: "starting" as const };
+  assert.deepEqual(sessionPane({ ...base, pendingCreate: input }), {
+    list: true,
+    skeleton: false,
+    placeholder: undefined,
+    composerDisabled: true,
+    editorDisabled: true,
+  });
+  const attached = sessionPane({ ...base, pendingCreate: input, session: session("/repo") });
+  assert.equal(attached.skeleton, false);
+  assert.equal(attached.placeholder, undefined, "the first message is not an empty transcript");
+  assert.equal(attached.composerDisabled, true);
+  const submitted = sessionPane({
+    ...base,
+    pendingCreate: { ...input, outcome: "submitted" },
+    session: session("/repo"),
+  });
+  assert.equal(submitted.composerDisabled, false);
+  assert.equal(
+    sessionPane({ ...base, pendingCreate: { ...input, outcome: "rejected" } }).skeleton,
+    false,
+  );
+});
+
+test("the session pane: a failed selection has no skeleton", () => {
+  const pane = sessionPane({
+    ...base,
+    selectionFailure: { cwd: "/repo", sessionId: "s1", message: "gone" },
+  });
+  assert.equal(pane.skeleton, false);
+  assert.equal(pane.list, false);
+});
+
+test("the session pane: a settled empty session says so and drops the skeleton", () => {
+  for (const hosted of [true, false]) {
+    const pane = sessionPane({ ...base, session: session("/repo", {}, { hosted }) });
+    assert.deepEqual(pane, {
+      list: true,
+      skeleton: false,
+      placeholder: "No messages yet.",
+      composerDisabled: false,
+      editorDisabled: false,
+    });
+  }
+  const withHistory = sessionPane({
+    ...base,
+    session: session("/repo", {}, { messages: [{ id: "m", role: "user", text: "hi" }] }),
+  });
+  assert.equal(withHistory.skeleton, false);
+  assert.equal(withHistory.placeholder, undefined);
+});
+
+test("the session pane: input Pi has not answered keeps the skeleton and no placeholder", () => {
+  const submitting = sessionPane({
+    ...base,
+    session: session("/repo", { submission: { id: 1, outcome: "submitting" } }),
+  });
+  assert.equal(submitting.skeleton, true);
+  assert.equal(submitting.placeholder, undefined);
+  const replying = sessionPane({
+    ...base,
+    session: session(
+      "/repo",
+      { isStreaming: true },
+      { pending: { id: "p", role: "assistant", text: "partial" } },
+    ),
+  });
+  assert.equal(replying.skeleton, false);
+  assert.equal(replying.placeholder, undefined);
+});
+
+test("the session pane: work under way is never described as an empty session", () => {
+  for (const working of [{ isStreaming: true }, { isCompacting: true }, { isRetrying: true }]) {
+    const pane = sessionPane({ ...base, session: session("/repo", working) });
+    assert.equal(pane.placeholder, undefined, JSON.stringify(working));
+    assert.equal(pane.skeleton, true, JSON.stringify(working));
+  }
+});
+
+test("the session pane: the composer waits for a ready attachment", () => {
+  const current = { ...base, session: session("/repo") };
+  assert.equal(sessionPane(current).composerDisabled, false);
+  for (const state of [
+    { ...current, connected: false },
+    { ...current, resync: true },
+    { ...current, selectionId: null },
+  ])
+    assert.equal(sessionPane(state).composerDisabled, true);
+});
+
+test("an archived session refuses input as archived, even when its checkout is also missing", () => {
+  const archived = (state: Partial<SessionState> = {}): AppState => ({
+    ...base,
+    sessionReferences: [
+      sessionReference("/work/repo.feature", "s1", { branch: "feature", archived: true }),
+    ],
+    session: session("/work/repo.feature", state),
+  });
+  for (const [name, state] of [
+    ["checkout missing", archived({ checkoutMissing: true })],
+    ["checkout present", archived()],
+  ] as const) {
+    assert.equal(sessionActivity(state, false).status, "Archived", name);
+    assert.equal(sessionContext(state).draftKey, null, `${name}: no draft takes additions`);
+    assert.equal(sessionPane(state).composerDisabled, true, name);
+    assert.equal(sessionPane(state).editorDisabled, true, name);
+  }
+});
+
+test("the session pane: the editor keeps its draft while reconnecting but not while starting", () => {
+  const current = { ...base, session: session("/repo") };
+  assert.equal(sessionPane(current).editorDisabled, false);
+  assert.equal(sessionPane({ ...current, connected: false }).editorDisabled, false);
+  const starting = { attemptId: "a", cwd: "/repo", text: "hi", outcome: "starting" as const };
+  assert.equal(sessionPane({ ...current, pendingCreate: starting }).editorDisabled, true);
+  assert.equal(sessionPane({ ...base, session: null }).editorDisabled, true);
+  assert.equal(
+    sessionPane({ ...base, session: session("/repo", { checkoutMissing: true }) }).editorDisabled,
+    true,
+  );
+});
+
+test("directory trust prefers the latest probe over discovery", () => {
+  assert.deepEqual(directoryTrust(base, "/repo"), { required: true, trusted: false });
+  assert.deepEqual(
+    directoryTrust({ ...base, trusts: { "/repo": { required: true, trusted: true } } }, "/repo"),
+    { required: true, trusted: true },
+  );
+  assert.equal(directoryTrust(base, "/elsewhere"), undefined);
+});
+
+test("the selected session waits for a settled attachment before registry changes; other sessions do not", () => {
+  const selected = { cwd: "/work/repo.feature", sessionId: "s1" };
+  const other = { cwd: "/repo", sessionId: "s2" };
+  const settled = {
+    ...base,
+    sessionReferences: [...base.sessionReferences, sessionReference("/repo", "s2")],
+    session: session("/work/repo.feature"),
+  };
+  assert.equal(sessionMutable(settled, selected), true);
+  assert.equal(sessionMutable({ ...settled, resync: true }, selected), false);
+  assert.equal(sessionMutable({ ...settled, resync: true }, other), true);
+  assert.equal(sessionMutable({ ...settled, connected: false }, other), false);
+  assert.equal(
+    sessionMutable({ ...settled, selectionId: null, session: null, view: { kind: "new" } }, other),
+    true,
+  );
+  assert.equal(
+    sessionCheckoutMissing(
+      { ...base, session: session("/work/repo.feature", { checkoutMissing: true }) },
+      selected,
+    ),
+    true,
+  );
+  assert.equal(
+    sessionCheckoutMissing(
+      {
+        ...base,
+        sessionReferences: [
+          sessionReference(other.cwd, other.sessionId, { unavailable: "checkout" }),
+        ],
+      },
+      other,
+    ),
+    true,
+  );
+  assert.equal(sessionCheckoutMissing(settled, other), false);
+});
+
+test("the focused directory is the New page's directory, else the selected session's, which the palette's trust command targets", () => {
+  assert.deepEqual(
+    focusedDirectory({ ...base, view: { kind: "new", cwd: "/repo" }, session: null }),
+    { cwd: "/repo", checkoutMissing: false },
+  );
+  assert.equal(focusedDirectory({ ...base, view: { kind: "new" }, session: null }), undefined);
+  assert.deepEqual(focusedDirectory({ ...base, session: session("/work/repo.feature") }), {
+    cwd: "/work/repo.feature",
+    checkoutMissing: false,
+  });
+  assert.deepEqual(
+    focusedDirectory({ ...base, session: session("/gone", { checkoutMissing: true }) }),
+    { cwd: "/gone", checkoutMissing: true },
+  );
+  assert.equal(
+    focusedDirectory({ ...base, session: null, selecting: { cwd: "/repo", sessionId: "s1" } }),
+    undefined,
+    "nothing is focused until the snapshot arrives",
+  );
+});
+
+test("slash completion uses one revision rule for the New page and a session", () => {
+  const fresh = {
+    ...base,
+    view: { kind: "new" as const, cwd: "/repo" },
+    selectionId: null,
+    session: null,
+  };
+  const target = completionTarget(fresh);
+  assert.equal(target?.cwd, "/repo");
+  assert.equal(target?.session, undefined);
+  assert.notEqual(
+    completionTarget({ ...fresh, trusts: { "/repo": { required: true, trusted: true } } })
+      ?.revision,
+    target?.revision,
+    "a trust change invalidates discovery",
+  );
+  assert.equal(completionTarget({ ...fresh, connected: false }), undefined);
+  const hosted = completionTarget({ ...base, session: session("/repo") });
+  assert.deepEqual(
+    [hosted?.cwd, hosted?.session],
+    ["/repo", { workspaceId: "ws:/repo", sessionId: "s1" }],
+    "a running session is asked by its IDs",
+  );
+  const saved = completionTarget({ ...base, session: session("/repo", {}, { hosted: false }) });
+  assert.deepEqual(
+    [saved?.cwd, saved?.session],
+    ["/repo", undefined],
+    "discovery never starts a saved session",
+  );
+  assert.equal(
+    completionTarget({ ...base, workspaces: [], session: session("/repo") }),
+    undefined,
+    "a running session without a known workspace is not asked",
+  );
+  assert.equal(
+    completionTarget({ ...base, resync: true, session: session("/repo") }),
+    undefined,
+    "only on a ready attachment",
+  );
+});
+
+test("the New session directory picker names a root by folder, a worktree by folder and branch, and anything else by path", () => {
+  const root = directoryChoices(base, "/repo");
+  assert.deepEqual(root.trigger, { kind: "checkout", folder: "repo" });
+  assert.deepEqual(root.roots, [{ path: "/repo", label: "repo", selected: true }]);
+  const feature = directoryChoices(base, "/work/repo.feature");
+  assert.deepEqual(feature.trigger, { kind: "checkout", folder: "repo", branchLabel: "feature" });
+  assert.equal(feature.roots[0]?.selected, false);
+  const elsewhere = directoryChoices({ ...base, registryLoaded: true }, "/Users/me/scratch");
+  assert.deepEqual(elsewhere.trigger, { kind: "path", label: "~/scratch" });
+  assert.deepEqual(directoryChoices(base, "").trigger, { kind: "none" });
+});
+
+test("before the registry loads, the directory picker names a remembered directory by its folder, not its full path", () => {
+  const loading = { ...base, folders: [] };
+  assert.deepEqual(directoryChoices(loading, "/tmp/run/repo").trigger, {
+    kind: "checkout",
+    folder: "repo",
+  });
+  assert.deepEqual(
+    directoryChoices({ ...loading, registryLoaded: true }, "/tmp/run/repo").trigger,
+    { kind: "path", label: "/tmp/run/repo" },
+    "once loaded, an unregistered directory is named by path",
+  );
+});
+
+test("the New page names its place for voice input as the session it starts will", () => {
+  assert.deepEqual(startPlace(base, "/work/repo.feature", undefined), {
+    project: undefined,
+    folder: "repo",
+    branch: "feature",
+  });
+  assert.deepEqual(startPlace(base, "/Users/me/scratch/", undefined), {
+    project: undefined,
+    folder: "scratch",
+    branch: undefined,
+  });
+  assert.equal(
+    startPlace(base, "/Users/me/scratch", undefined).folder,
+    sessionDirectories(base)("/Users/me/scratch").folderName,
+  );
+  assert.deepEqual(startPlace(base, "", undefined), {
+    project: undefined,
+    folder: undefined,
+    branch: undefined,
+  });
+});
+
+test("the New session directory picker offers only folders whose root is on disk", () => {
+  const other = (name: string, status: WorktreeView["status"]): FolderView => ({
+    ...folder,
+    path: `/${name}`,
+    name,
+    worktrees: [worktree(`/${name}`, "main", { root: true, status })],
+  });
+  const withResearch = (status: WorktreeView["status"]): AppState => ({
+    ...base,
+    folders: [
+      folder,
+      other("research", status),
+      other("notes", "non-git"),
+      other("probe", "unknown"),
+    ],
+  });
+  const labels = (state: AppState, cwd: string) =>
+    directoryChoices(state, cwd).roots.map((r) => r.label);
+  const gone = withResearch("missing");
+  assert.deepEqual(labels(gone, "/repo"), ["repo", "notes", "probe"]);
+  assert.deepEqual(
+    directoryChoices(gone, "/research").trigger,
+    { kind: "checkout", folder: "research" },
+    "a selected directory stays selected when its root goes missing",
+  );
+  assert.equal(gone.folders.length, 4, "the folder stays registered");
+  assert.deepEqual(
+    labels(withResearch("current"), "/repo"),
+    ["repo", "research", "notes", "probe"],
+    "a restored folder is offered again",
+  );
+});
+
+test("one rule answers whether a folder with no sessions can start one when its root is missing", () => {
+  const research = (status: WorktreeView["status"]): FolderView => ({
+    ...folder,
+    path: "/research",
+    name: "research",
+    worktrees: [worktree("/research", "main", { root: true, status })],
+  });
+  const state = (status: WorktreeView["status"]): AppState => ({
+    ...base,
+    session: null,
+    sessionReferences: [],
+    view: { kind: "new", cwd: "/research" },
+    folders: [folder, research(status)],
+  });
+  const gone = state("missing");
+  assert.equal(checkoutMissingAt(gone, "/research"), true);
+  assert.deepEqual(
+    directoryChoices(gone, "/research").roots.map((r) => r.label),
+    ["repo"],
+    "the picker leaves the missing root out",
+  );
+  assert.equal(folderCommands(gone, research("missing")).create.enabled, false);
+  assert.deepEqual(focusedDirectory(gone), { cwd: "/research", checkoutMissing: true });
+  assert.equal(trustCommand(gone, "/research"), undefined, "Pi cannot be asked about its trust");
+
+  assert.equal(checkoutMissingAt(gone, "/repo"), false, "a current folder beside it is unaffected");
+  assert.equal(folderCommands(gone, folder).create.enabled, true);
+  assert.deepEqual(focusedDirectory({ ...gone, view: { kind: "new", cwd: "/repo" } }), {
+    cwd: "/repo",
+    checkoutMissing: false,
+  });
+
+  for (const status of ["current", "unknown", "non-git"] as const) {
+    const s = state(status);
+    assert.equal(checkoutMissingAt(s, "/research"), false, `${status} is not evidence of absence`);
+    assert.equal(folderCommands(s, research(status)).create.enabled, true);
+    assert.equal(focusedDirectory(s)?.checkoutMissing, false);
+  }
+
+  const linked = worktree("/work/research.x", "x", { status: "missing" });
+  const unlisted: AppState = {
+    ...state("current"),
+    folders: [{ ...research("current"), worktrees: [...research("current").worktrees, linked] }],
+  };
+  assert.equal(
+    checkoutMissingAt(unlisted, "/work/research.x"),
+    false,
+    "a linked worktree Git stops listing may still be on disk; only session evidence marks it gone",
+  );
+});
+
+test("New session here, from a folder row or a session, starts wherever the checkout is on disk", () => {
+  const research = (status: WorktreeView["status"]): FolderView => ({
+    ...folder,
+    path: "/research",
+    name: "research",
+    worktrees: [worktree("/research", "main", { root: true, status })],
+  });
+  const at = (cwd: string, status: WorktreeView["status"]): AppState => ({
+    ...base,
+    session: session(cwd),
+    selectionId: "sel",
+    folders: [folder, research(status)],
+  });
+  const cases = [
+    { name: "a folder root on disk", cwd: "/research", status: "current", starts: true },
+    { name: "a missing folder root", cwd: "/research", status: "missing", starts: false },
+    { name: "a directory no folder holds", cwd: "/scratch", status: "current", starts: true },
+  ] as const;
+  for (const c of cases) {
+    const state = at(c.cwd, c.status);
+    const row = { path: c.cwd, name: c.cwd.slice(1) };
+    assert.equal(folderCommands(state, row).create.enabled, c.starts, `row: ${c.name}`);
+    const command = sessionCommands(state, undefined, {}).find((x) => x.id === "new-session-here");
+    assert.equal(command?.enabled, c.starts, `session: ${c.name}`);
+    assert.equal(command?.detail, c.starts ? c.cwd : "Checkout removed", `detail: ${c.name}`);
+  }
+});
+
+test("the New session directory picker labels a branchless worktree", () => {
+  const facts = (detached: boolean) => ({
+    path: "/work/repo.x",
+    branch: null,
+    detached,
+    prunable: false,
+  });
+  const withWorktree = (w: WorktreeView): AppState => ({
+    ...base,
+    folders: [{ ...folder, worktrees: [worktree("/repo", "main"), w] }],
+  });
+  const detached = withWorktree(worktree("/work/repo.x", null, { facts: facts(true) }));
+  assert.deepEqual(directoryChoices(detached, "/work/repo.x").trigger, {
+    kind: "checkout",
+    folder: "repo",
+    branchLabel: "Detached HEAD",
+  });
+  const unknown = withWorktree(worktree("/work/repo.x", null, { facts: facts(false) }));
+  assert.deepEqual(directoryChoices(unknown, "/work/repo.x").trigger, {
+    kind: "checkout",
+    folder: "repo",
+    branchLabel: "Unknown branch",
+  });
+});
+
+test("a session is selected and working by cwd and ID together", () => {
+  const other = { cwd: "/repo", sessionId: "s2" };
+  const state: AppState = {
+    ...base,
+    session: session("/repo"),
+    hosts: [
+      { cwd: "/repo", sessionId: "s2", working: true },
+      { cwd: "/elsewhere", sessionId: "s1", working: false },
+    ],
+  };
+  assert.equal(sessionWorking(state, { cwd: "/repo", sessionId: "s1" }), false);
+  assert.equal(sessionWorking(state, other), true);
+  assert.equal(hostOf(state, other)?.working, true);
+  assert.equal(hostOf(state, { cwd: "/repo", sessionId: "s3" }), undefined);
+  assert.equal(isSelectedSession(state, { cwd: "/repo", sessionId: "s1" }), true);
+  assert.equal(isSelectedSession(state, other), false);
+  const busyHost = { ...state, hosts: [{ cwd: "/repo", sessionId: "s1", working: true }] };
+  assert.equal(sessionWorking(busyHost, { cwd: "/repo", sessionId: "s1" }), false);
+  assert.equal(
+    sessionWorking({ ...busyHost, session: null }, { cwd: "/repo", sessionId: "s1" }),
+    true,
+  );
+});
+
+test("a missing checkout is decided once: Trust, New session here, Rename, the focus, the composer and the status agree", () => {
+  const trusts = {
+    "/work/repo.feature": { required: true, trusted: false },
+    "/closed": { required: true, trusted: false },
+  };
+  const gone = {
+    ...base,
+    trusts,
+    sessionReferences: [
+      ...base.sessionReferences,
+      sessionReference("/closed", "s1", { unavailable: "checkout" }),
+      sessionReference("/closed", "s2"),
+    ],
+  };
+  const cases = [
+    {
+      name: "the selected session reports its checkout missing",
+      state: { ...gone, session: session("/work/repo.feature", { checkoutMissing: true }) },
+      cwd: "/work/repo.feature",
+      missing: true,
+    },
+    {
+      name: "the registry marks the directory's checkout unavailable",
+      state: { ...gone, session: session("/closed", {}, { sessionId: "s2" }) },
+      cwd: "/closed",
+      missing: true,
+    },
+    {
+      name: "the checkout is present",
+      state: { ...gone, session: session("/work/repo.feature") },
+      cwd: "/work/repo.feature",
+      missing: false,
+    },
+  ];
+  for (const c of cases) {
+    const target = { cwd: c.cwd, sessionId: c.state.session?.sessionId ?? "s1" };
+    const commands = sessionCommands(c.state, target, {});
+    const enabled = (id: string) => commands.find((x) => x.id === id)?.enabled;
+    assert.equal(checkoutMissingAt(c.state, c.cwd), c.missing, c.name);
+    assert.equal(trustCommand(c.state, c.cwd) === undefined, c.missing, `${c.name}: Trust`);
+    assert.equal(enabled("new-session-here"), !c.missing, `${c.name}: New session here`);
+    assert.equal(enabled("rename"), !c.missing, `${c.name}: Rename`);
+    assert.equal(focusedDirectory(c.state)?.checkoutMissing, c.missing, `${c.name}: focus`);
+    assert.equal(sessionContext(c.state).draftKey === null, c.missing, `${c.name}: composer`);
+    assert.equal(
+      sessionActivity(c.state, false).status === "Read-only",
+      c.missing,
+      `${c.name}: status`,
+    );
+  }
+});
+
+test("where a session runs: repository or folder, then branch or short detached commit", () => {
+  const none = {
+    folderName: undefined,
+    githubRepo: undefined,
+    branch: undefined,
+    detachedHead: undefined,
+  };
+  assert.deepEqual(
+    sessionPlace({
+      ...none,
+      folderName: "repo",
+      githubRepo: "goofansu/piano",
+      branch: "feature",
+    }),
+    { name: "goofansu/piano", repository: true, ref: { kind: "branch", name: "feature" } },
+  );
+  assert.deepEqual(
+    sessionPlace({
+      ...none,
+      folderName: "repo",
+      githubRepo: "goofansu/piano",
+      detachedHead: "d4449bb7183bb577791acab4f6fc4f52f78d02b0",
+    }),
+    { name: "goofansu/piano", repository: true, ref: { kind: "commit", name: "d4449bb718" } },
+  );
+  assert.equal(sessionPlace(none), undefined, "no line before the session has a directory");
+});
+
+test("a session's place names its folder as its sidebar row does", () => {
+  const worktreeState = { ...base, session: session("/work/repo.feature") };
+  assert.deepEqual(sessionPlace(sessionContext(worktreeState)), {
+    name: "repo",
+    repository: false,
+    ref: { kind: "branch", name: "feature" },
+  });
+  assert.equal(catalogEntry(worktreeState, "s1")?.folder, "repo");
+
+  const loose = {
+    ...base,
+    session: session("/work/notes/"),
+    sessionReferences: [sessionReference("/work/notes/", "s1")],
+  };
+  assert.equal(sessionPlace(sessionContext(loose))?.name, "notes");
+  assert.equal(catalogEntry(loose, "s1")?.folder, "notes");
+});

@@ -23,7 +23,7 @@ Use the latest Node 24 patch: the locked dependencies need a later patch than th
 Node options go before the test path; `npm test -- --test-name-pattern=…` does not select tests:
 
 ```sh
-node --test --test-name-pattern='<pattern>' --import ./test/setup.ts test/<name>.test.ts
+node --test --test-name-pattern='<pattern>' --import ./test/setup.ts features/<feature>/tests/<name>.test.ts
 ```
 
 ## CI and merging

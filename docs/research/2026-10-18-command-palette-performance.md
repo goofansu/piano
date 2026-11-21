@@ -44,15 +44,15 @@ starts at the last edit, not at every intermediate query.
 
 Sources are the repository at the revision above and the installed cmdk 1.1.1 distribution.
 
-1. [`CommandPalette.tsx`](../../web/src/components/CommandPalette.tsx) controls the input with
+1. [`CommandPalette.tsx`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/CommandPalette.tsx) controls the input with
    `search`, calls `commandPalette(state, { search, ... })` directly during rendering, and maps
    every returned row into `CommandItem`. There is no debounce, deferred list or result window.
    The palette component also computes groups while its dialog is closed.
-2. [`commandPalette.ts`](../../web/src/lib/commandPalette.ts) shows eight recent sessions before
+2. [`commandPalette.ts`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/lib/commandPalette.ts) shows eight recent sessions before
    searching. Any nonblank search produces rows for **every nonarchived session**, scores them,
    sorts rows and groups, and retains even zero-score rows for cmdk to filter later. This is
    metadata search (title, folder, branch, project, ID), not server-side transcript search.
-3. [`sessionCatalog.ts`](../../web/src/lib/sessionCatalog.ts) reconstructs entries, joins folders,
+3. [`sessionCatalog.ts`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/lib/sessionCatalog.ts) reconstructs entries, joins folders,
    hosts and projects, then sorts by parsed creation time whenever `recentSessions` is called.
    The palette also re-extracts conversation links when a session is selected. Those operations
    do not intrinsically depend on query text.
@@ -64,13 +64,13 @@ Sources are the repository at the revision above and the installed cmdk 1.1.1 di
 5. This is a **controlled** cmdk input: its input callback updates Piano state; cmdk synchronizes
    the controlled value into its search store in an effect. Simply passing a debounced value to
    Piano's ranking function while leaving cmdk filtering enabled does not debounce that second path.
-6. [`PianoCommand.tsx`](../../web/src/components/PianoCommand.tsx) exposes `filter`, but its custom
+6. [`PianoCommand.tsx`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/PianoCommand.tsx) exposes `filter`, but its custom
    `CommandDialog` does not currently expose/forward `shouldFilter` to the inner `Command`.
    That wrapper must be extended deliberately; adding a prop to the dialog alone is insufficient.
 
 The duplicate ranking exists for a reason: newly matching rows previously appeared in the wrong
 order. Preserve that observable behavior, not both implementations. Existing
-[`CommandPalette.test.ts`](../../test/CommandPalette.test.ts) covers this, recent ordering, alias
+[`CommandPalette.test.ts`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/test/CommandPalette.test.ts) covers this, recent ordering, alias
 precedence, groups and file/link queries. Some assertions explicitly expect all candidates for
 cmdk; a new external-filter contract would require reviewing those assertions rather than blindly
 retaining the implementation detail.
