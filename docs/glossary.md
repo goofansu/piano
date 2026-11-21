@@ -12,7 +12,7 @@ SQLite, UI and documentation. Some describe the target model in
 | Checkout | The directory on disk a session runs in: a folder root, one of its worktrees, or another directory. |
 | Workspace | Piano's context around a folder root or worktree, attaching sessions, revision, processes, evidence and integration state. Each has a registry ID, which URLs carry in place of its path. |
 | Session | The Pi session, with Pi-owned history and identity. Use "session" for the entity and its lifecycle, never "thread". |
-| Running session | A session whose Pi is running or starting, including while idle, waiting for input or owning an app. Not merely the session selected on screen, and not only one that is Working. |
+| Running session | A session whose Pi is running or starting, including while idle or waiting for input. Not merely the session selected on screen, and not only one that is Working. |
 | Page | A main-pane view other than a session: the New page, the Projects index, a project's home, or Session not found. Opening one leaves the selected session; each has its own address. |
 | Session pane | The main pane when it is not on a page: a session shown or being selected, a session being created (addressed `/new` until it has an ID), a selection that failed (kept at the session's address with its Retry), or an unresolved deep link. Closing Settings returns to it unless it holds nothing. |
 | Conversation | The user messages and final assistant replies within a session, rather than its tool activity or intermediate assistant output. Use for navigation through that exchange, such as "Top of conversation" and "End of conversation"; not a separate session identity. |
@@ -22,8 +22,6 @@ SQLite, UI and documentation. Some describe the target model in
 | Side-by-side | The session layout keeping the Agent area shown, with room on its right for either the Surface area or the session rail, whichever was brought in last. Neither must be open; this does not mean three simultaneous columns. |
 | Session rail | The selected session's column of facts about its workspace and outputs, available only side-by-side and sharing the right side with the Surface area. One switch applies to every session, remembered by the browser: "Show session rail" / "Hide session rail". Not "Details", which names the Details popovers. |
 | Artifact | A document a session published to Radius with the bundled artifact tools, opened at its Radius URL. The session header's Artifacts menu lists them by title; not a file Pi wrote (an output). |
-| App | The current checkout's application service, including an app package within its monorepo, rather than a listener manufactured to host generated files or publish artifacts. The rail's App section represents only the selected live session's owned app. |
-| Preview | The selected live session's managed app, opened in an external browser tab, with status, on-demand details and exact-instance stop in Piano. A transcript URL is not a live preview. App inspection lives in the rail or session menu, not the Surface area. |
 | Task | An intended outcome that may span sessions; session completion does not establish task acceptance. |
 | Acceptance criterion | An observable requirement with an identity and captured version, against which evidence can be evaluated. |
 | Revision | A captured identity for relevant repository content, including uncommitted inputs; HEAD alone is insufficient. |

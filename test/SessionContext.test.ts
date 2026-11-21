@@ -25,7 +25,6 @@ import {
   sessionWorking,
   startPlace,
 } from "../web/src/lib/sessionContext.ts";
-import { sessionHasPreview } from "../web/src/lib/sessionPreview.ts";
 import { type AppState, initialState, type SessionView } from "../web/src/store.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
 
@@ -779,20 +778,18 @@ test("the New session directory picker labels a branchless worktree", () => {
   });
 });
 
-test("a session is selected, working and previewing by cwd and ID together", () => {
+test("a session is selected and working by cwd and ID together", () => {
   const other = { cwd: "/repo", sessionId: "s2" };
   const state: AppState = {
     ...base,
-    session: session("/repo", { preview: undefined }),
+    session: session("/repo"),
     hosts: [
-      { cwd: "/repo", sessionId: "s2", working: true, preview: true },
+      { cwd: "/repo", sessionId: "s2", working: true },
       { cwd: "/elsewhere", sessionId: "s1", working: false },
     ],
   };
   assert.equal(sessionWorking(state, { cwd: "/repo", sessionId: "s1" }), false);
   assert.equal(sessionWorking(state, other), true);
-  assert.equal(sessionHasPreview(state, other), true);
-  assert.equal(sessionHasPreview(state, { cwd: "/repo", sessionId: "s1" }), false);
   assert.equal(hostOf(state, other)?.working, true);
   assert.equal(hostOf(state, { cwd: "/repo", sessionId: "s3" }), undefined);
   assert.equal(isSelectedSession(state, { cwd: "/repo", sessionId: "s1" }), true);

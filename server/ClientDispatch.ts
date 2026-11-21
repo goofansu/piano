@@ -149,24 +149,16 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
       admission: ({ action }) =>
         sessionActionPolicy[action._tag].priority ? "control" : "ordinary",
       run: ({ selectionId, action, start }) => sessions.act(selectionId, action, start),
-      unanswered: ({ selectionId, action }, reason) =>
-        action._tag === "preview_status" && action.requestId !== undefined
-          ? {
-              _tag: "preview_unobserved",
-              selectionId,
-              requestId: action.requestId,
-              message: unansweredText(reason),
-            }
-          : {
-              _tag: "error",
-              message: unansweredText(reason),
-              selectionId,
-              ...("inputId" in action &&
-              action.inputId !== undefined &&
-              (reason._tag !== "failed" || reason.error instanceof InputNotSent)
-                ? { inputId: action.inputId }
-                : {}),
-            },
+      unanswered: ({ selectionId, action }, reason) => ({
+        _tag: "error",
+        message: unansweredText(reason),
+        selectionId,
+        ...("inputId" in action &&
+        action.inputId !== undefined &&
+        (reason._tag !== "failed" || reason.error instanceof InputNotSent)
+          ? { inputId: action.inputId }
+          : {}),
+      }),
       confirmed: null,
     },
     registry: {

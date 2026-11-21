@@ -437,19 +437,6 @@ function handle(cmd) {
     case "prompt": {
       if (cmd.message.startsWith("write marker "))
         writeFileSync(`${process.cwd()}/${cmd.message.slice(13)}`, `${sessionId}\n`);
-      if (cmd.message.startsWith("preview ")) {
-        respond(cmd, { disposition: "handled" });
-        import("../scripts/PreviewClient.ts")
-          .then(({ ownerRequest }) =>
-            ownerRequest(process.env.PIANO_PREVIEW_OWNER, JSON.parse(cmd.message.slice(8))),
-          )
-          .then(
-            () => "preview answered",
-            (error) => `preview failed: ${error.message}`,
-          )
-          .then((message) => out({ type: "extension_ui_request", method: "notify", message }));
-        return;
-      }
       if (cmd.message === "late start") {
         respond(cmd, { disposition: "started" });
         streaming = true;

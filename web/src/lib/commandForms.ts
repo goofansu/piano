@@ -12,13 +12,7 @@ import {
 } from "./projectCommands.ts";
 import { inSidebarGroups, sessionCatalog, sessionLabel } from "./sessionCatalog.ts";
 import { canRenameSession } from "./sessionCommands.ts";
-import {
-  sessionMutable,
-  sessionReady,
-  sessionReferenceChangeable,
-  sessionWorking,
-} from "./sessionContext.ts";
-import { previewClaimHolds, sessionHasPreview, stopPreview } from "./sessionPreview.ts";
+import { sessionMutable, sessionReferenceChangeable, sessionWorking } from "./sessionContext.ts";
 import type { SendDisposition } from "./ws.ts";
 
 export type FormAnswer = {
@@ -50,10 +44,6 @@ export function answerForm(
 ): FormAnswer {
   const text = typeof input === "string" ? input : "";
   switch (form.kind) {
-    case "stop-preview": {
-      if (!sessionReady(state) || !previewClaimHolds(state, form)) return { allowed: false };
-      return { allowed: true, command: stopPreview(form) };
-    }
     case "rename-session": {
       const { target } = form;
       const title = text.trim();
@@ -127,39 +117,22 @@ export interface Confirmation {
 
 export function confirmation(state: AppState, form: CommandForm): Confirmation | undefined {
   switch (form.kind) {
-    case "stop-preview":
-      return {
-        title: "Stop preview?",
-        description: `This will stop ${form.host}. The session stays available.`,
-        confirmLabel: "Stop preview",
-        destructive: true,
-      };
     case "archive-session": {
       const title = sessionLabel(form.target.title);
-      const preview = sessionHasPreview(state, form.target);
-      const stop =
-        preview && !sessionWorking(state, form.target)
-          ? `the app "${title}" started`
-          : `any work still running in "${title}"${preview ? " and the app it started" : ""}`;
       return {
         title: "Stop and archive this session?",
-        description: `This will stop ${stop} and remove ${preview ? "the session" : "it"} from the sidebar. Its transcript will be kept. Changes already made to files will not be undone.`,
+        description: `This will stop any work still running in "${title}" and remove it from the sidebar. Its transcript will be kept. Changes already made to files will not be undone.`,
         confirmLabel: "Stop and archive",
         destructive: false,
       };
     }
     case "delete-session": {
       const working = sessionWorking(state, form.target);
-      const preview = sessionHasPreview(state, form.target);
-      const stop = working
-        ? `This will stop the session and interrupt its current work${preview ? ", and stop the app it started" : ""}. `
-        : preview
-          ? "This will stop the app the session started. "
-          : "";
+      const stop = working ? "This will stop the session and interrupt its current work. " : "";
       return {
         title: "Delete session?",
         description: `${stop}"${sessionLabel(form.target.title)}" and its transcript are removed from Pi's session store. This cannot be undone.`,
-        confirmLabel: working || preview ? "Stop and delete" : "Delete",
+        confirmLabel: working ? "Stop and delete" : "Delete",
         destructive: true,
       };
     }

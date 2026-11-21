@@ -80,16 +80,6 @@ test("queued and restored messages and the session name leave as typed with cont
   assert.deepEqual(restored.result.messages, expected);
   assert.doesNotMatch(restored.result.stopError ?? "", /hunter22/);
 
-  const logs = projectServerMessage({
-    _tag: "action_result",
-    cwd: "/repo",
-    sessionId: "s1",
-    result: { _tag: "preview_observed", instanceId: null, logs: typed },
-  });
-  assert.equal(logs._tag, "action_result");
-  if (logs._tag === "action_result" && logs.result._tag === "preview_observed")
-    assert.doesNotMatch(logs.result.logs, /hunter22/);
-
   const update = projectSessionEvent({ _tag: "queue_update", messages: queue });
   assert.deepEqual(update, { _tag: "queue_update", messages: expected });
 

@@ -18,7 +18,6 @@ test("Piano's extensions are resolved from the installation, never from the sess
     installed("piano-session"),
     installed("piano-project"),
     installed("piano-dispatch"),
-    installed("piano-preview"),
     installed("piano-ask-user"),
     installed("piano-library"),
     installed("radius-artifacts"),

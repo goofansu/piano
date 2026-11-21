@@ -1,4 +1,3 @@
-import type { SessionPreview } from "@shared/wire";
 import { cn } from "cn";
 import {
   ArrowLeftIcon,
@@ -11,10 +10,7 @@ import {
 import { Fragment, type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react";
 import {
   CommandIcon,
-  CommandLink,
-  type LinkCommand,
   useCommands,
-  useOpenPreview,
   useSessionCommands,
   useSessionProjectMenu,
 } from "@/components/CommandHost";
@@ -23,13 +19,6 @@ import { PianoLinkButton } from "@/components/PianoButton";
 import { SheetClose, SheetContent, SheetTitle } from "@/components/PianoSheet";
 import { ProjectCommandIconView } from "@/components/Projects";
 import { SessionIdDetails } from "@/components/SessionIdDetails";
-import {
-  dotTone,
-  PreviewStatus,
-  useClaimedPreview,
-  useSeenPreview,
-} from "@/components/SessionPreview";
-import { StatusDot } from "@/components/StatusDot";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -39,10 +28,8 @@ import type { ProjectCommand } from "@/lib/projectCommands";
 import { pullRequestView } from "@/lib/pullRequestView";
 import { type SessionCommand, sessionHeaderMenu } from "@/lib/sessionCommands";
 import { sessionContext } from "@/lib/sessionContext";
-import { type PreviewClaim, previewClaim, previewFace, previewHost } from "@/lib/sessionPreview";
-import { usePreviews } from "@/lib/usePageStores";
 
-type Page = "actions" | "projects" | "preview";
+type Page = "actions" | "projects";
 
 const row =
   "h-11 w-full justify-start gap-3 border border-transparent px-3 text-base font-normal [&_svg]:size-4 [&_svg]:shrink-0";
@@ -125,20 +112,13 @@ function LinkRow({
   onOpen,
   children,
 }: {
-  to: string | LinkCommand;
+  to: string;
   icon: ReactNode;
   value?: ReactNode;
   onOpen: () => void;
   children: ReactNode;
 }) {
-  const content = (
-    <>
-      {icon} {children}
-      {rowValue && <span className={value}>{rowValue}</span>}
-      <ExternalLinkIcon data-icon="inline-end" className="ml-auto text-muted-foreground" />
-    </>
-  );
-  return typeof to === "string" ? (
+  return (
     <PianoLinkButton
       variant="ghost"
       className={row}
@@ -147,30 +127,10 @@ function LinkRow({
       rel="noopener noreferrer"
       onClick={onOpen}
     >
-      {content}
+      {icon} {children}
+      {rowValue && <span className={value}>{rowValue}</span>}
+      <ExternalLinkIcon data-icon="inline-end" className="ml-auto text-muted-foreground" />
     </PianoLinkButton>
-  ) : (
-    <PianoLinkButton
-      variant="ghost"
-      className={row}
-      render={<CommandLink command={to} onClick={onOpen} />}
-    >
-      {content}
-    </PianoLinkButton>
-  );
-}
-
-function PreviewRow({ preview, onShow }: { preview: SessionPreview; onShow: () => void }) {
-  const face = previewFace(preview);
-  return (
-    <Button variant="ghost" className={row} aria-label="Preview" onClick={onShow}>
-      <span className="flex size-4 shrink-0 items-center justify-center">
-        <StatusDot tone={dotTone[face.tone]} />
-      </span>
-      <span data-slot="row-title">Preview</span>
-      <span className={value}>{preview.url ? previewHost(preview.url) : face.status}</span>
-      <ChevronRightIcon className="ml-auto text-muted-foreground" />
-    </Button>
   );
 }
 
@@ -237,11 +197,6 @@ export function SessionMenuSheet({
   const { commands, run } = useSessionCommands();
   const { pullRequest, sessionId } = sessionContext(state);
   const pr = pullRequestView({ link: pullRequest ?? null, pullRequest: null });
-  const preview = useSeenPreview(state);
-  const previews = usePreviews();
-  const openPreview = useOpenPreview();
-  const [previewPage, setPreviewPage] = useState<PreviewClaim | null>(null);
-  const pagePreview = useClaimedPreview(state, previewPage);
   const projects = useSessionProjectMenu();
   const left = useRef(false);
   const leave = () => {
@@ -265,7 +220,6 @@ export function SessionMenuSheet({
   const { display } = menu;
   const rows = (section: SessionCommand[]) =>
     section.map((c) => <SessionCommandRow key={c.id} command={c} run={run} />);
-  const facts = !!pr || !!preview;
 
   return (
     <SheetContent
@@ -299,17 +253,7 @@ export function SessionMenuSheet({
                 Pull request
               </LinkRow>
             )}
-            {preview && (
-              <PreviewRow
-                preview={preview}
-                onShow={() => {
-                  setPreviewPage(previewClaim(state) ?? null);
-                  setPage("preview");
-                  previews.refresh();
-                }}
-              />
-            )}
-            {facts && <Separator className="my-1" />}
+            {pr && <Separator className="my-1" />}
             {menu.sections.map((section, i) => {
               if (section === "project")
                 return (
@@ -343,50 +287,6 @@ export function SessionMenuSheet({
                 </Fragment>
               );
             })}
-          </>
-        )}
-        {page === "preview" && (
-          <>
-            <PaneHeader title="Preview" onBack={() => setPage("actions")} />
-            <Separator className="my-1" />
-            {pagePreview ? (
-              <>
-                <div className="flex min-w-0 flex-col gap-1 px-3 py-2">
-                  <PreviewStatus
-                    preview={pagePreview}
-                    className="flex items-center gap-2 text-sm"
-                  />
-                  {pagePreview.url && (
-                    <span className={cn(value, "font-mono")}>{previewHost(pagePreview.url)}</span>
-                  )}
-                </div>
-                {openPreview && (
-                  <LinkRow
-                    to={openPreview}
-                    icon={<CommandIcon icon={openPreview.icon} />}
-                    onOpen={onLeave}
-                  >
-                    {openPreview.label}
-                  </LinkRow>
-                )}
-                {commands
-                  .filter((c) => c.id === "preview-details" || c.id === "stop-preview")
-                  .map((command) => (
-                    <Fragment key={command.id}>
-                      {command.destructive && <Separator className="my-1" />}
-                      <SessionCommandRow
-                        command={command}
-                        run={(c) => {
-                          leave();
-                          run(c);
-                        }}
-                      />
-                    </Fragment>
-                  ))}
-              </>
-            ) : (
-              <p className="px-3 py-2 text-sm text-muted-foreground">Preview unavailable</p>
-            )}
           </>
         )}
         {page === "projects" && projects && (

@@ -11,7 +11,7 @@ import {
 } from "../shared/wire.ts";
 import type { DeliveryOverflow } from "./BoundedDelivery.ts";
 import { CreationAttempts } from "./CreationAttempts.ts";
-import { type PiSession, PiSessionError, sessionActionPolicy } from "./PiSessions.ts";
+import { type PiSession, PiSessionError } from "./PiSessions.ts";
 import { type CreateSpec, SessionHosts, type SessionNotCreated } from "./SessionHosts.ts";
 
 export interface CreateSessionRequest extends Omit<CreateSpec, "attempt"> {
@@ -353,10 +353,7 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     start?: StartOptions,
   ) {
     const inputId = "inputId" in action ? action.inputId : undefined;
-    const session = yield* target(
-      selectionId,
-      sessionActionPolicy[action._tag].startsPi ? start : undefined,
-    ).pipe(
+    const session = yield* target(selectionId, start).pipe(
       Effect.mapError((cause) =>
         inputId === undefined ? cause : new InputNotSent({ inputId, detail: cause.detail, cause }),
       ),

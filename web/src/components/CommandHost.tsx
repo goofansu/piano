@@ -1,6 +1,5 @@
 import { type ClientCommand, SESSION_TITLE_MAX, type ServerMessage } from "@shared/wire";
 import {
-  AppWindowIcon,
   ArchiveIcon,
   CopyIcon,
   FileDiffIcon,
@@ -11,24 +10,15 @@ import {
   MessagesSquareIcon,
   PinIcon,
   PinOffIcon,
-  ScrollTextIcon,
   ShapesIcon,
   Share2Icon,
-  SquareIcon,
   SquarePenIcon,
   TextCursorInputIcon,
   Trash2Icon,
   WrapTextIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import {
-  type ComponentProps,
-  createContext,
-  useContext,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { createContext, useContext, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { copyText } from "@/components/CopyButton";
 import { FormDialog } from "@/components/FormDialog";
@@ -37,7 +27,6 @@ import { DropdownMenuItem } from "@/components/PianoDropdownMenu";
 import { ProjectDialogView } from "@/components/Projects";
 import { ProjectSettingsDialog } from "@/components/ProjectSettings";
 import { RemovalDialog } from "@/components/RemovalDialog";
-import { PreviewDetailsDialog } from "@/components/SessionPreview";
 import { ShareSessionDialog, type ShareTarget } from "@/components/ShareSessionDialog";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup } from "@/components/ui/field";
@@ -48,7 +37,6 @@ import { type Command, type CommandEffects, type CommandForm, runCommand } from 
 import { type FocusReturn, focusReturn } from "@/lib/focusReturn";
 import { type GlobalCommandContext, globalCommands } from "@/lib/globalCommands";
 import type { SessionLayout } from "@/lib/navigation";
-import { openLink } from "@/lib/openLink";
 import { openPageEditor, pageAvailability } from "@/lib/pageEditor";
 import { sessionProjectMenu } from "@/lib/projectCommands";
 import { sessionLabel } from "@/lib/sessionCatalog";
@@ -59,12 +47,10 @@ import {
   sessionCommands,
 } from "@/lib/sessionCommands";
 import { workspaceFor } from "@/lib/sessionContext";
-import { type PreviewClaim, previewClaim } from "@/lib/sessionPreview";
 import { useCodeWrap } from "@/lib/useCodeWrap";
 import { useCommandForms } from "@/lib/useCommandForms";
 import { useMessagesOnly } from "@/lib/useMessagesOnly";
 import { useNavigation } from "@/lib/useNavigation";
-import { usePreviewObservation, usePreviews } from "@/lib/usePageStores";
 import { useSidebarLayout } from "@/lib/useSidebarLayout";
 import { useSidebarView } from "@/lib/useSidebarView";
 import type { SendDisposition } from "@/lib/ws";
@@ -92,9 +78,6 @@ const ICONS: Record<SessionCommandIcon, LucideIcon> = {
   list: ListIcon,
   agent: MessagesSquareIcon,
   "pull-request": GitPullRequestIcon,
-  preview: AppWindowIcon,
-  details: ScrollTextIcon,
-  stop: SquareIcon,
   messages: MessageSquareIcon,
   rename: TextCursorInputIcon,
   share: Share2Icon,
@@ -107,7 +90,7 @@ const ICONS: Record<SessionCommandIcon, LucideIcon> = {
 
 export function CommandIcon({ icon }: { icon: SessionCommandIcon }) {
   const Icon = ICONS[icon];
-  return <Icon className={icon === "stop" ? "fill-current" : undefined} />;
+  return <Icon />;
 }
 
 interface CommandsValue {
@@ -128,14 +111,8 @@ export function useCommands() {
 
 export function useSessionCommands(target?: SessionTarget) {
   const { state, run, messagesOnly, codeWrap, layout } = useCommands();
-  const observed = usePreviewObservation();
   return {
-    commands: sessionCommands(state, target, {
-      messagesOnly,
-      codeWrap,
-      layout,
-      previewObservation: observed,
-    }),
+    commands: sessionCommands(state, target, { messagesOnly, codeWrap, layout }),
     run,
     messagesOnly,
   };
@@ -172,28 +149,6 @@ export function SessionCommandMenuItem({
   );
 }
 
-export type LinkCommand = SessionCommand & { intent: { kind: "open-url"; url: string } };
-
-export function useOpenPreview(): LinkCommand | undefined {
-  const { commands } = useSessionCommands();
-  const command = commands.find((c) => c.id === "open-preview");
-  return command?.enabled && command.intent.kind === "open-url" && command.intent.url
-    ? (command as LinkCommand)
-    : undefined;
-}
-
-export function CommandLink({
-  command,
-  children,
-  ...props
-}: Omit<ComponentProps<"a">, "href" | "target" | "rel"> & { command: LinkCommand }) {
-  return (
-    <a {...props} href={command.intent.url} target="_blank" rel="noopener noreferrer">
-      {children}
-    </a>
-  );
-}
-
 export function CommandHost({
   state,
   send,
@@ -221,7 +176,6 @@ export function CommandHost({
     settings,
     layout,
   } = useNavigation();
-  const previews = usePreviews();
   const [messagesOnly, setMessagesOnly] = useMessagesOnly();
   const [codeWrap, setCodeWrap] = useCodeWrap();
   const { view, setView } = useSidebarView();
@@ -247,7 +201,6 @@ export function CommandHost({
   const asking = form ? confirmation(state, form) : undefined;
   const project = form?.kind === "project" ? form.dialog : undefined;
   const projectSettings = form?.kind === "project-settings";
-  const [previewDetails, setPreviewDetails] = useState<PreviewClaim | null>(null);
   const [sharing, setSharing] = useState<ShareTarget | null>(null);
   const returnFocus = useRef<FocusReturn | undefined>(undefined);
 
@@ -273,7 +226,6 @@ export function CommandHost({
     openForm: (form) => {
       returnFocus.current = focusReturn(formFocusFallback(form));
       forms.open(form);
-      if (form.kind === "stop-preview") previews.refresh();
     },
     shareSession: (target) => {
       const workspace = workspaceFor(state, target.cwd);
@@ -287,12 +239,6 @@ export function CommandHost({
         sessionId: target.sessionId,
         title: sessionLabel(target.title),
       });
-    },
-    openUrl: openLink,
-    openPreviewDetails: () => {
-      returnFocus.current = focusReturn(SESSION_MENU);
-      setPreviewDetails(previewClaim(state) ?? null);
-      previews.refresh();
     },
     openPageEditor,
   };
@@ -372,11 +318,6 @@ export function CommandHost({
         disabled={!answer.allowed}
         cancel={close}
         confirm={forms.submit}
-        finalFocus={returnFocus.current}
-      />
-      <PreviewDetailsDialog
-        claim={previewDetails}
-        close={() => setPreviewDetails(null)}
         finalFocus={returnFocus.current}
       />
       <ProjectDialogView

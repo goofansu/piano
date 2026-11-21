@@ -69,12 +69,6 @@ Run it first, and again whenever anything looks off. It changes nothing.
    directory given as the first argument. Run them one at a time before Launch or after Cleanup,
    and inspect `run.json`, not just the exit code.
 
-   For mapped Preview behavior, also run `node test/browser/preview.mjs <evidence-directory>`
-   serially before Launch. It needs the native supervisor and free ports described in
-   [the Preview journey](../../../docs/testing.md#managed-preview-host-journey). A scratch JSON
-   `PIANO_PREVIEW_CONFIG` containing `{"origin":"http://127.0.0.1"}` enables external-tab
-   interaction without exe.dev authentication; it does not prove authenticated HTTPS access.
-
 2. **Then launch once and reuse `agent-browser`** for anything the harness does not cover,
    through `ab.sh`, which runs `agent-browser --session "$AB_SESSION"` from `PATH`.
    `cleanup.sh` closes the session with the same installed CLI:

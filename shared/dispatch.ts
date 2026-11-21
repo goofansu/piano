@@ -117,11 +117,5 @@ export const SESSION_WS_URL = "PIANO_SESSION_WS_URL";
 export const SESSION_ORIGIN = "PIANO_SESSION_ORIGIN";
 export const PROJECT_INSTRUCTIONS_ENV = "PIANO_PROJECT_INSTRUCTIONS";
 export const PROJECT_INSTRUCTIONS_SECTION = "project_instructions";
-export const PREVIEW_OWNER_ENV = "PIANO_PREVIEW_OWNER";
-export const LAUNCH_ENV = [
-  SESSION_WS_URL,
-  SESSION_ORIGIN,
-  PREVIEW_OWNER_ENV,
-  PROJECT_INSTRUCTIONS_ENV,
-] as const;
+export const LAUNCH_ENV = [SESSION_WS_URL, SESSION_ORIGIN, PROJECT_INSTRUCTIONS_ENV] as const;
 export type LaunchEnv = Partial<Record<(typeof LAUNCH_ENV)[number], string>>;

@@ -131,18 +131,6 @@ On macOS `open-session.mjs` skips its copied-content check, so only a Linux run 
 For production startup observations, run `npm run build` first, then prefix a journey with
 `PIANO_BROWSER_PRODUCTION=1`: the harness serves the existing `web/dist` and does not rebuild.
 
-### Managed preview host journey
-
-`node test/browser/preview.mjs <evidence-directory>` is opt-in and outside CI. It needs macOS
-(launchd, in a logged-in session) or Linux (systemd, with a lingering user manager), the real
-installed Pi and free ports 9400–9479; no credentials. On Linux, point `PIANO_PREVIEW_CONFIG` at a
-JSON file containing `{"origin":"http://127.0.0.1"}` to also observe the external tab.
-
-`PIANO_TEST_NATIVE_PREVIEW=1 node --test test/PreviewNative.test.ts` is the smaller native
-supervisor check, on ports 9480–9519 with the same prerequisites. Report the platform actually
-run; simulated launchd output is not native macOS evidence. See
-[managed previews](live-previews.md).
-
 ## Alignment
 
 A transcript row's gutter glyph centres on its content's first text line, so content must not pad

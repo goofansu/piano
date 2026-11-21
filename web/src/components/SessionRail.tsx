@@ -20,7 +20,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/PianoDropdownMenu";
 import { SessionOutputs } from "@/components/SessionOutputs";
-import { PreviewRailRow, useSeenPreview } from "@/components/SessionPreview";
 import { RailList, RailRowTitle, railRow } from "@/components/SessionRailList";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Item, ItemContent, ItemMedia } from "@/components/ui/item";
@@ -34,8 +33,8 @@ import { useSessionFiles } from "@/lib/useSessionFiles";
 import { useTranscriptViewport } from "@/lib/useTranscriptViewport";
 import { type AppState, sessionKey } from "@/store";
 
-type RailSectionName = "workspace" | "app" | "outputs";
-const SECTIONS: readonly RailSectionName[] = ["workspace", "app", "outputs"];
+type RailSectionName = "workspace" | "outputs";
+const SECTIONS: readonly RailSectionName[] = ["workspace", "outputs"];
 
 const collapsedPreference = createPreference<readonly RailSectionName[]>({
   key: "piano.detailsCollapsed",
@@ -103,7 +102,6 @@ function passWheel(event: React.WheelEvent<HTMLElement>, viewport: TranscriptVie
 }
 
 function RailSections({ state }: { state: AppState }) {
-  const preview = useSeenPreview(state);
   const files = useSessionFiles();
   const { cwd } = sessionContext(state);
   const [collapsed, setCollapsed] = usePreference(collapsedPreference);
@@ -117,11 +115,6 @@ function RailSections({ state }: { state: AppState }) {
       <RailSection title="Environment" {...group("workspace")}>
         <SessionEnvironment state={state} />
       </RailSection>
-      {preview && (
-        <RailSection title="App" {...group("app")}>
-          <PreviewRailRow key={preview.instanceId} preview={preview} />
-        </RailSection>
-      )}
       {files.length > 0 && (
         <RailSection title="Outputs" {...group("outputs")}>
           <SessionOutputs files={files} cwd={cwd} />

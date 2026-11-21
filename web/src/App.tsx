@@ -56,7 +56,7 @@ export default function App() {
 }
 
 function PianoApp() {
-  const { catalogs: modelCatalogs, drafts, questions: questionReplies, previews } = stores;
+  const { catalogs: modelCatalogs, drafts, questions: questionReplies } = stores;
   useEffect(observeDictationPage, []);
   const { state, client } = useClient(
     (): AppState => ({
@@ -73,7 +73,6 @@ function PianoApp() {
   useEffect(() => checkoutRefresh.follow(client), [client]);
   useEffect(() => drafts.follow(client, notify), [client, drafts]);
   useEffect(() => questionReplies.follow(client), [client, questionReplies]);
-  useEffect(() => previews.follow(client, notify), [client, previews]);
   const layout = useSidebarLayout();
   useSidebarShortcut();
   const sessionFiles = useSessionFilesController(state);
