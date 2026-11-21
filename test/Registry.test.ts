@@ -11,8 +11,8 @@ import {
   type RegistryData,
   RegistryDatabasePath,
   RegistryLive,
-} from "../server/Registry.ts";
-import { openRegistryDatabase } from "../server/RegistryDatabase.ts";
+} from "../server/shared/registry/Registry.ts";
+import { openRegistryDatabase } from "../server/shared/registry/RegistryDatabase.ts";
 import { decodeClientMessage, PROJECT_NAME_MAX, SESSION_TITLE_MAX } from "../shared/wire.ts";
 import { seedRegistry } from "./fixtures/registry.ts";
 
@@ -526,7 +526,7 @@ test("PIN-167: an upgrade forgets every recorded base it cannot tie to a creatio
 test("PIN-152: reversible archive preserves metadata and refuses stale writes after unarchive; bulk commits once", async (t) => {
   const f = fixture(t),
     cwd = join(f.root, "missing-closed-folder");
-  let stale: import("../server/Registry.ts").SessionEntry;
+  let stale: import("../server/shared/registry/Registry.ts").SessionEntry;
   await f.run(
     Effect.gen(function* () {
       const r = yield* Registry;
@@ -1090,7 +1090,7 @@ test("database location honors data home and DB override", () => {
       [
         "--input-type=module",
         "-e",
-        "import { RegistryDatabasePath } from './server/Registry.ts'; console.log(RegistryDatabasePath.defaultValue());",
+        "import { RegistryDatabasePath } from './server/shared/registry/Registry.ts'; console.log(RegistryDatabasePath.defaultValue());",
       ],
       { cwd: resolve("."), env: { ...env, ...extra }, encoding: "utf8" },
     ).trim();

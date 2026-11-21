@@ -4,21 +4,21 @@ import { fileURLToPath } from "node:url";
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
 import { HttpRouter } from "effect/http";
-import { inboundLimits } from "./InboundCapacity.ts";
+import { PianoAdaptersLive, PianoServicesLive } from "./app/PianoServices.ts";
+import { AppRouter } from "./app/Router.ts";
+import { staticAssets } from "./app/StaticAssets.ts";
+import { sessionEndpoint, sessionEnvironment } from "./features/dispatch/SessionEndpoint.ts";
+import { ensurePianoFolders, pianoFolder } from "./features/library/PianoFolders.ts";
+import { defaultPiCli, PiCli } from "./features/sessions/pi/PiCli.ts";
+import { inboundLimits } from "./shared/InboundCapacity.ts";
 import {
   AllowedOrigins,
   configuredOrigins,
   SessionLinkOrigin,
   sessionLinkOrigin,
-} from "./OriginPolicy.ts";
-import { ensurePianoFolders, pianoFolder } from "./PianoFolders.ts";
-import { PianoAdaptersLive, PianoServicesLive } from "./PianoServices.ts";
-import { defaultPiCli, PiCli } from "./PiCli.ts";
-import { agentDir } from "./PiEnv.ts";
-import { RegistryDatabasePath } from "./Registry.ts";
-import { AppRouter } from "./Router.ts";
-import { sessionEndpoint, sessionEnvironment } from "./SessionEndpoint.ts";
-import { staticAssets } from "./StaticAssets.ts";
+} from "./shared/OriginPolicy.ts";
+import { agentDir } from "./shared/PiEnv.ts";
+import { RegistryDatabasePath } from "./shared/registry/Registry.ts";
 
 const PORT = Number(process.env.PORT ?? 7070);
 const HOST = process.env.HOST ?? "127.0.0.1";

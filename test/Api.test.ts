@@ -2,19 +2,17 @@ import assert from "node:assert/strict";
 import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
-import { WRITTEN_PATHS_LIMIT } from "../shared/http.ts";
+import { WRITTEN_PATHS_LIMIT } from "../shared/features/workspace/files/http.ts";
 import type { WorkspaceWrittenFiles } from "../shared/wire.ts";
+import { listWebhooks, saveWebhook } from "../web/src/features/webhooks/webhookApi.ts";
+import { sessionChanges } from "../web/src/features/workspace/changes/changesApi.ts";
 import {
-  ApiError,
-  listDirectory,
-  listWebhooks,
-  makeDirectory,
-  saveWebhook,
-  sessionChanges,
   workspaceFile,
   workspaceFileDownload,
   workspaceWrittenFiles,
-} from "../web/src/lib/api.ts";
+} from "../web/src/features/workspace/files/fileApi.ts";
+import { listDirectory, makeDirectory } from "../web/src/features/workspace/folders/folderApi.ts";
+import { ApiError } from "../web/src/shared/transport/api.ts";
 import { type RouterFixture, startRouter } from "./fixtures/router.ts";
 
 let server: RouterFixture;

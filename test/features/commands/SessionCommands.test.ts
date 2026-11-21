@@ -1,0 +1,497 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import type { FolderView, SessionState, WorktreeView } from "../../../shared/wire.ts";
+import { type AppState, initialState, type SessionView } from "../../../web/src/app/store.ts";
+import {
+  environmentRowMenu,
+  type SessionCommandId,
+  type SessionHeaderMenu,
+  type SessionMenuSection,
+  type SessionRowMenu,
+  sessionCommands,
+  sessionHeaderMenu,
+  sessionRowMenu,
+} from "../../../web/src/features/commands/sessionCommands.ts";
+import type { SessionLayout } from "../../../web/src/features/navigation/navigation.ts";
+import { sessionProjectMenu } from "../../../web/src/features/projects/projectCommands.ts";
+import { sessionReference } from "../../fixtures/sessionReference.ts";
+
+const ws = (path: string) => ({ id: `ws:${path}`, folder: "/repo", path });
+const worktree = (path: string, branch: string | null): WorktreeView => ({
+  workspace: ws(path),
+  trust: { required: true, trusted: false },
+  branch,
+  path,
+  root: path === "/repo",
+  status: "current",
+});
+const folder: FolderView = {
+  path: "/repo",
+  name: "repo",
+  worktrees: [worktree("/repo", "main"), worktree("/work/repo.feature", "feature")],
+  discovery: { status: "ready", observedAt: "", currentPath: "/repo", worktrees: [] },
+};
+const session = (cwd: string, state: Partial<SessionState> = {}): SessionView => ({
+  cwd,
+  sessionId: "s1",
+  hosted: true,
+  cursor: null,
+  state: { sessionId: "s1", ...state } as SessionState,
+  messages: [],
+  dialogs: [],
+});
+const base: AppState = {
+  ...initialState,
+  connected: true,
+  selectionId: "sel",
+  view: { kind: "session" },
+  folders: [folder],
+  workspaces: [ws("/repo"), ws("/work/repo.feature")],
+  sessionReferences: [
+    sessionReference("/work/repo.feature", "s1", { branch: "feature" }),
+    sessionReference("/repo", "s2", { branch: "main" }),
+  ],
+  session: session("/work/repo.feature"),
+};
+const other = { cwd: "/repo", sessionId: "s2", title: "Other" };
+
+const enabled = (state: AppState, target?: typeof other) =>
+  Object.fromEntries(sessionCommands(state, target, {}).map((c) => [c.id, c.enabled])) as Partial<
+    Record<SessionCommandId, boolean>
+  >;
+
+test("Artifacts is available from receipts without any direct tool-result messages", () => {
+  for (const hosted of [true, false]) {
+    const selected = {
+      ...session("/repo", {
+        artifacts: [
+          {
+            artifactId: "report",
+            title: "Report",
+            url: "https://radius.pi.dev/artifacts/report",
+            revision: 1,
+            operationKey: "report",
+          },
+        ],
+      }),
+      hosted,
+    };
+    assert.equal(enabled({ ...base, session: selected }).artifacts, true);
+  }
+});
+
+test("saved session path copies without a running Pi, and is unavailable without a file", () => {
+  const path = "/home/test/.pi/agent/sessions/--repo--/2026-01-01_s1.jsonl";
+  const saved = { ...session("/repo", { sessionFile: path }), hosted: false };
+  const command = sessionCommands({ ...base, session: saved }, undefined, {}).find(
+    (c) => c.id === "copy-session-path",
+  );
+  assert.equal(command?.enabled, true);
+  assert.deepEqual(command?.intent, { kind: "copy", value: path, label: "Session path" });
+  assert.equal(enabled(base)["copy-session-path"], false);
+});
+
+test("session command availability: settled, disconnected, resyncing, unavailable session, no workspace", () => {
+  const settled = enabled(base);
+  assert.deepEqual(settled, {
+    "copy-working-directory": true,
+    "copy-branch": true,
+    "copy-session-id": true,
+    "copy-session-path": false,
+    changes: true,
+    artifacts: false,
+    "session-rail": true,
+    agent: false,
+    "wrap-code": true,
+    "pull-request": true,
+    "messages-only": true,
+    share: true,
+    rename: true,
+    pin: true,
+    archive: true,
+    delete: true,
+    "new-session-here": true,
+  });
+
+  const disconnected = enabled({ ...base, connected: false });
+  for (const id of ["rename", "pin", "archive", "delete"] as const)
+    assert.equal(disconnected[id], false, id);
+  assert.equal(disconnected.changes, true, "Changes reads the registry workspace, not the socket");
+  assert.equal(enabled({ ...base, connected: false }, other).archive, false);
+
+  const resync = { ...base, resync: true };
+  for (const id of ["rename", "archive", "delete"] as const)
+    assert.equal(enabled(resync)[id], false, id);
+  assert.deepEqual(enabled(resync, other), {
+    share: true,
+    rename: true,
+    pin: true,
+    archive: true,
+    delete: true,
+  });
+  assert.equal(enabled(resync).pin, true, "pinning only changes registry preferences");
+  assert.equal(
+    enabled({ ...base, selecting: { cwd: "/work/repo.feature", sessionId: "s1" } }).delete,
+    false,
+  );
+
+  const missing = enabled({
+    ...base,
+    session: session("/work/repo.feature", { checkoutMissing: true }),
+  });
+  assert.deepEqual(
+    [missing.rename, missing.changes, missing["new-session-here"], missing.archive, missing.delete],
+    [false, false, false, true, true],
+  );
+  const changesOf = (state: AppState) =>
+    sessionCommands(state, undefined, {}).find((c) => c.id === "changes")?.detail;
+  assert.equal(
+    changesOf({ ...base, session: session("/work/repo.feature", { checkoutMissing: true }) }),
+    "Checkout removed",
+    "unavailable Changes says why, never No changes",
+  );
+  assert.equal(changesOf(base), undefined);
+  for (const unavailable of ["checkout", "history"] as const) {
+    const missingRow = enabled(
+      {
+        ...base,
+        sessionReferences: [
+          sessionReference(other.cwd, other.sessionId, { title: other.title, unavailable }),
+        ],
+      },
+      other,
+    );
+    assert.deepEqual(missingRow, {
+      share: true,
+      rename: false,
+      pin: true,
+      archive: true,
+      delete: true,
+    });
+  }
+
+  const noWorkspace = enabled({ ...base, workspaces: [] });
+  assert.equal(noWorkspace.changes, false);
+  assert.equal(noWorkspace["pull-request"], false);
+  assert.equal(changesOf({ ...base, workspaces: [] }), "Changes unavailable");
+
+  const unnamed = enabled({
+    ...base,
+    session: { ...session("/work/repo.feature"), sessionId: null },
+  });
+  assert.deepEqual(
+    [
+      unnamed["copy-session-id"],
+      unnamed["pull-request"],
+      unnamed.rename,
+      unnamed.archive,
+      unnamed.delete,
+    ],
+    [false, false, false, false, false],
+  );
+
+  assert.deepEqual(
+    enabled({ ...base, session: null, selectionId: null, view: { kind: "new" } }, other),
+    { share: true, rename: true, pin: true, archive: true, delete: true },
+  );
+  assert.deepEqual(
+    enabled({ ...base, session: null, selectionId: null, view: { kind: "new" } }),
+    {},
+  );
+});
+
+test("pin commands reflect registry state and stay available independently of Pi activity", () => {
+  const pin = sessionCommands(base, other, {}).find((c) => c.id === "pin")!;
+  assert.equal(pin.label, "Pin");
+  assert.deepEqual(pin.intent, {
+    kind: "send",
+    command: { _tag: "pin_session", cwd: other.cwd, sessionId: other.sessionId, pinned: true },
+  });
+  const pinned = {
+    ...base,
+    sessionReferences: base.sessionReferences.map((s) => ({ ...s, pinned: true })),
+  };
+  const unpin = sessionCommands(pinned, other, {}).find((c) => c.id === "pin")!;
+  assert.equal(unpin.label, "Unpin");
+  assert.deepEqual(unpin.intent, {
+    kind: "send",
+    command: { _tag: "pin_session", cwd: other.cwd, sessionId: other.sessionId, pinned: false },
+  });
+  assert.equal(enabled({ ...base, sessionReferences: [] }, other).pin, false);
+  assert.equal(
+    enabled(
+      { ...base, sessionReferences: base.sessionReferences.map((s) => ({ ...s, archived: true })) },
+      other,
+    ).pin,
+    false,
+  );
+  assert.equal(
+    enabled({ ...base, session: session("/work/repo.feature", { isStreaming: true }) }).pin,
+    true,
+  );
+});
+
+test("an archived reference keeps read and copy commands but offers no change, project assignment included", () => {
+  const archived: AppState = {
+    ...base,
+    projects: [{ id: "p1", name: "Launch" }],
+    sessionReferences: base.sessionReferences.map((s) => ({ ...s, archived: true })),
+  };
+  assert.equal(enabled(archived)["copy-session-id"], true, "copying stays available");
+  assert.equal(enabled(base)["pull-request"], true);
+  assert.equal(enabled(archived)["pull-request"], false, "header Pull request");
+  for (const target of [undefined, other]) {
+    const commands = enabled(archived, target);
+    for (const id of ["rename", "pin", "archive", "delete"] as const)
+      assert.equal(commands[id], false, `${target ? "row" : "header"} ${id}`);
+
+    const project = sessionProjectMenu(
+      archived,
+      target ?? { cwd: "/work/repo.feature", sessionId: "s1" },
+    );
+    assert.equal(project.entry.enabled, false, "Move/Add to project");
+    for (const c of [project.create!, ...project.destinations.map((d) => d.command)])
+      assert.equal(c.enabled, false, c.label);
+  }
+});
+
+test("Messages only is off by default; running it toggles, and it is checked while on", () => {
+  const command = (messagesOnly?: boolean) =>
+    sessionCommands(base, undefined, { messagesOnly }).find((c) => c.id === "messages-only");
+  assert.deepEqual(command()?.checked, false);
+  assert.deepEqual(command()?.intent, { kind: "messages-only", on: true });
+  assert.deepEqual(command(true)?.checked, true);
+  assert.deepEqual(command(true)?.intent, { kind: "messages-only", on: false });
+  assert.deepEqual(
+    sessionCommands(base, undefined, { messagesOnly: true })
+      .filter((c) => c.checked)
+      .map((c) => c.id),
+    ["messages-only"],
+  );
+});
+
+test("Wrap reflects the code wrap preference and is available whatever Changes can do", () => {
+  const command = (state: AppState, codeWrap?: boolean) =>
+    sessionCommands(state, undefined, { codeWrap }).find((c) => c.id === "wrap-code")!;
+  assert.equal(command(base).checked, false);
+  assert.deepEqual(command(base).intent, { kind: "wrap-code", on: true });
+  assert.equal(command(base, true).checked, true);
+  assert.deepEqual(command(base, true).intent, { kind: "wrap-code", on: false });
+  const noWorkspace = { ...base, workspaces: [] };
+  const missing = { ...base, session: session("/work/repo.feature", { checkoutMissing: true }) };
+  for (const state of [noWorkspace, missing]) {
+    assert.equal(command(state).enabled, true);
+    assert.equal(command(state).detail, undefined);
+  }
+  assert.ok(!sessionCommands(base, other, {}).some((c) => c.id === "wrap-code"));
+});
+
+const commandsOf = (sections: readonly (SessionMenuSection | "display")[]) =>
+  sections.flatMap((s) => (typeof s === "string" ? [] : s));
+const ids = (sections: readonly (SessionMenuSection | "display")[]) =>
+  sections.map((s) => (typeof s === "string" ? s : s.map((c) => c.id)));
+
+const headerIds = ({ details, sections, display }: SessionHeaderMenu) => [
+  ...[...details, ...commandsOf(sections)].map((c) => c.id),
+  ...(display ? [display.id] : []),
+];
+
+const rowCommands = ({ sections }: SessionRowMenu) => commandsOf(sections);
+
+test("the palette offers every command the session header and the sidebar row menu offer", () => {
+  const commands = sessionCommands(base, undefined, {});
+  const palette = new Set(commands.map((c) => c.id));
+  for (const id of headerIds(sessionHeaderMenu(commands)))
+    assert.ok(palette.has(id), `header ${id}`);
+  for (const id of rowCommands(sessionRowMenu(commands)).map((c) => c.id))
+    assert.ok(palette.has(id), `row ${id}`);
+  const row = rowCommands(
+    sessionRowMenu(sessionCommands(base, { cwd: "/work/repo.feature", sessionId: "s1" }, {})),
+  );
+  const fromPalette = rowCommands(sessionRowMenu(commands));
+  assert.deepEqual(
+    row.map((c) => [c.id, c.label, c.enabled]),
+    fromPalette.map((c) => [c.id, c.label, c.enabled]),
+  );
+});
+
+test("each session menu places its project section after the manage commands and before Archive and Delete", () => {
+  const row = ids(sessionRowMenu(sessionCommands(base, other, {})).sections);
+  assert.deepEqual(row, [["rename", "pin", "share"], "project", ["archive", "delete"]]);
+  const reversed = sessionCommands(base, other, {}).reverse();
+  assert.deepEqual(ids(sessionRowMenu(reversed).sections), row);
+  assert.deepEqual(ids(sessionHeaderMenu(sessionCommands(base, undefined, {})).sections), [
+    ["rename", "pin", "share"],
+    "project",
+    "display",
+    ["archive", "delete"],
+  ]);
+});
+
+test("the header menu: copy beside the details, manage, a Messages only switch, then archive with delete", () => {
+  for (const messagesOnly of [false, true]) {
+    const menu = sessionHeaderMenu(sessionCommands(base, undefined, { messagesOnly }));
+    assert.deepEqual(
+      menu.details.map((c) => c.id),
+      ["copy-session-path"],
+    );
+    assert.ok(!headerIds(menu).includes("pull-request"), "PR linking lives in Changes");
+    assert.ok(
+      sessionCommands(base, undefined, {}).some((c) => c.id === "pull-request" && c.enabled),
+    );
+    assert.deepEqual(ids(menu.sections), [
+      ["rename", "pin", "share"],
+      "project",
+      "display",
+      ["archive", "delete"],
+    ]);
+    assert.equal(menu.display?.label, "Messages only");
+    assert.equal(menu.display?.checked, messagesOnly);
+  }
+  const other = sessionHeaderMenu(
+    sessionCommands(base, { cwd: "/work/other", sessionId: "s9" }, {}),
+  );
+  assert.deepEqual(other.details, []);
+  assert.equal(other.display, undefined);
+  assert.ok(!other.sections.includes("display"));
+});
+
+test("archiving a working session asks first from its sidebar row", () => {
+  const archive = (state: AppState, target?: typeof other) =>
+    sessionCommands(state, target, {}).find((c) => c.id === "archive")?.intent;
+  assert.equal((archive(base) as { confirm: boolean }).confirm, false);
+  const idle = { ...base, hosts: [{ ...other, working: false }] };
+  assert.equal((archive(idle, other) as { confirm: boolean }).confirm, false);
+  const working = { ...base, hosts: [{ ...other, working: true }] };
+  assert.equal((archive(working, other) as { confirm: boolean }).confirm, true);
+});
+
+test("view commands offer the rail side by side, Agent one at a time beside an open tab", () => {
+  const ofLayout = (layout: SessionLayout, state = base) =>
+    Object.fromEntries(
+      sessionCommands(state, undefined, { layout })
+        .filter((c) => ["changes", "session-rail", "agent"].includes(c.id))
+        .map((c) => [c.id, c.enabled]),
+    );
+  const sideBySide = { single: false, agent: true, rail: false, agentTab: false };
+  assert.deepEqual(ofLayout({ ...sideBySide, surface: false }), {
+    changes: true,
+    "session-rail": true,
+    agent: false,
+  });
+  assert.deepEqual(ofLayout({ ...sideBySide, surface: true }), {
+    changes: true,
+    "session-rail": true,
+    agent: false,
+  });
+  assert.deepEqual(
+    ofLayout({ single: true, agent: false, surface: true, rail: false, agentTab: true }),
+    { changes: true, "session-rail": false, agent: true },
+  );
+  assert.deepEqual(
+    ofLayout({ single: true, agent: true, surface: false, rail: false, agentTab: false }),
+    { changes: true, "session-rail": false, agent: false },
+  );
+});
+
+test("one area at a time the rail command is left out: the session menu holds its facts", () => {
+  const command = sessionCommands(base, undefined, {
+    layout: { single: true, agent: true, surface: false, rail: false, agentTab: false },
+  }).find((c) => c.id === "session-rail")!;
+  assert.equal(command.hidden, true);
+  assert.equal(command.enabled, false);
+});
+
+test("a pull request, linked or not, opens only where Changes can, and says why not", () => {
+  const pullRequest = { url: "https://github.com/acme/repo/pull/1", source: "manual" } as const;
+  const at = (extra: Parameters<typeof sessionReference>[2]) => {
+    const state: AppState = {
+      ...base,
+      sessionReferences: [
+        sessionReference("/work/repo.feature", "s1", { branch: "feature", ...extra }),
+      ],
+    };
+    const command = sessionCommands(state, undefined, {}).find((c) => c.id === "pull-request")!;
+    const changes = sessionCommands(state, undefined, {}).find((c) => c.id === "changes")!;
+    return { command, changes };
+  };
+
+  const present = at({ pullRequest });
+  assert.equal(present.command.enabled, true);
+  assert.deepEqual(present.command.intent, { kind: "pull-request", linked: true });
+
+  const removed = at({ pullRequest, unavailable: "checkout" });
+  assert.equal(removed.changes.enabled, false);
+  assert.equal(removed.command.enabled, false);
+  assert.equal(removed.command.detail, removed.changes.detail);
+
+  const unlinked = at({ unavailable: "checkout" });
+  assert.equal(unlinked.command.enabled, false);
+  assert.equal(unlinked.command.detail, unlinked.changes.detail);
+  assert.deepEqual(unlinked.command.intent, { kind: "pull-request", linked: false });
+});
+
+test("the rail's Environment rows offer the session's copy commands for their fact", () => {
+  const path = "/work/repo.feature";
+  const head = "d4449bb7183bb577791acab4f6fc4f52f78d02b0";
+  const at = (
+    checkout: WorktreeView,
+    branch: string | null,
+    extra: Parameters<typeof sessionReference>[2] = {},
+  ) =>
+    sessionCommands(
+      {
+        ...base,
+        folders: [
+          {
+            ...folder,
+            worktrees: [checkout],
+            discovery: { ...folder.discovery, githubRepo: "acme/repo" } as FolderView["discovery"],
+          },
+        ],
+        sessionReferences: [sessionReference(path, "s1", { branch, ...extra })],
+      },
+      undefined,
+      {},
+    );
+  const menu = (commands: ReturnType<typeof at>, row: Parameters<typeof environmentRowMenu>[1]) =>
+    environmentRowMenu(commands, row).map((c) => [c.label, c.intent]);
+
+  const onBranch = at(worktree(path, "feature"), "feature");
+  assert.deepEqual(menu(onBranch, "branch"), [
+    ["Copy branch", { kind: "copy", value: "feature", label: "Branch" }],
+  ]);
+  assert.deepEqual(menu(onBranch, "commit"), []);
+  assert.deepEqual(menu(onBranch, "repository"), [
+    ["Copy repository name", { kind: "copy", value: "acme/repo", label: "Repository name" }],
+    ["Copy directory path", { kind: "copy", value: path, label: "Directory path" }],
+  ]);
+  assert.deepEqual(menu(onBranch, "folder"), [
+    ["Copy directory path", { kind: "copy", value: path, label: "Directory path" }],
+  ]);
+
+  const detached = at(
+    {
+      ...worktree(path, null),
+      facts: { path, branch: null, detached: true, prunable: false, head },
+    } as WorktreeView,
+    null,
+  );
+  assert.deepEqual(menu(detached, "commit"), [
+    ["Copy commit SHA", { kind: "copy", value: head, label: "Commit SHA" }],
+  ]);
+  assert.deepEqual(menu(detached, "branch"), []);
+
+  assert.deepEqual(menu(onBranch, "pull request"), []);
+  const linked = at(worktree(path, "feature"), "feature", {
+    pullRequest: { url: "https://github.com/other/repo/pull/222", source: "manual" },
+    unavailable: "checkout",
+  });
+  assert.deepEqual(menu(linked, "pull request"), [
+    [
+      "Copy pull request reference",
+      { kind: "copy", value: "other/repo#222", label: "Pull request reference" },
+    ],
+  ]);
+  assert.equal(linked.find((c) => c.id === "copy-pull-request-reference")?.enabled, true);
+});

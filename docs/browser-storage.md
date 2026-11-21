@@ -36,17 +36,17 @@ The pre-paint script in `web/index.html` and `ThemeProvider` in `web/src/main.ts
 ## What Piano remembers about its own data
 
 A value named by Piano's paths, session IDs or project IDs, or caching the server's answer: add
-the name and its store to `BROWSER_MEMORY` in `web/src/lib/browserMemory.ts` and use
+the name and its store to `BROWSER_MEMORY` in `web/src/shared/lib/browserMemory.ts` and use
 `browserMemory`.
 
 ## Preferences
 
 How the person likes Piano to look or behave: create one with `createPreference`
-(`web/src/lib/preference.ts`) under a fixed `piano.<name>` key.
+(`web/src/shared/lib/preference.ts`) under a fixed `piano.<name>` key.
 
 ## Reading and writing
 
 Storage can be missing or blocked (private windows, embedded webviews, cleared site data). Read
 through a fallback and treat every write as best effort: use `createPreference`, `browserMemory`,
-the helpers in `web/src/lib/storage.ts`, or a `try`/`catch` of the same shape. Treat a stored
+the helpers in `web/src/shared/lib/storage.ts`, or a `try`/`catch` of the same shape. Treat a stored
 value as untrusted input and validate it on read.

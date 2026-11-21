@@ -5,8 +5,8 @@ import { z } from "zod";
 import {
   RADIUS_ARTIFACT_FILE_BYTES,
   RADIUS_ARTIFACT_FILE_LIMIT,
-} from "../../shared/radiusArtifacts.ts";
-import { isRadiusUrl, RADIUS_MCP_URL } from "../../shared/radiusUrl.ts";
+} from "../../shared/features/radius/radiusArtifacts.ts";
+import { isRadiusUrl, RADIUS_MCP_URL } from "../../shared/features/radius/radiusUrl.ts";
 
 export const ARTIFACT_PAGE_BYTES = 16 * 1024;
 export const ARTIFACT_MAX_PAGE_BYTES = 32 * 1024;

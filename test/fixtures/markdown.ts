@@ -12,7 +12,7 @@ const vite = await createServer({
   optimizeDeps: { noDiscovery: true, include: [] },
 });
 after(() => vite.close());
-const { Markdown } = (await vite.ssrLoadModule("/src/components/Markdown.tsx")) as {
+const { Markdown } = (await vite.ssrLoadModule("/src/shared/markdown/Markdown.tsx")) as {
   Markdown: ComponentType<{
     text: string;
     images?: ReadonlyMap<string, string>;
@@ -41,7 +41,9 @@ export const renderMarkdown = (
     ),
   );
 
-const { QuestionText } = (await vite.ssrLoadModule("/src/components/QuestionText.tsx")) as {
+const { QuestionText } = (await vite.ssrLoadModule(
+  "/src/features/sessions/dialogs/QuestionText.tsx",
+)) as {
   QuestionText: ComponentType<{ text: string }>;
 };
 export const renderQuestion = (text: string) =>

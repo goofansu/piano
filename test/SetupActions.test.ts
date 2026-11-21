@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { toast } from "sonner";
-import { createSetupActions } from "../web/src/lib/setupActions.ts";
+import { createSetupActions } from "../web/src/shared/lib/setupActions.ts";
 
 const errorToasts = (from: number) =>
   toast

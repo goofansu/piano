@@ -7,7 +7,7 @@ import {
   type SignInOutcome,
   type SignInPolicy,
   type SignInState,
-} from "../server/SignInAttempts.ts";
+} from "../server/shared/SignInAttempts.ts";
 
 const until = (attempts: SignInAttempts, predicate: (state: SignInState) => boolean) =>
   Effect.gen(function* () {

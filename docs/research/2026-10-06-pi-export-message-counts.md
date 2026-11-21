@@ -24,7 +24,7 @@ Executed the installed export template's actual `computeStats()` function in a N
 | Export tool results | 2 |
 | Export tool calls | 2 |
 
-The source-defined Pi turn count for that example is 2. Piano's original jumper offers two message destinations: the user prompt and final reply; top/end are controls, not messages. Source: [Piano transcript navigation](../../web/src/lib/transcript.ts), `jumpEntries`.
+The source-defined Pi turn count for that example is 2. Piano's original jumper offers two message destinations: the user prompt and final reply; top/end are controls, not messages. Source: [Piano transcript navigation](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/lib/transcript.ts), `jumpEntries`.
 
 ## Footer implication
 

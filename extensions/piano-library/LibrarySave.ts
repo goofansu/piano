@@ -1,5 +1,6 @@
-import { DRAFT_FIELDS, isName, NAME_RULE } from "../../shared/drafts.ts";
-import { type Endpoint, Endpoints, readRefusal } from "../../shared/http.ts";
+import { type Endpoint, readRefusal } from "../../shared/endpoint.ts";
+import { DRAFT_FIELDS, isName, NAME_RULE } from "../../shared/features/library/drafts.ts";
+import { libraryEndpoints } from "../../shared/features/library/http.ts";
 import {
   LIBRARY_REACH,
   type LibraryChange,
@@ -7,7 +8,7 @@ import {
   type LibraryProposal,
   type LibraryResult,
   proposalDialog,
-} from "../../shared/library.ts";
+} from "../../shared/features/library/library.ts";
 
 export interface LibraryDraft {
   name: string;
@@ -22,8 +23,8 @@ export interface LibraryDeps {
 }
 
 const ENDPOINTS = {
-  skill: Endpoints.skills,
-  prompt: Endpoints.prompts,
+  skill: libraryEndpoints.skills,
+  prompt: libraryEndpoints.prompts,
 } satisfies Record<LibraryKind, Record<"list" | "propose" | "create" | "update", Endpoint>>;
 
 interface Saved {

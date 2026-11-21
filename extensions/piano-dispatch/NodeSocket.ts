@@ -1,7 +1,7 @@
-import { MAX_MESSAGE_BYTES } from "../../shared/attachments.ts";
-import { SESSION_ORIGIN, SESSION_WS_URL } from "../../shared/dispatch.ts";
+import { SESSION_ORIGIN, SESSION_WS_URL } from "../../shared/features/dispatch/dispatch.ts";
+import { MAX_MESSAGE_BYTES } from "../../shared/features/sessions/attachments/attachments.ts";
 import { isLoopbackHostname } from "../../shared/loopback.ts";
-import type { SocketEnvironment } from "../../web/src/lib/ws.ts";
+import type { SocketEnvironment } from "../../web/src/shared/transport/ws.ts";
 
 export interface DispatchConfiguration {
   url: string;

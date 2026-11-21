@@ -5,7 +5,7 @@ import {
   projectServerMessage,
   projectSessionEvent,
   projectSnapshot,
-} from "../server/DisplayProjection.ts";
+} from "../server/shared/DisplayProjection.ts";
 import type { ServerMessage, SessionState, Snapshot } from "../shared/wire.ts";
 
 test("a written file's path and placed name leave verbatim; display text under any other key is redacted", () => {

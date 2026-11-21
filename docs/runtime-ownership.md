@@ -18,7 +18,7 @@ open/continue journey, and recheck cold-worker latency and memory.
 
 ### Developer navigation: session creation and recovery
 
-Start at `create` in `server/SessionHosts.ts`; `shared/creationVerdict.ts` reads the answer.
+Start at `create` in `server/features/sessions/SessionHosts.ts`; `shared/features/sessions/creationVerdict.ts` reads the answer.
 
 ## Publication mutation contract (PIN-28)
 

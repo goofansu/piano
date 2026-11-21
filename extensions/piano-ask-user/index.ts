@@ -6,7 +6,7 @@ import {
   AskUserParameters,
   askUserPrompt,
   askUserQuestions,
-} from "../../shared/askUser.ts";
+} from "../../shared/features/sessions/askUser.ts";
 
 const Output = obj({ status: StringEnum(["answered", "cancelled"] as const), answers: map(str()) });
 

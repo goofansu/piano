@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { closeSync, existsSync, readdirSync, writeFileSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
-import { inboundLimits } from "../server/InboundCapacity.ts";
+import { inboundLimits } from "../server/shared/InboundCapacity.ts";
 
 const args = process.argv.slice(2);
 if (args.includes("--remember-project-trust")) {
@@ -763,7 +763,7 @@ function handle(cmd) {
           ? ["Use api_key: staging-111 for $1", "Use api_key: production-999 for $1"]
           : ["Deploy $1", "Deploy $1 to staging"];
         const file = (body) => `---\ndescription: "Deploy"\n---\n${body}\n`;
-        import("../shared/library.ts").then(({ proposalDialog }) =>
+        import("../shared/features/library/library.ts").then(({ proposalDialog }) =>
           out({
             type: "extension_ui_request",
             id: "p1",

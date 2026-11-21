@@ -4,13 +4,13 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { Deferred, Effect, Fiber, Layer, type Scope, Stream } from "effect";
-import { PiCli, type PiCliConfig } from "../server/PiCli.ts";
+import { PiCli, type PiCliConfig } from "../server/features/sessions/pi/PiCli.ts";
 import {
   PiRequestTimeoutMs,
   type PiSession,
   PiSessions,
   PiSessionsLive,
-} from "../server/PiSessions.ts";
+} from "../server/features/sessions/pi/PiSessions.ts";
 import type { SessionEvent } from "../shared/wire.ts";
 import { createPiCompatibilityFixture, sentinelTool } from "./fixtures/PiCompatibility.ts";
 

@@ -10,7 +10,7 @@ registerHooks({
   },
   resolve(specifier, context, nextResolve) {
     if (
-      context.parentURL?.endsWith("/server/PiHistoryFile.ts") &&
+      context.parentURL?.endsWith("/server/features/sessions/pi/PiHistoryFile.ts") &&
       specifier.endsWith("/core/session-manager.js")
     ) {
       if (mode === "missing" || mode === "dependency")

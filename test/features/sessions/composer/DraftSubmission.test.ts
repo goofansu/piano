@@ -1,0 +1,381 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { MAX_MESSAGE_BYTES } from "../../../../shared/features/sessions/attachments/attachments.ts";
+import { type ClientMessage, encodeServerMessage } from "../../../../shared/wire.ts";
+import { createClient } from "../../../../web/src/app/client.ts";
+import { initialState } from "../../../../web/src/app/store.ts";
+import {
+  emptyChoice,
+  type ModelTarget,
+  modelChoice,
+} from "../../../../web/src/features/models/modelChoice.ts";
+import {
+  messageCommand,
+  newSessionCommand,
+} from "../../../../web/src/features/sessions/composer/composerControl.ts";
+import {
+  createDrafts,
+  NEW_SESSION_DRAFT,
+  sessionDraftKey,
+} from "../../../../web/src/features/sessions/composer/messageDraft.ts";
+import {
+  openConnection,
+  type SocketEnvironment,
+  type SocketEvents,
+} from "../../../../web/src/shared/transport/ws.ts";
+
+function harness({ select = true, frameBytes = MAX_MESSAGE_BYTES } = {}) {
+  const sockets: Array<{
+    events: SocketEvents;
+    open: boolean;
+    sent: ClientMessage[];
+    throws: boolean;
+  }> = [];
+  let online = () => {};
+  const env: SocketEnvironment = {
+    open: (_url, events) => {
+      const socket = { events, open: false, sent: [] as ClientMessage[], throws: false };
+      sockets.push(socket);
+      return {
+        isOpen: () => socket.open,
+        send: (data) => {
+          socket.sent.push(JSON.parse(data));
+          if (socket.throws) throw new Error("Delivery outcome unknown");
+        },
+        close: () => {
+          socket.open = false;
+        },
+      };
+    },
+    url: () => "ws://scratch.test/ws",
+    frameBytes,
+    nonce: () => "ping",
+    setTimeout: () => 0,
+    clearTimeout: () => {},
+    onOnline: (listener) => {
+      online = listener;
+      return () => {};
+    },
+    onOffline: () => () => {},
+  };
+  let ids = 0;
+  const notices: string[] = [];
+  const client = createClient({
+    initial: initialState,
+    connect: (handlers) => openConnection(handlers, env),
+    notify: (message) => notices.push(message),
+    newSelectionId: () => `selection-${++ids}`,
+    lastDirectory: { read: () => null, write: () => {} },
+  });
+  const stop = client.start();
+  const last = () => sockets.at(-1)!;
+  const accept = () => {
+    last().open = true;
+    last().events.open();
+  };
+  const selected = () =>
+    last().events.message(
+      encodeServerMessage(
+        {
+          _tag: "selected",
+          cwd: "/scratch",
+          sessionId: "existing",
+          selectionId: client.getState().selectionId!,
+          hosted: true,
+          cursor: { cwd: "/scratch", sessionId: "existing", generation: "g1", sequence: 1 },
+          snapshot: {
+            state: { sessionId: "existing", isStreaming: false },
+            messages: [],
+            dialogs: [],
+          },
+        },
+        1,
+      ),
+    );
+  accept();
+  if (select) {
+    client.select("/scratch", "existing");
+    selected();
+  }
+  return {
+    client,
+    stop,
+    last,
+    accept,
+    selected,
+    notices,
+    reconnect: () => online(),
+    actions: () => sockets.flatMap((s) => s.sent).filter((m) => m._tag === "act"),
+    creations: () => sockets.flatMap((s) => s.sent).filter((m) => m._tag === "create_session"),
+  };
+}
+
+test("failed creation restores text, quotes, images and options; reconnect only reads the original attempt", async (t) => {
+  const h = harness({ select: false });
+  t.after(h.stop);
+  const drafts = createDrafts();
+  t.after(drafts.follow(h.client, () => {}));
+  const key = NEW_SESSION_DRAFT;
+  drafts.setText(key, "Keep the first input");
+  drafts.addQuote(key, "Context");
+  const bytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]);
+  await drafts.addImages(key, [new File([bytes], "shot.png", { type: "image/png" })], async () =>
+    Buffer.from(bytes).toString("base64"),
+  );
+  const before = drafts.get(key);
+  const options = { model: "fake/beta", thinkingLevel: "high" as const };
+  const submit = () =>
+    drafts.submit(key, (message, attemptId) =>
+      h.client.send({
+        ...newSessionCommand({ cwd: "/scratch", projectId: "project" }, message, options),
+        attemptId,
+      }),
+    );
+  assert.equal(submit(), true);
+  const original = h.creations()[0];
+  h.last().events.close(1006);
+  h.reconnect();
+  h.accept();
+  const reconcile = h
+    .last()
+    .sent.find((m) => m._tag === "select" && m.attemptId === original.attemptId);
+  assert.ok(reconcile);
+  assert.equal(h.creations().length, 1, "disconnect never resubmits");
+  assert.equal(drafts.get(key).text, "", "unknown input is not returned as safe to resend");
+  h.last().events.message(
+    encodeServerMessage(
+      {
+        _tag: "selection_rejected",
+        selectionId: h.client.getState().selectionId!,
+        inputId: original.attemptId,
+        message: "fixture startup failure",
+      },
+      1,
+    ),
+  );
+  assert.equal(drafts.get(key).text, before.text);
+  assert.deepEqual(drafts.get(key).quotes, before.quotes);
+  assert.deepEqual(drafts.get(key).images, before.images);
+  assert.deepEqual(h.client.getState().pendingCreate?.options, options);
+  assert.deepEqual(h.client.getState().view, {
+    kind: "new",
+    cwd: "/scratch",
+    projectId: "project",
+  });
+  assert.equal(submit(), true, "explicit retry uses the restored draft");
+  assert.notEqual(h.creations()[1].attemptId, original.attemptId);
+  assert.deepEqual(h.creations()[1].attachments, original.attachments);
+});
+
+test("PIN-61: CLOSING before onclose retains the full draft for explicit retry after selection", async (t) => {
+  const h = harness();
+  t.after(h.stop);
+  const drafts = createDrafts();
+  const key = sessionDraftKey({ cwd: "/scratch", sessionId: "existing" });
+  drafts.setText(key, "Keep my draft");
+  drafts.addQuote(key, "Quoted context");
+  const bytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]);
+  await drafts.addImages(key, [new File([bytes], "shot.png", { type: "image/png" })], async () =>
+    Buffer.from(bytes).toString("base64"),
+  );
+  const before = drafts.get(key);
+  const target: ModelTarget = {
+    kind: "session",
+    cwd: "/scratch",
+    sessionId: "existing",
+    hosted: true,
+  };
+  const pick = modelChoice(emptyChoice(target), null, target, false).chooseModel("test/held");
+  assert.equal(pick.kind, "hold");
+  let held = pick.held;
+  const submit = () => {
+    let consumed = false;
+    held = modelChoice(held, null, target).submit((start) => {
+      consumed = drafts.submit(key, (message) =>
+        h.client.send(messageCommand("steering", message, start)),
+      );
+      return consumed;
+    });
+    return consumed;
+  };
+
+  h.last().open = false;
+  assert.equal(h.client.getState().connected, true);
+  assert.equal(submit(), false, "known-unsent must not report composer success");
+  assert.equal(h.actions().length, 0);
+  assert.deepEqual(drafts.get(key), before);
+  assert.deepEqual(held.pick, { model: "test/held" });
+  assert.match(h.notices[0]!, /Message not sent.*retry/);
+  assert.equal(h.client.getState().connected, false);
+
+  h.reconnect();
+  h.accept();
+  assert.equal(submit(), false, "wait for authoritative selection before retry");
+  assert.deepEqual(drafts.get(key), before);
+  h.selected();
+  assert.equal(h.actions().length, 0, "reconnect does not replay");
+  assert.equal(submit(), true);
+  assert.equal(h.actions().length, 1);
+  assert.deepEqual(h.actions()[0]!.start, { model: "test/held" });
+  assert.deepEqual(h.actions()[0]!.action, {
+    _tag: "steer",
+    text: "> Quoted context\n\nKeep my draft",
+    attachments: before.images.items,
+  });
+  assert.deepEqual(held.pick, {});
+  assert.equal(drafts.sendable(key), false);
+  h.last().events.close(1006);
+  h.reconnect();
+  h.accept();
+  h.selected();
+  assert.equal(h.actions().length, 1, "accepted sends are never replayed");
+});
+
+test("PIN-61: a throwing send is uncertain and reconnect never replays it", (t) => {
+  const h = harness();
+  t.after(h.stop);
+  const drafts = createDrafts();
+  const key = sessionDraftKey({ cwd: "/scratch", sessionId: "existing" });
+  drafts.setText(key, "Possibly delivered");
+  h.last().throws = true;
+  assert.equal(
+    drafts.submit(key, (message) => {
+      const disposition = h.client.send(messageCommand("follow-up", message, {}));
+      assert.equal(disposition, "uncertain");
+      return disposition;
+    }),
+    true,
+  );
+  assert.equal(drafts.sendable(key), false);
+  assert.match(h.notices[0]!, /delivery is uncertain/);
+  h.reconnect();
+  h.accept();
+  h.selected();
+  assert.equal(h.actions().length, 1);
+});
+
+test("a message larger than the frame limit keeps its draft and says why", (t) => {
+  const frameBytes = 1024 * 1024;
+  const h = harness({ frameBytes });
+  t.after(h.stop);
+  const drafts = createDrafts();
+  const key = sessionDraftKey({ cwd: "/scratch", sessionId: "existing" });
+  const log = "a pasted log line\n".repeat(frameBytes / 16);
+  drafts.setText(key, log);
+  const before = drafts.get(key);
+  const sent = drafts.submit(key, (message) =>
+    h.client.send(messageCommand("steering", message, {})),
+  );
+  assert.equal(sent, false);
+  assert.deepEqual(drafts.get(key), before, "the person's text stays in the composer");
+  assert.equal(h.actions().length, 0);
+  assert.equal(h.client.getState().connected, true, "the socket stays up");
+  assert.match(h.notices[0]!, /too large/);
+});
+
+test("a first message refused after its session was created returns to that session's draft", (t) => {
+  const h = harness({ select: false });
+  t.after(h.stop);
+  const drafts = createDrafts();
+  t.after(drafts.follow(h.client, () => {}));
+  drafts.setText(NEW_SESSION_DRAFT, "Start here");
+  drafts.submit(NEW_SESSION_DRAFT, (message, attemptId) =>
+    h.client.send({
+      ...newSessionCommand({ cwd: "/scratch", projectId: undefined }, message, {}),
+      attemptId,
+    }),
+  );
+  const { attemptId } = h.creations()[0]!;
+  h.selected();
+  h.last().events.message(
+    encodeServerMessage(
+      {
+        _tag: "error",
+        selectionId: h.client.getState().selectionId!,
+        inputId: attemptId,
+        cwd: "/scratch",
+        sessionId: "existing",
+        message: "Session is closing. Nothing was sent.",
+      },
+      2,
+    ),
+  );
+  const created = sessionDraftKey({ cwd: "/scratch", sessionId: "existing" });
+  assert.equal(drafts.get(created).text, "Start here");
+  assert.equal(
+    drafts.get(NEW_SESSION_DRAFT).text,
+    "",
+    "sending it again from the New page would start a second session",
+  );
+  assert.equal(h.client.getState().view.kind, "session");
+});
+
+test("a new session's first message that is known not sent stays on the New page as a draft", (t) => {
+  const h = harness({ select: false });
+  t.after(h.stop);
+  h.client.dispatch({ type: "new_directory", cwd: "/scratch" });
+  const drafts = createDrafts();
+  drafts.setText(NEW_SESSION_DRAFT, "Start here");
+  const before = drafts.get(NEW_SESSION_DRAFT);
+  const target: ModelTarget = { kind: "new", cwd: "/scratch" };
+  const pick = modelChoice(emptyChoice(target), null, target).chooseModel("test/held");
+  assert.equal(pick.kind, "hold");
+  let held = pick.held;
+  const submit = () => {
+    let consumed = false;
+    held = modelChoice(held, null, target).submit((start) => {
+      consumed = drafts.submit(NEW_SESSION_DRAFT, (message) =>
+        h.client.send(newSessionCommand({ cwd: "/scratch", projectId: undefined }, message, start)),
+      );
+      return consumed;
+    });
+    return consumed;
+  };
+
+  h.last().open = false;
+  assert.equal(submit(), false, "known-unsent must not consume the draft");
+  assert.equal(h.creations().length, 0);
+  assert.deepEqual(drafts.get(NEW_SESSION_DRAFT), before);
+  assert.deepEqual(h.client.getState().view, { kind: "new", cwd: "/scratch" });
+  assert.equal(
+    h.client.getState().pendingCreate,
+    null,
+    "nothing was sent, so nothing is uncertain",
+  );
+  assert.equal(h.client.getState().selecting, null);
+  assert.match(h.notices[0] ?? "", /Message not sent.*retry/);
+  assert.deepEqual(held.pick, { model: "test/held" });
+
+  h.reconnect();
+  h.accept();
+  assert.equal(h.creations().length, 0, "reconnect does not replay the creation");
+  assert.equal(submit(), true);
+  assert.equal(h.creations().length, 1);
+  assert.equal(h.creations()[0]!.options.model, "test/held");
+  assert.deepEqual(held.pick, {});
+  assert.equal(h.client.getState().view.kind, "session");
+  assert.equal(h.client.getState().pendingCreate?.text, "Start here");
+  assert.equal(h.client.getState().pendingCreate?.outcome, "starting");
+  assert.equal(drafts.sendable(NEW_SESSION_DRAFT), false);
+});
+
+test("a new session's first message whose send throws opens the session as uncertain and never replays", (t) => {
+  const h = harness({ select: false });
+  t.after(h.stop);
+  const drafts = createDrafts();
+  drafts.setText(NEW_SESSION_DRAFT, "Possibly started");
+  h.last().throws = true;
+  assert.equal(
+    drafts.submit(NEW_SESSION_DRAFT, (message) =>
+      h.client.send(newSessionCommand({ cwd: "/scratch", projectId: undefined }, message, {})),
+    ),
+    true,
+  );
+  assert.equal(drafts.sendable(NEW_SESSION_DRAFT), false);
+  assert.equal(h.client.getState().view.kind, "session");
+  assert.equal(h.client.getState().pendingCreate?.text, "Possibly started");
+  assert.equal(h.client.getState().pendingCreate?.outcome, "uncertain");
+  h.reconnect();
+  h.accept();
+  assert.equal(h.creations().length, 1, "reconnect never replays the creation");
+});

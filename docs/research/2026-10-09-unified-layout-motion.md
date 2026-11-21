@@ -105,7 +105,7 @@ behavior, not measured frame timing or a reproduced browser focus failure.
 ## Implementation decision and verification
 
 The implementation chooses a single width-bearing `<aside>` in
-[`AppLayout.tsx`](../../web/src/components/AppLayout.tsx), rather than driving two stock shadcn
+[`AppLayout.tsx`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/AppLayout.tsx), rather than driving two stock shadcn
 spacer/panel elements. Both pages now use this same shell. The installed shadcn provider, navigation
 primitives and Radix Sheet remain the composition foundation; the shell owns the custom resize
 policy that those primitives do not provide. This is a deliberate refinement of the proposal above,

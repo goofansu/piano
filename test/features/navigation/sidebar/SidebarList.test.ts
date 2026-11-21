@@ -1,0 +1,929 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import type { FolderView, SessionEvent } from "../../../../shared/wire.ts";
+import { type AppState, initialState, reduce, sessionKey } from "../../../../web/src/app/store.ts";
+import {
+  adjacentSidebarSession,
+  createSidebarList,
+  PINNED,
+  type SidebarClock,
+  type SidebarList,
+  sidebarPreferences,
+} from "../../../../web/src/features/navigation/sidebar/sidebarList.ts";
+import type {
+  GroupBy,
+  SidebarView,
+} from "../../../../web/src/features/navigation/sidebar/sidebarView.ts";
+import type { SessionEntry } from "../../../../web/src/features/sessions/sessionCatalog.ts";
+import type { PreferenceStorage } from "../../../../web/src/shared/lib/preference.ts";
+import { sessionReference } from "../../../fixtures/sessionReference.ts";
+
+const folder = (path: string, worktrees: string[] = [path]): FolderView => ({
+  path,
+  name: path.slice(1),
+  worktrees: worktrees.map((p) => ({
+    workspace: { id: `ws:${p}`, folder: path, path: p },
+    trust: { required: false, trusted: true },
+    branch: "main",
+    path: p,
+    root: p === path,
+    status: "current",
+  })),
+  discovery: { status: "ready", observedAt: "", currentPath: path, worktrees: [] },
+});
+const loaded: AppState = { ...initialState, registryLoaded: true };
+const registry: AppState = {
+  ...loaded,
+  folders: [folder("/repo", ["/repo", "/work/repo.feature"]), folder("/other")],
+  projects: [{ id: "p1", name: "Launch" }],
+  sessionReferences: [sessionReference("/work/repo.feature", "s1", { projectId: "p1" })],
+};
+const view = (groupBy: GroupBy): SidebarView => ({
+  groupBy,
+  sortBy: "name",
+  folderAndBranch: false,
+});
+const GROUPINGS: GroupBy[] = ["folder", "project", "date"];
+const OCTOBER_FIRST = { updatedAt: new Date(2026, 9, 1, 12).toISOString() };
+const titles = (items: ReadonlyArray<{ title?: string }>) => items.map((s) => s.title);
+const selecting = (state: AppState, cwd: string, sessionId: string | null): AppState => ({
+  ...state,
+  selecting: { cwd, sessionId },
+});
+
+function memoryStorage(initial: Record<string, string> = {}) {
+  const items = new Map(Object.entries(initial));
+  const storage: PreferenceStorage = {
+    read: (key) => items.get(key) ?? null,
+    write: (key, value) => void items.set(key, value),
+    onChange: () => () => {},
+  };
+  return { items, storage };
+}
+
+function fakeClock(start: Date) {
+  let now = start;
+  let timer: { at: number; wake: () => void } | null = null;
+  const resumes = new Set<() => void>();
+  const clock: SidebarClock = {
+    now: () => now,
+    wakeAfter: (ms, wake) => {
+      const pending = { at: now.getTime() + ms, wake };
+      timer = pending;
+      return () => {
+        if (timer === pending) timer = null;
+      };
+    },
+    onResume: (wake) => {
+      resumes.add(wake);
+      return () => resumes.delete(wake);
+    },
+  };
+  return {
+    clock,
+    advance: (to: Date) => {
+      now = to;
+      if (timer && timer.at <= to.getTime()) timer.wake();
+    },
+    jump: (to: Date) => {
+      now = to;
+    },
+    resume: () => {
+      for (const wake of resumes) wake();
+    },
+    pendingAt: () => timer?.at ?? null,
+  };
+}
+
+function sidebar(stored: Record<string, string> = {}, now = new Date(2026, 9, 2)) {
+  const { items, storage } = memoryStorage(stored);
+  const time = fakeClock(now);
+  const model = createSidebarList({
+    clock: time.clock,
+    preferences: sidebarPreferences(storage),
+  });
+  let changes = 0;
+  model.subscribe(() => changes++);
+  return { model, items, time, changes: () => changes };
+}
+
+const openness = (list: SidebarList) => [
+  ...(list.pinned ? [[list.pinned.key, list.pinned.open]] : []),
+  ...(list.body?.kind === "sections"
+    ? [...list.body.sections, ...list.body.done].map((s) => [s.key, "open" in s ? s.open : null])
+    : []),
+];
+const isOpen = (list: SidebarList, key: string) =>
+  openness(list).find(([k]) => k === key)?.[1] ?? null;
+
+test("sidebar list: sequenced transcript, tool and usage updates reuse even a collapsed selected folder", () => {
+  for (const groupBy of GROUPINGS) {
+    const { model } = sidebar();
+    const chosen = view(groupBy);
+    const identity = { cwd: "/work/repo.feature", sessionId: "s1" };
+    let state = reduce(
+      { ...registry, connected: true },
+      { type: "selecting", selectionId: "selection", ...identity },
+    );
+    state = reduce(state, {
+      type: "server",
+      message: {
+        _tag: "selected",
+        selectionId: "selection",
+        ...identity,
+        hosted: true,
+        cursor: { ...identity, generation: "host", sequence: 0 },
+        snapshot: { state: { sessionId: "s1", isStreaming: true }, messages: [], dialogs: [] },
+      },
+    });
+    model.sync(state, chosen);
+    model.toggle("/repo", false);
+    const before = state;
+    const list = model.list(state, chosen);
+    const events: SessionEvent[] = [
+      { _tag: "message_update", message: { id: "reply", role: "assistant", text: "partial" } },
+      { _tag: "message_update", message: { id: "reply", role: "assistant", text: "more text" } },
+      {
+        _tag: "tool_update",
+        tool: {
+          id: "tool",
+          name: "bash",
+          args: "{}",
+          status: "running",
+          text: "output",
+          outputKind: "latest-update",
+        },
+      },
+      {
+        _tag: "state",
+        state: { sessionId: "s1", isStreaming: true, cost: 0.42, statsUpdatedAt: 1 },
+      },
+    ];
+    for (const [index, event] of events.entries()) {
+      state = reduce(state, {
+        type: "server",
+        message: {
+          _tag: "session",
+          selectionId: "selection",
+          cursor: { ...identity, generation: "host", sequence: index + 1 },
+          event,
+        },
+      });
+      assert.notEqual(state, before);
+      assert.equal(state.session?.cursor?.sequence, index + 1, "the reducer applied the event");
+      for (const key of ["sessionReferences", "folders", "projects", "hosts", "done"] as const)
+        assert.equal(state[key], before[key], key);
+      model.sync(state, chosen);
+      assert.equal(model.list(state, chosen), list, `${groupBy}: ${event._tag}`);
+    }
+    assert.equal(state.session?.pending?.text, "more text");
+    assert.equal(state.session?.tools?.[0]?.text, "output");
+    assert.equal(state.session?.state.cost, 0.42);
+    if (groupBy === "folder") assert.equal(isOpen(list, "/repo"), false);
+  }
+});
+
+test("sidebar list: cached rows still follow every catalog fact", () => {
+  const a = sessionReference("/repo", "a", { title: "Alpha" });
+  const b = sessionReference("/closed", "b", { title: "Beta", projectId: "p1" });
+  const state: AppState = {
+    ...registry,
+    sessionReferences: [a, b],
+  };
+  const rows = (list: SidebarList): SessionEntry[] =>
+    list.body?.kind === "sections" ? list.body.sections.flatMap((s) => s.sessions) : [];
+  const cases: Array<{
+    name: string;
+    patch: Partial<AppState>;
+    check: (list: SidebarList) => void;
+  }> = [
+    {
+      name: "title and order",
+      patch: { sessionReferences: [{ ...a, title: "Zulu" }, b] },
+      check: (list) => assert.deepEqual(titles(rows(list)), ["Beta", "Zulu"]),
+    },
+    {
+      name: "availability",
+      patch: { sessionReferences: [{ ...a, unavailable: "history" }, b] },
+      check: (list) => assert.equal(rows(list)[0]?.disabled, true),
+    },
+    {
+      name: "pins",
+      patch: { sessionReferences: [{ ...a, pinned: true }, b] },
+      check: (list) => {
+        assert.deepEqual(titles(list.pinned?.sessions ?? []), ["Alpha"]);
+        assert.deepEqual(titles(rows(list)), ["Beta"]);
+      },
+    },
+    {
+      name: "archives",
+      patch: { sessionReferences: [{ ...a, archived: true }, b] },
+      check: (list) => assert.deepEqual(titles(rows(list)), ["Beta"]),
+    },
+    {
+      name: "project membership",
+      patch: { sessionReferences: [a, { ...b, projectId: undefined }] },
+      check: (list) => assert.deepEqual(titles(rows(list)), ["Alpha"]),
+    },
+    {
+      name: "project rename",
+      patch: { projects: [{ id: "p1", name: "Renamed" }] },
+      check: (list) => assert.equal(rows(list)[1]?.project?.name, "Renamed"),
+    },
+    {
+      name: "folder removal",
+      patch: { folders: [] },
+      check: (list) => assert.deepEqual(titles(rows(list)), ["Beta"]),
+    },
+    {
+      name: "host activity",
+      patch: { hosts: [{ cwd: a.cwd, sessionId: a.sessionId, working: true }], hostsCurrent: true },
+      check: (list) => assert.equal(rows(list)[0]?.activity, "working"),
+    },
+    {
+      name: "stale host activity",
+      patch: { hosts: [{ cwd: a.cwd, sessionId: a.sessionId, working: true }] },
+      check: (list) => assert.equal(rows(list)[0]?.activity, "off"),
+    },
+    {
+      name: "starting host",
+      patch: {
+        hosts: [{ cwd: a.cwd, sessionId: a.sessionId, working: false, starting: true }],
+        hostsCurrent: true,
+      },
+      check: (list) => assert.equal(rows(list)[0]?.activity, "off"),
+    },
+    {
+      name: "done markers",
+      patch: { done: [sessionKey(a)] },
+      check: (list) => assert.equal(rows(list)[0]?.activity, "done"),
+    },
+    {
+      name: "registry readiness",
+      patch: { registryLoaded: false },
+      check: (list) => assert.equal(list.body?.kind, "loading"),
+    },
+  ];
+  for (const { name, patch, check } of cases) {
+    const { model } = sidebar();
+    const chosen = view("date");
+    const before = model.list(state, chosen);
+    const after = model.list({ ...state, ...patch }, chosen);
+    assert.notEqual(after, before, name);
+    check(after);
+  }
+});
+
+test("sidebar list: selection follows cwd and session id, not the snapshot or selecting object", () => {
+  const { model } = sidebar();
+  const chosen = view("date");
+  const state = {
+    ...registry,
+    sessionReferences: [
+      sessionReference("/repo", "a"),
+      sessionReference("/other", "a"),
+      sessionReference("/other", "b"),
+    ],
+  };
+  const selectedKeys = (list: SidebarList) =>
+    list.body?.kind === "sections"
+      ? list.body.sections.flatMap((s) => s.sessions.filter((r) => r.selected).map(sessionKey))
+      : [];
+  let previous = model.list(state, chosen);
+  assert.deepEqual(selectedKeys(previous), []);
+  for (const [cwd, sessionId] of [
+    ["/repo", "a"],
+    ["/other", "a"],
+    ["/other", "b"],
+  ] as const) {
+    const pending = selecting(state, cwd, sessionId);
+    const list = model.list(pending, chosen);
+    assert.notEqual(list, previous);
+    assert.deepEqual(selectedKeys(list), [sessionKey({ cwd, sessionId })]);
+    assert.equal(model.list(selecting(state, cwd, sessionId), chosen), list);
+    const selected: AppState = {
+      ...pending,
+      selecting: null,
+      session: {
+        cwd,
+        sessionId,
+        hosted: true,
+        cursor: null,
+        state: { sessionId, isStreaming: false },
+        messages: [],
+        dialogs: [],
+      },
+    };
+    assert.equal(model.list(selected, chosen), list, "the selected snapshot has the same identity");
+    previous = list;
+  }
+  assert.deepEqual(
+    selectedKeys(model.list(state, chosen)),
+    [],
+    "leaving the session clears selection",
+  );
+});
+
+test("sidebar list: view and open preferences invalidate an otherwise unchanged list", () => {
+  const { model } = sidebar();
+  const state: AppState = {
+    ...registry,
+    sessionReferences: [
+      sessionReference("/repo", "a", { title: "Alpha", updatedAt: "2026-10-01T01:00:00Z" }),
+      sessionReference("/repo", "b", { title: "Beta", updatedAt: "2026-10-01T02:00:00Z" }),
+      sessionReference("/repo", "p", { title: "Pinned", pinned: true }),
+    ],
+  };
+  const byName = view("date");
+  const names = (chosen: SidebarView) => {
+    const list = model.list(state, chosen);
+    return list.body?.kind === "sections" ? titles(list.body.sections[0]!.sessions) : [];
+  };
+  assert.deepEqual(names(byName), ["Alpha", "Beta"]);
+  assert.deepEqual(names({ ...byName, sortBy: "recent", folderAndBranch: false }), [
+    "Beta",
+    "Alpha",
+  ]);
+  const byFolder = view("folder");
+  assert.equal(isOpen(model.list(state, byFolder), "/repo"), false);
+  model.toggle("/repo", true);
+  assert.equal(isOpen(model.list(state, byFolder), "/repo"), true);
+  assert.equal(model.list(state, byFolder).pinned?.open, true);
+  model.toggle(PINNED, false);
+  assert.equal(model.list(state, byFolder).pinned?.open, false);
+});
+
+test("sidebar navigation follows Pinned, expanded sections and Done in the chosen order", () => {
+  const { model } = sidebar();
+  const ref = (id: string, title: string, hour: number, extra = {}) =>
+    sessionReference("/repo", id, {
+      title,
+      updatedAt: `2026-10-02T0${hour}:00:00Z`,
+      ...extra,
+    });
+  const state: AppState = {
+    ...registry,
+    projects: [
+      { id: "p1", name: "Launch" },
+      { id: "done", name: "Earlier", doneAt: "2026-10-01T00:00:00Z" },
+    ],
+    sessionReferences: [
+      ref("pin", "Z pin", 1, { pinned: true }),
+      ref("a", "Alpha", 2, { projectId: "p1" }),
+      ref("b", "Beta", 3, { projectId: "p1" }),
+      ref("missing", "Between", 4, { projectId: "p1", unavailable: "history" }),
+      ref("starting", "Booting", 5, { projectId: "p1" }),
+      ref("loose", "Loose", 6),
+      ref("done", "Done", 7, { projectId: "done" }),
+    ],
+    hosts: [{ cwd: "/repo", sessionId: "starting", starting: true, working: false }],
+    hostsCurrent: true,
+  };
+  for (const key of ["/repo", "project:p1", "project:", "project:done"]) model.toggle(key, true);
+  const walk = (list: SidebarList, direction: -1 | 1) => {
+    const ids: string[] = [];
+    let current = adjacentSidebarSession(list, null, direction);
+    while (current && ids.length < 10) {
+      ids.push(current.sessionId);
+      current = adjacentSidebarSession(list, current, direction);
+    }
+    return ids;
+  };
+  for (const [groupBy, sortBy, expected] of [
+    ["project", "name", ["pin", "a", "b", "loose", "done"]],
+    ["project", "recent", ["pin", "b", "a", "loose", "done"]],
+    ["folder", "name", ["pin", "a", "b", "done", "loose"]],
+    ["date", "recent", ["pin", "done", "loose", "b", "a"]],
+  ] as const) {
+    const list = model.list(state, { ...view(groupBy), sortBy });
+    assert.deepEqual(walk(list, 1), expected);
+    assert.deepEqual(walk(list, -1), [...expected].reverse());
+  }
+  const chosen = view("project");
+  model.toggle("project:p1", false);
+  assert.deepEqual(walk(model.list(state, chosen), 1), ["pin", "loose", "done"]);
+  model.toggle(PINNED, false);
+  const list = model.list(state, chosen);
+  assert.deepEqual(walk(list, 1), ["loose", "done"]);
+  assert.equal(
+    adjacentSidebarSession(list, { cwd: "/repo", sessionId: "a" }, 1)?.sessionId,
+    "loose",
+  );
+  assert.equal(
+    adjacentSidebarSession(list, { cwd: "/other", sessionId: "loose" }, -1)?.sessionId,
+    "done",
+  );
+  assert.equal(adjacentSidebarSession(model.list(initialState, chosen), null, 1), undefined);
+});
+
+test("sidebar list: before the registry arrives every grouping is loading, with no Pinned section", () => {
+  const { model } = sidebar();
+  const state: AppState = {
+    ...initialState,
+    folders: [folder("/repo")],
+    sessionReferences: [sessionReference("/repo", "p", { pinned: true })],
+  };
+  for (const groupBy of GROUPINGS)
+    assert.deepEqual(model.list(state, view(groupBy)), {
+      pinned: null,
+      body: { kind: "loading" },
+    });
+});
+
+test("sidebar list: an empty registry says what to do next, per grouping; pinned rows stand in for it", () => {
+  const { model } = sidebar();
+  const noSessions = "No sessions yet. Start one and it appears here.";
+  const expected: Record<GroupBy, string> = {
+    folder: "No folders yet. Start a session in any folder and it appears here.",
+    project: noSessions,
+    date: noSessions,
+  };
+  for (const groupBy of GROUPINGS)
+    assert.deepEqual(model.list(loaded, view(groupBy)), {
+      pinned: null,
+      body: { kind: "empty", text: expected[groupBy] },
+    });
+  const withFolder: AppState = { ...loaded, folders: [folder("/repo")] };
+  assert.deepEqual(openness(model.list(withFolder, view("folder"))), [["/repo", false]]);
+  assert.equal(model.list(withFolder, view("date")).body?.kind, "empty");
+
+  const pinnedOnly: AppState = {
+    ...loaded,
+    sessionReferences: [sessionReference("/closed/app", "p", { title: "Pinned", pinned: true })],
+  };
+  for (const groupBy of GROUPINGS) {
+    const list = model.list(pinnedOnly, view(groupBy));
+    assert.deepEqual(titles(list.pinned?.sessions ?? []), ["Pinned"]);
+    assert.equal(list.body, null, groupBy);
+  }
+});
+
+test("sidebar list: a pinned session shows only under Pinned, even when its folder is closed", () => {
+  const { model } = sidebar();
+  const state: AppState = {
+    ...loaded,
+    folders: [folder("/repo")],
+    sessionReferences: [
+      sessionReference("/repo", "pinned-open", { title: "Pinned open", pinned: true }),
+      sessionReference("/repo", "unfiled", { title: "Unfiled", ...OCTOBER_FIRST }),
+      sessionReference("/closed/app", "pinned-closed", { title: "Pinned closed", pinned: true }),
+    ],
+  };
+  const rows = (groupBy: GroupBy) => {
+    const list = model.list(state, view(groupBy));
+    return {
+      pinned: titles(list.pinned?.sessions ?? []),
+      sections:
+        list.body?.kind === "sections"
+          ? list.body.sections.map((s) => [s.key, titles(s.sessions)])
+          : list.body,
+    };
+  };
+  assert.deepEqual(rows("folder"), {
+    pinned: ["Pinned closed", "Pinned open"],
+    sections: [["/repo", ["Unfiled"]]],
+  });
+  assert.deepEqual(rows("date").sections, [["date:2026-10-01", ["Unfiled"]]]);
+});
+
+test("sidebar list: folder and branch adds a line only where a row has something to show", () => {
+  const { model } = sidebar();
+  const plain: FolderView = {
+    ...folder("/notes"),
+    worktrees: [{ ...folder("/notes").worktrees[0]!, branch: null, status: "non-git" }],
+    discovery: { status: "non-git", observedAt: "" },
+  };
+  const state: AppState = {
+    ...loaded,
+    folders: [folder("/repo"), plain],
+    sessionReferences: [
+      sessionReference("/repo", "git", { title: "Git", branch: "main", ...OCTOBER_FIRST }),
+      sessionReference("/notes", "plain", { title: "Plain", branch: null, ...OCTOBER_FIRST }),
+      sessionReference("/notes", "pinned", { title: "Pinned", branch: null, pinned: true }),
+    ],
+  };
+  const details = (groupBy: GroupBy, folderAndBranch = true) => {
+    const list = model.list(state, { ...view(groupBy), folderAndBranch });
+    return {
+      pinned: list.pinned?.details,
+      sections:
+        list.body?.kind === "sections" ? list.body.sections.map((s) => [s.key, s.details]) : [],
+    };
+  };
+  assert.deepEqual(details("folder"), {
+    pinned: "folder-and-branch",
+    sections: [
+      ["/notes", undefined],
+      ["/repo", "branch"],
+    ],
+  });
+  assert.deepEqual(details("date").sections, [["date:2026-10-01", "folder-and-branch"]]);
+  assert.deepEqual(details("folder", false), {
+    pinned: undefined,
+    sections: [
+      ["/notes", undefined],
+      ["/repo", undefined],
+    ],
+  });
+});
+
+test("sidebar list: a project without members is listed with the No project group, not the empty state", () => {
+  const { model } = sidebar();
+  const state: AppState = { ...loaded, projects: [{ id: "launch", name: "Launch" }] };
+  const list = model.list(state, view("project"));
+  assert.equal(list.body?.kind, "sections");
+  if (list.body?.kind === "sections")
+    assert.deepEqual(
+      list.body.sections.map((s) => [s.key, s.kind === "project" ? s.project?.name : s.kind]),
+      [
+        ["project:launch", "Launch"],
+        ["project:", undefined],
+      ],
+    );
+  assert.equal(model.list({ ...state, projects: [] }, view("project")).body?.kind, "empty");
+});
+
+test("sidebar list: selecting a session opens the section holding it: its folder (from any worktree), its project, or Pinned", () => {
+  const pinned: AppState = {
+    ...registry,
+    sessionReferences: [
+      ...registry.sessionReferences,
+      sessionReference("/other", "s2", { title: "Pinned plan", pinned: true }),
+      sessionReference("/other", "unfiled"),
+    ],
+  };
+  const { model, items } = sidebar({ "piano.pinnedOpen": "false" });
+  const feature = selecting(pinned, "/work/repo.feature", "s1");
+  model.sync(feature, view("folder"));
+  assert.equal(isOpen(model.list(feature, view("folder")), "/repo"), true);
+  model.sync(feature, view("project"));
+  assert.equal(isOpen(model.list(feature, view("project")), "project:p1"), true);
+
+  const unfiled = selecting(pinned, "/other", "unfiled");
+  model.sync(unfiled, view("project"));
+  assert.equal(isOpen(model.list(unfiled, view("project")), "project:"), true);
+
+  const before = openness(model.list(pinned, view("folder")));
+  assert.equal(isOpen(model.list(pinned, view("folder")), PINNED), false);
+  const pinnedSelected = selecting(pinned, "/other", "s2");
+  model.sync(pinnedSelected, view("folder"));
+  const after = model.list(pinnedSelected, view("folder"));
+  assert.equal(after.pinned?.open, true, "selecting a pinned session opens Pinned");
+  assert.deepEqual(
+    openness(after).filter(([k]) => k !== PINNED),
+    before.filter(([k]) => k !== PINNED),
+    "no other section changes",
+  );
+  assert.equal(items.get("piano.pinnedOpen"), "true", "and stays open on the next load");
+
+  model.toggle(PINNED, false);
+  model.sync(pinnedSelected, view("date"));
+  assert.equal(model.list(pinnedSelected, view("date")).pinned?.open, true);
+});
+
+test("sidebar list: a session being started opens its project's group once its reference names it, not No project", () => {
+  const { model, items } = sidebar();
+  for (const sessionId of [null, "new"]) {
+    const starting = selecting(registry, "/repo", sessionId);
+    model.sync(starting, view("project"));
+    assert.equal(isOpen(model.list(starting, view("project")), "project:"), false, `${sessionId}`);
+  }
+  const filed = selecting(
+    {
+      ...registry,
+      sessionReferences: [
+        ...registry.sessionReferences,
+        sessionReference("/repo", "new", { projectId: "p1" }),
+      ],
+    },
+    "/repo",
+    "new",
+  );
+  model.sync(filed, view("project"));
+  const list = model.list(filed, view("project"));
+  assert.equal(isOpen(list, "project:p1"), true);
+  assert.equal(isOpen(list, "project:"), false);
+  assert.doesNotMatch(items.get("piano.openGroups") ?? "", /"project:"/, "nor on the next load");
+});
+
+test("sidebar list: selecting an archived session opens no section, since none lists it", () => {
+  const { model, items } = sidebar();
+  const archived = selecting(
+    {
+      ...registry,
+      sessionReferences: [
+        sessionReference("/work/repo.feature", "s1", { projectId: "p1", archived: true }),
+      ],
+    },
+    "/work/repo.feature",
+    "s1",
+  );
+  for (const groupBy of GROUPINGS) {
+    model.sync(archived, view(groupBy));
+    assert.deepEqual(
+      openness(model.list(archived, view(groupBy))).filter(([, open]) => open === true),
+      [],
+      groupBy,
+    );
+  }
+  assert.equal(items.get("piano.openGroups"), undefined, "nor on the next load");
+});
+
+test("sidebar list: a registry refresh never reopens a section the user collapsed; a new selection, grouping or owner does", () => {
+  const { model, changes } = sidebar();
+  const selected = selecting(registry, "/work/repo.feature", "s1");
+  model.sync(selected, view("folder"));
+  model.toggle("/repo", false);
+  const collapsed = model.list(selected, view("folder"));
+  assert.equal(isOpen(collapsed, "/repo"), false);
+
+  const seen = changes();
+  const refreshed: AppState = {
+    ...selected,
+    folders: [...registry.folders],
+    sessionReferences: [...registry.sessionReferences],
+  };
+  model.sync(refreshed, view("folder"));
+  model.sync(refreshed, view("folder"));
+  assert.equal(isOpen(model.list(refreshed, view("folder")), "/repo"), false);
+  assert.equal(changes(), seen, "a repeat changes nothing, so nothing is stored or rendered again");
+  model.sync(selecting(registry, "/unregistered", "s3"), view("folder"));
+  model.sync(refreshed, view("folder"));
+  assert.equal(isOpen(model.list(refreshed, view("folder")), "/repo"), false);
+
+  const another = selecting(registry, "/repo", "s9");
+  model.sync(another, view("folder"));
+  assert.equal(isOpen(model.list(another, view("folder")), "/repo"), true, "another session");
+
+  model.toggle("project:p1", false);
+  model.sync(another, view("project"));
+  model.sync(selected, view("project"));
+  assert.equal(isOpen(model.list(selected, view("project")), "project:p1"), true, "a regrouping");
+
+  model.toggle("project:p1", false);
+  const filedElsewhere: AppState = {
+    ...selected,
+    projects: [...registry.projects, { id: "p2", name: "Other" }],
+    sessionReferences: [sessionReference("/work/repo.feature", "s1", { projectId: "p1" })],
+  };
+  model.sync(filedElsewhere, view("project"));
+  const moved = model.list(filedElsewhere, view("project"));
+  assert.equal(isOpen(moved, "project:p2"), true, "moving the session opens its new project");
+  assert.equal(isOpen(moved, "project:p1"), false);
+});
+
+test("sidebar list: keys stay the same across a grouping switch, so sections keep how the user left them", () => {
+  const { model, items } = sidebar({
+    "piano.openGroups": JSON.stringify(["/other"]),
+  });
+  const state: AppState = {
+    ...registry,
+    sessionReferences: [
+      ...registry.sessionReferences,
+      sessionReference("/repo", "pin", { pinned: true }),
+    ],
+  };
+  model.toggle("project:p1", true);
+  model.toggle(PINNED, false);
+  model.toggle("/repo", true);
+  model.toggle("/other", false);
+  const byFolder = openness(model.list(state, view("folder")));
+  const byProject = openness(model.list(state, view("project")));
+  for (const groupBy of ["date", "project", "folder"] as const) model.list(state, view(groupBy));
+  assert.deepEqual(openness(model.list(state, view("folder"))), byFolder);
+  assert.deepEqual(openness(model.list(state, view("project"))), byProject);
+  assert.deepEqual(byFolder, [
+    [PINNED, false],
+    ["/other", false],
+    ["/repo", true],
+  ]);
+  assert.deepEqual(byProject, [
+    [PINNED, false],
+    ["project:p1", true],
+    ["project:", false],
+  ]);
+  assert.deepEqual(JSON.parse(items.get("piano.openGroups") ?? "[]").sort(), [
+    "/repo",
+    "project:p1",
+  ]);
+  const reloaded = sidebar(Object.fromEntries(items)).model;
+  assert.deepEqual(openness(reloaded.list(state, view("project"))), byProject);
+});
+
+test("sidebar list: a project created after the registry loaded opens; existing ones keep their state", () => {
+  const { model } = sidebar();
+  const withProjects = (...ids: string[]): AppState => ({
+    ...registry,
+    projects: ids.map((id) => ({ id, name: id })),
+  });
+  model.sync(withProjects("p1"), view("project"));
+  model.sync(withProjects("p1"), view("project"));
+  assert.equal(isOpen(model.list(withProjects("p1"), view("project")), "project:p1"), false);
+  model.sync(withProjects("p1", "p2"), view("project"));
+  assert.equal(isOpen(model.list(withProjects("p1", "p2"), view("project")), "project:p2"), true);
+  model.toggle("project:p2", false);
+  model.sync(withProjects("p1", "p2"), view("project"));
+  assert.equal(
+    isOpen(model.list(withProjects("p1", "p2"), view("project")), "project:p2"),
+    false,
+    "a later refresh does not reopen it",
+  );
+});
+
+test("sidebar list: done projects' groups sit apart, A–Z, under project grouping only", () => {
+  const { model } = sidebar();
+  const projects = [
+    { id: "launch", name: "Launch" },
+    { id: "zz", name: "Zz shipped", doneAt: "2026-10-01T08:00:00Z" },
+    { id: "a11y", name: "Accessibility" },
+    { id: "aa", name: "Aa shipped", doneAt: "2026-10-02T08:00:00Z" },
+  ];
+  const state: AppState = {
+    ...registry,
+    projects,
+    sessionReferences: [
+      sessionReference("/repo", "s1", { projectId: "zz", updatedAt: "2026-10-01T09:00:00Z" }),
+    ],
+  };
+  const parts = (s: AppState, groupBy: GroupBy) => {
+    const body = model.list(s, view(groupBy)).body;
+    assert.equal(body?.kind, "sections");
+    if (body?.kind !== "sections") return null;
+    return {
+      sections: body.sections.map((x) => [x.key, x.kind === "project" ? x.done : null]),
+      done: body.done.map((x) => [x.key, x.project?.name, x.done]),
+    };
+  };
+  assert.deepEqual(parts(state, "project"), {
+    sections: [
+      ["project:a11y", false],
+      ["project:launch", false],
+      ["project:", false],
+    ],
+    done: [
+      ["project:aa", "Aa shipped", true],
+      ["project:zz", "Zz shipped", true],
+    ],
+  });
+  const reopened = { ...state, projects: projects.map(({ doneAt: _, ...p }) => p) };
+  assert.deepEqual(parts(reopened, "project")?.done, [], "no done part when no project is done");
+  for (const groupBy of ["folder", "date"] as const)
+    assert.deepEqual(parts(state, groupBy)?.done, [], `${groupBy} grouping has no done part`);
+});
+
+test("sidebar list: marking a project done folds its group once; reopening unfolds it once", () => {
+  const { model } = sidebar();
+  const at = (doneAt?: string): AppState => ({
+    ...registry,
+    projects: [{ id: "p1", name: "Launch", ...(doneAt ? { doneAt } : {}) }],
+  });
+  const open = (state: AppState) => isOpen(model.list(state, view("project")), "project:p1");
+  model.sync(at(), view("project"));
+  model.toggle("project:p1", true);
+  const done = at("2026-10-02T08:00:00Z");
+  model.sync(done, view("project"));
+  assert.equal(open(done), false, "marked done, the group folds");
+  model.toggle("project:p1", true);
+  model.sync({ ...done, folders: [...done.folders] }, view("project"));
+  assert.equal(open(done), true, "a later state update keeps the user's reopening");
+  model.toggle("project:p1", false);
+  model.sync(at(), view("project"));
+  assert.equal(open(at()), true, "reopened, the group unfolds");
+  model.toggle("project:p1", false);
+  model.sync({ ...at(), folders: [...registry.folders] }, view("project"));
+  assert.equal(open(at()), false, "a later state update keeps the user's collapse");
+});
+
+test("sidebar list: date sections start open, remember a collapse per browser, and open for a selected session", () => {
+  const { model, items, changes } = sidebar({}, new Date(2026, 9, 2, 12));
+  const today = sessionReference("/repo", "today", {
+    title: "Today",
+    updatedAt: new Date(2026, 9, 2, 9).toISOString(),
+  });
+  const earlier = sessionReference("/repo", "earlier", {
+    title: "Earlier",
+    updatedAt: new Date(2026, 9, 1, 9).toISOString(),
+  });
+  const state: AppState = { ...registry, sessionReferences: [today, earlier] };
+  const chosen = view("date");
+  const TODAY = "date:2026-10-02";
+  const YESTERDAY = "date:2026-10-01";
+  assert.deepEqual(openness(model.list(state, chosen)), [
+    [TODAY, true],
+    [YESTERDAY, true],
+  ]);
+
+  model.toggle(YESTERDAY, false);
+  assert.deepEqual(openness(model.list(state, chosen)), [
+    [TODAY, true],
+    [YESTERDAY, false],
+  ]);
+  const reloaded = sidebar(Object.fromEntries(items), new Date(2026, 9, 2, 12)).model;
+  assert.equal(isOpen(reloaded.list(state, chosen), YESTERDAY), false, "the next load");
+  assert.deepEqual(JSON.parse(items.get("piano.openGroups") ?? "[]"), []);
+
+  const selected = selecting(state, "/repo", "earlier");
+  model.sync(selected, chosen);
+  assert.equal(isOpen(model.list(selected, chosen), YESTERDAY), true);
+  model.toggle(YESTERDAY, false);
+  const seen = changes();
+  model.sync({ ...selected, sessionReferences: [today, earlier] }, chosen);
+  assert.equal(isOpen(model.list(selected, chosen), YESTERDAY), false, "a refresh");
+  assert.equal(changes(), seen);
+
+  model.toggle(TODAY, false);
+  const fresh = selecting(state, "/repo", null);
+  model.sync(fresh, chosen);
+  assert.equal(isOpen(model.list(fresh, chosen), TODAY), true);
+});
+
+test("sidebar list: a collapsed day stays collapsed after midnight renames it, and the new Today starts open", () => {
+  const { model, time } = sidebar({}, new Date(2026, 9, 2, 23, 0));
+  const state: AppState = {
+    ...loaded,
+    folders: [folder("/repo")],
+    sessionReferences: [
+      sessionReference("/repo", "late", {
+        title: "Late",
+        updatedAt: new Date(2026, 9, 2, 22, 30).toISOString(),
+      }),
+    ],
+  };
+  const chosen = view("date");
+  const stop = model.start();
+  model.toggle("date:2026-10-02", false);
+
+  time.advance(new Date(2026, 9, 3, 0, 5));
+  const morning: AppState = {
+    ...state,
+    sessionReferences: [
+      ...state.sessionReferences,
+      sessionReference("/repo", "early", {
+        title: "Early",
+        updatedAt: new Date(2026, 9, 3, 0, 1).toISOString(),
+      }),
+    ],
+  };
+  const list = model.list(morning, chosen);
+  assert.deepEqual(
+    list.body?.kind === "sections"
+      ? list.body.sections.map((s) => s.kind === "date" && [s.label, s.open, titles(s.sessions)])
+      : list.body,
+    [
+      ["Today", true, ["Early"]],
+      ["Yesterday", false, ["Late"]],
+    ],
+  );
+  stop();
+});
+
+test("sidebar list: date sections roll over at local midnight and after the page wakes", () => {
+  const { model, time, changes } = sidebar({}, new Date(2026, 9, 2, 23, 0));
+  const state: AppState = {
+    ...loaded,
+    folders: [folder("/repo")],
+    sessionReferences: [
+      sessionReference("/repo", "s", {
+        title: "Late",
+        updatedAt: new Date(2026, 9, 2, 22, 30).toISOString(),
+      }),
+    ],
+  };
+  const chosen = view("date");
+  const labels = () => {
+    const list = model.list(state, chosen);
+    return list.body?.kind === "sections" ? list.body.sections.map((s) => s.key) : [];
+  };
+  const headings = () => {
+    const list = model.list(state, chosen);
+    return list.body?.kind === "sections"
+      ? list.body.sections.map((s) => s.kind === "date" && s.label)
+      : [];
+  };
+  const stop = model.start();
+  assert.deepEqual(labels(), ["date:2026-10-02"], "a day group is keyed by its calendar date");
+  assert.deepEqual(headings(), ["Today"]);
+  assert.equal(time.pendingAt(), new Date(2026, 9, 3).getTime(), "wakes at the next midnight");
+
+  const seen = changes();
+  time.advance(new Date(2026, 9, 3, 0, 0));
+  assert.deepEqual(headings(), ["Yesterday"]);
+  assert.deepEqual(labels(), ["date:2026-10-02"], "the same day keeps its key under a new name");
+  assert.equal(changes(), seen + 1, "the rollover re-renders once");
+  assert.equal(time.pendingAt(), new Date(2026, 9, 4).getTime(), "and waits for the next one");
+
+  time.jump(new Date(2026, 9, 6, 9));
+  assert.deepEqual(headings(), ["Yesterday"]);
+  time.resume();
+  assert.deepEqual(headings(), ["Oct 2"]);
+  assert.deepEqual(labels(), ["date:2026-10-02"]);
+  const settled = changes();
+  time.resume();
+  assert.equal(changes(), settled, "a wake on the same day changes nothing");
+
+  stop();
+  assert.equal(time.pendingAt(), null, "stopping cancels the timer");
+  time.jump(new Date(2026, 10, 30));
+  time.resume();
+  assert.deepEqual(labels(), ["date:2026-10-02"], "and no longer follows the clock");
+});

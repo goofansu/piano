@@ -6,8 +6,8 @@ import {
   type RegistryData,
   RegistryDatabasePath,
   RegistryLive,
-} from "../../server/Registry.ts";
-import { openRegistryDatabase } from "../../server/RegistryDatabase.ts";
+} from "../../server/shared/registry/Registry.ts";
+import { openRegistryDatabase } from "../../server/shared/registry/RegistryDatabase.ts";
 
 type Seed = Partial<Omit<RegistryData, "sessions">> & {
   sessions?: ReadonlyArray<

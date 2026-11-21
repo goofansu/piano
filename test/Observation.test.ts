@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createObservation, type ObservationEnvironment } from "../web/src/lib/observation.ts";
+import {
+  createObservation,
+  type ObservationEnvironment,
+} from "../web/src/shared/lib/observation.ts";
 
 function environment() {
   let now = 0,

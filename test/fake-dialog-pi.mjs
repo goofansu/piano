@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { closeSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
-import { askUserPrompt, askUserQuestions } from "../shared/askUser.ts";
+import { askUserPrompt, askUserQuestions } from "../shared/features/sessions/askUser.ts";
 
 const out = (value) => process.stdout.write(`${JSON.stringify(value)}\n`);
 const reply = (cmd, data) =>

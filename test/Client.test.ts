@@ -1,12 +1,19 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ClientMessage, Dialog, ServerMessage, SessionClosure } from "../shared/wire.ts";
-import { createClient, type NotifyLevel } from "../web/src/lib/client.ts";
-import { trustCommand } from "../web/src/lib/globalCommands.ts";
-import { createModelCatalogs } from "../web/src/lib/modelCatalogs.ts";
-import { createDialogAnswer, pendingDialogs } from "../web/src/lib/piDialogs.ts";
-import type { ConnectionHandlers, DisconnectReason, SendDisposition } from "../web/src/lib/ws.ts";
-import { initialState } from "../web/src/store.ts";
+import { createClient, type NotifyLevel } from "../web/src/app/client.ts";
+import { initialState } from "../web/src/app/store.ts";
+import { trustCommand } from "../web/src/features/commands/globalCommands.ts";
+import { createModelCatalogs } from "../web/src/features/models/modelCatalogs.ts";
+import {
+  createDialogAnswer,
+  pendingDialogs,
+} from "../web/src/features/sessions/dialogs/piDialogs.ts";
+import type {
+  ConnectionHandlers,
+  DisconnectReason,
+  SendDisposition,
+} from "../web/src/shared/transport/ws.ts";
 import { sessionReference } from "./fixtures/sessionReference.ts";
 
 function harness() {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { documentReference, relativeToDocument } from "../web/src/lib/file-link.ts";
+import { documentReference, relativeToDocument } from "../web/src/shared/markdown/file-link.ts";
 
 test("a reference resolves from its document's directory; absolute paths and replies do not", () => {
   assert.equal(relativeToDocument("docs/guide.md", "shots/a.png"), "docs/shots/a.png");

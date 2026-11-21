@@ -6,7 +6,7 @@ asks for local delivery. A failed publication is never silently delivered as a l
 ### Use without Piano
 
 This is a standalone Pi package with no Piano environment requirements. It imports dependency-free
-modules from the checkout's `shared/` and `server/LocalFile.ts` by relative path, so load it from a
+modules from the checkout's `shared/` and `server/shared/LocalFile.ts` by relative path, so load it from a
 checkout rather than a copied folder. From a checkout with `npm install` completed, try it for one
 invocation:
 
@@ -93,7 +93,7 @@ manifest only, without content or page fields. Transport credentials and signed 
 ## File size
 
 One bound covers every Piano function that sends a file to Radius or reads one back:
-`RADIUS_ARTIFACT_FILE_BYTES` in [`shared/radiusArtifacts.ts`](../shared/radiusArtifacts.ts),
+`RADIUS_ARTIFACT_FILE_BYTES` in [`shared/features/radius/radiusArtifacts.ts`](../shared/features/radius/radiusArtifacts.ts),
 **25 MiB** of UTF-8 bytes per file. It is Radius's documented per-file limit.
 
 Source: <https://radius.pi.dev/v1/openapi.json>, in the description of the **Artifacts** tag under
@@ -120,15 +120,15 @@ enforce. Piano publishes through Radius's MCP tools with the text inline; that r
   create/update/view, validates tool arguments through Pi's schemas and pins view revisions.
 - [`RadiusClient.ts`](../extensions/radius-artifacts/RadiusClient.ts) owns bounded MCP/transfer
   requests and UTF-8 page reads; Radius remains the owner of revision content.
-- [`server/LocalFile.ts`](../server/LocalFile.ts) reads a document given by `path`: regular files
+- [`server/shared/LocalFile.ts`](../server/shared/LocalFile.ts) reads a document given by `path`: regular files
   only, bounded, cancellable and refused if its length changes during the read. File previews and
   Session Share read through it too.
-- [`shared/radiusArtifacts.ts`](../shared/radiusArtifacts.ts) defines the additive structured
+- [`shared/features/radius/radiusArtifacts.ts`](../shared/features/radius/radiusArtifacts.ts) defines the additive structured
   result contract and publication receipts; viewing does not write a receipt.
-- [`test/RadiusArtifactExtension.test.ts`](../test/RadiusArtifactExtension.test.ts) exercises the
+- [`test/features/radius/RadiusArtifactExtension.test.ts`](../test/features/radius/RadiusArtifactExtension.test.ts) exercises the
   registered tools using real Pi argument validation, credential resolution and session history,
   plus the real MCP SDK against an isolated HTTP adapter with fake credentials. Run:
-  `node --test --import ./test/setup.ts test/RadiusArtifactExtension.test.ts`.
+  `node --test --import ./test/setup.ts test/features/radius/RadiusArtifactExtension.test.ts`.
   It covers exact Unicode reconstruction, pinned continuation while latest advances, 25 MiB reads,
   page/download bounds, EOF, invalid offsets, abort, manifest selection and credential containment.
 - The [Open a session recipe](../.agents/skills/verify-piano/features/open-session.md) covers the

@@ -17,7 +17,7 @@ import {
   startSession,
   withLinks,
 } from "../extensions/piano-dispatch/SessionDispatch.ts";
-import { sessionLink } from "../shared/sessionLink.ts";
+import { sessionLink } from "../shared/features/sessions/sessionLink.ts";
 
 const usage = `Usage: node scripts/dispatch-session.ts --json < request.json
        node scripts/dispatch-session.ts <prompt-file> <cwd> [out-file] [options]

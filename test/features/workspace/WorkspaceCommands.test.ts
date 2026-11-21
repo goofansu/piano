@@ -1,0 +1,209 @@
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { after, test } from "node:test";
+import { NodeServices } from "@effect/platform-node";
+import { Context, Effect, Fiber, Layer, type Scope, Stream } from "effect";
+import { PianoCoreLive } from "../../../server/app/PianoServices.ts";
+import { SidebarView } from "../../../server/features/navigation/SidebarView.ts";
+import { PiCli } from "../../../server/features/sessions/pi/PiCli.ts";
+import type { SessionHosts } from "../../../server/features/sessions/SessionHosts.ts";
+import { WorkspaceCommands } from "../../../server/features/workspace/WorkspaceCommands.ts";
+import {
+  FolderWorktrees,
+  FolderWorktreesLive,
+} from "../../../server/features/workspace/worktrees/FolderWorktrees.ts";
+import { DirectoryFacts } from "../../../server/shared/DirectoryFacts.ts";
+import { worktreeInstance } from "../../../server/shared/GitCheckout.ts";
+import {
+  Registry,
+  RegistryDatabasePath,
+  RegistryError,
+} from "../../../server/shared/registry/Registry.ts";
+import { GitCommand } from "../../../server/shared/Subprocess.ts";
+
+const root = realpathSync(mkdtempSync(join(tmpdir(), "piano-commands-")));
+const cwd = join(root, "checkout");
+mkdirSync(cwd);
+mkdirSync(join(root, "sessions"));
+process.env.PI_CODING_AGENT_DIR = join(root, "agent");
+process.env.PI_CODING_AGENT_SESSION_DIR = join(root, "sessions");
+after(() => rmSync(root, { recursive: true, force: true }));
+
+const git = (dir: string, ...args: string[]) =>
+  execFileSync("git", ["-C", dir, "-c", "user.name=t", "-c", "user.email=t@example.com", ...args], {
+    stdio: "pipe",
+  });
+let databases = 0;
+const run = <A, E>(
+  effect: Effect.Effect<
+    A,
+    E,
+    | WorkspaceCommands
+    | FolderWorktrees
+    | SidebarView
+    | SessionHosts
+    | Registry
+    | DirectoryFacts
+    | Scope.Scope
+  >,
+  path = join(root, `registry-${++databases}.db`),
+) => {
+  const layer = PianoCoreLive({ idleMs: 0 }).pipe(Layer.provide(NodeServices.layer));
+  return Effect.runPromise(
+    effect.pipe(
+      Effect.scoped,
+      Effect.provide(layer),
+      Effect.provideService(PiCli, {
+        node: process.execPath,
+        cli: new URL("../../fake-pi.mjs", import.meta.url).pathname,
+        extraArgs: [],
+      }),
+      Effect.provideService(RegistryDatabasePath, path),
+      Effect.timeout("10 seconds"),
+    ),
+  );
+};
+
+test("INV-06: creating a worktree requires a registered folder and leaves no branch when refused", async () => {
+  const repo = join(root, "repo");
+  mkdirSync(repo);
+  git(repo, "init", "--quiet");
+  git(repo, "commit", "--quiet", "--allow-empty", "-m", "init");
+  await run(
+    Effect.gen(function* () {
+      const registry = yield* Registry;
+      yield* registry.addFolder(cwd);
+      const refused = yield* (yield* FolderWorktrees).create(repo, "other").pipe(Effect.flip);
+      assert.equal(refused.detail, "Select a registered folder first.");
+      assert.notEqual(refused.unconfirmed, true);
+      assert.equal(git(repo, "branch", "--list", "other").toString(), "");
+      assert.deepEqual((yield* registry.get).worktrees, []);
+    }),
+  );
+});
+
+test("INV-06: a created checkout that could not be recorded is reported unconfirmed and kept", async () => {
+  const repo = join(root, "unconfirmed");
+  mkdirSync(repo);
+  git(repo, "init", "--quiet", "-b", "main");
+  git(repo, "commit", "--quiet", "--allow-empty", "-m", "init");
+  await run(
+    Effect.gen(function* () {
+      const registry = yield* Registry;
+      yield* registry.addFolder(repo);
+      const built = yield* Layer.build(Layer.fresh(FolderWorktreesLive)).pipe(
+        Effect.provideService(Registry, {
+          ...registry,
+          recordCreatedWorktree: () =>
+            Effect.fail(new RegistryError({ detail: "Registry write failed." })),
+        }),
+      );
+      const created = yield* Context.get(built, FolderWorktrees)
+        .create(repo, "kept")
+        .pipe(Effect.flip);
+      assert.equal(created.unconfirmed, true);
+      assert.equal(created.detail, `Registry write failed. ${repo}.kept`);
+      assert.ok(existsSync(`${repo}.kept`));
+    }),
+  );
+});
+
+test("INV-02/06: a requester that leaves while Git creates the worktree still gets it registered", async () => {
+  const repo = join(root, "held"),
+    heldGit = join(root, "held-git"),
+    started = join(root, "held-started"),
+    release = join(root, "held-release"),
+    path = `${repo}.next`;
+  mkdirSync(repo);
+  git(repo, "init", "--quiet", "-b", "main");
+  git(repo, "commit", "--quiet", "--allow-empty", "-m", "init");
+  writeFileSync(
+    heldGit,
+    `#!${process.execPath}\nimport {spawnSync} from 'node:child_process';import {existsSync,writeFileSync} from 'node:fs';
+const a=process.argv.slice(2);
+if(a.includes('worktree')&&a.includes('add')){writeFileSync(${JSON.stringify(started)},'');
+while(!existsSync(${JSON.stringify(release)}))Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20);}
+const r=spawnSync('git',a,{stdio:'inherit'});process.exit(r.status??1);\n`,
+    { mode: 0o755 },
+  );
+  const until = <A>(read: Effect.Effect<A | undefined>, what: string) =>
+    Effect.gen(function* () {
+      for (let n = 0; n < 250; n++) {
+        const value = yield* read;
+        if (value !== undefined) return value;
+        yield* Effect.sleep("20 millis");
+      }
+      return yield* Effect.die(new Error(`never observed: ${what}`));
+    });
+  await run(
+    Effect.gen(function* () {
+      const worktrees = yield* FolderWorktrees,
+        registry = yield* Registry;
+      yield* registry.addFolder(repo);
+      const requester = yield* worktrees.create(repo, "next").pipe(Effect.forkChild);
+      yield* until(
+        Effect.sync(() => (existsSync(started) ? true : undefined)),
+        "git worktree add running",
+      );
+      yield* Fiber.interrupt(requester);
+      writeFileSync(release, "");
+      const registered = yield* until(
+        registry.get.pipe(Effect.map((d) => d.worktrees.find((w) => w.path === path))),
+        "the worktree registered",
+      );
+      assert.deepEqual(registered, {
+        folder: repo,
+        path,
+        branch: "next",
+        created: {
+          branch: "next",
+          baseBranch: "main",
+          commit: git(repo, "rev-parse", "HEAD").toString().trim(),
+          instance: yield* Effect.promise(() =>
+            worktreeInstance(git(path, "rev-parse", "--absolute-git-dir").toString().trim()),
+          ),
+        },
+      });
+    }).pipe(Effect.provideService(GitCommand, heldGit)),
+  );
+});
+
+test("INV-01: a trust decision is saved in Pi's store and every client's model catalog is invalidated", async () => {
+  mkdirSync(join(cwd, ".agents/skills/hello"), { recursive: true });
+  writeFileSync(
+    join(cwd, ".agents/skills/hello/SKILL.md"),
+    "---\nname: hello\ndescription: say hello\n---\nSay hello.\n",
+  );
+  try {
+    await run(
+      Effect.gen(function* () {
+        const commands = yield* WorkspaceCommands,
+          facts = yield* DirectoryFacts;
+        const invalidated = yield* (yield* facts.changes).pipe(
+          Stream.take(2),
+          Stream.runCollect,
+          Effect.forkChild,
+        );
+        const trusted = yield* commands.setTrust(cwd, true);
+        assert.deepEqual([trusted.cwd, trusted.trust], [cwd, { required: true, trusted: true }]);
+        assert.match(trusted.notice, /^Trusted\./);
+        const untrusted = yield* commands.setTrust(cwd, false);
+        assert.deepEqual(
+          [untrusted.cwd, untrusted.trust],
+          [cwd, { required: true, trusted: false }],
+        );
+        assert.match(untrusted.notice, /^Untrusted\./);
+        assert.equal(
+          [...(yield* Fiber.join(invalidated))].length,
+          2,
+          "one invalidation per decision",
+        );
+      }),
+    );
+  } finally {
+    rmSync(join(cwd, ".agents"), { recursive: true, force: true });
+  }
+});

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { defaultPiCli } from "../../server/PiCli.ts";
+import { defaultPiCli } from "../../server/features/sessions/pi/PiCli.ts";
 
 export async function askUserFixture() {
   const scratch = fileURLToPath(new URL("../../.scratch/", import.meta.url));

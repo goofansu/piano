@@ -10,7 +10,7 @@ import { brotliCompressSync, brotliDecompressSync, gunzipSync, gzipSync } from "
 import { NodeHttpServer } from "@effect/platform-node";
 import { Effect, Fiber, Layer } from "effect";
 import { HttpRouter } from "effect/http";
-import { staticAssets } from "../server/StaticAssets.ts";
+import { staticAssets } from "../server/app/StaticAssets.ts";
 
 const INDEX = `<!doctype html><html><body>${"<p>piano</p>".repeat(200)}</body></html>`;
 const SCRIPT = `export const piano = ${JSON.stringify("a".repeat(4000))};\n`;

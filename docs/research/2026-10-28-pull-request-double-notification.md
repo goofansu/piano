@@ -18,19 +18,19 @@ actual result; preserving session metadata remains necessary (INV-01/07).
 
 ## Causal chain
 
-1. [`SessionPullRequests.result`](../../server/SessionPullRequests.ts), lines 144–149, keeps the
+1. [`SessionPullRequests.result`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/SessionPullRequests.ts), lines 144–149, keeps the
    existing link when discovery finds nothing and adds the no-match `error` to the returned
    snapshot. This is a normal HTTP 200 response, not a rejected request.
-2. [`createSessionPullRequest.change`](../../web/src/lib/sessionPullRequest.ts), lines 247–275,
+2. [`createSessionPullRequest.change`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/lib/sessionPullRequest.ts), lines 247–275,
    calls `notify.error(body.error)` but still returns `_tag: "saved"`: only a thrown request
    failure sets its `failed` variable. The comment intentionally allows an association save to
    succeed even when live GitHub status is unavailable.
 3. `discover` in that same file, lines 355–372, sees the retained `value.link` and returns the
    saved outcome before reaching its no-link/not-found handling.
-4. [`LinkedPullRequestRow`](../../web/src/components/SessionPullRequest.tsx), lines 188–193,
+4. [`LinkedPullRequestRow`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/SessionPullRequest.tsx), lines 188–193,
    interprets `saved && value.link` as success and calls `toast.success("Pull request linked")`.
    The form's discovery handler uses the same condition at lines 301–306.
-5. [`useSessionPullRequest`](../../web/src/lib/useSessionPullRequest.ts), line 35, connects the
+5. [`useSessionPullRequest`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/lib/useSessionPullRequest.ts), line 35, connects the
    module's error notification directly to Sonner. Thus the error and success have separate,
    explicit producers; Sonner is displaying both as requested.
 
@@ -87,9 +87,9 @@ node --test --import ./test/setup.ts \
   test/SessionPullRequestLink.test.ts test/SessionPullRequests.test.ts
 ```
 
-The [client test](../../test/SessionPullRequestLink.test.ts), starting at line 692, proves one
+The [client test](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/test/SessionPullRequestLink.test.ts), starting at line 692, proves one
 notification only for an **unlinked** session receiving `{ link: null, pullRequest: null }`.
-The [server test](../../test/SessionPullRequests.test.ts), lines 164–170, protects preservation of
+The [server test](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/test/SessionPullRequests.test.ts), lines 164–170, protects preservation of
 the existing association after unsuccessful discovery, not the resulting client notifications.
 Neither tests the full combination of a retained link, a discovery error, and the UI success
 handler.

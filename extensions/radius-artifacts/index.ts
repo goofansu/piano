@@ -5,7 +5,7 @@ import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { int, obj, opt, type Static, str } from "@earendil-works/pi-schema";
 import { z } from "zod";
-import { LocalFileRefusal, readLocalFile } from "../../server/LocalFile.ts";
+import { LocalFileRefusal, readLocalFile } from "../../server/shared/LocalFile.ts";
 import {
   artifactPublication,
   RADIUS_ARTIFACT_FILE_BYTES,
@@ -15,7 +15,7 @@ import {
   RADIUS_ARTIFACT_UPDATE_TOOL,
   RADIUS_ARTIFACT_VIEW_TOOL,
   RadiusArtifactResult,
-} from "../../shared/radiusArtifacts.ts";
+} from "../../shared/features/radius/radiusArtifacts.ts";
 import {
   type Artifact,
   ARTIFACT_MAX_PAGE_BYTES,

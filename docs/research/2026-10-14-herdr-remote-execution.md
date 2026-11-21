@@ -303,7 +303,7 @@ Herdr documentation citations are pinned to **v0.9.4**:
 - **S2:** [Saved-machine API bridge](https://github.com/herdrdev/herdr/blob/6521382dbed36f2d001417108149c338aee116ea/src/remote/saved.rs) and [remote command construction](https://github.com/herdrdev/herdr/blob/6521382dbed36f2d001417108149c338aee116ea/src/remote/attach.rs).
 - **S3:** [Pi integration's TUI-only gate](https://github.com/herdrdev/herdr/blob/v0.9.4/src/integration/assets/pi/herdr-agent-state.ts#L229-L235).
 - **P1:** [Pi 1.2.0 RPC](https://github.com/earendil-works/pi/blob/v1.2.0/packages/coding-agent/docs/rpc.md) and [commands](https://github.com/earendil-works/pi/blob/v1.2.0/packages/coding-agent/docs/rpc-commands.md).
-- **L1:** [Piano ADR](../adr/0001-pi-rpc-workspace-workbench.md), [invariants](../development-invariants.md), [glossary](../glossary.md), [roadmap](../roadmap.md), [PiSessions](../../server/PiSessions.ts), [PiTransport](../../server/PiTransport.ts), [Worktrees](../../server/Worktrees.ts).
+- **L1:** [Piano ADR](../adr/0001-pi-rpc-workspace-workbench.md), [invariants](../development-invariants.md), [glossary](../glossary.md), [roadmap](../roadmap.md), [PiSessions](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/PiSessions.ts), [PiTransport](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/PiTransport.ts), [Worktrees](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/Worktrees.ts).
 
 ## Verification
 

@@ -7,8 +7,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import * as NodeWS from "@effect/platform-node/NodeWS";
-import { inboundLimits } from "../server/InboundCapacity.ts";
-import { configuredOrigins } from "../server/OriginPolicy.ts";
+import { inboundLimits } from "../server/shared/InboundCapacity.ts";
+import { configuredOrigins } from "../server/shared/OriginPolicy.ts";
 import { freePort } from "./fixtures/ports.ts";
 
 test("origin configuration fails closed and does not implicitly extend explicit origins", () => {

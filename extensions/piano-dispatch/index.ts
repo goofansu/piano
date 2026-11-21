@@ -27,8 +27,8 @@ import {
   WAIT_TOOL,
   type WaitArguments,
   type WaitToolResult,
-} from "../../shared/dispatch.ts";
-import { sessionLink } from "../../shared/sessionLink.ts";
+} from "../../shared/features/dispatch/dispatch.ts";
+import { sessionLink } from "../../shared/features/sessions/sessionLink.ts";
 import { dispatchConfiguration, nodeSocketEnvironment } from "./NodeSocket.ts";
 import {
   readStatus,

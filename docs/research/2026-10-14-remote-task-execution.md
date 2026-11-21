@@ -339,9 +339,9 @@ these are the actual pages reviewed, not claims about older Codex releases.
 
 ### Piano (at the inspected revision)
 
-- **L1:** [PiTransport](../../server/PiTransport.ts), [PiCli](../../server/PiCli.ts), [PiSessions](../../server/PiSessions.ts).
-- **L2:** [PiHistory](../../server/PiHistory.ts), [SessionReferences](../../server/SessionReferences.ts), [SessionHosts](../../server/SessionHosts.ts).
-- **L3:** [Directories](../../server/Directories.ts), [Worktrees](../../server/Worktrees.ts), [ProjectTrust](../../server/ProjectTrust.ts), [Registry](../../server/Registry.ts).
+- **L1:** [PiTransport](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/PiTransport.ts), [PiCli](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/PiCli.ts), [PiSessions](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/PiSessions.ts).
+- **L2:** [PiHistory](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/PiHistory.ts), [SessionReferences](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/SessionReferences.ts), [SessionHosts](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/SessionHosts.ts).
+- **L3:** [Directories](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/Directories.ts), [Worktrees](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/Worktrees.ts), [ProjectTrust](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/ProjectTrust.ts), [Registry](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/Registry.ts).
 - **L4:** [ADR 0001](../adr/0001-pi-rpc-workspace-workbench.md), [invariants](../development-invariants.md), [roadmap](../roadmap.md), [glossary](../glossary.md).
 
 ## Verification of this note

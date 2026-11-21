@@ -5,8 +5,8 @@ import {
   correlatedRequests,
   RECEIPT_TIMEOUT_MS,
   type RequestOutcome,
-} from "../web/src/lib/correlatedRequest.ts";
-import type { SendDisposition } from "../web/src/lib/ws.ts";
+} from "../web/src/app/requests/correlatedRequest.ts";
+import type { SendDisposition } from "../web/src/shared/transport/ws.ts";
 
 type Result = Extract<ServerMessage, { _tag: "data_controls_result" }>["result"];
 

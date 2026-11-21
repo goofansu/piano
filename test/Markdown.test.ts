@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { markdownImages } from "../web/src/lib/markdown.ts";
+import { markdownImages } from "../web/src/shared/markdown/markdownPlugins.ts";
 import { renderMarkdown } from "./fixtures/markdown.ts";
 
 test("transcript soft breaks are visible without changing document Markdown or existing hard breaks", () => {

@@ -2,7 +2,7 @@
 
 ## Boundaries
 
-- `server/McpSetup.ts` owns this policy; Pi owns configuration parsing and validation, OAuth and
+- `server/features/mcp/McpSetup.ts` owns this policy; Pi owns configuration parsing and validation, OAuth and
   credential storage (INV-01/02/11/12). The browser never receives an `Authorization` value.
 - Pi exports neither its MCP config writer, its validator nor its sign-in flow publicly, so
   `McpConfigEntries` and `McpSetup` import the pinned `dist` helpers. Recheck these imports on

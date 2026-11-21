@@ -2,7 +2,7 @@
 
 ## Formats and limits
 
-Formats and size limits live in `shared/files.ts`. SVG previews use a Blob URL in an `<img>`,
+Formats and size limits live in `shared/features/workspace/files/files.ts`. SVG previews use a Blob URL in an `<img>`,
 never inline SVG, an object or an iframe, so scripts, event handlers and external resources stay
 disabled by browser image mode.
 
@@ -22,7 +22,7 @@ HTML opens as a document, not an app:
 - Changes to the bridge's source, CSP, sanitation or message/lifecycle checks require renewed
   browser security observations.
 
-Budgets are constants in `web/src/lib/html-preview.ts`.
+Budgets are constants in `web/src/features/workspace/files/html-preview.ts`.
 
 ## Ownership and privacy
 

@@ -29,9 +29,9 @@ current Piano support.
 
 - Piano's [attachment policy](../image-attachments.md) allows PNG/JPEG/GIF/WebP,
   four images, 10 MiB each and 20 MiB combined. These are original-upload limits,
-  not provider limits. [Validation](../../shared/attachments.ts) recognizes raster
+  not provider limits. [Validation](https://github.com/goofansu/piano/blob/bf0116bc8c2800e229d22c16170f88ce006f5703/shared/attachments.ts) recognizes raster
   signatures; [wire types](../../shared/wire.ts) admit only image attachments.
-- [PiRecords](../../server/PiRecords.ts) validates attachments and converts them to
+- [PiRecords](https://github.com/goofansu/piano/blob/bf0116bc8c2800e229d22c16170f88ce006f5703/server/PiRecords.ts) validates attachments and converts them to
   RPC `images`; history projection also recognizes image blocks. Changing only the
   file picker's `accept` attribute would not implement other formats.
 - Pi 1.2.0 RPC `prompt`, `steer` and `follow_up` accept a message string and optional
@@ -45,7 +45,7 @@ current Piano support.
   not implement PDF extraction or MP4 decoding. Merely placing either binary on disk
   and asking the ordinary read tool to read it is not adequate support.
 - RPC `clear_queue` returns text only. At the research baseline,
-  [PiSessions](../../server/PiSessions.ts) rejected image-bearing submissions while Pi
+  [PiSessions](https://github.com/goofansu/piano/blob/bf0116bc8c2800e229d22c16170f88ce006f5703/server/PiSessions.ts) rejected image-bearing submissions while Pi
   was working. Piano now allows queued images with explicitly text-only restoration
   (see [attachment policy](../image-attachments.md)); this does not add PDF/video support.
   Text converted entirely into the message can use text queue semantics, but restoring

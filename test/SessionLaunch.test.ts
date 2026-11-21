@@ -6,9 +6,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { configuredOrigins, sessionLinkOrigin } from "../server/OriginPolicy.ts";
-import { defaultPiCli } from "../server/PiCli.ts";
-import { sessionEndpoint, sessionEnvironment } from "../server/SessionEndpoint.ts";
+import {
+  sessionEndpoint,
+  sessionEnvironment,
+} from "../server/features/dispatch/SessionEndpoint.ts";
+import { defaultPiCli } from "../server/features/sessions/pi/PiCli.ts";
+import { configuredOrigins, sessionLinkOrigin } from "../server/shared/OriginPolicy.ts";
 import { freePort } from "./fixtures/ports.ts";
 
 test("Piano's extensions are resolved from the installation, never from the session's cwd", () => {

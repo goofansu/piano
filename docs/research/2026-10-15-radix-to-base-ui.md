@@ -95,7 +95,7 @@ checkbox, collapsible, dialog, dropdown-menu, item, label, popover, progress, sc
 separator, sheet, sidebar, slider, switch, toggle-group, toggle, tooltip); 12 do not (alert,
 command, empty, field, input-group, input, kbd, skeleton, sonner, spinner, table, textarea)
 (`grep -l 'from "radix-ui"' web/src/components/ui/*.tsx`). Outside `ui/`, only
-[PianoSidebarReveal.tsx](../../web/src/components/PianoSidebarReveal.tsx) line 1 imports
+[PianoSidebarReveal.tsx](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/PianoSidebarReveal.tsx) line 1 imports
 `radix-ui`. The `"use client"` directives Piano preserves via `rsc: true` are still present in
 base files ([base/ui/dialog.tsx][b-dialog] line 1), so that policy carries over unchanged.
 
@@ -115,7 +115,7 @@ Changes, MessageList, NewSession, SessionHeader, SessionPullRequest, one each in
 Banner, EffortSelect, IconButton, JumpTo, ModelSelect, PianoSidebarMenuButton,
 PianoSidebarReveal, ProviderLoginDialog, Quotes, RadiusSection, SlashTextarea) and 36 inside
 `ui/` (`grep -c asChild`). The one in
-[PianoSidebarMenuButton.tsx](../../web/src/components/PianoSidebarMenuButton.tsx) line 15
+[PianoSidebarMenuButton.tsx](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/PianoSidebarMenuButton.tsx) line 15
 (`<TooltipTrigger asChild>{button}</TooltipTrigger>`) becomes
 `<TooltipTrigger render={button} />`.
 
@@ -133,7 +133,7 @@ lines 94-100). The shadcn base wrappers forward exactly four Positioner props:
 `...props` onto the Popup (wrong DOM node) and positioning silently breaks"
 ([universal-patterns.md][universal] lines 277-286). This touches Piano in three places:
 
-- `collisionPadding={8}` in [PianoDropdownMenu.tsx](../../web/src/components/PianoDropdownMenu.tsx)
+- `collisionPadding={8}` in [PianoDropdownMenu.tsx](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/PianoDropdownMenu.tsx)
   lines 33 and 55, and `collisionPadding={16}` in JumpTo.tsx:67, ModelSelect.tsx:167,
   SessionHeader.tsx:144, SessionPullRequest.tsx:214. Base UI's Positioner default is 5
   (`collisionPadding = 5`, [TooltipPositioner.tsx][bu-tt-pos] line 36; Radix default 0 per
@@ -141,8 +141,8 @@ lines 94-100). The shadcn base wrappers forward exactly four Positioner props:
 - `hideWhenDetached` in Quotes.tsx:159 is dropped; the replacement is CSS on the Positioner's
   `data-anchor-hidden` ([overlays.md][overlays] line 231).
 - Piano's raised layer is `z-[60]` on the content ([overlayStyles.ts](../../web/src/lib/overlayStyles.ts)
-  line 7, [PianoSelect.tsx](../../web/src/components/PianoSelect.tsx) line 18,
-  [PianoTooltip.tsx](../../web/src/components/PianoTooltip.tsx) line 31) so it "sits above
+  line 7, [PianoSelect.tsx](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/PianoSelect.tsx) line 18,
+  [PianoTooltip.tsx](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/PianoTooltip.tsx) line 31) so it "sits above
   toasts". With the base wrappers the Popup is inside a Positioner that is `isolate z-50`, so a
   `z-[60]` on the Popup no longer competes with the toaster; the stacking value would have to move
   to the Positioner, which only the `ui/` file can style. This is the structural conflict with
@@ -150,7 +150,7 @@ lines 94-100). The shadcn base wrappers forward exactly four Positioner props:
 
 Popover `Anchor` is dropped as a part and becomes a Positioner `anchor` prop
 ([overlays.md][overlays] lines 197-202); Piano re-exports `PopoverAnchor`
-([PianoPopover.tsx](../../web/src/components/PianoPopover.tsx) line 9) but no app file renders it
+([PianoPopover.tsx](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/PianoPopover.tsx) line 9) but no app file renders it
 (`grep PopoverAnchor` outside `ui/` and the wrapper: none).
 
 ### 2.3 Data attributes and CSS variables
@@ -168,18 +168,18 @@ line 261).
 Piano's `index.css` imports `shadcn/tailwind.css` (line 23), whose `data-open:` and
 `data-closed:` custom variants match **both** `[data-state="open"]` and `[data-open]`
 ([tailwind.css][sc-tw] lines 28-37). So the `data-open:`/`data-closed:` utilities in
-[PianoSheet.tsx](../../web/src/components/PianoSheet.tsx) line 23 are already portable, while
+[PianoSheet.tsx](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/PianoSheet.tsx) line 23 are already portable, while
 every Tailwind arbitrary variant `data-[state=…]:` is Radix-only and stops matching silently:
 
 | Site | Selector today | Base UI target |
 | --- | --- | --- |
 | [overlayStyles.ts](../../web/src/lib/overlayStyles.ts) line 7 | `data-[state=closed]:duration-…`, `data-[state=open]:zoom-in-…` | `data-closed:`, `data-open:` |
-| [PianoDialog.tsx](../../web/src/components/PianoDialog.tsx) line 20 | same pattern | same |
-| [PianoSheet.tsx](../../web/src/components/PianoSheet.tsx) line 30 | `data-[state=closed]:duration-200 … data-[state=open]:duration-300` | `data-closed:` / `data-open:` |
-| [PianoTooltip.tsx](../../web/src/components/PianoTooltip.tsx) line 31 | `data-[state=closed]:zoom-out-[0.96]` | `data-closed:` |
-| [PianoViewToggle.tsx](../../web/src/components/PianoViewToggle.tsx) line 18 | `data-[state=on]:…` (three) | `data-pressed:` |
-| [lib/styles.ts](../../web/src/lib/styles.ts) line 5, [JumpTo.tsx](../../web/src/components/JumpTo.tsx) line 59, [Sidebar.tsx](../../web/src/components/Sidebar.tsx) line 66 | trigger `data-[state=open]:` | `data-popup-open:` |
-| [RadiusSection.tsx](../../web/src/components/RadiusSection.tsx) line 121 | collapsible trigger `data-[state=open]:rounded-b-none` | `data-panel-open:` |
+| [PianoDialog.tsx](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/PianoDialog.tsx) line 20 | same pattern | same |
+| [PianoSheet.tsx](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/PianoSheet.tsx) line 30 | `data-[state=closed]:duration-200 … data-[state=open]:duration-300` | `data-closed:` / `data-open:` |
+| [PianoTooltip.tsx](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/PianoTooltip.tsx) line 31 | `data-[state=closed]:zoom-out-[0.96]` | `data-closed:` |
+| [PianoViewToggle.tsx](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/PianoViewToggle.tsx) line 18 | `data-[state=on]:…` (three) | `data-pressed:` |
+| [lib/styles.ts](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/lib/styles.ts) line 5, [JumpTo.tsx](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/JumpTo.tsx) line 59, [Sidebar.tsx](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/Sidebar.tsx) line 66 | trigger `data-[state=open]:` | `data-popup-open:` |
+| [RadiusSection.tsx](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/RadiusSection.tsx) line 121 | collapsible trigger `data-[state=open]:rounded-b-none` | `data-panel-open:` |
 | [index.css](../../web/src/index.css) lines 361, 369, 373 | `[data-slot="dialog-overlay"][data-state="closed"]` etc. | `[data-closed]`, `[data-open]` on the Backdrop (slot name `dialog-overlay` is kept, [b-dialog] line 32) |
 | [index.css](../../web/src/index.css) line 389 | `[data-slot="mobile-sidebar"][data-state="closed"]` | `[data-closed]` |
 | [index.css](../../web/src/index.css) lines 745-749 | `.disclosure-content[data-state="open"|"closed"]` | `[data-open]` / `[data-closed]` |
@@ -189,7 +189,7 @@ CSS variables rename `--radix-<comp>-content-available-height` → `--available-
 `--collapsible-panel-height` ([class-mapping.md][classmap] lines 37-45; Base UI sets the latter in
 [CollapsiblePanel.tsx][bu-coll-panel] line 112). Piano uses them in Composer.tsx:303,
 JumpTo.tsx:74, Picker.tsx:24, SessionPullRequest.tsx:216, SlashTextarea.tsx:271 and 292,
-[PianoDropdownMenu.tsx](../../web/src/components/PianoDropdownMenu.tsx) line 60, and
+[PianoDropdownMenu.tsx](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/PianoDropdownMenu.tsx) line 60, and
 [index.css](../../web/src/index.css) lines 839 and 845.
 
 `anchoredMotion` ([overlayStyles.ts](../../web/src/lib/overlayStyles.ts) line 3) neutralizes
@@ -217,7 +217,7 @@ outsidePress | escapeKey | closePress | focusOut | imperativeAction | none`
 void | HTMLElement | null` and "Return `false` to replicate `event.preventDefault()`"
 ([menus.md][menus] line 53).
 
-That last signature is exactly the policy [pointerClose.ts](../../web/src/lib/pointerClose.ts)
+That last signature is exactly the policy [pointerClose.ts](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/lib/pointerClose.ts)
 reconstructs with document-level `pointerdown`/`keydown` listeners (lines 1-17): "Return it only
 when the keyboard closed the overlay; a click leaves focus alone" (line 21). On Base UI it is
 `finalFocus={(type) => type === "keyboard"}` with no global state. Call sites to rewrite:
@@ -243,7 +243,7 @@ Projects.tsx:79, 88, 145; Sidebar.tsx:543, 615; SessionHeader.tsx:154. Composer.
 Submenus are `SubmenuRoot`/`SubmenuTrigger`, and the base `DropdownMenuSubContent` composes
 `DropdownMenuContent` with `align="start" alignOffset={-3} side="right" sideOffset={0}`
 ([b-dropdown] lines 134-156); Piano's `DropdownMenuSubContent` wrapper
-([PianoDropdownMenu.tsx](../../web/src/components/PianoDropdownMenu.tsx) lines 49-65) would lose
+([PianoDropdownMenu.tsx](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/PianoDropdownMenu.tsx) lines 49-65) would lose
 its `--radix-…-available-height` class for `max-h-(--available-height)`.
 
 ### 2.6 Tooltip
@@ -257,7 +257,7 @@ it to 0 ([ui/tooltip.tsx](../../web/src/components/ui/tooltip.tsx) line 8) as th
 Opening on focus differs. Radix opens on any focus not preceded by a pointerdown on the trigger
 (`if (!isPointerDownRef.current) context.onOpen()`, installed
 `@radix-ui/react-tooltip/dist/index.mjs` lines 209-211), which is why
-[PianoTooltip.tsx](../../web/src/components/PianoTooltip.tsx) lines 12-21 wraps `onFocus` with
+[PianoTooltip.tsx](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/PianoTooltip.tsx) lines 12-21 wraps `onFocus` with
 `preventPointerFocus`. Base UI's trigger uses the vendored `useFocus`, which returns early when
 `!matchesFocusVisible(target)` ([useFocus.ts][bu-usefocus] line 146), so a tooltip opens on focus
 only when the browser would draw a focus ring. The `TooltipTrigger` wrapper likely becomes
@@ -325,7 +325,7 @@ slider is ContextDetails.tsx:143-149 (`value={[position]}`, `([value]) => …`).
 ### 2.11 PianoSidebarReveal
 
 This is the one Piano file that composes Radix directly: `Dialog.Portal`, `Dialog.Content` and
-`Dialog.Close asChild` ([PianoSidebarReveal.tsx](../../web/src/components/PianoSidebarReveal.tsx)
+`Dialog.Close asChild` ([PianoSidebarReveal.tsx](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/PianoSidebarReveal.tsx)
 lines 1, 50-51, 70) with `onOpenAutoFocus`/`onCloseAutoFocus` (lines 57-65). On Base UI it
 becomes `Dialog.Portal > Dialog.Popup` with `initialFocus={() => !dragging && content.current}`
 style logic and `finalFocus={() => { restoreFocus(); return false }}` (shape per §2.4), and

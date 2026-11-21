@@ -94,7 +94,7 @@ export PIANO_SESSION_ORIGIN=$WEB_URL
 EOF
 
 cd "$ROOT"
-# The server passes no launch variable on to its children (server/ChildEnvironment.ts); see Gotchas
+# The server passes no launch variable on to its children (server/shared/ChildEnvironment.ts); see Gotchas
 # for PIANO_API_SOCKET.
 detach env -u PIANO_API_SOCKET \
   HOME="$RUN/home" HOST=127.0.0.1 PORT="$PORT" PIANO_DB_PATH="$DB" \

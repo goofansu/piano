@@ -1,0 +1,915 @@
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import fs, { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import fsPromises from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { after, type TestContext, test } from "node:test";
+import { NodeServices } from "@effect/platform-node";
+import { Effect, Fiber, Layer, type Scope, Stream } from "effect";
+import { PianoCoreLive } from "../../../../server/app/PianoServices.ts";
+import {
+  type SidebarMessage,
+  SidebarView,
+} from "../../../../server/features/navigation/SidebarView.ts";
+import { PiCli } from "../../../../server/features/sessions/pi/PiCli.ts";
+import { SessionHosts } from "../../../../server/features/sessions/SessionHosts.ts";
+import { listWorktrees } from "../../../../server/features/workspace/worktrees/Worktrees.ts";
+import { DirectoryFacts } from "../../../../server/shared/DirectoryFacts.ts";
+import { Registry, RegistryDatabasePath } from "../../../../server/shared/registry/Registry.ts";
+import type { WorktreeDiscovery } from "../../../../shared/wire.ts";
+
+const root = realpathSync(mkdtempSync(join(tmpdir(), "piano-sidebar-")));
+const first = join(root, "first"),
+  second = join(root, "second");
+mkdirSync(first);
+mkdirSync(second);
+process.env.PI_CODING_AGENT_DIR = join(root, "agent");
+process.env.PI_CODING_AGENT_SESSION_DIR = join(root, "sessions");
+mkdirSync(join(root, "sessions"));
+after(() => rmSync(root, { recursive: true, force: true }));
+
+const slowGit = () => {
+  let open: () => void = () => {};
+  let entered: () => void = () => {};
+  let gate: Promise<void> | undefined;
+  const git = {
+    calls: 0,
+    hold: () => {
+      gate = new Promise((resolve) => {
+        open = resolve;
+      });
+      const waiting = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      return Effect.promise(() => waiting);
+    },
+    release: () => {
+      gate = undefined;
+      open();
+    },
+    discover: (_folder: string) =>
+      Effect.promise(async (): Promise<WorktreeDiscovery> => {
+        git.calls++;
+        if (gate) entered();
+        await gate;
+        return {
+          status: "non-git",
+          observedAt: new Date(1_700_000_000_000 + git.calls).toISOString(),
+        };
+      }),
+  };
+  return git;
+};
+
+let databases = 0;
+const run = <A, E>(
+  git: ReturnType<typeof slowGit>,
+  effect: Effect.Effect<A, E, SidebarView | DirectoryFacts | Registry | SessionHosts | Scope.Scope>,
+  cli = "../../../fake-pi.mjs",
+  extraArgs: readonly string[] = [],
+) => {
+  const layer = PianoCoreLive({ idleMs: 0, discover: git.discover }).pipe(
+    Layer.provide(NodeServices.layer),
+  );
+  return Effect.runPromise(
+    effect.pipe(
+      Effect.scoped,
+      Effect.provide(layer),
+      Effect.provideService(PiCli, {
+        node: process.execPath,
+        cli: new URL(cli, import.meta.url).pathname,
+        extraArgs,
+      }),
+      Effect.provideService(RegistryDatabasePath, join(root, `registry-${++databases}.db`)),
+      Effect.timeout("10 seconds"),
+    ),
+  );
+};
+const nextView = (view: SidebarView["Service"], match: (m: SidebarMessage) => boolean) =>
+  view.subscribe.pipe(
+    Effect.flatMap((s) => s.pipe(Stream.filter(match), Stream.take(1), Stream.runCollect)),
+    Effect.map((c) => [...c][0]!),
+  );
+const titleOf = (m: SidebarMessage) => m.sessionReferences?.[0]?.title;
+
+test("INV-06: changes during discovery coalesce into one more run; a late subscriber gets the latest view", async () => {
+  const git = slowGit();
+  await run(
+    git,
+    Effect.gen(function* () {
+      const registry = yield* Registry,
+        view = yield* SidebarView;
+      yield* registry.addFolder(first);
+      yield* view.fresh;
+      const before = git.calls;
+      const held = git.hold();
+      yield* view.refresh;
+      yield* held;
+      yield* Effect.forEach(
+        Array.from({ length: 20 }, (_, i) => i),
+        (i) => registry.addSession(first, `s${i}`),
+        { concurrency: "unbounded" },
+      );
+      const fresh = yield* Effect.forkChild(view.fresh, { startImmediately: true });
+      git.release();
+      const built = yield* Fiber.join(fresh);
+      assert.equal(
+        git.calls - before,
+        2,
+        "the held run plus one run for everything that changed during it",
+      );
+      assert.equal(built.sessionReferences?.length, 20);
+
+      const late = yield* nextView(view, () => true);
+      assert.deepEqual(
+        [late.folders.map((f) => f.path), late.sessionReferences?.length],
+        [[first], 20],
+        "a late subscriber starts from the latest view",
+      );
+    }),
+  );
+});
+
+test("INV-06: a registry-only change publishes before Git answers; a later change starts a fresh run", async () => {
+  const git = slowGit();
+  await run(
+    git,
+    Effect.gen(function* () {
+      const registry = yield* Registry,
+        view = yield* SidebarView;
+      yield* registry.addFolder(first);
+      yield* registry.addSession(first, "s1", "Before");
+      yield* view.fresh;
+      const runs = git.calls;
+
+      git.hold();
+      yield* registry.mirrorSession(first, "s1", { sessionName: "After" });
+      assert.equal(titleOf(yield* nextView(view, () => true)), "After");
+      git.release();
+
+      yield* registry.addFolder(second);
+      const grown = yield* nextView(view, (m) => m.folders.length === 2);
+      assert.deepEqual(grown.folders.map((f) => f.path).sort(), [first, second]);
+      assert.ok(git.calls > runs, "the change after a finished run rediscovered");
+    }),
+  );
+});
+
+test("INV-01/06/07: a prompt, rename, pin or membership starts no reader; sessions and folders start only theirs", async (t) => {
+  const git = slowGit();
+  await run(
+    git,
+    Effect.gen(function* () {
+      const registry = yield* Registry,
+        view = yield* SidebarView;
+      yield* registry.addFolder(first);
+      yield* registry.addSession(first, "s1", "Before");
+      yield* view.fresh;
+      const quiet = git.calls;
+      let scans = 0,
+        reads = 0;
+      const readdir = fsPromises.readdir;
+      t.after(() => {
+        t.mock.restoreAll();
+        syncBuiltinESMExports();
+      });
+      t.mock.method(fsPromises, "readdir", (...args: unknown[]) => {
+        if (args[0] === join(root, "sessions")) scans++;
+        return Reflect.apply(readdir, fsPromises, args);
+      });
+      syncBuiltinESMExports();
+      const read = fs.read;
+      t.mock.method(fs, "read", (...args: unknown[]) => {
+        reads++;
+        return Reflect.apply(read, fs, args);
+      });
+
+      for (let i = 0; i < 5; i++) yield* registry.touchSession(first, "s1", `prompt ${i}`);
+      yield* registry.mirrorSession(first, "s1", { sessionName: "After" });
+      yield* registry.pinSession(first, "s1", true);
+      yield* registry.saveProject({ id: "outcome", name: "Outcome" });
+      const shown = yield* nextView(view, () => true);
+      assert.deepEqual(
+        [titleOf(shown), shown.sessionReferences?.[0]?.pinned, shown.projects?.length],
+        ["After", true, 1],
+        "the metadata reached browsers from the last observation",
+      );
+
+      yield* Effect.yieldNow;
+      assert.equal(git.calls, quiet, "no discovery run for visible metadata or a project row");
+      assert.equal(scans, 0, "no history scan for visible metadata or a project row");
+
+      yield* registry.assignProject(first, "s1", "outcome");
+      const assigned = yield* nextView(
+        view,
+        (m) => m.sessionReferences?.[0]?.projectId === "outcome",
+      );
+      assert.equal(assigned.sessionReferences?.[0]?.unavailable, "history");
+      yield* Effect.yieldNow;
+      assert.equal(scans, 0, "project membership started no history scan");
+      assert.equal(git.calls, quiet, "project membership started no Git discovery");
+
+      yield* registry.addSession(first, "s2", "Added");
+      const judged = yield* nextView(
+        view,
+        (m) => m.sessionReferences?.find((s) => s.sessionId === "s2")?.unavailable === "history",
+      );
+      assert.equal(judged.sessionReferences?.length, 2);
+      yield* Effect.yieldNow;
+      assert.ok(scans > 0, "a new session was judged");
+      assert.equal(git.calls, quiet, "a new session started no Git discovery");
+
+      const scanned = scans,
+        headers = reads;
+      yield* registry.addFolder(second);
+      const grown = yield* nextView(view, (m) => m.folders.length === 2);
+      assert.deepEqual(grown.folders.map((f) => f.path).sort(), [first, second]);
+      yield* Effect.yieldNow;
+      assert.ok(git.calls > quiet, "a new folder was discovered");
+      assert.deepEqual(
+        [scans - scanned, reads - headers],
+        [0, 0],
+        "a new folder started no history scan or header read",
+      );
+    }),
+  );
+});
+
+test("INV-01: a registry write made outside any browser request reaches the sidebar; cached statistics do not, a pull request link does", async () => {
+  const git = slowGit();
+  await run(
+    git,
+    Effect.gen(function* () {
+      const registry = yield* Registry,
+        view = yield* SidebarView,
+        hosts = yield* SessionHosts;
+      yield* registry.addFolder(first);
+      yield* view.fresh;
+      yield* registry.addSession(first, "pi-named");
+      const session = yield* hosts.open({ cwd: first, sessionId: "pi-named" });
+      yield* session.act({ _tag: "set_name", name: "Named by Pi" });
+      assert.equal(
+        titleOf(yield* nextView(view, (m) => titleOf(m) === "Named by Pi")),
+        "Named by Pi",
+      );
+
+      yield* view.fresh;
+      const views = yield* view.subscribe.pipe(
+        Effect.flatMap((s) =>
+          s.pipe(Stream.take(2), Stream.runCollect, Effect.forkChild({ startImmediately: true })),
+        ),
+      );
+      yield* registry.mirrorSession(first, "pi-named", {
+        stats: { cost: 1, statsUpdatedAt: Date.now() },
+      });
+      const named = (yield* registry.get).sessions.find((s) => s.sessionId === "pi-named")!;
+      yield* registry.touchSession(first, "pi-named");
+      const [, next] = [...(yield* Fiber.join(views))];
+      const updatedAt = (yield* registry.get).sessions[0]?.updatedAt;
+      assert.equal(
+        next?.sessionReferences?.[0]?.updatedAt,
+        updatedAt,
+        "the view after the statistics write is the touch",
+      );
+      const shown = next?.sessionReferences?.[0] ?? {};
+      for (const hidden of ["stats", "pullRequest"])
+        assert.equal(hidden in shown, false, `${hidden} stays off the wire`);
+
+      const runs = git.calls;
+      const link = { url: "https://github.com/o/r/pull/1", source: "manual" } as const;
+      const [linkedView] = yield* Effect.all(
+        [
+          nextView(view, (m) => m.sessionReferences?.[0]?.pullRequest?.url === link.url),
+          registry.setSessionLink(named, "pullRequest", link),
+        ],
+        { concurrency: "unbounded" },
+      );
+      assert.deepEqual(linkedView.sessionReferences?.[0]?.pullRequest, link);
+      assert.equal(git.calls, runs, "a link write starts no Git run");
+      const linkedEntry = (yield* registry.get).sessions.find((s) => s.sessionId === "pi-named")!;
+      const [removedView] = yield* Effect.all(
+        [
+          nextView(view, (m) => m.sessionReferences?.[0]?.pullRequest === null),
+          registry.setSessionLink(linkedEntry, "pullRequest", null),
+        ],
+        { concurrency: "unbounded" },
+      );
+      assert.equal(
+        removedView.sessionReferences?.[0]?.pullRequest,
+        null,
+        "removal reaches the wire",
+      );
+    }),
+  );
+});
+
+test("INV-01/INV-07: a session reference keeps its registry creation time and workspace after its folder closes", async () => {
+  const git = slowGit();
+  await run(
+    git,
+    Effect.gen(function* () {
+      const registry = yield* Registry,
+        view = yield* SidebarView;
+      yield* registry.addFolder(first);
+      yield* registry.addSession(first, "kept", "Kept");
+      const entry = (yield* registry.get).sessions[0]!;
+      const workspaceId = (yield* registry.get).workspaces.find((w) => w.path === first)!.id;
+      const open = (yield* view.fresh).sessionReferences?.[0];
+      assert.deepEqual(
+        open && [open.createdAt, open.workspaceId, open.branch],
+        [entry.createdAt, workspaceId, null],
+        "non-Git discovery knows no branch",
+      );
+
+      yield* registry.removeFolder(first);
+      const closed = yield* view.fresh;
+      assert.deepEqual(closed.folders, []);
+      const ref = closed.sessionReferences?.[0];
+      assert.deepEqual(ref && [ref.sessionId, ref.createdAt, ref.workspaceId, ref.branch], [
+        "kept",
+        entry.createdAt,
+        workspaceId,
+        null,
+      ]);
+    }),
+  );
+});
+
+test("INV-01/07: a removed worktree's sessions keep the last branch Git reported for it; a worktree Git still lists keeps Git's", async () => {
+  const live = join(root, "first.live"),
+    detached = join(root, "first.detached"),
+    removed = join(root, "first.removed");
+  for (const dir of [live, detached, removed]) mkdirSync(dir);
+  let listing: "all" | "failed" | "gone" = "all";
+  const git = {
+    ...slowGit(),
+    discover: (folder: string) =>
+      Effect.sync((): WorktreeDiscovery => {
+        const observedAt = new Date(1_700_000_000_000).toISOString();
+        if (listing === "failed")
+          return { status: "error", observedAt, detail: "fatal: index.lock exists" };
+        const main = { path: folder, branch: "develop", detached: false, prunable: false };
+        return {
+          status: "ready",
+          observedAt,
+          currentPath: folder,
+          worktrees:
+            listing === "gone"
+              ? [main]
+              : [
+                  main,
+                  { path: live, branch: "renamed-by-git", detached: false, prunable: false },
+                  { path: detached, branch: null, detached: true, prunable: false },
+                  { path: removed, branch: "feat-b", detached: false, prunable: false },
+                ],
+        };
+      }),
+  };
+  await run(
+    git,
+    Effect.gen(function* () {
+      const registry = yield* Registry,
+        view = yield* SidebarView;
+      yield* registry.addFolder(first);
+      for (const [path, branch] of [
+        [live, "registered-live"],
+        [detached, "registered-detached"],
+        [removed, "feat-a"],
+      ] as const)
+        yield* registry.addWorktree({ folder: first, path, branch });
+      for (const cwd of [first, live, detached, removed]) yield* registry.addSession(cwd, cwd);
+      const shown = (m: SidebarMessage) =>
+        Object.fromEntries((m.sessionReferences ?? []).map((r) => [r.cwd, r.branch]));
+      assert.deepEqual(shown(yield* view.fresh), {
+        [first]: "develop",
+        [live]: "renamed-by-git",
+        [detached]: null,
+        [removed]: "feat-b",
+      });
+
+      listing = "failed";
+      assert.deepEqual(
+        shown(yield* view.fresh),
+        { [first]: null, [live]: null, [detached]: null, [removed]: null },
+        "a failed read shows no branch",
+      );
+
+      listing = "gone";
+      assert.deepEqual(
+        shown(yield* view.fresh),
+        {
+          [first]: "develop",
+          [live]: "renamed-by-git",
+          [detached]: "registered-detached",
+          [removed]: "feat-b",
+        },
+        "once Git no longer lists them, each shows the last branch Git reported; a detached checkout or failed read reported none",
+      );
+
+      yield* registry.removeFolder(first);
+      assert.deepEqual(
+        shown(yield* view.fresh),
+        {
+          [first]: null,
+          [live]: "renamed-by-git",
+          [detached]: "registered-detached",
+          [removed]: "feat-b",
+        },
+        "a closed folder's worktrees keep it too",
+      );
+    }),
+  );
+});
+
+test("INV-06: while Git discovery fails, a worktree's sessions show no branch rather than the saved one", async () => {
+  const linked = join(root, "first.switched");
+  mkdirSync(linked);
+  const git = {
+    ...slowGit(),
+    discover: (_folder: string) =>
+      Effect.succeed<WorktreeDiscovery>({
+        status: "error",
+        observedAt: new Date(1_700_000_000_000).toISOString(),
+        detail: "fatal: Unable to create '.git/index.lock': File exists.",
+      }),
+  };
+  await run(
+    git,
+    Effect.gen(function* () {
+      const registry = yield* Registry,
+        view = yield* SidebarView;
+      yield* registry.addFolder(first);
+      yield* registry.addWorktree({
+        folder: first,
+        path: linked,
+        branch: "saved-at-registration",
+      });
+      for (const cwd of [first, linked]) yield* registry.addSession(cwd, cwd);
+      const branches = Object.fromEntries(
+        ((yield* view.fresh).sessionReferences ?? []).map((r) => [r.cwd, r.branch]),
+      );
+      assert.deepEqual(branches, { [first]: null, [linked]: null });
+    }),
+  );
+});
+
+test("INV-01: a repeated observation that found nothing new publishes no view; a real change still does", async () => {
+  const git = slowGit();
+  await run(
+    git,
+    Effect.gen(function* () {
+      const registry = yield* Registry,
+        view = yield* SidebarView,
+        facts = yield* DirectoryFacts;
+      yield* registry.addFolder(first);
+      yield* registry.addSession(first, "s1", "One");
+      yield* view.fresh;
+
+      const views = yield* view.subscribe.pipe(
+        Effect.flatMap((s) =>
+          s.pipe(Stream.take(2), Stream.runCollect, Effect.forkChild({ startImmediately: true })),
+        ),
+      );
+      const runs = git.calls;
+      yield* view.fresh;
+      yield* view.fresh;
+      yield* facts.invalidate;
+      assert.ok(git.calls > runs, "the repeated observations really ran");
+
+      yield* registry.addSession(first, "s2", "Two");
+      const [initial, next] = [...(yield* Fiber.join(views))];
+      assert.equal(
+        initial?.sessionReferences?.length,
+        1,
+        "the subscriber starts from the latest view",
+      );
+      assert.deepEqual(
+        next?.sessionReferences?.map((s) => s.title),
+        ["One", "Two"],
+        "the next view is the new session, not a repeat of the one already shown",
+      );
+    }),
+  );
+});
+
+test("INV-01: a trust decision reaches the sidebar without a registry write", async () => {
+  const skilled = join(root, "skilled");
+  mkdirSync(join(skilled, ".agents/skills/hello"), { recursive: true });
+  writeFileSync(
+    join(skilled, ".agents/skills/hello/SKILL.md"),
+    "---\nname: hello\ndescription: say hello\n---\nSay hello.\n",
+  );
+  const git = slowGit();
+  await run(
+    git,
+    Effect.gen(function* () {
+      const registry = yield* Registry,
+        view = yield* SidebarView,
+        facts = yield* DirectoryFacts;
+      yield* registry.addFolder(skilled);
+      const trustIn = (m: SidebarMessage) => m.folders[0]?.worktrees[0]?.trust;
+      assert.deepEqual(trustIn(yield* view.fresh), { required: true, trusted: false });
+      const runs = git.calls;
+
+      git.hold();
+      const next = yield* nextView(view, (m) => trustIn(m)?.trusted === true).pipe(
+        Effect.forkChild({ startImmediately: true }),
+      );
+      yield* facts.setTrust(skilled, true);
+      assert.deepEqual(trustIn(yield* Fiber.join(next)), { required: true, trusted: true });
+      assert.equal(git.calls, runs, "no discovery run was needed");
+      git.release();
+    }),
+  );
+});
+
+test("INV-01/02/06: retirement rechecks saved history without waiting for Git or explicit refresh", async () => {
+  const git = slowGit();
+  await run(
+    git,
+    Effect.gen(function* () {
+      const registry = yield* Registry,
+        hosts = yield* SessionHosts,
+        view = yield* SidebarView;
+      yield* registry.saveProject({ id: "lifecycle", name: "Lifecycle" });
+      yield* registry.onChange((before, after) =>
+        after.sessions.length > before.sessions.length
+          ? view.fresh.pipe(
+              Effect.tap((m) =>
+                Effect.sync(() => {
+                  const id = after.sessions.at(-1)!.sessionId;
+                  assert.equal(
+                    m.sessionReferences?.find((s) => s.sessionId === id)?.unavailable,
+                    "history",
+                  );
+                }),
+              ),
+            )
+          : Effect.void,
+      );
+      const session = yield* hosts.create({ cwd: first, projectId: "lifecycle", options: {} });
+      const id = session.spec.sessionId;
+      const ref = (m: SidebarMessage) => m.sessionReferences?.find((s) => s.sessionId === id);
+      yield* view.fresh;
+      const held = git.hold();
+      const full = yield* view.fresh.pipe(Effect.forkChild({ startImmediately: true }));
+      yield* held;
+      const runs = git.calls;
+      yield* registry.addFolder(second);
+      try {
+        const written = yield* session.events.pipe(
+          Stream.filter((e) => e._tag === "message_end" && e.message.text === `Final ${id}`),
+          Stream.take(1),
+          Stream.runDrain,
+          Effect.forkChild({ startImmediately: true }),
+        );
+        yield* session.act({ _tag: "prompt", text: "/final" });
+        yield* Fiber.join(written);
+        yield* hosts.release(first, id);
+        yield* registry.pinSession(first, id, true);
+        const available = yield* nextView(
+          view,
+          (m) => ref(m)?.unavailable === undefined && !!ref(m)?.pinned,
+        );
+        assert.equal(ref(available)?.unavailable, undefined);
+        assert.equal(git.calls, runs, "retirement did not start Git discovery");
+        const saved = yield* hosts.read(first, id);
+        assert.equal(saved._tag, "saved");
+        if (saved._tag === "saved")
+          assert.deepEqual(
+            saved.snapshot.messages.map((m) => m.text),
+            [`Final ${id}`],
+          );
+      } finally {
+        git.release();
+      }
+      assert.equal(ref(yield* Fiber.join(full))?.unavailable, undefined);
+    }),
+    "../../../fake-host-pi.mjs",
+  );
+});
+
+test("INV-01/02: failed acquisition rechecks history saved before readiness failed", async () => {
+  await run(
+    slowGit(),
+    Effect.gen(function* () {
+      const registry = yield* Registry,
+        hosts = yield* SessionHosts,
+        view = yield* SidebarView;
+      yield* registry.saveProject({ id: "failed-start", name: "Failed start" });
+      yield* registry.onChange((before, after) =>
+        after.sessions.length > before.sessions.length ? view.fresh : Effect.void,
+      );
+      const result = yield* hosts
+        .create({ cwd: second, projectId: "failed-start", options: {} })
+        .pipe(Effect.result);
+      assert.equal(result._tag, "Failure");
+      if (result._tag === "Failure")
+        assert.match(result.failure.detail, /fixture readiness failure/);
+      const id = (yield* registry.get).sessions[0]!.sessionId;
+      const available = yield* nextView(
+        view,
+        (m) => m.sessionReferences?.some((s) => s.sessionId === id && !s.unavailable) === true,
+      );
+      assert.equal(available.sessionReferences?.[0]?.unavailable, undefined);
+      assert.deepEqual(yield* hosts.list, [], "failed acquisition left no running host");
+      const saved = yield* hosts.read(second, id);
+      assert.equal(saved._tag, "saved");
+      if (saved._tag === "saved")
+        assert.deepEqual(
+          saved.snapshot.messages.map((m) => m.text),
+          ["Saved before readiness failed"],
+        );
+    }),
+    "../../../fake-host-pi.mjs",
+    ["--persist-before-readiness-failure"],
+  );
+});
+
+const holdHistoryRead = (t: TestContext) => {
+  let entered: () => void = () => {};
+  const waiting = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  let release: () => void = () => {};
+  let armed = true;
+  const read = fs.read;
+  t.mock.method(fs, "read", (...args: unknown[]) => {
+    const callback = args.pop() as (...result: unknown[]) => void;
+    const hold = armed;
+    armed = false;
+    return Reflect.apply(read, fs, [
+      ...args,
+      (...result: unknown[]) => {
+        if (!hold) return callback(...result);
+        release = () => {
+          release = () => {};
+          callback(...result);
+        };
+        entered();
+      },
+    ]);
+  });
+  return { entered: Effect.promise(() => waiting), release: () => release() };
+};
+
+test("INV-01/05: fresh awaits availability; a lifetime during its read invalidates the old verdict", async (t) => {
+  const git = slowGit();
+  const cwd = join(root, "racing-history");
+  mkdirSync(cwd);
+  seedHistory(cwd, "marker");
+  await run(
+    git,
+    Effect.gen(function* () {
+      const registry = yield* Registry,
+        hosts = yield* SessionHosts,
+        view = yield* SidebarView;
+      yield* registry.addFolder(cwd);
+      yield* registry.saveProject({ id: "racing", name: "Racing" });
+      yield* registry.addSession(cwd, "rapid", undefined, "racing");
+      const before = yield* view.fresh;
+      const ref = (m: SidebarMessage) => m.sessionReferences?.find((s) => s.sessionId === "rapid");
+      assert.equal(ref(before)?.unavailable, "history");
+      const gitUpdated = yield* nextView(view, (m) => m.folders.length === 2).pipe(
+        Effect.forkChild({ startImmediately: true }),
+      );
+      seedHistory(cwd, "new-marker");
+      const held = holdHistoryRead(t);
+      let freshDone = false;
+      const full = yield* view.fresh.pipe(
+        Effect.tap(() =>
+          Effect.sync(() => {
+            freshDone = true;
+          }),
+        ),
+        Effect.forkChild({ startImmediately: true }),
+      );
+      yield* held.entered;
+      try {
+        yield* registry.addFolder(second);
+        yield* Fiber.join(gitUpdated);
+        yield* Effect.yieldNow;
+        assert.equal(freshDone, false, "Git completed, but fresh still owes an availability read");
+        const runs = git.calls;
+        const session = yield* hosts.open({ cwd, sessionId: "rapid" });
+        const persisted = yield* session.events.pipe(
+          Stream.filter((e) => e._tag === "message_end" && e.message.text === "Final rapid"),
+          Stream.take(1),
+          Stream.runDrain,
+          Effect.forkChild({ startImmediately: true }),
+        );
+        yield* session.act({ _tag: "prompt", text: "/final" });
+        yield* Fiber.join(persisted);
+        yield* hosts.release(cwd, "rapid");
+        yield* registry.pinSession(cwd, "rapid", true);
+        const next = yield* view.subscribe.pipe(
+          Effect.flatMap((s) => s.pipe(Stream.drop(1), Stream.take(1), Stream.runCollect)),
+          Effect.forkChild({ startImmediately: true }),
+        );
+        held.release();
+        assert.equal(ref([...(yield* Fiber.join(next))][0]!)?.unavailable, undefined);
+        assert.equal(ref(yield* Fiber.join(full))?.unavailable, undefined);
+        assert.equal(git.calls, runs, "the whole host lifetime needed no additional Git run");
+      } finally {
+        held.release();
+      }
+    }),
+    "../../../fake-host-pi.mjs",
+  );
+});
+
+test("INV-01/06: established-host prompts do not rescan history; a never-written session stays unavailable after release", async (t) => {
+  const git = slowGit();
+  await run(
+    git,
+    Effect.gen(function* () {
+      const registry = yield* Registry,
+        hosts = yield* SessionHosts,
+        view = yield* SidebarView;
+      seedHistory(first, "performance-marker");
+      yield* registry.saveProject({ id: "no-history", name: "No history" });
+      const session = yield* hosts.create({ cwd: first, projectId: "no-history", options: {} });
+      const id = session.spec.sessionId;
+      const ref = (m: SidebarMessage) => m.sessionReferences?.find((s) => s.sessionId === id);
+      yield* view.fresh;
+      const runs = git.calls;
+      let reads = 0,
+        scans = 0;
+      const readdir = fsPromises.readdir;
+      t.after(() => {
+        t.mock.restoreAll();
+        syncBuiltinESMExports();
+      });
+      t.mock.method(fsPromises, "readdir", (...args: unknown[]) => {
+        if (args[0] === join(root, "sessions")) scans++;
+        return Reflect.apply(readdir, fsPromises, args);
+      });
+      syncBuiltinESMExports();
+      const read = fs.read;
+      t.mock.method(fs, "read", (...args: unknown[]) => {
+        reads++;
+        return Reflect.apply(read, fs, args);
+      });
+      for (let i = 0; i < 5; i++) {
+        const barrier = yield* session.events.pipe(
+          Stream.filter((e) => e._tag === "notice" && e.message === `barrier /prompt-${i}`),
+          Stream.take(1),
+          Stream.runDrain,
+          Effect.forkChild({ startImmediately: true }),
+        );
+        yield* session.act({ _tag: "prompt", text: `/prompt-${i}` });
+        yield* Fiber.join(barrier);
+      }
+      yield* Effect.yieldNow;
+      assert.equal(git.calls, runs, "five prompts add no Git discovery");
+      assert.equal(scans, 0, "five prompts start no history directory scans");
+      assert.equal(reads, 0, "five prompts add no history header reads");
+      t.diagnostic(
+        `five established-host prompts: ${git.calls - runs} Git runs, ${scans} history scans, ${reads} header reads`,
+      );
+      yield* hosts.release(first, id);
+      const missing = yield* nextView(view, (m) => ref(m)?.unavailable === "history");
+      assert.equal(ref(missing)?.unavailable, "history");
+      assert.ok(scans > 0, "retirement did inspect the real history directory");
+      t.diagnostic(
+        `retirement: ${git.calls - runs} Git runs, ${scans} history scans, ${reads} header reads`,
+      );
+    }),
+    "../../../fake-host-pi.mjs",
+  );
+});
+
+const seedHistory = (cwd: string, id: string) =>
+  writeFileSync(
+    join(root, "sessions", `${id}.jsonl`),
+    `${JSON.stringify({ type: "session", version: 3, id, cwd, timestamp: "2026-10-05T00:00:00Z" })}\n`,
+  );
+
+test("INV-01: the sidebar marks a session unavailable when its history or checkout is gone, in a project or not", async () => {
+  const kept = join(root, "kept"),
+    gone = join(root, "gone");
+  mkdirSync(kept);
+  mkdirSync(gone);
+  await run(
+    slowGit(),
+    Effect.gen(function* () {
+      const registry = yield* Registry,
+        view = yield* SidebarView;
+      yield* registry.addFolder(kept);
+      yield* registry.addFolder(gone);
+      yield* registry.saveProject({ id: "outcome", name: "Outcome" });
+      seedHistory(kept, "written");
+      seedHistory(gone, "removed");
+      seedHistory(kept, "loose-written");
+      seedHistory(gone, "loose-removed");
+      for (const [cwd, id] of [
+        [kept, "written"],
+        [kept, "never-written"],
+        [gone, "removed"],
+      ]) {
+        yield* registry.addSession(cwd, id);
+        yield* registry.assignProject(cwd, id, "outcome");
+      }
+      for (const [cwd, id] of [
+        [kept, "loose-written"],
+        [kept, "loose-never-written"],
+        [gone, "loose-removed"],
+      ])
+        yield* registry.addSession(cwd, id);
+      rmSync(gone, { recursive: true });
+      const unavailable = new Map(
+        (yield* view.fresh).sessionReferences?.map((s) => [s.sessionId, s.unavailable]),
+      );
+      assert.deepEqual(Object.fromEntries(unavailable), {
+        written: undefined,
+        "never-written": "history",
+        removed: "checkout",
+        "loose-written": undefined,
+        "loose-never-written": "history",
+        "loose-removed": "checkout",
+      });
+    }),
+  );
+});
+
+test("INV-06: a registered directory deleted outside Piano reads missing whatever Git says; one that cannot be read stays unknown", async () => {
+  const repo = join(root, "deleted-repo"),
+    linked = join(root, "deleted-repo.linked"),
+    plain = join(root, "deleted-plain"),
+    fenced = join(root, "fenced"),
+    hidden = join(fenced, "hidden");
+  const gitIn = (dir: string, ...args: string[]) =>
+    execFileSync("git", ["-C", dir, ...args], { stdio: "pipe" });
+  mkdirSync(repo);
+  gitIn(repo, "init", "--quiet", "-b", "main");
+  gitIn(
+    repo,
+    "-c",
+    "user.name=Test",
+    "-c",
+    "user.email=test@example.invalid",
+    "commit",
+    "--quiet",
+    "--allow-empty",
+    "-m",
+    "init",
+  );
+  gitIn(repo, "worktree", "add", "--quiet", "-b", "linked", linked);
+  mkdirSync(plain);
+  mkdirSync(hidden, { recursive: true });
+  await run(
+    { ...slowGit(), discover: listWorktrees },
+    Effect.gen(function* () {
+      const registry = yield* Registry,
+        view = yield* SidebarView;
+      for (const folder of [repo, plain, fenced]) yield* registry.addFolder(folder);
+      yield* registry.addWorktree({ folder: repo, path: linked, branch: "linked" });
+      yield* registry.addWorktree({ folder: fenced, path: hidden, branch: "" });
+      const statuses = (m: SidebarMessage) =>
+        Object.fromEntries(m.folders.flatMap((f) => f.worktrees.map((w) => [w.path, w.status])));
+      assert.deepEqual(statuses(yield* view.fresh), {
+        [repo]: "current",
+        [linked]: "current",
+        [plain]: "non-git",
+        [fenced]: "non-git",
+        [hidden]: "unknown",
+      });
+
+      rmSync(linked, { recursive: true });
+      rmSync(plain, { recursive: true });
+      assert.deepEqual(
+        statuses(yield* view.fresh),
+        {
+          [repo]: "current",
+          [linked]: "missing",
+          [plain]: "missing",
+          [fenced]: "non-git",
+          [hidden]: "unknown",
+        },
+        "a deleted linked worktree Git still lists as prunable, and a deleted non-Git folder, are missing",
+      );
+
+      rmSync(repo, { recursive: true });
+      fs.chmodSync(fenced, 0);
+      try {
+        const seen = statuses(yield* view.fresh);
+        assert.equal(
+          seen[repo],
+          "missing",
+          "a deleted repository root is missing, so New session disables it",
+        );
+        assert.equal(seen[linked], "missing");
+        if (process.getuid?.() !== 0)
+          assert.equal(
+            seen[hidden],
+            "unknown",
+            "a stat that fails for another reason stays unknown",
+          );
+      } finally {
+        fs.chmodSync(fenced, 0o755);
+      }
+    }),
+  );
+});

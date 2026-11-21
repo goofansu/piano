@@ -1,0 +1,122 @@
+import type { ApiKeyProvider } from "@shared/features/providers/providerApiKeys";
+import { useState } from "react";
+import { toast } from "sonner";
+import { ItemMedia } from "@/components/ui/item";
+import { changeProviderApiKey, providerApiKeys } from "@/features/providers/providerApi";
+import { settingsLoadView } from "@/features/settings/settingsLoadView";
+import {
+  SettingsGroup,
+  SettingsList,
+  SettingsLoadState,
+} from "@/features/settings/SettingsSectionFrame";
+import { ApiKeyDialog } from "@/shared/components/ApiKeyDialog";
+import { PianoButton } from "@/shared/components/PianoButton";
+import {
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/shared/components/PianoDropdownMenu";
+import { RemovalDialog } from "@/shared/components/RemovalDialog";
+import { ListRow, RowMenu, RowStatus } from "@/shared/components/RowActions";
+import { useObservation } from "@/shared/lib/useObservation";
+import { useSetupActions } from "@/shared/lib/useSetupActions";
+
+export function ApiKeySettings() {
+  const observed = useObservation("provider-api-keys", (signal) => providerApiKeys({ signal }));
+  const [editing, setEditing] = useState<ApiKeyProvider>();
+  const actions = useSetupActions<ApiKeyProvider>({
+    refresh: () => void observed.refresh(),
+    success: (text) => toast.success(text),
+  });
+  const removing = actions.confirmation;
+  const busy = actions.running !== undefined;
+  return (
+    <SettingsGroup id="settings-api-keys" title="API keys">
+      <SettingsLoadState
+        view={settingsLoadView(observed)}
+        noun="API keys"
+        retry={() => void observed.refresh()}
+      >
+        {(providers) => (
+          <SettingsList>
+            {providers.map((provider) => (
+              <ListRow
+                key={provider.id}
+                media={
+                  <ItemMedia variant="icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                      <use href={`/provider-logos/${provider.logo}.svg#logo`} />
+                    </svg>
+                  </ItemMedia>
+                }
+                title={provider.name}
+                menu={
+                  provider.saved && (
+                    <RowMenu label={`${provider.name} API key actions`} disabled={busy}>
+                      <DropdownMenuGroup>
+                        <DropdownMenuItem onClick={() => setEditing(provider)}>
+                          Replace key
+                        </DropdownMenuItem>
+                      </DropdownMenuGroup>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onClick={() => actions.confirm(provider)}
+                      >
+                        Remove key
+                      </DropdownMenuItem>
+                    </RowMenu>
+                  )
+                }
+                actions={
+                  !provider.saved && (
+                    <PianoButton
+                      variant="outline"
+                      size="sm"
+                      disabled={busy}
+                      aria-label={`Add ${provider.name} API key`}
+                      onClick={() => setEditing(provider)}
+                    >
+                      Add key
+                    </PianoButton>
+                  )
+                }
+              >
+                {provider.saved && <RowStatus>Saved</RowStatus>}
+              </ListRow>
+            ))}
+          </SettingsList>
+        )}
+      </SettingsLoadState>
+      {editing && (
+        <ApiKeyDialog
+          title={`${editing.saved ? "Replace" : "Add"} ${editing.name} API key`}
+          description="Saved in Pi on this machine. Start a new session to use it."
+          save={(key) => changeProviderApiKey({ action: "save", provider: editing.id, key })}
+          done={`${editing.name} API key saved`}
+          fallback="Could not save API key."
+          close={() => setEditing(undefined)}
+          refresh={() => void observed.refresh()}
+        />
+      )}
+      <RemovalDialog
+        open={!!removing}
+        title={`Remove ${removing?.name} API key?`}
+        description="Removes the saved key from Pi on this machine, without revoking it at the provider. Environment keys still apply."
+        action="Remove key"
+        progress="Removing…"
+        busy={busy}
+        cancel={actions.cancel}
+        confirm={() => {
+          if (!removing) return;
+          void actions.run({
+            id: removing.id,
+            run: () => changeProviderApiKey({ action: "remove", provider: removing.id }),
+            done: `${removing.name} API key removed`,
+            fallback: "Could not remove API key.",
+          });
+        }}
+      />
+    </SettingsGroup>
+  );
+}

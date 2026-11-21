@@ -27,6 +27,7 @@ storage, backups and browser origins.
 
 ## Develop
 
+See the [feature inventory and source layout](docs/README.md#feature-inventory) to find an owner.
 Install development dependencies with `npm ci`, then run `npm run verify` for the required
 typecheck, lint and module-test baseline. See [development setup and checks](docs/development.md)
 for tool prerequisites, focused checks and scratch browser journeys.

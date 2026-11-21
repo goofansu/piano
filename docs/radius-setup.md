@@ -6,7 +6,7 @@ does not change organization permissions or billing settings. See
 
 ## Boundaries
 
-- `server/RadiusSetup.ts` owns the narrow setup policy (INV-01/02/11/12); provider OAuth
+- `server/features/radius/RadiusSetup.ts` owns the narrow setup policy (INV-01/02/11/12); provider OAuth
   continues to use `ProviderLogin`.
 - Pi does not export its provider-auth MCP writer publicly, so the adapter imports the locked
   helper through `McpConfigEntries`. Recheck it on every Pi upgrade; see

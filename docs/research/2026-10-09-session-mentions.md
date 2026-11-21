@@ -23,19 +23,19 @@ implying that a clickable title lets Pi read another session automatically.
 
 ## What Piano already has
 
-- [`RegistryDatabase.ts`](../../server/RegistryDatabase.ts) stores session title, activity times,
+- [`RegistryDatabase.ts`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/RegistryDatabase.ts) stores session title, activity times,
   archive state and outcome `project_id`. Session identity is `(cwd, session_id)`; workspaces have
   stable IDs and `folder_path`. Existing indexes include `(archived, updated_at DESC)` and
   `(project_id, updated_at DESC)`. **SQL projects are outcome Projects, not Folders.**
-- [`Registry.ts`](../../server/Registry.ts) serves `get` from an in-memory `Ref`; SQLite persists
+- [`Registry.ts`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/Registry.ts) serves `get` from an in-memory `Ref`; SQLite persists
   changes, but reads are not currently a scoped SQL query API. Adding an index alone therefore
   will not accelerate the existing browser lookup path. See the
   [migration limitations](sqlite-registry.md#limits-and-operations).
 - [`Views.ts`](../../server/Views.ts) already builds Folder session lists and outcome-project
   references. Do not call those builders on each keystroke: they also discover worktrees or inspect
   history availability. Mentions need only registry metadata.
-- [`Composer.tsx`](../../web/src/components/Composer.tsx) uses
-  [`SlashTextarea.tsx`](../../web/src/components/SlashTextarea.tsx), which already handles a
+- [`Composer.tsx`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/Composer.tsx) uses
+  [`SlashTextarea.tsx`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/web/src/components/SlashTextarea.tsx), which already handles a
   textarea, anchored Popover/listbox, caret selection, IME, keyboard acceptance and stale-range guards.
   Slash discovery happens once per opening with local filtering. This is a good interaction seam,
   not a reason to reuse its command-discovery endpoint for sessions.

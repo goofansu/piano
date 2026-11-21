@@ -68,6 +68,8 @@ export default {
               ? "server"
               : undefined;
         if (!layer) return {};
+        const runtime = layer === "web" ? resolve(root, "web/src") : resolve(root, "server");
+        const sharedRuntimeModule = layer !== "shared" && within(file, resolve(runtime, "shared"));
         const report = (node, specifier, reason) =>
           context.report({ node, messageId: "boundary", data: { reason, specifier } });
         function check(node, source) {
@@ -108,8 +110,14 @@ export default {
                 ? !within(target, resolve(root, "web"))
                 : within(target, resolve(root, "shared")) ||
                   (layer === "web" && within(target, resolve(root, "web/src")));
-            if (!allowed) {
-              report(node, specifier, `${layer} cannot depend on ${relative(root, target)}`);
+            if (
+              !allowed ||
+              (sharedRuntimeModule &&
+                (within(target, resolve(runtime, "features")) ||
+                  within(target, resolve(runtime, "app"))))
+            ) {
+              const owner = sharedRuntimeModule ? `Shared ${layer} modules` : layer;
+              report(node, specifier, `${owner} cannot depend on ${relative(root, target)}`);
               break;
             }
           }

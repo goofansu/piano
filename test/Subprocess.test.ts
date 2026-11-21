@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { Effect } from "effect";
-import { run, runAsync, SubprocessError } from "../server/Subprocess.ts";
+import { run, runAsync, SubprocessError } from "../server/shared/Subprocess.ts";
 
 const node = (script: string, options: Partial<Parameters<typeof run>[0]> = {}) =>
   Effect.runPromise(
@@ -151,7 +151,7 @@ test("terminated runner releases inherited pipe handles so its host can exit", a
   try {
     const descendant = `require('node:fs').writeFileSync(${JSON.stringify(ready)}, String(process.pid)); setInterval(() => {}, 1000);`;
     const leader = `require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(descendant)}], { stdio: 'inherit' });`;
-    const harness = `import { runAsync } from ${JSON.stringify(new URL("../server/Subprocess.ts", import.meta.url).href)};
+    const harness = `import { runAsync } from ${JSON.stringify(new URL("../server/shared/Subprocess.ts", import.meta.url).href)};
       try { await runAsync({ command: process.execPath, args: ['-e', ${JSON.stringify(leader)}], timeout: 500 }); }
       catch (error) { if (error.reason !== 'timeout') throw error; console.log('settled'); }`;
     const result = await runAsync({

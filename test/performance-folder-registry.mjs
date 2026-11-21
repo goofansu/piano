@@ -8,8 +8,12 @@ import { monitorEventLoopDelay } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
 import { Layer, ManagedRuntime } from "effect";
 import WebSocket from "ws";
-import { Registry, RegistryDatabasePath, RegistryLive } from "../server/Registry.ts";
-import { openRegistryDatabase } from "../server/RegistryDatabase.ts";
+import {
+  Registry,
+  RegistryDatabasePath,
+  RegistryLive,
+} from "../server/shared/registry/Registry.ts";
+import { openRegistryDatabase } from "../server/shared/registry/RegistryDatabase.ts";
 import { seedRegistry } from "./fixtures/registry.ts";
 
 const output = resolve(process.argv[2] ?? "/tmp/piano-performance.json");

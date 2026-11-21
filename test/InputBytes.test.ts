@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { inputBytes } from "../server/InputBytes.ts";
+import { inputBytes } from "../server/shared/InputBytes.ts";
 
 test("input bytes match JSON for image envelopes, omissions, arrays and escaped UTF-8", () => {
   const sparse: unknown[] = [];

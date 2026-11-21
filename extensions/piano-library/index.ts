@@ -1,8 +1,12 @@
 import { type JsonValue, StringEnum } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { bool, obj, opt, type Static, str } from "@earendil-works/pi-schema";
-import { DESCRIPTION_MAX, NAME_MAX, TEXT_MAX } from "../../shared/drafts.ts";
-import { type LibraryKind, SAVE_PROMPT_TOOL, SAVE_SKILL_TOOL } from "../../shared/library.ts";
+import { DESCRIPTION_MAX, NAME_MAX, TEXT_MAX } from "../../shared/features/library/drafts.ts";
+import {
+  type LibraryKind,
+  SAVE_PROMPT_TOOL,
+  SAVE_SKILL_TOOL,
+} from "../../shared/features/library/library.ts";
 import { dispatchConfiguration } from "../piano-dispatch/NodeSocket.ts";
 import {
   type LibraryDeps,

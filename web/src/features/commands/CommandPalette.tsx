@@ -1,0 +1,437 @@
+import { cn } from "cn";
+import {
+  Fragment,
+  memo,
+  type ReactNode,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
+import type { AppState } from "@/app/store";
+import {
+  CommandIcon,
+  useGlobalCommands,
+  useSessionCommands,
+  useSessionProjectMenu,
+} from "@/features/commands/CommandHost";
+import { GlobalCommandIcon } from "@/features/commands/GlobalCommandIcon";
+import { createPaletteCatalog, PALETTE_NAME } from "@/features/commands/paletteModel";
+import {
+  type PaletteItem,
+  type PalettePage,
+  paletteItems,
+  paletteSelection,
+} from "@/features/commands/paletteSearch";
+import { usePaletteSearch } from "@/features/commands/usePaletteSearch";
+import { useNavigation } from "@/features/navigation/useNavigation";
+import { ProjectCommandIconView } from "@/features/projects/Projects";
+import {
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "@/shared/components/PianoCommand";
+import { abbrevPath } from "@/shared/lib/format";
+import { hasMod, isImeKey } from "@/shared/lib/keys";
+
+interface Props {
+  state: AppState;
+}
+
+function Current() {
+  return <span className="sr-only">current</span>;
+}
+
+export function CommandPalette({ state }: Props) {
+  const { palette: open, setPalette: onOpenChange } = useNavigation();
+  const [selected, setSelected] = useState("");
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.isComposing) return;
+      if (hasMod(e) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        onOpenChange(!open);
+      }
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  }, [open, onOpenChange]);
+  return (
+    <CommandDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={PALETTE_NAME}
+      description="Open a session or project, start a session, or change the view."
+      showCloseButton={false}
+      commandProps={{ shouldFilter: false, value: selected, onValueChange: setSelected }}
+      className="top-[18%] translate-y-0 sm:max-w-xl"
+    >
+      <PaletteContents
+        key={`${state.view.kind}:${state.session?.cwd}:${state.session?.sessionId}`}
+        state={state}
+        selected={selected}
+        setSelected={setSelected}
+      />
+    </CommandDialog>
+  );
+}
+
+function PaletteContents({
+  state,
+  selected,
+  setSelected,
+}: Props & { selected: string; setSelected: (value: string) => void }) {
+  const { palette: open, setPalette: onOpenChange, select } = useNavigation();
+  const [catalog] = useState(createPaletteCatalog);
+  const [search, setSearch] = useState("");
+  const [editing, setEditing] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  const list = useRef<HTMLDivElement>(null);
+  const { commands: globalCommandList, run: runCommand } = useGlobalCommands();
+  const commandRunner = useRef(runCommand);
+  commandRunner.current = runCommand;
+  const executeCommand = useCallback(
+    (command: Parameters<typeof runCommand>[0]) => commandRunner.current(command),
+    [],
+  );
+  const { commands: sessionCommandList } = useSessionCommands();
+  const sessionProject = useSessionProjectMenu();
+  const groups = catalog(state, {
+    globalCommands: globalCommandList,
+    sessionCommands: sessionCommandList,
+    sessionProject,
+  });
+  const results = usePaletteSearch(groups, search, editing || !open);
+  const pending = editing || results.pending;
+  const allowed = useRef(false);
+  allowed.current = open && !pending && !results.error;
+  const edit = useCallback(() => {
+    allowed.current = false;
+    setEditing(true);
+  }, []);
+  const commit = useCallback((query: string) => {
+    setSearch(query);
+    setEditing(false);
+  }, []);
+  const settled = useRef(search);
+  if (allowed.current) settled.current = search;
+  const ready = useCallback(() => allowed.current && input.current?.value === settled.current, []);
+  const run = useCallback(
+    (action: () => void) => {
+      if (!ready()) return;
+      onOpenChange(false);
+      action();
+    },
+    [onOpenChange, ready],
+  );
+  const changePage = useCallback(
+    (group: PalettePage["group"]["id"], page: number) => {
+      if (ready()) results.page(group, page);
+    },
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- page is the only member read.
+    [results.page, ready],
+  );
+  const replaceText = useRef<(text: string) => void>(() => {});
+  const editInput = useCallback(
+    (text: string) => {
+      if (ready()) replaceText.current(text);
+    },
+    [ready],
+  );
+  const selectionContext = useRef(results.selectionKey);
+  useLayoutEffect(() => {
+    if (pending) return;
+    const reset = selectionContext.current !== results.selectionKey;
+    selectionContext.current = results.selectionKey;
+    const next = paletteSelection(results.result, selected, reset);
+    if (next !== selected) setSelected(next);
+    if (reset || next !== selected) list.current?.scrollTo({ top: 0, behavior: "instant" });
+  }, [results.result, results.selectionKey, pending, selected, setSelected]);
+  const pointerSelects = useRef(false);
+  const keyed = useCallback(() => {
+    pointerSelects.current = false;
+  }, []);
+  // cmdk 1.1.1 scrolls to the row still marked aria-selected, which is the previous one here:
+  // the memoized rows re-render only after its layout effect. Scroll to the row by value instead.
+  useEffect(() => {
+    if (pointerSelects.current) return;
+    const row = list.current?.querySelector(`[cmdk-item][data-value="${CSS.escape(selected)}"]`);
+    if (!row) return;
+    if (row.parentElement?.firstElementChild === row)
+      row.closest("[cmdk-group]")?.querySelector("[cmdk-group-heading]")?.scrollIntoView({
+        block: "nearest",
+      });
+    row.scrollIntoView({ block: "nearest" });
+  }, [selected]);
+
+  return (
+    <PaletteInput
+      input={input}
+      active={open}
+      pending={pending}
+      edit={edit}
+      commit={commit}
+      keyed={keyed}
+    >
+      {(replace) => {
+        replaceText.current = replace;
+        return (
+          <CommandList
+            ref={list}
+            aria-busy={pending}
+            className="max-h-[min(24rem,60dvh)]"
+            onPointerMove={() => {
+              pointerSelects.current = true;
+            }}
+          >
+            <CommandEmpty>
+              {results.error
+                ? "Search unavailable. Close and reopen to retry."
+                : pending
+                  ? "Searching…"
+                  : "No sessions, projects or commands match."}
+            </CommandEmpty>
+            <PaletteResults
+              pages={results.result}
+              run={run}
+              edit={editInput}
+              select={select}
+              runCommand={executeCommand}
+              page={changePage}
+            />
+          </CommandList>
+        );
+      }}
+    </PaletteInput>
+  );
+}
+
+const PaletteInput = memo(function PaletteInput({
+  input,
+  active,
+  pending,
+  edit,
+  commit,
+  keyed,
+  children,
+}: {
+  input: RefObject<HTMLInputElement | null>;
+  active: boolean;
+  pending: boolean;
+  edit: () => void;
+  commit: (query: string) => void;
+  keyed: () => void;
+  children: (replaceText: (value: string) => void) => ReactNode;
+}) {
+  const [text, setText] = useState("");
+  const composing = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  useEffect(() => {
+    if (active) return;
+    clearTimeout(timer.current);
+    composing.current = false;
+    setText("");
+    commit("");
+  }, [active, commit]);
+  const schedule = (value: string) => {
+    clearTimeout(timer.current);
+    if (composing.current) return;
+    if (!value.trim()) commit(value);
+    else timer.current = setTimeout(() => commit(value), 80);
+  };
+  return (
+    <>
+      <CommandInput
+        ref={input}
+        value={text}
+        onValueChange={(value) => {
+          setText(value);
+          edit();
+          schedule(value);
+        }}
+        onCompositionStart={() => {
+          composing.current = true;
+          clearTimeout(timer.current);
+          edit();
+        }}
+        onCompositionEnd={(event) => {
+          composing.current = false;
+          schedule(event.currentTarget.value);
+        }}
+        onKeyDown={(event) => {
+          keyed();
+          if (pending && ["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key))
+            event.preventDefault();
+          if (event.key !== "Enter") return;
+          if (isImeKey(event) || composing.current || event.repeat) event.preventDefault();
+          else if (pending) {
+            event.preventDefault();
+            clearTimeout(timer.current);
+            commit(event.currentTarget.value);
+          }
+        }}
+        placeholder={`${PALETTE_NAME}…`}
+        aria-label={PALETTE_NAME}
+      />
+      {children((value) => {
+        clearTimeout(timer.current);
+        composing.current = false;
+        edit();
+        setText(value);
+        commit(value);
+        input.current?.focus();
+      })}
+    </>
+  );
+});
+
+const PaletteResults = memo(function PaletteResults({
+  pages,
+  run,
+  edit,
+  select,
+  runCommand,
+  page,
+}: {
+  pages: PalettePage[];
+  run: (action: () => void) => void;
+  edit: (text: string) => void;
+  select: ReturnType<typeof useNavigation>["select"];
+  runCommand: ReturnType<typeof useGlobalCommands>["run"];
+  page: (group: PalettePage["group"]["id"], page: number) => void;
+}) {
+  const row = (item: Extract<PaletteItem, { kind: "row" }>) => {
+    const { value, enabled } = item;
+    switch (item.group) {
+      case "sessions": {
+        const r = item.row;
+        return (
+          <CommandItem
+            key={value}
+            value={value}
+            title={r.hint}
+            onSelect={() => run(() => select(r.session.cwd, r.session.sessionId))}
+          >
+            <span
+              className={cn(
+                "min-w-0 flex-1 truncate",
+                r.untitled && "text-ink-3",
+                r.selected && "font-medium",
+              )}
+            >
+              {r.label}
+            </span>
+            {r.folder && (
+              <span className="ml-1 min-w-0 max-w-[45%] shrink-0 truncate text-xs text-ink-3">
+                <span className="sr-only">Folder: </span>
+                {r.folder}
+              </span>
+            )}
+            {r.hint && <span className="sr-only">{r.hint}</span>}
+          </CommandItem>
+        );
+      }
+      case "projects": {
+        const r = item.row;
+        return (
+          <CommandItem
+            key={value}
+            value={value}
+            disabled={!enabled}
+            onSelect={() => run(() => runCommand(r.command))}
+          >
+            <ProjectCommandIconView icon={r.command.icon} /> {r.label}
+          </CommandItem>
+        );
+      }
+      case "filters": {
+        const r = item.row;
+        return (
+          <CommandItem key={value} value={value} onSelect={() => edit(r.text)}>
+            {r.label} · <span className="text-muted-foreground">{r.token}</span>
+          </CommandItem>
+        );
+      }
+      case "global": {
+        const r = item.row;
+        return (
+          <CommandItem
+            key={value}
+            value={value}
+            disabled={!enabled}
+            data-checked={r.checked}
+            onSelect={() => run(() => runCommand(r.command))}
+          >
+            <GlobalCommandIcon icon={r.command.icon} /> {r.label}
+            {r.checked && <Current />}
+          </CommandItem>
+        );
+      }
+      case "session": {
+        const r = item.row;
+        return (
+          <CommandItem
+            key={value}
+            value={value}
+            disabled={!enabled}
+            data-checked={r.checked}
+            variant={r.kind === "session" && r.command.destructive ? "destructive" : "default"}
+            onSelect={() => run(() => runCommand(r.command))}
+          >
+            {r.kind === "session" ? (
+              <CommandIcon icon={r.command.icon} />
+            ) : (
+              <ProjectCommandIconView icon={r.command.icon} />
+            )}{" "}
+            {r.detail ? (
+              <>
+                <span className="shrink-0">{r.label}</span>{" "}
+                <span className="min-w-0 truncate font-mono text-xs text-ink-3">
+                  {abbrevPath(r.detail)}
+                </span>
+              </>
+            ) : (
+              r.label
+            )}
+            {r.checked && <Current />}
+          </CommandItem>
+        );
+      }
+    }
+  };
+  return (
+    <>
+      {pages.map((current, index) => {
+        const { group } = current;
+        const { heading, items } = paletteItems(current);
+        return (
+          <Fragment key={group.id}>
+            {index > 0 && <CommandSeparator />}
+            <CommandGroup heading={heading}>
+              {items.map((item) =>
+                item.kind === "row" ? (
+                  row(item)
+                ) : (
+                  <CommandItem
+                    key={item.value}
+                    value={item.value}
+                    onSelect={() => page(group.id, item.page)}
+                  >
+                    {item.label}
+                  </CommandItem>
+                ),
+              )}
+            </CommandGroup>
+          </Fragment>
+        );
+      })}
+    </>
+  );
+});

@@ -14,7 +14,7 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import type { PiCliConfig } from "../../server/PiCli.ts";
+import type { PiCliConfig } from "../../server/features/sessions/pi/PiCli.ts";
 
 const installedCli = fileURLToPath(
   new URL("../../node_modules/@earendil-works/pi-coding-agent/dist/cli.js", import.meta.url),

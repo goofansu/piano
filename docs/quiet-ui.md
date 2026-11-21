@@ -124,9 +124,9 @@ such as the row's menu or a popover from its badge.
 
 Build UI from shadcn/ui components (the `shadcn` skill: search the registry, add with
 `npx shadcn@latest add`). Hand-written markup is for the case where no standard component exists,
-and says so in a comment. `web/src/components/ui/` stays upstream-owned: Piano's variants, overlay
-styling and focus policy live in the `Piano*` wrappers and `StatusBadge` in
-`web/src/components/`, and tokens in `web/src/index.css`. Before adding a customization or
+and says so in a comment. The shadcn CLI owns `web/src/components/ui/`. Piano's reusable wrappers
+and `StatusBadge` live in `web/src/shared/components/`. Sidebar-specific controls live under
+`web/src/features/navigation/sidebar/`, and design tokens live in `web/src/index.css`. Before adding a customization or
 upgrading shadcn, read [the ownership and upgrade guide](shadcn-ui.md); review every
 `--diff` before writing over a file in `ui/`.
 
@@ -145,8 +145,8 @@ and license attribution, and use `currentColor` to match the UI; see `web/public
 
 ## Command palette and shortcuts
 
-The command palette on Mod+K (`web/src/components/CommandPalette.tsx`,
-`web/src/lib/commandPalette.ts`) is the keyboard surface for navigation and view commands. A
+The command palette on Mod+K (`web/src/features/commands/CommandPalette.tsx`,
+`web/src/features/commands/paletteModel.ts`) is the keyboard surface for navigation and view commands. A
 feature that adds an action the sidebar or header offers also adds a row in the appropriate
 command group, named as its button is, including a toggle, whose row reads its state ("Hide
 sidebar" while the sidebar is shown, "Show sidebar" while it is hidden). An icon button's label,

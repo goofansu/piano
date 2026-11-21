@@ -1,5 +1,8 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { PROJECT_INSTRUCTIONS_ENV, PROJECT_INSTRUCTIONS_SECTION } from "../../shared/dispatch.ts";
+import {
+  PROJECT_INSTRUCTIONS_ENV,
+  PROJECT_INSTRUCTIONS_SECTION,
+} from "../../shared/features/dispatch/dispatch.ts";
 
 export default function pianoProject(pi: ExtensionAPI) {
   const instructions = process.env[PROJECT_INSTRUCTIONS_ENV];

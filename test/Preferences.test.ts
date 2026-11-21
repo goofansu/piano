@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createPreference, type PreferenceStorage, parseJson } from "../web/src/lib/preference.ts";
+import {
+  createPreference,
+  type PreferenceStorage,
+  parseJson,
+} from "../web/src/shared/lib/preference.ts";
 
 function browser(stored: Record<string, string> = {}, { available = true } = {}) {
   const items = new Map(Object.entries(stored));

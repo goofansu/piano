@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
-import { creationVerdictOf } from "../../shared/creationVerdict.ts";
 import {
   type Attribution,
   type CreatedWorktree,
@@ -17,11 +16,20 @@ import {
   type WaitEnding,
   type WaitStatus,
   type WorktreeRequest,
-} from "../../shared/dispatch.ts";
-import { type InputVerdict, inputVerdictOf, submissionVerdict } from "../../shared/inputVerdict.ts";
-import { applySessionEvent, cursorStep } from "../../shared/sessionProjection.ts";
-import { dialogAsks, isAnswer, liveActivityOf } from "../../shared/sessionStatus.ts";
-import { turnEnding } from "../../shared/turnEnding.ts";
+} from "../../shared/features/dispatch/dispatch.ts";
+import { creationVerdictOf } from "../../shared/features/sessions/creationVerdict.ts";
+import {
+  type InputVerdict,
+  inputVerdictOf,
+  submissionVerdict,
+} from "../../shared/features/sessions/inputVerdict.ts";
+import { applySessionEvent, cursorStep } from "../../shared/features/sessions/sessionProjection.ts";
+import {
+  dialogAsks,
+  isAnswer,
+  liveActivityOf,
+} from "../../shared/features/sessions/sessionStatus.ts";
+import { turnEnding } from "../../shared/features/sessions/turnEnding.ts";
 import {
   type ClientMessage,
   type Dialog,
@@ -38,7 +46,7 @@ import {
   openConnection,
   type SendDisposition,
   type SocketEnvironment,
-} from "../../web/src/lib/ws.ts";
+} from "../../web/src/shared/transport/ws.ts";
 
 const HOME_PREFIX = /^~(?=$|\/)/;
 
@@ -66,7 +74,7 @@ export type {
   SessionObservation,
   StartResult,
   WaitEnding,
-} from "../../shared/dispatch.ts";
+} from "../../shared/features/dispatch/dispatch.ts";
 
 export const WAIT_MIN_MS = 1_000;
 export const WAIT_MAX_MS = 60_000;

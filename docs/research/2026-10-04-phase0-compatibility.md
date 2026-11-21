@@ -26,7 +26,7 @@ startup-support observations remain blocked. The results below preserve the orig
   loopback backend/dev UI. It answers a supported dialog after reload, reads selected-checkout facts,
   aborts a local synthetic provider wait, observes explicit exit/read-only reload, and observes a
   bounded startup failure without resubmission.
-- Fixed a readiness deadline bug in [`server/PiSessions.ts`](../../server/PiSessions.ts): `open` and
+- Fixed a readiness deadline bug in [`server/PiSessions.ts`](https://github.com/goofansu/piano/blob/8642f170823b619b88c9dae71a90346ec3838c34/server/PiSessions.ts): `open` and
   `probe` now use `Effect.raceFirst`, not `Effect.race`. On pinned Effect v4, `race` waits for the first
   **successful** result; it suppresses a readiness timeout while the other branch waits for a live
   child's exit. `raceFirst` returns the first completion, including a typed timeout. The regression

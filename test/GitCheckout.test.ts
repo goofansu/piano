@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { Effect, Semaphore } from "effect";
-import { branchHomes, observeCheckout, observeGit } from "../server/GitCheckout.ts";
+import { branchHomes, observeCheckout, observeGit } from "../server/shared/GitCheckout.ts";
 import { forkWorktree } from "./fixtures/forkWorktree.ts";
 
 const git = (cwd: string, ...args: string[]) =>

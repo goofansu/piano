@@ -1,0 +1,1751 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import type { ClientMessage, ServerMessage } from "../../../shared/wire.ts";
+import { createClient } from "../../../web/src/app/client.ts";
+import { initialState, sessionKey } from "../../../web/src/app/store.ts";
+import {
+  type AddressBar,
+  activeTab,
+  addressFor,
+  createNavigation,
+  initialView,
+  type SurfaceMemory,
+  tabKey,
+} from "../../../web/src/features/navigation/navigation.ts";
+import { parseRoute } from "../../../web/src/features/navigation/routes.ts";
+import type { workspaceFile } from "../../../web/src/features/workspace/files/fileApi.ts";
+import {
+  createPreference,
+  type Preference,
+  type PreferenceStorage,
+} from "../../../web/src/shared/lib/preference.ts";
+import type { ConnectionHandlers } from "../../../web/src/shared/transport/ws.ts";
+import { sessionReference } from "../../fixtures/sessionReference.ts";
+
+function addressBar(start: string) {
+  const entries = [start];
+  let index = 0;
+  const titles: string[] = [];
+  let popped: (() => void) | undefined;
+  const bar: AddressBar = {
+    location: () => {
+      const url = new URL(entries[index], "http://piano.test");
+      return { pathname: url.pathname, search: url.search };
+    },
+    push: (path) => {
+      entries.splice(index + 1, Infinity, path);
+      index++;
+    },
+    replace: (path) => {
+      entries[index] = path;
+    },
+    setTitle: (title) => titles.push(title),
+    onPop: (listener) => {
+      popped = listener;
+      return () => {
+        popped = undefined;
+      };
+    },
+  };
+  const go = (delta: number) => {
+    index += delta;
+    popped?.();
+  };
+  return {
+    bar,
+    entries,
+    path: () => entries[index],
+    title: () => titles.at(-1),
+    titles,
+    back: () => go(-1),
+    forward: () => go(1),
+  };
+}
+
+function page(url: string, memory?: SurfaceMemory, rail?: Preference<boolean>) {
+  const address = addressBar(url);
+  const sent: ClientMessage[] = [];
+  let handlers: ConnectionHandlers | undefined;
+  let ids = 0;
+  const client = createClient({
+    initial: { ...initialState, view: initialView(parseRoute(address.bar.location())) },
+    connect: (h) => {
+      handlers = h;
+      return {
+        send: (m) => {
+          sent.push(m);
+          return "sent";
+        },
+        close: () => {},
+      };
+    },
+    notify: () => {},
+    newSelectionId: () => `sel${++ids}`,
+  });
+  let moves = 0;
+  let reads = 0;
+  type Preview = Awaited<ReturnType<typeof workspaceFile>>;
+  const fileReads: {
+    workspaceId: string;
+    path: string;
+    signal: AbortSignal;
+    finish: (path: string, content?: string) => Promise<Preview>;
+    fail: (message: string) => Promise<void>;
+  }[] = [];
+  const navigation = createNavigation({
+    readFile: (workspaceId, path, options) =>
+      new Promise((resolve, reject) => {
+        fileReads.push({
+          workspaceId,
+          path,
+          signal: options!.signal!,
+          finish: async (resolved, content = "read content") => {
+            const result: Preview = {
+              workspaceId,
+              kind: "text",
+              path: resolved,
+              content,
+              language: "text",
+            };
+            resolve(result);
+            return result;
+          },
+          fail: async (message) => {
+            reject(new Error(message));
+          },
+        });
+      }),
+    client: {
+      ...client,
+      getState: () => {
+        reads++;
+        return client.getState();
+      },
+    },
+    address: address.bar,
+    memory,
+    rail,
+    moved: () => moves++,
+  });
+  client.start();
+  const stopNavigation = navigation.start();
+  handlers!.onStatus(true);
+  const server = (m: ServerMessage) => handlers!.onMessage(m);
+  const registry = (workspaceId: string | undefined = "workspace", missing = false) =>
+    server({
+      _tag: "registry",
+      folders: [],
+      workspaces: workspaceId ? [{ id: workspaceId, folder: "/scratch", path: "/scratch" }] : [],
+      projects: [{ id: "p1", name: "Launch" }],
+      sessionReferences: [
+        sessionReference("/scratch", "a", {
+          title: "Alpha",
+          ...(missing ? { unavailable: "checkout" as const } : {}),
+        }),
+        sessionReference("/scratch", "b", { title: "Beta" }),
+      ],
+    });
+  const selected = (sessionId: string, selectionId = client.getState().selectionId!) =>
+    server({
+      _tag: "selected",
+      cwd: "/scratch",
+      sessionId,
+      selectionId,
+      hosted: true,
+      cursor: { cwd: "/scratch", sessionId, generation: "g1", sequence: 1 },
+      snapshot: { state: { sessionId, isStreaming: false }, messages: [], dialogs: [] },
+    });
+  const selects = () => sent.filter((m) => m._tag === "select").map((m) => m.sessionId);
+  return {
+    ...address,
+    client,
+    navigation,
+    fileReads,
+    stopNavigation,
+    server,
+    registry,
+    selected,
+    selects,
+    sent,
+    status: (connected: boolean) => handlers!.onStatus(connected),
+    moves: () => moves,
+    reads: () => reads,
+  };
+}
+
+test("restoring a session address leaves navigation open; explicit selection and history dismiss it", (t) => {
+  const p = page("/s/a");
+  t.after(p.stopNavigation);
+  p.registry();
+  p.selected("a");
+  assert.equal(p.moves(), 0, "mount restores the session without dismissing the sidebar");
+  p.navigation.select("/scratch", "b");
+  p.selected("b");
+  assert.equal(p.moves(), 1, "a user's selection dismisses the sidebar");
+  p.back();
+  p.selected("a");
+  assert.equal(p.moves(), 2, "history dismisses once");
+});
+
+test("100 transcript frames leave a 2k-session navigation catalog and title untouched", (t) => {
+  const p = page("/s/s1999");
+  let titleReads = 0;
+  let unrelatedTitleReads = 0;
+  let identityReads = 0;
+  const refs = Array.from({ length: 2000 }, (_, i) => {
+    const ref = sessionReference("/scratch", `s${i}`);
+    return {
+      ...ref,
+      get sessionId() {
+        identityReads++;
+        return ref.sessionId;
+      },
+      get title() {
+        titleReads++;
+        if (i !== 1999) unrelatedTitleReads++;
+        return `Session ${i}`;
+      },
+    };
+  });
+  p.server({ _tag: "registry", folders: [], projects: [], sessionReferences: refs });
+  p.selected("s1999");
+  assert.equal(p.title(), "Session 1999 - Piano");
+  assert.equal(unrelatedTitleReads, 0, "deep links and selection need only the selected title");
+  const before = { titles: p.titles.length, entries: [...p.entries] };
+  titleReads = 0;
+  identityReads = 0;
+  const start = performance.now();
+  for (let i = 0; i < 100; i++) {
+    p.server({
+      _tag: "session",
+      selectionId: p.client.getState().selectionId!,
+      cursor: { cwd: "/scratch", sessionId: "s1999", generation: "g1", sequence: i + 2 },
+      event: {
+        _tag: "message_update",
+        message: { id: "reply", role: "assistant", text: `Frame ${i}` },
+      },
+    });
+  }
+  const measurement = {
+    sessions: refs.length,
+    frames: 100,
+    elapsedMs: performance.now() - start,
+    titleReads,
+    identityReads,
+    titleWrites: p.titles.length - before.titles,
+  };
+  t.diagnostic(JSON.stringify(measurement));
+  assert.equal(p.client.getState().session?.pending?.text, "Frame 99", "frames were applied");
+  assert.deepEqual(
+    { titleReads, identityReads, titleWrites: measurement.titleWrites },
+    { titleReads: 0, identityReads: 0, titleWrites: 0 },
+    "transcript frames must neither scan/map the catalog nor rewrite the title",
+  );
+  assert.deepEqual(p.entries, before.entries);
+});
+
+test("registry refreshes update renamed sessions and projects without redundant title writes", () => {
+  const p = page("/s/a");
+  p.registry();
+  p.selected("a");
+  const writes = p.titles.length;
+  p.registry();
+  assert.equal(p.titles.length, writes, "an unchanged registry must not rewrite the title");
+  const refresh = (title: string | undefined, projectName: string, projectId?: string) =>
+    p.server({
+      _tag: "registry",
+      folders: [],
+      projects: [{ id: "p1", name: projectName }],
+      sessionReferences: [
+        sessionReference("/scratch", "a", { title, projectId, archived: true }),
+        sessionReference("/scratch", "b", { title: "Beta" }),
+      ],
+    });
+  refresh("Renamed", "Launch", "p1");
+  assert.equal(p.path(), "/s/a");
+  assert.equal(p.title(), "Renamed - Piano", "archived references still name deep links");
+  const renamedWrites = p.titles.length;
+  refresh("Renamed", "Launch");
+  assert.equal(p.path(), "/s/a", "membership does not change session identity");
+  assert.equal(p.titles.length, renamedWrites);
+  refresh(undefined, "Launch");
+  assert.equal(p.title(), "Untitled - Piano");
+  p.navigation.select("/scratch", "b");
+  assert.equal(p.path(), "/s/b", "selection updates before its snapshot arrives");
+  assert.equal(p.title(), "Beta - Piano");
+  p.selected("b");
+  p.navigation.openProject("p1");
+  assert.equal(p.path(), "/projects/p1");
+  refresh("Renamed", "Shipped");
+  assert.equal(p.title(), "Shipped - Piano");
+  p.navigation.openNew(undefined, "p1");
+  assert.equal(p.path(), "/projects/p1/new");
+  refresh("Renamed", "Next launch");
+  assert.equal(p.title(), "Next launch - Piano");
+  p.back();
+  p.back();
+  assert.equal(p.path(), "/s/b");
+  assert.equal(p.title(), "Beta - Piano");
+});
+
+test("a session URL waits for the registry, then selects that session without moving the address", () => {
+  const p = page("/s/a");
+  assert.equal(
+    p.client.getState().view.kind,
+    "session",
+    "the New page is never shown for a session URL",
+  );
+  assert.deepEqual(p.selects(), [], "nothing to select before the registry names the directory");
+  assert.equal(p.title(), undefined);
+  p.registry();
+  assert.deepEqual(p.selects(), ["a"]);
+  p.selected("a");
+  assert.deepEqual(p.entries, ["/s/a"], "the address is replaced in place, never pushed");
+  assert.equal(p.title(), "Alpha - Piano");
+});
+
+test("New session supersedes a deferred startup route before the registry arrives", () => {
+  for (const sessionId of ["a", "gone"]) {
+    const p = page(`/s/${sessionId}`);
+    p.navigation.openNew();
+    assert.equal(p.client.getState().view.kind, "new");
+    assert.equal(p.path(), "/new", "the address follows New even before registry delivery");
+    assert.equal(p.title(), "New session - Piano");
+    p.registry();
+    assert.deepEqual(p.selects(), [], "the obsolete route must not select a session");
+    assert.equal(p.client.getState().view.kind, "new", "nor show Session not found");
+    assert.equal(p.path(), "/new");
+    assert.equal(p.title(), "New session - Piano");
+  }
+});
+
+test("Settings has an address even while the underlying session is unresolved", () => {
+  const state = { ...initialState, view: initialView({ kind: "session", sessionId: "a" }) };
+  assert.equal(addressFor(state, null, "/s/a"), null);
+  assert.deepEqual(addressFor(state, "providers", "/s/a"), {
+    path: "/settings/providers",
+    mode: "push",
+    title: "Settings - Piano",
+  });
+});
+
+test("Settings supersedes a deferred session route, whether the late registry finds it or not", () => {
+  for (const sessionId of ["a", "gone"]) {
+    const p = page(`/s/${sessionId}`);
+    p.navigation.openSettings();
+    p.registry();
+    assert.equal(p.navigation.getState().settings, "providers");
+    assert.deepEqual(p.selects(), [], "the obsolete route must not select a session");
+    assert.equal(p.client.getState().view.kind, "session", "no late Session not found page");
+    assert.equal(p.path(), "/settings/providers");
+    assert.equal(p.title(), "Settings - Piano");
+    assert.deepEqual(p.entries, [`/s/${sessionId}`, "/settings/providers"]);
+  }
+});
+
+test("closing Settings over an unresolved session returns to New before or after the registry", () => {
+  for (const registryFirst of [false, true]) {
+    const p = page("/s/a");
+    p.navigation.openSettings();
+    p.navigation.openSettings("mcp");
+    assert.equal(p.path(), "/settings/mcp", "sections work before registry delivery");
+    assert.equal(p.title(), "Settings - Piano");
+    if (registryFirst) p.registry();
+    p.navigation.closeSettings();
+    assert.equal(p.navigation.getState().settings, null);
+    assert.equal(p.client.getState().view.kind, "new");
+    assert.equal(p.path(), "/new");
+    assert.equal(p.title(), "New session - Piano");
+    if (!registryFirst) p.registry();
+    assert.deepEqual(p.selects(), []);
+    assert.equal(p.client.getState().view.kind, "new");
+    assert.equal(p.path(), "/new");
+  }
+});
+
+test("Settings → Home preserves an in-flight creation and accepts its late selection", () => {
+  const p = page("/new");
+  p.registry();
+  p.client.send({ _tag: "create_session", cwd: "/scratch", options: {}, text: "Start here" });
+  const { selecting, selectionId, pendingCreate } = p.client.getState();
+  assert.ok(selectionId);
+  assert.deepEqual(selecting, { cwd: "/scratch", sessionId: null });
+  assert.equal(pendingCreate?.outcome, "starting");
+  p.navigation.openSettings();
+  assert.equal(p.path(), "/settings/providers");
+  p.navigation.closeSettings();
+  assert.equal(p.client.getState().view.kind, "session");
+  assert.equal(p.client.getState().selecting, selecting);
+  assert.equal(p.client.getState().selectionId, selectionId);
+  assert.equal(p.client.getState().pendingCreate, pendingCreate);
+  assert.equal(p.path(), "/new", "unnamed creation has no session URL yet");
+  assert.equal(p.title(), "Session - Piano", "neither Settings nor the New page is shown");
+  p.selected("a", selectionId);
+  assert.equal(p.client.getState().session?.sessionId, "a");
+  assert.equal(p.path(), "/s/a");
+  assert.equal(p.title(), "Alpha - Piano");
+  assert.equal(p.sent.filter((m) => m._tag === "create_session").length, 1);
+  assert.deepEqual(p.selects(), [], "closing Settings does not reselect or retry creation");
+});
+
+test("Settings → Home keeps a failed selection, its banner's retry and its address", () => {
+  const p = page("/s/a");
+  p.registry();
+  p.selected("a");
+  p.navigation.select("/scratch", "b");
+  const selectionId = p.client.getState().selectionId!;
+  p.server({ _tag: "selection_failed", selectionId, message: "Pi exited" });
+  const failure = p.client.getState().selectionFailure;
+  assert.equal(failure?.sessionId, "b");
+  assert.equal(p.path(), "/s/b");
+  p.navigation.openSettings();
+  p.navigation.closeSettings();
+  assert.equal(p.client.getState().view.kind, "session");
+  assert.equal(p.client.getState().selectionFailure, failure, "the Retry banner stays");
+  assert.equal(p.path(), "/s/b");
+  assert.equal(p.title(), "Beta - Piano");
+  assert.deepEqual(p.selects(), ["a", "b"], "closing Settings does not retry");
+});
+
+for (const failure of ["disconnect", "error"] as const)
+  test(`Settings → Home preserves uncertain creation after ${failure} without replay`, () => {
+    const p = page("/new");
+    p.registry();
+    const attachments = [
+      { kind: "image", name: "input.png", data: "aGVsbG8=", mimeType: "image/png" },
+    ] as const;
+    p.client.send({
+      _tag: "create_session",
+      cwd: "/scratch",
+      options: {},
+      text: "Possibly started",
+      attachments,
+    });
+    const selectionId = p.client.getState().selectionId!;
+    p.navigation.openSettings();
+    if (failure === "disconnect") p.status(false);
+    else p.server({ _tag: failure, selectionId, message: "Startup outcome unknown" });
+    const uncertain = p.client.getState().pendingCreate;
+    const correlation = p.client.getState().selectionId;
+    assert.equal(uncertain?.outcome, "uncertain");
+    assert.equal(p.client.getState().selecting, null);
+    p.navigation.closeSettings();
+    assert.equal(p.client.getState().view.kind, "session");
+    assert.equal(p.client.getState().selectionId, correlation);
+    assert.equal(p.client.getState().pendingCreate, uncertain);
+    assert.equal(uncertain?.text, "Possibly started");
+    assert.deepEqual(uncertain?.attachments, [
+      { kind: "image", url: "data:image/png;base64,aGVsbG8=" },
+    ]);
+    assert.equal(p.path(), "/new");
+    assert.equal(p.title(), "Session - Piano");
+    if (failure === "disconnect") p.status(true);
+    p.registry();
+    p.navigation.openSettings("mcp");
+    p.navigation.closeSettings();
+    assert.equal(p.client.getState().pendingCreate, uncertain);
+    assert.equal(p.sent.filter((m) => m._tag === "create_session").length, 1);
+    assert.deepEqual(
+      p.selects(),
+      failure === "disconnect" ? [null] : [],
+      "reconnect only reads the original attempt",
+    );
+    if (failure === "disconnect")
+      assert.ok(p.sent.some((m) => m._tag === "select" && m.attemptId === selectionId));
+  });
+
+test("history can revisit a superseded session route or cancel it by returning to Settings", () => {
+  const p = page("/s/a");
+  p.navigation.openSettings();
+  p.back();
+  assert.equal(p.navigation.getState().settings, null);
+  p.forward();
+  assert.equal(p.navigation.getState().settings, "providers");
+  p.registry();
+  assert.deepEqual(p.selects(), []);
+  assert.equal(p.path(), "/settings/providers");
+  assert.equal(p.title(), "Settings - Piano");
+  p.back();
+  assert.deepEqual(p.selects(), ["a"]);
+  p.selected("a");
+  assert.equal(p.title(), "Alpha - Piano");
+  p.forward();
+  assert.equal(p.navigation.getState().settings, "providers");
+  assert.equal(p.title(), "Settings - Piano");
+  assert.deepEqual(p.entries, ["/s/a", "/settings/providers"]);
+  p.navigation.closeSettings();
+  assert.equal(p.path(), "/s/a", "a resolved session remains the close destination");
+  assert.equal(p.title(), "Alpha - Piano");
+});
+
+test("a direct Settings link closes to New before the registry arrives", () => {
+  const p = page("/settings/mcp");
+  assert.equal(p.navigation.getState().settings, "mcp");
+  assert.equal(p.title(), "Settings - Piano");
+  p.navigation.closeSettings();
+  assert.equal(p.path(), "/new");
+  assert.equal(p.client.getState().view.kind, "new");
+  p.registry();
+  assert.deepEqual(p.selects(), []);
+  assert.equal(p.path(), "/new");
+});
+
+test("the Settings button opens the section /settings opens", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.openSettings();
+  assert.deepEqual(parseRoute({ pathname: p.path() }), parseRoute({ pathname: "/settings" }));
+});
+
+test("explicit session selection supersedes a deferred startup route", () => {
+  const p = page("/s/a");
+  p.navigation.select("/scratch", "b");
+  assert.equal(p.path(), "/s/b");
+  p.registry();
+  p.selected("b");
+  assert.deepEqual(p.selects(), ["b"]);
+  assert.equal(p.path(), "/s/b");
+  assert.equal(p.title(), "Beta - Piano");
+});
+
+test("New supersedes a deferred history route, which back can still revisit", () => {
+  const p = page("/s/a");
+  p.navigation.openProjects();
+  p.back();
+  p.navigation.openNew();
+  assert.equal(p.path(), "/new");
+  p.registry();
+  assert.deepEqual(p.selects(), []);
+  assert.equal(p.client.getState().view.kind, "new");
+  assert.deepEqual(p.entries, ["/s/a", "/new"]);
+
+  p.back();
+  assert.deepEqual(p.selects(), ["a"]);
+  p.selected("a");
+  assert.equal(p.path(), "/s/a");
+  assert.equal(p.client.getState().view.kind, "session");
+  p.forward();
+  assert.equal(p.path(), "/new");
+  assert.equal(p.client.getState().view.kind, "new");
+  assert.deepEqual(p.entries, ["/s/a", "/new"]);
+});
+
+test("forward to a page supersedes a deferred history route", () => {
+  const p = page("/s/a");
+  p.navigation.openNew();
+  p.back();
+  p.forward();
+  p.registry();
+  assert.deepEqual(p.selects(), []);
+  assert.equal(p.path(), "/new");
+  assert.equal(p.client.getState().view.kind, "new");
+});
+
+test("an unknown session keeps its URL and shows Session not found", () => {
+  const p = page("/s/gone");
+  p.registry();
+  assert.deepEqual(p.client.getState().view, {
+    kind: "missing-session",
+    sessionId: "gone",
+    reason: "missing",
+  });
+  assert.deepEqual(p.selects(), []);
+  assert.deepEqual(p.entries, ["/s/gone"]);
+  assert.equal(p.title(), "Session not found - Piano");
+});
+
+test("a session without history keeps its URL, is not selected, and says so", () => {
+  const p = page("/s/gone");
+  p.server({
+    _tag: "registry",
+    folders: [],
+    projects: [],
+    sessionReferences: [sessionReference("/scratch", "gone", { unavailable: "history" })],
+  });
+  assert.deepEqual(p.client.getState().view, {
+    kind: "missing-session",
+    sessionId: "gone",
+    reason: "history",
+  });
+  assert.deepEqual(p.selects(), []);
+  assert.deepEqual(p.entries, ["/s/gone"]);
+  assert.equal(p.title(), "History unavailable - Piano");
+
+  const q = page("/s/gone");
+  q.server({
+    _tag: "registry",
+    folders: [],
+    projects: [],
+    sessionReferences: [sessionReference("/scratch", "gone", { unavailable: "checkout" })],
+  });
+  assert.deepEqual(q.selects(), ["gone"]);
+});
+
+test("an archived session's address keeps its URL and says it is archived instead of selecting it", () => {
+  const p = page("/s/old");
+  p.server({
+    _tag: "registry",
+    folders: [],
+    projects: [],
+    sessionReferences: [sessionReference("/scratch", "old", { archived: true })],
+  });
+  assert.deepEqual(p.client.getState().view, {
+    kind: "missing-session",
+    sessionId: "old",
+    reason: "archived",
+  });
+  assert.deepEqual(p.selects(), [], "the server refuses to open an archived session");
+  assert.equal(p.client.getState().selectionFailure, null);
+  assert.deepEqual(p.entries, ["/s/old"]);
+  assert.equal(p.title(), "Session archived - Piano");
+});
+
+test("an unavailable session's page follows its session when its reference changes", () => {
+  const references = (opts: Parameters<typeof sessionReference>[2]) => ({
+    _tag: "registry" as const,
+    folders: [],
+    projects: [],
+    sessionReferences: [sessionReference("/scratch", "old", opts)],
+  });
+  const p = page("/s/old");
+  p.server(references({ archived: true }));
+  p.server(references({ unavailable: "history" }));
+  assert.deepEqual(p.client.getState().view, {
+    kind: "missing-session",
+    sessionId: "old",
+    reason: "history",
+  });
+  assert.equal(p.title(), "History unavailable - Piano");
+  p.server(references({}));
+  assert.deepEqual(p.selects(), ["old"], "a restored history opens the session it names");
+  p.selected("old");
+  assert.equal(p.client.getState().view.kind, "session");
+  assert.deepEqual(p.entries, ["/s/old"], "the address stays the session's own");
+
+  const q = page("/s/old");
+  q.server(references({ archived: true }));
+  q.navigation.openSettings("data-controls");
+  q.server(references({}));
+  assert.equal(q.navigation.getState().settings, "data-controls", "Settings stays open");
+  assert.deepEqual(q.selects(), []);
+  q.navigation.closeSettings();
+  assert.deepEqual(q.selects(), ["old"], "leaving Settings opens the unarchived session");
+  q.selected("old");
+  assert.equal(q.path(), "/s/old");
+  assert.equal(q.client.getState().view.kind, "session");
+});
+
+test("aliases are replaced and real moves are pushed, with a title for each screen", () => {
+  const p = page("/");
+  p.registry();
+  assert.deepEqual(p.entries, ["/new"], "the bare root is an alias for /new");
+  assert.equal(p.title(), "New session - Piano");
+
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  assert.deepEqual(p.entries, ["/new", "/s/a"]);
+  assert.equal(p.title(), "Alpha - Piano");
+
+  p.navigation.openSettings("providers");
+  assert.deepEqual(
+    p.entries,
+    ["/new", "/s/a", "/settings/providers"],
+    "Settings is one history entry",
+  );
+  assert.equal(p.title(), "Settings - Piano");
+  p.navigation.openNew(undefined, "p1");
+  assert.equal(p.navigation.getState().settings, null);
+  assert.deepEqual(
+    p.entries,
+    ["/new", "/s/a", "/settings/providers", "/projects/p1/new"],
+    "leaving Settings for the New page is one entry, not two",
+  );
+  assert.equal(p.title(), "Launch - Piano");
+
+  const bare = page("/settings");
+  assert.deepEqual(bare.navigation.getState().settings, "providers");
+  assert.deepEqual(bare.entries, ["/settings/providers"], "/settings is an alias for Providers");
+});
+
+test("a project's address opens its home; its New page has an address of its own", () => {
+  const p = page("/projects/p1");
+  assert.deepEqual(p.client.getState().view, { kind: "project", projectId: "p1" });
+  p.registry();
+  assert.deepEqual(p.entries, ["/projects/p1"]);
+  assert.equal(p.title(), "Launch - Piano");
+
+  p.navigation.openNew(undefined, "p1");
+  assert.deepEqual(p.entries, ["/projects/p1", "/projects/p1/new"]);
+  assert.equal(p.client.getState().view.kind, "new");
+  p.back();
+  assert.deepEqual(p.client.getState().view, { kind: "project", projectId: "p1" });
+  assert.equal(p.title(), "Launch - Piano");
+
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openProject("p1");
+  assert.deepEqual(p.entries, ["/projects/p1", "/s/a", "/projects/p1"]);
+  assert.deepEqual(p.client.getState().view, { kind: "project", projectId: "p1" });
+
+  const fresh = page("/projects/p1/new");
+  assert.deepEqual(fresh.client.getState().view, { kind: "new", projectId: "p1" });
+});
+
+test("archiving or deleting a previously viewed session keeps the project home and its draft directory", () => {
+  for (const action of ["archive_session", "delete_session"] as const) {
+    const p = page("/s/a");
+    p.registry();
+    p.selected("a");
+    const selectionId = p.client.getState().selectionId!;
+    p.navigation.openProject("p1");
+    p.client.dispatch({ type: "new_directory", cwd: "/scratch" });
+    p.client.send({ _tag: action, cwd: "/scratch", sessionId: "a" });
+    p.server({
+      _tag: "registry",
+      folders: [],
+      projects: [{ id: "p1", name: "Launch" }],
+      sessionReferences:
+        action === "archive_session"
+          ? [sessionReference("/scratch", "a", { projectId: "p1", archived: true })]
+          : [],
+    });
+    p.server({
+      _tag: "selected",
+      selectionId,
+      cwd: "/scratch",
+      sessionId: null,
+      hosted: false,
+      cursor: null,
+      snapshot: { state: { sessionId: "", isStreaming: false }, messages: [], dialogs: [] },
+    });
+    assert.deepEqual(p.client.getState().view, {
+      kind: "project",
+      projectId: "p1",
+      cwd: "/scratch",
+    });
+    assert.equal(p.path(), "/projects/p1");
+    assert.equal(p.title(), "Launch - Piano");
+  }
+});
+
+test("the Projects index has its own address and title, and a row's move to a home is one entry", () => {
+  const p = page("/projects");
+  assert.deepEqual(p.client.getState().view, { kind: "projects" });
+  p.registry();
+  assert.deepEqual(p.entries, ["/projects"]);
+  assert.equal(p.title(), "Projects - Piano");
+
+  p.navigation.openProject("p1");
+  assert.deepEqual(p.entries, ["/projects", "/projects/p1"]);
+  assert.equal(p.title(), "Launch - Piano");
+  p.back();
+  assert.deepEqual(p.client.getState().view, { kind: "projects" });
+  assert.equal(p.title(), "Projects - Piano");
+
+  p.navigation.openSettings("mcp");
+  p.navigation.openProjects();
+  assert.equal(p.navigation.getState().settings, null, "opening the index leaves Settings");
+  assert.deepEqual(p.entries, ["/projects", "/settings/mcp", "/projects"]);
+});
+
+test("back and forward apply the address bar's route; back onto the same New page keeps its directory", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.openNew("/scratch");
+  p.navigation.openSettings();
+  assert.deepEqual(p.entries, ["/new", "/settings/providers"]);
+  p.back();
+  assert.equal(p.navigation.getState().settings, null);
+  assert.deepEqual(p.client.getState().view, {
+    kind: "new",
+    cwd: "/scratch",
+    projectId: undefined,
+  });
+  assert.equal(p.title(), "New session - Piano");
+
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openSettings("providers");
+  assert.deepEqual(p.entries, ["/new", "/s/a", "/settings/providers"]);
+  p.back();
+  assert.equal(p.navigation.getState().settings, null);
+  assert.deepEqual(p.selects(), ["a"], "the session already on screen is not selected again");
+  assert.equal(p.title(), "Alpha - Piano");
+  p.back();
+  assert.deepEqual(
+    p.client.getState().view,
+    { kind: "new", cwd: undefined, projectId: undefined },
+    "a different page opens New afresh",
+  );
+  p.forward();
+  assert.deepEqual(p.selects(), ["a", "a"]);
+  p.forward();
+  assert.equal(p.navigation.getState().settings, "providers");
+  assert.deepEqual(
+    p.entries,
+    ["/new", "/s/a", "/settings/providers"],
+    "history moves never add entries",
+  );
+  assert.ok(p.moves() > 0);
+});
+
+function shownTabs(navigation: ReturnType<typeof createNavigation>) {
+  const { surface, area } = navigation.getState();
+  return surface
+    ? { tabs: surface.tabs.map(tabKey), active: surface.active, area }
+    : { tabs: [], active: null, area };
+}
+
+function tabMemory(): SurfaceMemory {
+  let value: string | null = null;
+  return {
+    read: () => value,
+    write: (next) => {
+      value = next;
+    },
+  };
+}
+
+test("a reload brings back the session's open tabs, the one shown and its area", () => {
+  const memory = tabMemory();
+  const before = page("/s/a", memory);
+  before.registry();
+  before.selected("a");
+  before.navigation.openChanges();
+  before.navigation.openFile("docs/guide.md");
+  before.navigation.openFile("README.md");
+  before.navigation.selectTab("file:docs/guide.md");
+  before.navigation.showAgent();
+
+  const after = page("/s/a", memory);
+  assert.deepEqual(shownTabs(after.navigation), { tabs: [], active: null, area: "agent" });
+  after.registry();
+  after.selected("a");
+  assert.deepEqual(shownTabs(after.navigation), {
+    tabs: ["changes", "file:docs/guide.md", "file:README.md"],
+    active: "file:docs/guide.md",
+    area: "agent",
+  });
+
+  after.navigation.closeTab("changes");
+  const again = page("/s/a", memory);
+  again.registry();
+  again.selected("a");
+  assert.deepEqual(
+    shownTabs(again.navigation).tabs,
+    ["file:docs/guide.md", "file:README.md"],
+    "a closed tab stays closed",
+  );
+});
+
+test("a reload brings back only the session last shown, and nothing once a page replaced it", () => {
+  const memory = tabMemory();
+  const p = page("/s/a", memory);
+  p.registry();
+  p.selected("a");
+  p.navigation.openChanges();
+  p.navigation.select("/scratch", "b");
+  p.selected("b");
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  assert.deepEqual(
+    shownTabs(p.navigation).tabs,
+    [],
+    "coming back to a session without a reload starts on its Agent area",
+  );
+
+  p.navigation.openFile("README.md");
+  const other = page("/s/b", memory);
+  other.registry();
+  other.selected("b");
+  assert.deepEqual(shownTabs(other.navigation).tabs, [], "another session's tabs stay its own");
+
+  const q = page("/s/a", memory);
+  q.registry();
+  q.selected("a");
+  q.navigation.openFile("README.md");
+  q.navigation.openNew();
+  const fresh = page("/s/a", memory);
+  fresh.registry();
+  fresh.selected("a");
+  assert.deepEqual(shownTabs(fresh.navigation).tabs, [], "leaving for the New page forgets them");
+});
+
+test("every move among a session's areas leaves Settings, so the move shows", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openChanges();
+  p.navigation.openFile("docs/guide.md");
+  const overSettings = (move: () => void) => {
+    p.navigation.openSettings("providers");
+    move();
+    return p.navigation.getState();
+  };
+
+  p.navigation.setSingle(true);
+  const agent = overSettings(() => p.navigation.showAgent());
+  assert.equal(agent.settings, null);
+  assert.equal(shownTabs(p.navigation).area, "agent");
+
+  const closed = overSettings(() => p.navigation.closeTab("file:docs/guide.md"));
+  assert.equal(closed.settings, null);
+  assert.deepEqual(shownTabs(p.navigation).tabs, ["changes"]);
+});
+
+test("a session's surfaces close when another session is selected, and opening one leaves Settings", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openSettings();
+  p.navigation.openChanges();
+  assert.equal(p.navigation.getState().settings, null);
+  assert.deepEqual(shownTabs(p.navigation), {
+    tabs: ["changes"],
+    active: "changes",
+    area: "surface",
+  });
+  p.navigation.openFile("docs/guide.md");
+  assert.equal(p.path(), "/s/a", "a file preview never puts its path in the address bar");
+
+  p.navigation.openPullRequest();
+  assert.equal(p.navigation.getState().pullRequest, true);
+  assert.equal(
+    shownTabs(p.navigation).active,
+    "file:docs/guide.md",
+    "the PR opens over the nonmodal Surface area without replacing it",
+  );
+  p.navigation.closePullRequest();
+
+  p.navigation.openPullRequest();
+  p.navigation.select("/scratch", "b");
+  p.selected("b");
+  assert.deepEqual(
+    shownTabs(p.navigation),
+    { tabs: [], active: null, area: "agent" },
+    "another session starts on its Agent area with no tabs",
+  );
+  assert.equal(p.navigation.getState().pullRequest, false);
+  p.navigation.openChanges();
+  p.navigation.openPullRequest();
+  p.navigation.openNew();
+  assert.equal(p.navigation.getState().surface, null, "the New page has no Surface area");
+  assert.equal(p.navigation.getState().pullRequest, false);
+});
+
+test("Settings closes the pull request dialog, however it is reached", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openSettings();
+  p.navigation.openPullRequest();
+  assert.equal(p.navigation.getState().settings, null, "the dialog opens over the session");
+  assert.equal(p.navigation.getState().pullRequest, true);
+  p.back();
+  assert.equal(p.navigation.getState().settings, "providers");
+  assert.equal(
+    p.navigation.getState().pullRequest,
+    false,
+    "leaving Settings does not bring back a dialog it covered",
+  );
+  p.navigation.openPullRequest();
+  p.navigation.openSettings();
+  assert.equal(p.navigation.getState().pullRequest, false);
+});
+
+test("choosing Changes again shows its one tab in place: no toggle, no duplicate, no history entry", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  const entries = p.entries.length;
+  p.navigation.openChanges();
+  const first = p.navigation.getState().surfaceRequest;
+  p.navigation.openChanges();
+  assert.deepEqual(shownTabs(p.navigation), {
+    tabs: ["changes"],
+    active: "changes",
+    area: "surface",
+  });
+  assert.ok(
+    p.navigation.getState().surfaceRequest > first,
+    "a repeat is still a request, so the tab takes focus",
+  );
+  assert.equal(p.entries.length, entries, "showing a surface is local view state, not a route");
+
+  p.navigation.openFile("README.md");
+  p.navigation.openChanges();
+  assert.deepEqual(
+    shownTabs(p.navigation),
+    { tabs: ["changes", "file:README.md"], active: "changes", area: "surface" },
+    "Changes shows beside the open file's tab, not in place of it",
+  );
+});
+
+function rightSide(navigation: ReturnType<typeof createNavigation>) {
+  const { layout } = navigation.getState();
+  return layout.rail ? "rail" : layout.surface ? "surface" : null;
+}
+
+function railStorage(): PreferenceStorage {
+  const values = new Map<string, string>();
+  return {
+    read: (key) => values.get(key) ?? null,
+    write: (key, value) => {
+      values.set(key, value);
+    },
+    onChange: () => () => {},
+  };
+}
+
+const railPreference = (storage: PreferenceStorage) =>
+  createPreference<boolean>({ key: "rail", decode: (raw) => raw === "true", storage });
+
+test("side by side, the session rail and the Surface area share the right side: whichever came in last shows", () => {
+  const p = page("/s/a");
+  p.registry();
+  p.selected("a");
+  assert.equal(rightSide(p.navigation), null, "the rail starts off");
+
+  p.navigation.toggleRail();
+  assert.equal(rightSide(p.navigation), "rail");
+
+  p.navigation.openChanges();
+  assert.equal(rightSide(p.navigation), "surface", "a surface coming in hides the session rail");
+  assert.equal(p.navigation.getState().rail, true, "hidden, the session rail stays on");
+
+  p.navigation.closeTab("changes");
+  assert.equal(
+    rightSide(p.navigation),
+    "rail",
+    "the last tab closing brings the session rail back",
+  );
+
+  p.navigation.openFile("README.md");
+  p.navigation.toggleRail();
+  assert.equal(
+    rightSide(p.navigation),
+    "rail",
+    "turned on over a surface, the session rail covers it",
+  );
+  assert.deepEqual(shownTabs(p.navigation).tabs, ["file:README.md"], "the covered tabs wait");
+
+  p.navigation.toggleRail();
+  assert.equal(rightSide(p.navigation), "surface", "turned off, the covered surface returns");
+
+  p.navigation.toggleRail();
+  p.navigation.selectTab("file:README.md");
+  assert.equal(rightSide(p.navigation), "surface", "showing a tab uncovers the surface");
+  p.navigation.toggleRail();
+  assert.equal(rightSide(p.navigation), "rail");
+  p.navigation.toggleRail();
+  assert.equal(rightSide(p.navigation), "surface");
+  assert.equal(p.navigation.getState().rail, false);
+});
+
+test("the session rail is one choice for every session, and the browser remembers it", () => {
+  const storage = railStorage();
+  const before = page("/s/a", undefined, railPreference(storage));
+  before.registry();
+  before.selected("a");
+  before.navigation.toggleRail();
+  before.navigation.select("/scratch", "b");
+  before.selected("b");
+  assert.equal(rightSide(before.navigation), "rail", "another session shows its the session rail");
+
+  const after = page("/s/a", undefined, railPreference(storage));
+  after.registry();
+  after.selected("a");
+  assert.equal(rightSide(after.navigation), "rail", "a new page starts with the session rail on");
+  after.navigation.toggleRail();
+
+  const off = page("/s/a", undefined, railPreference(storage));
+  off.registry();
+  off.selected("a");
+  assert.equal(rightSide(off.navigation), null);
+});
+
+test("a reload keeps the session rail over the tabs it covered, unless it was turned off meanwhile", () => {
+  const memory = tabMemory();
+  const storage = railStorage();
+  const before = page("/s/a", memory, railPreference(storage));
+  before.registry();
+  before.selected("a");
+  before.navigation.openChanges();
+  before.navigation.toggleRail();
+  assert.equal(rightSide(before.navigation), "rail");
+
+  const after = page("/s/a", memory, railPreference(storage));
+  after.registry();
+  after.selected("a");
+  assert.equal(rightSide(after.navigation), "rail", "the rail still covers the tabs");
+  assert.deepEqual(shownTabs(after.navigation).tabs, ["changes"], "the covered tabs wait");
+  after.navigation.toggleRail();
+  assert.equal(rightSide(after.navigation), "surface", "turned off, the covered tabs return");
+
+  const away = tabMemory();
+  const left = page("/s/a", away, railPreference(railStorage()));
+  left.registry();
+  left.selected("a");
+  left.navigation.openChanges();
+  left.navigation.toggleRail();
+  assert.equal(rightSide(left.navigation), "rail");
+  const off = page("/s/a", away, railPreference(storage));
+  off.registry();
+  off.selected("a");
+  assert.equal(rightSide(off.navigation), "surface", "nothing is covered by a rail that is off");
+});
+
+test("narrowing does not auto-open the rail sheet, and widening restores the desktop rail", () => {
+  const p = page("/s/a");
+  p.registry();
+  p.selected("a");
+  p.navigation.toggleRail();
+  assert.equal(rightSide(p.navigation), "rail");
+
+  p.navigation.setSingle(true);
+  assert.deepEqual(p.navigation.getState().layout, {
+    single: true,
+    agent: true,
+    surface: false,
+    rail: false,
+    agentTab: false,
+  });
+
+  p.navigation.setSingle(false);
+  assert.equal(rightSide(p.navigation), "rail", "the switch was kept");
+});
+
+test("one area at a time there is no rail: its toggle changes nothing and the desktop switch survives", () => {
+  for (const enabled of [false, true]) {
+    const storage = railStorage();
+    const memory = tabMemory();
+    const p = page("/s/a", memory, railPreference(storage));
+    p.registry();
+    p.selected("a");
+    p.navigation.openChanges();
+    if (enabled) p.navigation.toggleRail();
+    const saved = storage.read("rail");
+    const sent = p.sent.length;
+    p.navigation.setSingle(true);
+    assert.equal(p.navigation.getState().layout.rail, false, "the session menu holds its facts");
+    const before = p.navigation.getState();
+    p.navigation.toggleRail();
+    assert.equal(p.navigation.getState(), before, "nothing moves");
+    p.navigation.showAgent();
+    p.navigation.openFile("src/answer.ts", "agent");
+    assert.equal(p.navigation.getState().layout.rail, false);
+    p.navigation.setSingle(false);
+    assert.equal(p.navigation.getState().rail, enabled, "the desktop switch is unchanged");
+    assert.equal(storage.read("rail"), saved, "no desktop preference writes");
+    assert.equal(p.sent.length, sent, "rail navigation sends no process actions (INV-02)");
+  }
+});
+
+test("a reload drops a the session rail tab kept by an older Piano and keeps the other tabs", () => {
+  const memory = tabMemory();
+  memory.write(
+    JSON.stringify({
+      owner: sessionKey({ cwd: "/scratch", sessionId: "a" }),
+      surface: { tabs: ["changes", "details"], active: "changes" },
+      area: "surface",
+    }),
+  );
+  const p = page("/s/a", memory);
+  p.registry();
+  p.selected("a");
+  assert.deepEqual(shownTabs(p.navigation), {
+    tabs: ["changes"],
+    active: "changes",
+    area: "surface",
+  });
+});
+
+test("each new view is added at the end, Changes included; reopening one keeps its place", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openFile("docs/a.md");
+  p.navigation.openChanges();
+  p.navigation.openFile("docs/b.md");
+  assert.deepEqual(shownTabs(p.navigation).tabs, ["file:docs/a.md", "changes", "file:docs/b.md"]);
+  p.navigation.openChanges();
+  p.navigation.openFile("docs/a.md");
+  assert.deepEqual(shownTabs(p.navigation), {
+    tabs: ["file:docs/a.md", "changes", "file:docs/b.md"],
+    active: "file:docs/a.md",
+    area: "surface",
+  });
+  p.navigation.closeTab("changes");
+  p.navigation.openChanges();
+  assert.deepEqual(
+    shownTabs(p.navigation).tabs,
+    ["file:docs/a.md", "file:docs/b.md", "changes"],
+    "a closed view opened again is new, so it joins the end",
+  );
+});
+
+test("files open as tabs once each; closing a tab shows its neighbour, the last hides the area", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openChanges();
+  p.navigation.openFile("docs/a.md");
+  p.navigation.openFile("docs/b.md");
+  p.navigation.openFile("docs/a.md");
+  assert.deepEqual(
+    shownTabs(p.navigation),
+    {
+      tabs: ["changes", "file:docs/a.md", "file:docs/b.md"],
+      active: "file:docs/a.md",
+      area: "surface",
+    },
+    "an open file is shown again, never opened twice",
+  );
+  p.navigation.selectTab("file:docs/b.md");
+  p.navigation.closeTab("file:docs/b.md");
+  assert.deepEqual(shownTabs(p.navigation).active, "file:docs/a.md");
+  p.navigation.closeTab("changes");
+  assert.deepEqual(
+    shownTabs(p.navigation),
+    { tabs: ["file:docs/a.md"], active: "file:docs/a.md", area: "surface" },
+    "closing a tab that is not shown leaves the shown one",
+  );
+  p.navigation.closeTab("file:docs/a.md");
+  assert.deepEqual(shownTabs(p.navigation), { tabs: [], active: null, area: "agent" });
+});
+
+test("a file opens as one tab however its path is spelled", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openFile("README.md");
+  p.navigation.openFile("/scratch/README.md");
+  p.navigation.openFile("./README.md");
+  p.navigation.openFile("docs//guide.md");
+  p.navigation.openFile("/scratch/./docs/guide.md");
+  assert.deepEqual(shownTabs(p.navigation).tabs, ["file:README.md", "file:docs/guide.md"]);
+  p.navigation.openFile("/scratchpad/notes.md");
+  p.navigation.openFile("../outside.md");
+  assert.deepEqual(
+    shownTabs(p.navigation),
+    {
+      tabs: [
+        "file:README.md",
+        "file:docs/guide.md",
+        "file:/scratchpad/notes.md",
+        "file:../outside.md",
+      ],
+      active: "file:../outside.md",
+      area: "surface",
+    },
+    "a path outside the session's directory keeps its own spelling",
+  );
+});
+
+test("following an HTML sibling link reuses the reference file tab and retains its one read", async () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openFile("reference/0001-codemode-map.html");
+  p.navigation.openFile("lessons/0001-why-codemode.html");
+  p.navigation.openFile("lessons/../reference/0001-codemode-map.html", "surface");
+  const request = activeTab(p.navigation.getState().surface);
+  assert.ok(request && typeof request !== "string");
+  const result = await p.fileReads[2].finish("reference/0001-codemode-map.html");
+  const resolved = activeTab(p.navigation.getState().surface);
+  assert.ok(resolved && typeof resolved !== "string");
+  assert.equal(resolved.result, result, "keep the acquired content, not a second read");
+  assert.equal(resolved.key, request.key, "adoption retains the viewer lifetime");
+  assert.equal(p.fileReads.length, 3);
+  assert.equal(p.fileReads[0].signal.aborted, true, "the superseded canonical read is cancelled");
+  assert.deepEqual(shownTabs(p.navigation), {
+    tabs: ["file:reference/0001-codemode-map.html", "file:lessons/0001-why-codemode.html"],
+    active: "file:reference/0001-codemode-map.html",
+    area: "surface",
+  });
+});
+
+test("a spelling that resolved to an open file rereads it in its tab, without adding one", async () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openFile("reference/map.html");
+  await p.fileReads[0].finish("reference/map.html");
+  p.navigation.openFile("lessons/../reference/map.html");
+  await p.fileReads[1].finish("reference/map.html");
+  p.navigation.openFile("lessons/../reference/map.html");
+  assert.deepEqual(
+    shownTabs(p.navigation).tabs,
+    ["file:reference/map.html"],
+    "a known spelling reuses its tab while the read is pending",
+  );
+  assert.equal(p.fileReads.length, 3, "an explicit open still rereads");
+  assert.equal(p.fileReads[2].path, "lessons/../reference/map.html", "as the link spelled it");
+  const result = await p.fileReads[2].finish("reference/map.html", "newer content");
+  const after = activeTab(p.navigation.getState().surface);
+  assert.ok(after && typeof after !== "string");
+  assert.equal(after.result, result);
+  assert.deepEqual(shownTabs(p.navigation).tabs, ["file:reference/map.html"]);
+});
+
+test("resolved aliases keep tab order and the latest link's return area, not completion order", async () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.setSingle(true);
+  p.navigation.openFile("lessons/../reference/map.html", "agent");
+  const alias = activeTab(p.navigation.getState().surface);
+  assert.ok(alias && typeof alias !== "string");
+  p.navigation.openChanges();
+  p.navigation.openFile("reference/map.html", "surface");
+  const latest = await p.fileReads[1].finish("reference/map.html", "latest content");
+  await p.fileReads[0].finish("reference/map.html", "older content");
+  const resolved = activeTab(p.navigation.getState().surface);
+  assert.ok(resolved && typeof resolved !== "string");
+  assert.equal(resolved.result, latest);
+  assert.deepEqual(shownTabs(p.navigation).tabs, ["file:reference/map.html", "changes"]);
+  p.navigation.closeTab("file:reference/map.html");
+  assert.equal(shownTabs(p.navigation).area, "surface", "latest link wins, even if it read first");
+});
+
+test("resolved file reads do not reopen closed tabs, steal focus or affect another session", async () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  const open = () => {
+    p.navigation.openFile("lessons/../reference/map.html");
+    return p.fileReads.at(-1)!;
+  };
+  const old = open();
+  const current = open();
+  assert.equal(old.signal.aborted, true);
+  await old.finish("reference/map.html");
+  assert.deepEqual(shownTabs(p.navigation).tabs, ["file:lessons/../reference/map.html"]);
+  p.navigation.openChanges();
+  await current.finish("reference/map.html");
+  assert.deepEqual(shownTabs(p.navigation), {
+    tabs: ["file:reference/map.html", "changes"],
+    active: "changes",
+    area: "surface",
+  });
+  const closed = open();
+  p.navigation.closeTab("file:reference/map.html");
+  const before = shownTabs(p.navigation);
+  assert.equal(closed.signal.aborted, true);
+  await closed.finish("reference/map.html");
+  assert.deepEqual(shownTabs(p.navigation), before);
+  const previousSession = open();
+  p.navigation.select("/scratch", "b");
+  p.selected("b");
+  open();
+  const next = shownTabs(p.navigation);
+  assert.equal(previousSession.signal.aborted, true);
+  await previousSession.finish("reference/map.html");
+  assert.deepEqual(shownTabs(p.navigation), next);
+});
+
+test("a path through `..` keeps its spelling until the server resolves the directory symlink", async () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openFile("README.md");
+  p.navigation.openFile("alias/../README.md");
+  p.navigation.openFile("/scratch/alias/../README.md");
+  assert.deepEqual(shownTabs(p.navigation).tabs, ["file:README.md", "file:alias/../README.md"]);
+  const file = activeTab(p.navigation.getState().surface);
+  assert.ok(file && typeof file !== "string");
+  assert.equal(p.fileReads.at(-1)!.path, "alias/../README.md");
+  await p.fileReads.at(-1)!.finish("/sibling/README.md");
+  assert.deepEqual(shownTabs(p.navigation).tabs, ["file:README.md", "file:/sibling/README.md"]);
+  p.navigation.openFile("alias/../README.md");
+  assert.deepEqual(shownTabs(p.navigation).tabs, ["file:README.md", "file:/sibling/README.md"]);
+  assert.equal(
+    p.fileReads.at(-1)!.path,
+    "alias/../README.md",
+    "the server follows the symlink again",
+  );
+});
+
+test("an alias resolving while a newer canonical read waits keeps that request, not the older bytes", async () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openFile("docs/../note.txt", "agent");
+  p.navigation.openChanges();
+  p.navigation.openFile("note.txt", "surface");
+  const latest = activeTab(p.navigation.getState().surface);
+  assert.ok(latest && typeof latest !== "string");
+  await p.fileReads[0].finish("note.txt", "older bytes");
+  const pending = activeTab(p.navigation.getState().surface);
+  assert.ok(pending && typeof pending !== "string");
+  assert.equal(pending.key, latest.key);
+  assert.equal(pending.result, undefined);
+  assert.equal(pending.from, "surface");
+  assert.equal(p.fileReads[1].signal.aborted, false);
+  const result = await p.fileReads[1].finish("note.txt", "latest bytes");
+  assert.equal(pending.key, (activeTab(p.navigation.getState().surface) as typeof pending).key);
+  assert.equal((activeTab(p.navigation.getState().surface) as typeof pending).result, result);
+  assert.deepEqual(shownTabs(p.navigation).tabs, ["file:note.txt", "changes"]);
+  assert.equal(p.fileReads.length, 2);
+});
+
+test("a retained acquisition is not persisted or reread by tab selection; an explicit link click rereads", async () => {
+  let kept: string | null = null;
+  const p = page("/new", {
+    read: () => kept,
+    write: (value) => {
+      kept = value;
+    },
+  });
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openFile("docs/../note.txt");
+  const result = await p.fileReads[0].finish("note.txt", "acquired bytes");
+  const file = activeTab(p.navigation.getState().surface);
+  assert.ok(file && typeof file !== "string");
+  assert.equal(file.result, result);
+  p.navigation.openChanges();
+  p.navigation.selectTab("file:note.txt");
+  p.registry();
+  assert.equal(activeTab(p.navigation.getState().surface), file);
+  assert.equal(p.fileReads.length, 1);
+  assert.ok(kept);
+  assert.deepEqual(JSON.parse(kept).surface.tabs[0], {
+    kind: "file",
+    path: "note.txt",
+    from: "agent",
+  });
+  const reloaded = page("/s/a", { read: () => kept, write: () => {} });
+  reloaded.registry();
+  reloaded.selected("a");
+  assert.equal(reloaded.fileReads.length, 1);
+  assert.equal(reloaded.fileReads[0].path, "note.txt");
+  p.navigation.openFile("docs/../note.txt");
+  assert.equal(p.fileReads.length, 2);
+  const fresh = await p.fileReads[1].finish("note.txt", "fresh bytes");
+  const reopened = activeTab(p.navigation.getState().surface);
+  assert.ok(reopened && typeof reopened !== "string");
+  assert.equal(reopened.result, fresh);
+  assert.notEqual(reopened.key, file.key);
+  assert.equal(p.fileReads.length, 2, "path adoption must not become a third request");
+  assert.deepEqual(shownTabs(p.navigation).tabs, ["file:note.txt", "changes"]);
+});
+
+test("failed reads keep their requested path and only another click retries", async () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openFile("docs/../missing.txt");
+  await p.fileReads[0].fail("File not found");
+  const file = activeTab(p.navigation.getState().surface);
+  assert.ok(file && typeof file !== "string");
+  assert.equal(file.path, "docs/../missing.txt");
+  assert.equal(file.status, "File not found");
+  assert.equal(file.result, undefined);
+  p.registry();
+  p.navigation.selectTab("file:docs/../missing.txt");
+  assert.equal(p.fileReads.length, 1);
+  p.navigation.openFile("docs/../missing.txt");
+  assert.equal(p.fileReads.length, 2);
+});
+
+test("checkout and workspace changes replace acquisitions; stopping navigation cancels pending reads", async () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openFile("note.txt");
+  const original = p.fileReads[0];
+  p.registry("workspace", true);
+  assert.equal(original.signal.aborted, true);
+  assert.equal(p.fileReads.length, 2);
+  await original.finish("wrong.txt");
+  await p.fileReads[1].fail("Checkout removed");
+  p.registry("workspace", false);
+  assert.equal(p.fileReads.length, 3);
+  const recovered = await p.fileReads[2].finish("note.txt");
+  const file = activeTab(p.navigation.getState().surface);
+  assert.ok(file && typeof file !== "string");
+  assert.equal(file.result, recovered);
+  p.registry("other-workspace");
+  const changed = activeTab(p.navigation.getState().surface);
+  assert.ok(changed && typeof changed !== "string");
+  assert.equal(changed.result, undefined);
+  assert.notEqual(changed.key, file.key);
+  assert.equal(p.fileReads[3].workspaceId, "other-workspace");
+  p.stopNavigation();
+  assert.equal(p.fileReads[3].signal.aborted, true);
+  await p.fileReads[3].finish("wrong.txt");
+  assert.equal(activeTab(p.navigation.getState().surface), changed);
+});
+
+test("one area at a time, closing a file opened from the Agent area returns there", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.setSingle(true);
+  p.navigation.openChanges();
+  p.navigation.showAgent();
+  assert.deepEqual(
+    shownTabs(p.navigation),
+    { tabs: ["changes"], active: "changes", area: "agent" },
+    "Agent keeps Changes for later",
+  );
+  p.navigation.openFile("docs/a.md");
+  p.navigation.closeTab("file:docs/a.md");
+  assert.deepEqual(shownTabs(p.navigation), {
+    tabs: ["changes"],
+    active: "changes",
+    area: "agent",
+  });
+
+  p.navigation.openChanges();
+  p.navigation.openFile("docs/b.md");
+  p.navigation.closeTab("file:docs/b.md");
+  assert.deepEqual(
+    shownTabs(p.navigation),
+    { tabs: ["changes"], active: "changes", area: "surface" },
+    "opened from Changes, back to Changes",
+  );
+  p.navigation.showAgent();
+  p.navigation.selectTab("changes");
+  assert.equal(shownTabs(p.navigation).area, "surface", "the Changes tab shows it again");
+});
+
+test("a file remembers the area it was opened from when the layout narrows", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openChanges();
+  p.navigation.openFile("docs/a.md", "agent");
+  p.navigation.openFile("docs/b.md", "surface");
+  p.navigation.setSingle(true);
+  p.navigation.closeTab("file:docs/b.md");
+  assert.deepEqual(
+    shownTabs(p.navigation),
+    { tabs: ["changes", "file:docs/a.md"], active: "file:docs/a.md", area: "surface" },
+    "opened from a file, back to the Surface area",
+  );
+  p.navigation.closeTab("file:docs/a.md");
+  assert.deepEqual(
+    shownTabs(p.navigation),
+    { tabs: ["changes"], active: "changes", area: "agent" },
+    "opened from the transcript side by side, back to Agent one area at a time",
+  );
+});
+
+test("one area at a time, a file opened again returns to the area of its latest link", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.setSingle(true);
+  p.navigation.openFile("docs/a.md", "agent");
+  p.navigation.openFile("docs/b.md", "surface");
+  p.navigation.showAgent();
+  p.navigation.openFile("docs/b.md", "agent");
+  assert.deepEqual(
+    shownTabs(p.navigation),
+    { tabs: ["file:docs/a.md", "file:docs/b.md"], active: "file:docs/b.md", area: "surface" },
+    "the open file's one tab shows again",
+  );
+  p.navigation.closeTab("file:docs/b.md");
+  assert.deepEqual(
+    shownTabs(p.navigation),
+    { tabs: ["file:docs/a.md"], active: "file:docs/a.md", area: "agent" },
+    "its latest link was in the transcript, so back to Agent",
+  );
+});
+
+test("every tab closes at every width; one area at a time, closing the last returns to Agent", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openChanges();
+  p.navigation.openFile("docs/a.md");
+  p.navigation.setSingle(true);
+  p.navigation.closeTab("file:docs/a.md");
+  assert.deepEqual(
+    shownTabs(p.navigation),
+    { tabs: ["changes"], active: "changes", area: "agent" },
+    "a file opened from the transcript returns there",
+  );
+  p.navigation.selectTab("changes");
+  p.navigation.closeTab("changes");
+  assert.deepEqual(
+    shownTabs(p.navigation),
+    { tabs: [], active: null, area: "agent" },
+    "one area at a time, Changes closes too",
+  );
+});
+
+test("legacy Preview memory restores remaining Changes but never the retired app surface", () => {
+  let value: string | null = null;
+  const memory = {
+    read: () => value,
+    write: (v: string | null) => {
+      value = v;
+    },
+  };
+  const p = page("/new", memory);
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openChanges();
+  const legacy = JSON.parse(value!);
+  legacy.surface.tabs.push("preview");
+  legacy.surface.active = "preview";
+  value = JSON.stringify(legacy);
+  const reloaded = page("/s/a", memory);
+  reloaded.registry();
+  reloaded.selected("a");
+  assert.deepEqual(shownTabs(reloaded.navigation).tabs, ["changes"]);
+  assert.equal(reloaded.navigation.getState().shownTab, "changes");
+});
+
+test("side by side both areas show while there are tabs; one area at a time, the one moved to", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  const shown = () => {
+    const { agent, surface } = p.navigation.getState().layout;
+    return { agent, surface };
+  };
+  assert.deepEqual(shown(), { agent: true, surface: false }, "no tabs: only the Agent area");
+  p.navigation.openChanges();
+  assert.deepEqual(shown(), { agent: true, surface: true }, "side by side");
+  p.navigation.setSingle(true);
+  assert.deepEqual(shown(), { agent: false, surface: true }, "narrow: Changes, just opened");
+  p.navigation.showAgent();
+  assert.deepEqual(shown(), { agent: true, surface: false }, "narrow: back on Agent");
+  p.navigation.setSingle(false);
+  assert.deepEqual(shown(), { agent: true, surface: true }, "wide again: both");
+  p.navigation.closeTab("changes");
+  p.navigation.setSingle(true);
+  assert.deepEqual(shown(), { agent: true, surface: false }, "nothing open stays on Agent");
+});
+
+test("the layout and Settings leave the session's tabs as they were", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  p.navigation.openChanges();
+  p.navigation.setSingle(true);
+  p.navigation.showAgent();
+  p.navigation.openSettings();
+  p.navigation.closeSettings();
+  p.navigation.setSingle(false);
+  assert.deepEqual(
+    shownTabs(p.navigation).tabs,
+    ["changes"],
+    "Changes chosen one at a time shows beside Agent",
+  );
+});
+
+test("a Surface tab is on screen only while nothing covers it", () => {
+  const p = page("/new", undefined, railPreference(railStorage()));
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  const shownTab = () => p.navigation.getState().shownTab;
+  assert.equal(shownTab(), null, "no tabs");
+  p.navigation.openChanges();
+  assert.equal(shownTab(), "changes");
+  p.navigation.openSettings();
+  assert.equal(shownTab(), null, "Settings covers the session");
+  p.navigation.closeSettings();
+  assert.equal(shownTab(), "changes");
+  p.navigation.toggleRail();
+  assert.equal(shownTab(), null, "the rail, turned on last, covers the Surface area");
+  p.navigation.toggleRail();
+  p.navigation.setSingle(true);
+  assert.equal(shownTab(), "changes", "one area at a time, Changes just opened");
+  p.navigation.showAgent();
+  assert.equal(shownTab(), null, "one area at a time, the Agent area shows instead");
+  p.navigation.openFile("README.md");
+  assert.equal(shownTab(), "file:README.md");
+});
+
+test("the removed Radius address follows the unknown-route fallback", () => {
+  const p = page("/settings/radius");
+  p.registry();
+  assert.equal(p.navigation.getState().settings, null);
+  assert.equal(p.client.getState().view.kind, "new");
+  assert.equal(p.path(), "/new");
+  assert.deepEqual(p.selects(), [], "an unknown address starts no session");
+});
+
+test("a move that changes nothing notifies no one and leaves the address bar alone", () => {
+  const p = page("/new");
+  p.registry();
+  let notified = 0;
+  p.navigation.subscribe(() => notified++);
+  const before = {
+    state: p.navigation.getState(),
+    titles: p.titles.length,
+    entries: [...p.entries],
+    reads: p.reads(),
+  };
+  p.navigation.setSingle(false);
+  p.navigation.setSingle(false);
+  p.navigation.setPalette(false);
+  p.navigation.closePullRequest();
+  p.navigation.closeSettings();
+  p.navigation.showAgent();
+  assert.equal(notified, 0, "an unchanged move notified a subscriber");
+  assert.equal(p.navigation.getState(), before.state, "the state keeps its identity");
+  assert.equal(p.titles.length, before.titles, "no title written");
+  assert.deepEqual(p.entries, before.entries, "no history entry");
+  assert.equal(p.reads(), before.reads, "an unchanged move read the client, so it settled");
+  assert.equal(
+    p.moves(),
+    2,
+    "a request to see an area or leave Settings is a move, changed or not",
+  );
+  p.navigation.setSingle(true);
+  assert.equal(notified, 1, "a move that changed the layout notifies once");
+  assert.equal(p.navigation.getState().single, true);
+  p.navigation.openSettings("providers");
+  assert.equal(notified, 2);
+  assert.equal(p.path(), "/settings/providers", "a real move still syncs the address");
+});
+
+test("selecting another session with the same areas notifies no navigation subscriber", () => {
+  const p = page("/new");
+  p.registry();
+  p.navigation.select("/scratch", "a");
+  p.selected("a");
+  let notified = 0;
+  p.navigation.subscribe(() => notified++);
+  const before = p.navigation.getState();
+  p.navigation.select("/scratch", "b");
+  p.selected("b");
+  assert.equal(p.client.getState().session?.sessionId, "b", "the client store carries the change");
+  assert.equal(p.path(), "/s/b", "the address follows the client");
+  assert.equal(p.navigation.getState(), before, "the areas are as they were: no new state");
+  assert.equal(
+    notified,
+    0,
+    "a session change with unchanged areas notified a navigation subscriber",
+  );
+});

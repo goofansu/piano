@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BROWSER_MEMORY, browserMemory } from "../web/src/lib/browserMemory.ts";
-import { storedLastDirectory } from "../web/src/lib/client.ts";
-import { browserCatalogStorage } from "../web/src/lib/modelCatalogs.ts";
-import { browserSurfaceMemory } from "../web/src/lib/navigation.ts";
-import { sidebarPreferences } from "../web/src/lib/sidebarList.ts";
+import { storedLastDirectory } from "../web/src/app/client.ts";
+import { browserCatalogStorage } from "../web/src/features/models/modelCatalogs.ts";
+import { browserSurfaceMemory } from "../web/src/features/navigation/navigation.ts";
+import { sidebarPreferences } from "../web/src/features/navigation/sidebar/sidebarList.ts";
+import { BROWSER_MEMORY, browserMemory } from "../web/src/shared/lib/browserMemory.ts";
 
 function browserStore() {
   const held = new Map<string, string>();

@@ -11,7 +11,7 @@ Keep empty or uncertain result files and inspect Piano before any retry. Fields:
 
 ## Developer navigation
 
-- **Owners:** `scripts/dispatch-session.ts`, `extensions/piano-dispatch/`, `shared/dispatch.ts`,
-  `server/ClientDispatch.ts`.
+- **Owners:** `scripts/dispatch-session.ts`, `extensions/piano-dispatch/`, `shared/features/dispatch/dispatch.ts`,
+  `server/app/ClientDispatch.ts`.
 - **Not proved:** fake Pi makes no tool calls, so the extension's waits, the parent's tool rows and
   child backlinks in the UI need a real Pi or scripted model.

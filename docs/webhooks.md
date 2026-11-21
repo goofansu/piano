@@ -13,6 +13,6 @@ error message. Retried attempts send nothing. Any other reason names how Pi's pr
 
 ## Verification
 
-`test/Webhooks.test.ts`, `test/WebhookReceiver.test.ts` and the
+`test/features/webhooks/Webhooks.test.ts`, `test/features/webhooks/WebhookReceiver.test.ts` and the
 [Settings recipe](../.agents/skills/verify-piano/features/settings-other.md) (inactive webhook
 editing and URL refusal only) never deliver to a public receiver.

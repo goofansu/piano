@@ -48,6 +48,24 @@ test("oxlint enforces layer edges, including types, aliases and a shared bridge"
     const cases: [string, string, boolean][] = [
       ["web/src/check.ts", 'export type { Thing } from "@backend/Thing";', false],
       ["server/check.ts", 'export type { Thing } from "@shared/Thing";', true],
+      [
+        "server/shared/check.ts",
+        'export type { Thing } from "../features/sessions/Thing.ts";',
+        false,
+      ],
+      ["server/shared/check.ts", 'export type { Thing } from "../app/Thing.ts";', false],
+      [
+        "server/features/sessions/check.ts",
+        'export type { Thing } from "../../shared/Thing.ts";',
+        true,
+      ],
+      ["web/src/shared/check.ts", 'export type { Thing } from "@/features/sessions/Thing";', false],
+      ["web/src/shared/check.ts", 'export type { Thing } from "@/app/Thing";', false],
+      [
+        "web/src/shared/check.ts",
+        'export type { Thing } from "@shared/features/sessions/Thing";',
+        true,
+      ],
       ["server/check.ts", "export const load = (path: string) => import(path);", false],
       [
         "web/src/hooks/use-mobile.ts",

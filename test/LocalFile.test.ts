@@ -4,7 +4,7 @@ import { appendFile, mkdtemp, rm, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { LocalFileRefusal, openLocalFile, readLocalFile } from "../server/LocalFile.ts";
+import { LocalFileRefusal, openLocalFile, readLocalFile } from "../server/shared/LocalFile.ts";
 
 const refusal = (reason: string) => (error: unknown) =>
   error instanceof LocalFileRefusal && error.reason === reason;

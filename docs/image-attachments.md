@@ -12,6 +12,6 @@ the [version-pinned research and sources](research/2026-10-06-pi-image-restricti
 
 ## Future changes
 
-Constants live in `shared/attachments.ts`; the wire schema and browser use them. Future increases
+Constants live in `shared/features/sessions/attachments/attachments.ts`; the wire schema and browser use them. Future increases
 need concrete user examples plus large-upload checks and a memory/transport review. General file
 support needs its own type and policy, not a broader image MIME allowlist.
