@@ -1,6 +1,6 @@
-import { isPublishingTool, publishedArtifact } from "../../../../shared/radius/artifactTools.ts";
-import type { ArtifactPublication } from "../../../../shared/radius/radiusArtifacts.ts";
-import type { RenderMsg } from "../../../../shared/wire.ts";
+import { isPublishingTool, publishedArtifact } from "../../../shared/radius/artifactTools.ts";
+import type { ArtifactPublication } from "../../../shared/radius/radiusArtifacts.ts";
+import type { RenderMsg, Snapshot } from "../../../shared/wire.ts";
 
 export interface SessionArtifact {
   id: string;
@@ -20,6 +20,10 @@ function parseObject(text: string): Record<string, unknown> | undefined {
 }
 
 const text = (value: unknown) => (typeof value === "string" && value ? value : undefined);
+
+export function hasSessionArtifacts(session: Snapshot): boolean {
+  return sessionArtifacts(session.messages, session.state.artifacts).length > 0;
+}
 
 export function sessionArtifacts(
   messages: ReadonlyArray<RenderMsg>,

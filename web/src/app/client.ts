@@ -1,6 +1,9 @@
 import type { ClientCommand, ServerMessage } from "@shared/wire";
 import { projectStartDirectory } from "../../../features/projects/web/projectHomeView.ts";
-import { createTrustDecisions, trustNotice } from "../../../features/projects/web/trustDecision.ts";
+import {
+  createTrustDecisions,
+  trustNotice,
+} from "../../../features/workspace/web/folders/trustDecision.ts";
 import { refusedAttempt } from "../../../shared/session/creationVerdict.ts";
 import { closureNeedsAttention } from "../../../shared/session/sessionStatus.ts";
 import type {

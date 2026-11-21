@@ -1,8 +1,8 @@
+import * as FirstMessage from "../../../features/sessions/web/start/firstMessage.ts";
 import {
   reduceTrustDecision,
   trustObserved,
-} from "../../../features/projects/web/trustDecision.ts";
-import * as FirstMessage from "../../../features/sessions/web/start/firstMessage.ts";
+} from "../../../features/workspace/web/folders/trustDecision.ts";
 import {
   type CreationContext,
   creationVerdictOf,

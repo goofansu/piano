@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
+import { sessionArtifacts } from "../../../../features/radius/web/artifactList.ts";
 import { PiCli, type PiCliConfig } from "../../../../features/sessions/server/pi/PiCli.ts";
 import {
   type PiSession,
@@ -55,6 +56,51 @@ const observe = (session: PiSession, text: string, projected?: (e: SessionEvent)
     yield* session.act({ _tag: "prompt", text });
     return yield* Fiber.join(observed);
   });
+
+test("nested publication receipts reach live and reconnect snapshots despite outer script failure", async () => {
+  await run(
+    Effect.gen(function* () {
+      const session = yield* (yield* PiSessions).open({
+        cwd: process.cwd(),
+        sessionId: "nested-artifacts",
+      });
+      let expected = 0;
+      for (const prompt of [
+        "codemode-artifact a 1 Draft",
+        "codemode-artifact b 1 Other",
+        "codemode-artifact a 2 Final",
+        "codemode-artifact a 1 Draft",
+      ]) {
+        expected++;
+        const ready = yield* Deferred.make<void>();
+        const observed = yield* session.events.pipe(
+          Stream.tap((e) =>
+            e._tag === "snapshot" ? Deferred.succeed(ready, undefined) : Effect.void,
+          ),
+          Stream.takeUntil(
+            (e) =>
+              e._tag === "context" &&
+              e.messages.filter((m) => m.role === "tool_result").length === expected,
+          ),
+          Stream.runCollect,
+          Effect.forkChild,
+        );
+        yield* Deferred.await(ready);
+        yield* session.act({ _tag: "prompt", text: prompt });
+        yield* Fiber.join(observed);
+      }
+      const { messages, state } = yield* snapshot(session);
+      assert.deepEqual(sessionArtifacts(messages, state.artifacts), [
+        { id: "a", title: "Final", url: "https://radius.example.test/a/a" },
+        { id: "b", title: "Other", url: "https://radius.example.test/a/b" },
+      ]);
+      const results = messages.filter((m) => m.role === "tool_result");
+      assert.equal(results.length, 4);
+      assert.ok(results.every((m) => m.isError && m.nestedCallsLost === "arguments"));
+    }).pipe(Effect.timeout("10 seconds"), Effect.scoped),
+    { ...cli, cli: new URL("../../../fake-pi.mjs", import.meta.url).pathname },
+  );
+});
 
 test("content-indexed endings replace drafts and cumulative usage is not added", async () => {
   await run(

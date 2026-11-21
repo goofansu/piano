@@ -7,7 +7,7 @@ import {
   type RadiusArtifactResult,
 } from "../../../shared/radius/radiusArtifacts.ts";
 import type { RenderMsg } from "../../../shared/wire.ts";
-import { sessionArtifacts } from "../../../web/src/shared/state/sessionArtifacts.ts";
+import { sessionArtifacts } from "../web/artifactList.ts";
 
 let next = 0;
 function publish(

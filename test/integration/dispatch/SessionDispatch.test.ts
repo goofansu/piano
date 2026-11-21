@@ -7,7 +7,7 @@ import {
   sendFollowUp,
   startSession,
   waitSessions,
-} from "../../../features/dispatch/extension/SessionDispatch.ts";
+} from "../../../features/dispatch/server/SessionDispatch.ts";
 import { PiCli } from "../../../features/sessions/server/pi/PiCli.ts";
 import { PiSessions, PiSessionsLive } from "../../../features/sessions/server/pi/PiSessions.ts";
 import { MAX_MESSAGE_BYTES } from "../../../shared/session/attachments.ts";

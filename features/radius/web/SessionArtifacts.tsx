@@ -1,3 +1,4 @@
+import { sessionArtifacts } from "@features/radius/web/artifactList";
 import { artifactsMenu } from "@features/radius/web/artifactsMenu";
 import { ExternalLinkIcon, ShapesIcon } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -10,7 +11,6 @@ import {
   DropdownMenuTrigger,
 } from "@/shared/components/PianoDropdownMenu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/components/PianoTooltip";
-import { sessionArtifacts } from "@/shared/state/sessionArtifacts";
 import type { AppState } from "@/shared/state/state";
 
 export function ArtifactsMenu({ state }: { state: AppState }) {

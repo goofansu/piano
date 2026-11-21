@@ -6,6 +6,7 @@ import {
   type SessionTarget,
   sessionCommands,
 } from "@features/commands/web/sessionCommands";
+import type { Snapshot } from "@shared/wire";
 import {
   ArchiveIcon,
   CopyIcon,
@@ -59,6 +60,7 @@ interface CommandsValue {
   layout: SessionLayout;
   codeWrap: boolean;
   state: AppState;
+  hasArtifacts: (session: Snapshot) => boolean;
   global: GlobalCommandContext;
   openProjectCommands: (state: AppState) => ProjectDestination[];
   sessionProjectMenu: (
@@ -75,9 +77,9 @@ export function useCommands() {
 }
 
 export function useSessionCommands(target?: SessionTarget) {
-  const { state, run, messagesOnly, codeWrap, layout } = useCommands();
+  const { state, run, messagesOnly, codeWrap, layout, hasArtifacts } = useCommands();
   return {
-    commands: sessionCommands(state, target, { messagesOnly, codeWrap, layout }),
+    commands: sessionCommands(state, target, { messagesOnly, codeWrap, layout, hasArtifacts }),
     run,
     messagesOnly,
   };

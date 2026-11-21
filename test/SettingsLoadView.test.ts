@@ -3,7 +3,7 @@ import { test } from "node:test";
 import {
   type SettingsLoadInput,
   settingsLoadView,
-} from "../../../web/src/shared/lib/settingsLoadView.ts";
+} from "../web/src/shared/lib/settingsLoadView.ts";
 
 const view = (input: Partial<SettingsLoadInput<string[]>> = {}) =>
   settingsLoadView<string[]>({

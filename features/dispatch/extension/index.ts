@@ -38,7 +38,7 @@ import {
   WAIT_MIN_MS,
   waitSessions,
   withLinks,
-} from "./SessionDispatch.ts";
+} from "../server/SessionDispatch.ts";
 
 const Handle = obj({
   cwd: str(),
