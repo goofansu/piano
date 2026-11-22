@@ -84,12 +84,24 @@ export const SessionPullRequestsLive = Layer.effect(
       pr.head && pr.base
         ? { head: pr.head, base: pr.base, headRepo: pr.headRepo, baseRepo: pr.baseRepo }
         : {};
+    const checkoutBranches = (cwd: string, pr: PullRequest): Effect.Effect<PullRequestBranches> => {
+      const branches = branchesOf(pr);
+      if (!branches.head) return Effect.succeed(branches);
+      return observeBranchRemote(cwd).pipe(
+        Effect.flatMap((remote) =>
+          remote?.on === "github"
+            ? github.checkoutNames(cwd, remote.head, remote.apiHost, branches)
+            : Effect.succeed(branches),
+        ),
+        Effect.orElseSucceed(() => branches),
+      );
+    };
     const recordBranches = Effect.fn("SessionPullRequests.recordBranches")(function* (
       s: SessionEntry,
       pr: PullRequest,
     ): Effect.fn.Return<SessionPullRequestLink, RegistryError> {
       const link = s.pullRequest!;
-      const branches = pullRequestBranches(branchesOf(pr));
+      const branches = pullRequestBranches(yield* checkoutBranches(s.cwd, pr));
       if (pullRequestBranchesKey(link) === pullRequestBranchesKey(branches)) return link;
       const saved = yield* Effect.uninterruptible(
         registry.setSessionLink(s, "pullRequest", { ...link, ...branches }),
@@ -145,7 +157,7 @@ export const SessionPullRequestsLive = Layer.effect(
       const link: SessionPullRequestLink = {
         ...found.success.link,
         source: "branch",
-        ...branchesOf(found.success.pullRequest),
+        ...(yield* checkoutBranches(s.cwd, found.success.pullRequest)),
       };
       yield* save(s, link);
       return { link, pullRequest: found.success.pullRequest };
