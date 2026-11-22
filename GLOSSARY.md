@@ -28,7 +28,7 @@ SQLite, UI and documentation.
 | Verification | Evaluation of evidence against identified acceptance criteria and project policy. It has a bounded scope and can become stale. Not implemented yet. |
 | Approval | A human or authorized policy decision permitting a specific action on a specific candidate, subject to its recorded conditions. Not implemented yet. |
 | Integration | Applying the approved candidate to a target. Local branch integration and forge PR merge are distinct actions. Not implemented yet. |
-| Registry | Piano's SQLite store of folders, projects, workspace identities, session references and preferences; not a transcript or evidence database. |
+| Registry | Piano's SQLite store of folders, projects, workspace identities, session references and preferences; not a transcript or evidence database. In UI strings, say "Piano's database". |
 | Prompt | A Pi prompt template created in Piano, offered as a `/name` command in the composer. Settings lists only these; Pi's own prompt templates stay Pi's. |
 | Skill | Agent instructions for a method or discipline, loaded by Pi; skill use does not by itself constitute evidence. |
 ## Projects
