@@ -962,6 +962,7 @@ await run(
     await page.ab("fill", '[aria-label="Message"]', "Recover this queue edit");
     await page.press("Enter");
     await page.ab("wait", 'button[aria-label="Edit queued message"]');
+    await page.until(`document.querySelector('[aria-label="Message"]')?.value === ""`);
     await page.evaluate(`(() => {
       const send = WebSocket.prototype.send;
       window.queueRecovery = { dropped: false, read: false };
@@ -970,14 +971,16 @@ await run(
         const request = JSON.parse(data);
         if (request.action?._tag === "restore_queue") {
           id = request.action.queueRequestId;
-          this.addEventListener("message", event => {
+          const deliver = this.onmessage;
+          this.onmessage = event => {
             const reply = JSON.parse(event.data);
             if (reply._tag === "action_result" && reply.queueRequestId === request.action.queueRequestId) {
               window.queueRecovery.dropped = true;
-              event.stopImmediatePropagation();
               this.close();
+              return;
             }
-          }, { capture: true });
+            deliver.call(this, event);
+          };
         }
         if (request._tag === "queue_receipt" && request.operation === "read" && request.queueRequestId === id) {
           window.queueRecovery.read = true;
@@ -990,7 +993,7 @@ await run(
     const before = clears();
     await page.click("button", "Edit queued message");
     await page.until(
-      `document.querySelector('[aria-label="Message"]')?.value === "Recover this queue edit"`,
+      `window.queueRecovery.read && document.querySelector('[aria-label="Message"]')?.value === "Recover this queue edit"`,
     );
     assert.equal(
       clears(),
