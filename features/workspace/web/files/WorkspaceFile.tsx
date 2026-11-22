@@ -18,7 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { CopyButton } from "@/shared/components/CopyButton";
 import { IconButton } from "@/shared/components/IconButton";
-import { SurfaceFrame } from "@/shared/components/SurfaceArea";
+import { InspectorFrame } from "@/shared/components/Inspector";
 import { relativeToDocument } from "@/shared/markdown/file-link";
 import { LocalFileContext, Markdown } from "@/shared/markdown/Markdown";
 import { previewImage } from "@/shared/markdown/previewImage";
@@ -117,7 +117,7 @@ export function WorkspaceFile({ file, active }: { active: boolean; file: FileTab
     !("bytes" in result) &&
     !(mode === "preview" && ["markdown", "html", "svg"].includes(result.kind));
   return (
-    <SurfaceFrame
+    <InspectorFrame
       tab={file}
       status={
         <div className="flex min-w-0 items-center gap-1">
@@ -194,7 +194,7 @@ export function WorkspaceFile({ file, active }: { active: boolean; file: FileTab
             ) : null
           ) : result.kind === "markdown" && mode === "preview" ? (
             <LocalFileContext
-              value={(path) => openFile(relativeToDocument(result.path, path), "surface")}
+              value={(path) => openFile(relativeToDocument(result.path, path), "inspector")}
             >
               <Markdown
                 text={result.content}
@@ -211,6 +211,6 @@ export function WorkspaceFile({ file, active }: { active: boolean; file: FileTab
           )}
         </section>
       )}
-    </SurfaceFrame>
+    </InspectorFrame>
   );
 }

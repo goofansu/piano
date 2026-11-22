@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Skeleton } from "@/components/ui/skeleton";
 import { IconButton } from "@/shared/components/IconButton";
+import { inspectorTabNames } from "@/shared/components/Inspector";
 import { PaneHeader } from "@/shared/components/Pane";
 import { PianoButton } from "@/shared/components/PianoButton";
 import {
@@ -35,7 +36,6 @@ import {
 } from "@/shared/components/PianoDropdownMenu";
 import { Sheet, SheetTrigger } from "@/shared/components/PianoSheet";
 import { SessionDetails } from "@/shared/components/SessionDetails";
-import { surfaceTabNames } from "@/shared/components/SurfaceArea";
 import { useNarrowViewport } from "@/shared/lib/useNarrowViewport";
 import { useNavigation } from "@/shared/navigation/useNavigation";
 import { sessionContext } from "@/shared/state/sessionContext";
@@ -246,7 +246,7 @@ function ChangesToggle() {
     <IconButton
       data-changes-trigger
       size="header"
-      label={closes ? surfaceTabNames("changes").close : command.label}
+      label={closes ? inspectorTabNames("changes").close : command.label}
       aria-pressed={single ? undefined : shown}
       onClick={() => (closes ? navigation.closeTab("changes") : run(command))}
       className="aria-pressed:bg-muted"

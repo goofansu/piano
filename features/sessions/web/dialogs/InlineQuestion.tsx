@@ -46,7 +46,7 @@ export function Question({
     <section aria-label="Question" className="px-(--gutter) pt-3">
       <form
         aria-labelledby={`${id}-title`}
-        className="mx-auto flex w-full max-w-3xl flex-col gap-3 rounded-md border border-line bg-surface-1 p-4"
+        className="mx-auto flex w-full max-w-3xl flex-col gap-3 rounded-md border border-line bg-layer-1 p-4"
         onSubmit={(event) => {
           event.preventDefault();
           if (choice && !selected) return;

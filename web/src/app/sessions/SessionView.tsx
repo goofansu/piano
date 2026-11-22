@@ -27,7 +27,7 @@ import { toast } from "sonner";
 import { InlineQuestion } from "@/app/sessions/InlineQuestion";
 import { SessionComposer } from "@/app/sessions/SessionComposer";
 import { SessionHeader } from "@/app/sessions/SessionHeader";
-import { SessionPanel, SurfaceTabTrigger } from "@/app/sessions/SessionPanel";
+import { SessionPanel, InspectorTabTrigger } from "@/app/sessions/SessionPanel";
 import { SessionRail } from "@/app/sessions/SessionRail";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -66,7 +66,7 @@ interface Props {
 }
 
 const NO_MESSAGES: ReadonlyArray<RenderMsg> = [];
-const AREA_ID = { agent: "session-agent-area", surface: "session-surface-area" } as const;
+const AREA_ID = { agent: "session-agent-area", inspector: "session-inspector" } as const;
 const tabId = (value: string) => `session-area-tab-${encodeURIComponent(value)}`;
 
 export function SessionView({ state, send }: Props) {
@@ -79,7 +79,7 @@ export function SessionView({ state, send }: Props) {
     openFile,
     single,
     setSingle,
-    surface,
+    inspector,
     showAgent,
   } = navigation;
   const onPullRequestOpenChange = (open: boolean) =>
@@ -172,7 +172,7 @@ export function SessionView({ state, send }: Props) {
         style={
           {
             "--agent-min": `${AGENT_MIN_WIDTH}px`,
-            "--surface-min": `${PANEL_WIDTH.min}px`,
+            "--inspector-min": `${PANEL_WIDTH.min}px`,
           } as React.CSSProperties
         }
       >
@@ -244,7 +244,7 @@ export function SessionView({ state, send }: Props) {
                   role="status"
                   className="late-enter pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center"
                 >
-                  <span className="flex items-center gap-2 rounded-full border border-line bg-surface-2 px-3 py-1.5 text-sm text-ink-2 shadow-2">
+                  <span className="flex items-center gap-2 rounded-full border border-line bg-layer-2 px-3 py-1.5 text-sm text-ink-2 shadow-2">
                     <Spinner className="size-3.5" /> Reconnecting…
                   </span>
                 </div>
@@ -295,8 +295,8 @@ export function SessionView({ state, send }: Props) {
           state={state}
           onAsk={onAsk}
           pullRequest={pullRequest}
-          id={AREA_ID.surface}
-          labelledBy={areaTabs && surface ? tabId(surface.active) : undefined}
+          id={AREA_ID.inspector}
+          labelledBy={areaTabs && inspector ? tabId(inspector.active) : undefined}
         />
       </div>
     </TranscriptViewportContext>
@@ -305,9 +305,9 @@ export function SessionView({ state, send }: Props) {
 
 function AreaTabs() {
   const navigation = useNavigation();
-  const { surface, showAgent, selectTab } = navigation;
-  const tabs = surface?.tabs ?? [];
-  const value = surface && navigation.layout.surface ? surface.active : "agent";
+  const { inspector, showAgent, selectTab } = navigation;
+  const tabs = inspector?.tabs ?? [];
+  const value = inspector && navigation.layout.inspector ? inspector.active : "agent";
   return (
     <PianoStripBar variant="pills">
       <Tabs
@@ -330,7 +330,7 @@ function AreaTabs() {
             const key = tabKey(tab);
             return (
               <PianoStripTab key={key} selected={key === value}>
-                <SurfaceTabTrigger tab={tab} id={tabId(key)} controls={AREA_ID.surface} />
+                <InspectorTabTrigger tab={tab} id={tabId(key)} controls={AREA_ID.inspector} />
               </PianoStripTab>
             );
           })}

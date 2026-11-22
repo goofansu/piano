@@ -71,11 +71,11 @@
   --type-label: 1rem;
   --type-caption: 0.875rem;
 
-  --surface-0: oklch(0.93 0.006 60);
+  --layer-0: oklch(0.93 0.006 60);
   --conversation: oklch(0.962 0.004 75);
-  --surface-1: oklch(0.978 0.004 75);
-  --surface-2: oklch(0.985 0.004 75);
-  --surface-3: oklch(0.99 0.003 75);
+  --layer-1: oklch(0.978 0.004 75);
+  --layer-2: oklch(0.985 0.004 75);
+  --layer-3: oklch(0.99 0.003 75);
   --line: oklch(0.46 0.01 68 / 14%);
   --line-strong: oklch(0.46 0.01 68 / 24%);
   --fill: oklch(0.46 0.01 68 / 6%);
@@ -102,11 +102,11 @@
   --err-soft: oklch(0.48 0.12 33 / 10%);
   --merged: oklch(0.5 0.07 320);
 
-  --background: var(--surface-0);
+  --background: var(--layer-0);
   --foreground: var(--ink);
-  --card: var(--surface-1);
+  --card: var(--layer-1);
   --card-foreground: var(--ink);
-  --popover: var(--surface-2);
+  --popover: var(--layer-2);
   --popover-foreground: var(--ink);
   --popover-hover: color-mix(in oklch, var(--popover), var(--foreground) 5%);
   --primary: var(--brand);
@@ -126,7 +126,7 @@
   --border: var(--line);
   --input: var(--line-strong);
   --ring: var(--brand);
-  --sidebar: var(--surface-0);
+  --sidebar: var(--layer-0);
   --sidebar-foreground: var(--ink);
   --sidebar-primary: var(--brand);
   --sidebar-primary-foreground: var(--brand-ink);
@@ -142,11 +142,11 @@
 }
 
 .dark {
-  --surface-0: oklch(0.215 0.022 257);
+  --layer-0: oklch(0.215 0.022 257);
   --conversation: oklch(0.25 0.022 257);
-  --surface-1: oklch(0.285 0.024 257);
-  --surface-2: oklch(0.31 0.024 257);
-  --surface-3: oklch(0.33 0.024 257);
+  --layer-1: oklch(0.285 0.024 257);
+  --layer-2: oklch(0.31 0.024 257);
+  --layer-3: oklch(0.33 0.024 257);
   --line: oklch(0.85 0.021 53 / 10%);
   --line-strong: oklch(0.85 0.021 53 / 18%);
   --fill: oklch(0.85 0.021 53 / 4%);
@@ -205,10 +205,10 @@
   --radius-xl: calc(var(--radius) + 4px);
 
   --color-conversation: var(--conversation);
-  --color-surface-0: var(--surface-0);
-  --color-surface-1: var(--surface-1);
-  --color-surface-2: var(--surface-2);
-  --color-surface-3: var(--surface-3);
+  --color-layer-0: var(--layer-0);
+  --color-layer-1: var(--layer-1);
+  --color-layer-2: var(--layer-2);
+  --color-layer-3: var(--layer-3);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
   --color-fill: var(--fill);
@@ -345,7 +345,7 @@
   width: var(--sidebar-reveal-width);
   height: 100dvh;
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
-  background: var(--surface-0);
+  background: var(--layer-0);
   clip-path: inset(0 calc((1 - var(--sidebar-progress)) * 100%) 0 0);
   transition: clip-path var(--sidebar-duration) var(--sidebar-easing);
   will-change: clip-path;
@@ -599,7 +599,7 @@
 .composer-card {
   border-radius: 1.25rem;
   border: 1px solid var(--line-strong);
-  background: var(--surface-1);
+  background: var(--layer-1);
   box-shadow: var(--shadow-1);
 }
 .composer-card[data-dragging="true"] {

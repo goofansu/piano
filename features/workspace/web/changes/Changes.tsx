@@ -44,7 +44,7 @@ import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empt
 import { Spinner } from "@/components/ui/spinner";
 import { DisclosureChevron } from "@/shared/components/Disclosure";
 import { IconButton } from "@/shared/components/IconButton";
-import { SurfaceFrame } from "@/shared/components/SurfaceArea";
+import { InspectorFrame } from "@/shared/components/Inspector";
 import { useObservation } from "@/shared/lib/useObservation";
 import type { SessionView } from "@/shared/state/state";
 import type { ChangeFile, Comparison } from "../../contracts/changes/http.ts";
@@ -128,7 +128,7 @@ export function ChangesPanel({
   const ask = onAsk && ((loaded: LoadedFile) => onAsk(askText(loaded)));
 
   return (
-    <SurfaceFrame
+    <InspectorFrame
       tab="changes"
       status={
         !unavailable &&
@@ -176,7 +176,7 @@ export function ChangesPanel({
           onAsk={ask}
         />
       </div>
-    </SurfaceFrame>
+    </InspectorFrame>
   );
 }
 

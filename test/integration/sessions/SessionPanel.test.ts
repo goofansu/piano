@@ -149,7 +149,7 @@ test("retained HTML viewer stops admitting links under Settings and resumes with
           createElement(
             Tooltip.Provider,
             null,
-            createElement(SessionPanel, { state, id: "surface", labelledBy: undefined }),
+            createElement(SessionPanel, { state, id: "inspector", labelledBy: undefined }),
           ),
         ),
       ),

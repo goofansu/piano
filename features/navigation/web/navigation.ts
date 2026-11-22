@@ -2,10 +2,10 @@ import type { FilePreview } from "../../../shared/workspace/files.ts";
 import { browserMemory } from "../../../web/src/shared/lib/browserMemory.ts";
 import type { Preference } from "../../../web/src/shared/lib/preference.ts";
 import {
-  type SurfaceView,
+  type InspectorView,
   type FileTab,
   isView,
-  type Surface,
+  type Inspector,
   tabKey,
   type SessionArea,
   type SessionLayout,
@@ -42,33 +42,33 @@ function filePath(path: string, cwd: string | undefined): string {
 }
 
 function sessionLayout(
-  state: Pick<NavigationState, "surface" | "area" | "single" | "rail" | "covered">,
+  state: Pick<NavigationState, "inspector" | "area" | "single" | "rail" | "covered">,
 ): SessionLayout {
   if (state.single) {
-    const surface = !!state.surface && state.area === "surface";
+    const inspector = !!state.inspector && state.area === "inspector";
     return {
       single: true,
-      agent: !surface,
-      surface,
+      agent: !inspector,
+      inspector,
       rail: false,
-      agentTab: !!state.surface,
+      agentTab: !!state.inspector,
     };
   }
-  const surface = !!state.surface && !state.covered;
-  return { single: false, agent: true, surface, rail: state.rail && !surface, agentTab: false };
+  const inspector = !!state.inspector && !state.covered;
+  return { single: false, agent: true, inspector, rail: state.rail && !inspector, agentTab: false };
 }
 
 function shownTab(
-  state: Pick<NavigationState, "settings" | "surface">,
+  state: Pick<NavigationState, "settings" | "inspector">,
   layout: SessionLayout,
 ): string | null {
-  return !state.settings && layout.surface && state.surface ? state.surface.active : null;
+  return !state.settings && layout.inspector && state.inspector ? state.inspector.active : null;
 }
 
 const sameLayout = (a: SessionLayout, b: SessionLayout) =>
   a.single === b.single &&
   a.agent === b.agent &&
-  a.surface === b.surface &&
+  a.inspector === b.inspector &&
   a.rail === b.rail &&
   a.agentTab === b.agentTab;
 
@@ -80,7 +80,7 @@ export interface AddressBar {
   onPop: (listener: () => void) => () => void;
 }
 
-export interface SurfaceMemory {
+export interface InspectorMemory {
   read: () => string | null;
   write: (value: string | null) => void;
 }
@@ -89,7 +89,7 @@ export interface NavigationOptions {
   client: Pick<Client, "getState" | "subscribe" | "select" | "dispatch">;
   address: AddressBar;
   readFile: (workspaceId: string, path: string, options: RequestOptions) => Promise<FilePreview>;
-  memory?: SurfaceMemory;
+  memory?: InspectorMemory;
   rail?: Preference<boolean>;
   moved?: () => void;
 }
@@ -179,16 +179,16 @@ function paneAddress(state: AppState, pane: SessionPane): { route: Route; title:
 
 const panelOwner = (s: AppState) => (s.session ? sessionKey(s.session) : null);
 
-interface KeptSurface {
+interface KeptInspector {
   owner: string;
-  surface: { tabs: (SurfaceView | FileLocation)[]; active: string } | null;
+  inspector: { tabs: (InspectorView | FileLocation)[]; active: string } | null;
   area: SessionArea;
   covered: boolean;
 }
 
-const isArea = (value: unknown): value is SessionArea => value === "agent" || value === "surface";
+const isArea = (value: unknown): value is SessionArea => value === "agent" || value === "inspector";
 
-const isTab = (value: unknown): value is SurfaceView | FileLocation =>
+const isTab = (value: unknown): value is InspectorView | FileLocation =>
   value === "changes" ||
   (typeof value === "object" &&
     value !== null &&
@@ -199,27 +199,31 @@ const isTab = (value: unknown): value is SurfaceView | FileLocation =>
 function decodeKept(
   raw: string | null,
   owner: string,
-): { surface: NonNullable<KeptSurface["surface"]>; area: SessionArea; covered: boolean } | null {
+): {
+  inspector: NonNullable<KeptInspector["inspector"]>;
+  area: SessionArea;
+  covered: boolean;
+} | null {
   if (raw === null) return null;
-  let value: Partial<KeptSurface> | null;
+  let value: Partial<KeptInspector> | null;
   try {
     value = JSON.parse(raw);
   } catch {
     return null;
   }
-  const surface = value?.owner === owner ? value.surface : null;
-  if (!surface || !isArea(value?.area) || !Array.isArray(surface.tabs)) return null;
-  const tabs = surface.tabs.filter(isTab);
+  const inspector = value?.owner === owner ? value.inspector : null;
+  if (!inspector || !isArea(value?.area) || !Array.isArray(inspector.tabs)) return null;
+  const tabs = inspector.tabs.filter(isTab);
   if (
     !tabs.length ||
-    (surface.active !== "preview" && !tabs.some((tab) => tabKey(tab) === surface.active))
+    (inspector.active !== "preview" && !tabs.some((tab) => tabKey(tab) === inspector.active))
   )
     return null;
-  const active = tabs.some((tab) => tabKey(tab) === surface.active)
-    ? surface.active
+  const active = tabs.some((tab) => tabKey(tab) === inspector.active)
+    ? inspector.active
     : tabKey(tabs[0]);
   return {
-    surface: { tabs, active },
+    inspector: { tabs, active },
     area: value.area,
     covered: value.covered === true,
   };
@@ -236,7 +240,7 @@ export function createNavigation({
   const routeAt = (): Route => parseRoute(address.location());
   let wanted: Route | null = routeAt();
   const fields = {
-    surface: null,
+    inspector: null,
     rail: railPreference?.get() ?? false,
     covered: false,
     area: "agent" as const,
@@ -247,7 +251,7 @@ export function createNavigation({
     ...fields,
     layout: sessionLayout(fields),
     shownTab: null,
-    surfaceRequest: 0,
+    inspectorRequest: 0,
     pullRequest: false,
     palette: false,
   };
@@ -257,7 +261,7 @@ export function createNavigation({
   let moving = false;
   let synced: unknown[] = [];
   let syncedTitle: string | undefined;
-  let kept: (Omit<KeptSurface, "owner"> & { owner: string | null }) | undefined;
+  let kept: (Omit<KeptInspector, "owner"> & { owner: string | null }) | undefined;
 
   const recall = (key: string) => {
     try {
@@ -272,26 +276,26 @@ export function createNavigation({
     if (!owner && client.getState().view.kind === "session") return;
     if (
       kept?.owner === owner &&
-      kept.surface === state.surface &&
+      kept.inspector === state.inspector &&
       kept.area === state.area &&
       kept.covered === state.covered
     )
       return;
-    kept = { owner, surface: state.surface, area: state.area, covered: state.covered };
+    kept = { owner, inspector: state.inspector, area: state.area, covered: state.covered };
     try {
       memory.write(
         owner
           ? JSON.stringify({
               owner,
-              surface: state.surface && {
-                ...state.surface,
-                tabs: state.surface.tabs.map((tab) =>
+              inspector: state.inspector && {
+                ...state.inspector,
+                tabs: state.inspector.tabs.map((tab) =>
                   isView(tab) ? tab : { kind: tab.kind, path: tab.path, from: tab.from },
                 ),
               },
               area: state.area,
               covered: state.covered,
-            } satisfies KeptSurface)
+            } satisfies KeptInspector)
           : null,
       );
     } catch {}
@@ -398,10 +402,10 @@ export function createNavigation({
         owner = next;
         const back = next ? recall(next) : null;
         set({
-          surface: back
+          inspector: back
             ? {
-                ...back.surface,
-                tabs: back.surface.tabs.map((tab) =>
+                ...back.inspector,
+                tabs: back.inspector.tabs.map((tab) =>
                   typeof tab === "string" ? tab : newFile(tab),
                 ),
               }
@@ -455,14 +459,14 @@ export function createNavigation({
       moved();
     });
 
-  const show = (surface: Surface) =>
+  const show = (inspector: Inspector) =>
     batch(() => {
       set({
         settings: null,
-        surface,
-        area: "surface",
+        inspector,
+        area: "inspector",
         covered: false,
-        surfaceRequest: state.surfaceRequest + 1,
+        inspectorRequest: state.inspectorRequest + 1,
       });
       moved();
     });
@@ -486,11 +490,11 @@ export function createNavigation({
 
   const setRail = (on: boolean) => {
     railPreference?.set(on);
-    moveArea({ rail: on, covered: on && !!state.surface });
+    moveArea({ rail: on, covered: on && !!state.inspector });
   };
 
-  const openView = (view: SurfaceView) => {
-    const tabs = state.surface?.tabs ?? [];
+  const openView = (view: InspectorView) => {
+    const tabs = state.inspector?.tabs ?? [];
     show({ tabs: tabs.includes(view) ? tabs : [...tabs, view], active: view });
   };
 
@@ -510,11 +514,11 @@ export function createNavigation({
       if (fileWorkspace !== workspaceId || fileCheckoutMissing !== missing) {
         fileWorkspace = workspaceId;
         fileCheckoutMissing = missing;
-        if (state.surface)
+        if (state.inspector)
           set({
-            surface: {
-              ...state.surface,
-              tabs: state.surface.tabs.map((tab) =>
+            inspector: {
+              ...state.inspector,
+              tabs: state.inspector.tabs.map((tab) =>
                 isView(tab)
                   ? tab
                   : newFile(
@@ -530,7 +534,7 @@ export function createNavigation({
           });
       }
     }
-    const files = state.surface?.tabs.filter((tab): tab is FileTab => !isView(tab)) ?? [];
+    const files = state.inspector?.tabs.filter((tab): tab is FileTab => !isView(tab)) ?? [];
     for (const [key, controller] of reads) {
       if (!files.some((file) => file.key === key)) {
         controller.abort();
@@ -561,11 +565,11 @@ export function createNavigation({
   ) {
     if (controller.signal.aborted) return;
     batch(() => {
-      const surface = state.surface;
-      const file = surface?.tabs.find((tab): tab is FileTab => !isView(tab) && tab.key === key);
-      if (!surface || !file) return;
+      const inspector = state.inspector;
+      const file = inspector?.tabs.find((tab): tab is FileTab => !isView(tab) && tab.key === key);
+      if (!inspector || !file) return;
       const path = patch.result?.path ?? file.requested;
-      const matches = surface.tabs.filter(
+      const matches = inspector.tabs.filter(
         (tab): tab is FileTab => !isView(tab) && (tab === file || tab.path === path),
       );
       const latest = matches.reduce((a, b) =>
@@ -580,13 +584,13 @@ export function createNavigation({
           ? { ...patch, path, requested: path, aliases, pending: false }
           : { path, aliases },
       );
-      const first = surface.tabs.indexOf(matches[0]);
+      const first = inspector.tabs.indexOf(matches[0]);
       set({
-        surface: {
-          tabs: surface.tabs.flatMap((tab, index) =>
+        inspector: {
+          tabs: inspector.tabs.flatMap((tab, index) =>
             index === first ? [resolved] : !isView(tab) && matches.includes(tab) ? [] : [tab],
           ),
-          active: surface.active === tabKey(file) ? tabKey(resolved) : surface.active,
+          active: inspector.active === tabKey(file) ? tabKey(resolved) : inspector.active,
         },
       });
     });
@@ -638,9 +642,9 @@ export function createNavigation({
     toggleRail: () => {
       if (!state.single) setRail(!state.layout.rail);
     },
-    openFile: (spelled, from = state.layout.agent ? "agent" : "surface") => {
+    openFile: (spelled, from = state.layout.agent ? "agent" : "inspector") => {
       const requested = filePath(spelled, client.getState().session?.cwd);
-      const tabs = state.surface?.tabs ?? [];
+      const tabs = state.inspector?.tabs ?? [];
       const files = tabs.filter((t): t is FileTab => !isView(t));
       const known =
         files.find((t) => t.path === requested) ?? files.find((t) => t.aliases.includes(requested));
@@ -652,21 +656,21 @@ export function createNavigation({
       show({ tabs: at < 0 ? [...tabs, tab] : tabs.with(at, tab), active: key });
     },
     selectTab: (key) => {
-      if (!state.surface?.tabs.some((tab) => tabKey(tab) === key)) return;
-      show({ ...state.surface, active: key });
+      if (!state.inspector?.tabs.some((tab) => tabKey(tab) === key)) return;
+      show({ ...state.inspector, active: key });
     },
     closeTab: (key) => {
-      const surface = state.surface;
-      const at = surface?.tabs.findIndex((tab) => tabKey(tab) === key) ?? -1;
-      if (!surface || at < 0) return;
-      const closing = surface.tabs[at];
-      const tabs = surface.tabs.toSpliced(at, 1);
-      if (!tabs.length) return moveArea({ surface: null, area: "agent" });
+      const inspector = state.inspector;
+      const at = inspector?.tabs.findIndex((tab) => tabKey(tab) === key) ?? -1;
+      if (!inspector || at < 0) return;
+      const closing = inspector.tabs[at];
+      const tabs = inspector.tabs.toSpliced(at, 1);
+      if (!tabs.length) return moveArea({ inspector: null, area: "agent" });
       const active =
-        surface.active === key ? tabKey(tabs[Math.min(at, tabs.length - 1)]) : surface.active;
+        inspector.active === key ? tabKey(tabs[Math.min(at, tabs.length - 1)]) : inspector.active;
       const back =
-        state.single && surface.active === key && !isView(closing) && closing.from === "agent";
-      moveArea({ surface: { tabs, active }, area: back ? "agent" : state.area });
+        state.single && inspector.active === key && !isView(closing) && closing.from === "agent";
+      moveArea({ inspector: { tabs, active }, area: back ? "agent" : state.area });
     },
     showAgent: () => moveArea({ area: "agent" }),
     setSingle: (single) => batch(() => set({ single })),
@@ -680,8 +684,8 @@ export function createNavigation({
   };
 }
 
-export function browserSurfaceMemory(): SurfaceMemory {
-  const memory = browserMemory("surface");
+export function browserInspectorMemory(): InspectorMemory {
+  const memory = browserMemory("inspector");
   return {
     read: memory.read,
     write: (value) => (value === null ? memory.remove() : memory.write(value)),

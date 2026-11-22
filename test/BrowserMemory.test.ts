@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { browserCatalogStorage } from "../features/models/web/modelCatalogs.ts";
-import { browserSurfaceMemory } from "../features/navigation/web/navigation.ts";
+import { browserInspectorMemory } from "../features/navigation/web/navigation.ts";
 import { sidebarPreferences } from "../features/navigation/web/sidebar/sidebarList.ts";
 import { storedLastDirectory } from "../web/src/app/client.ts";
 import { BROWSER_MEMORY, browserMemory } from "../web/src/shared/lib/browserMemory.ts";
@@ -38,7 +38,7 @@ test("each memory is kept under piano.<name> in its own store and read back from
     catalogs: () => browserCatalogStorage().write(catalogs),
     lastDir: () => storedLastDirectory().write("/repo"),
     openGroups: () => sidebarPreferences().openGroups.set(["/repo"]),
-    surface: () => browserSurfaceMemory().write("surface"),
+    inspector: () => browserInspectorMemory().write("inspector"),
   } satisfies Record<keyof typeof BROWSER_MEMORY, () => void>;
   for (const write of Object.values(remember)) write();
   for (const [name, kind] of Object.entries(BROWSER_MEMORY)) {
@@ -50,9 +50,9 @@ test("each memory is kept under piano.<name> in its own store and read back from
   assert.deepEqual(browserCatalogStorage().read(), catalogs);
   assert.equal(storedLastDirectory().read(), "/repo");
   assert.deepEqual(sidebarPreferences().openGroups.get(), ["/repo"]);
-  assert.equal(browserSurfaceMemory().read(), "surface");
-  browserSurfaceMemory().write(null);
-  assert.equal(browserSurfaceMemory().read(), null, "a closed surface is forgotten");
+  assert.equal(browserInspectorMemory().read(), "inspector");
+  browserInspectorMemory().write(null);
+  assert.equal(browserInspectorMemory().read(), null, "a closed inspector is forgotten");
 });
 
 test("storage that cannot be read or written reads as nothing remembered", () => {

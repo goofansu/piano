@@ -42,7 +42,7 @@ function HtmlDocument({ content, path, workspaceId, active }: Props) {
   useLayoutEffect(() => {
     if (!active || !document || !frame.current) return;
     return listenHtmlPreviewLinks(window, frame.current, document, (link) => {
-      if (link.kind === "file") openFile(link.path, "surface");
+      if (link.kind === "file") openFile(link.path, "inspector");
       else window.open(link.url, "_blank", "noopener,noreferrer");
     });
   }, [active, document, openFile]);

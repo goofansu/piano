@@ -125,10 +125,10 @@ await run(
       await page.ab("press", "Escape");
       await page.ab("wait", "--fn", "!document.querySelector('[role=menu]')");
       await page.click("button", "Changes");
-      await page.until("!!document.querySelector('[data-slot=surface-area]:not([inert])')");
+      await page.until("!!document.querySelector('[data-slot=inspector]:not([inert])')");
       await page.capture(`05c-changes-${scheme}`);
       await page.click("button", "Hide changes");
-      await page.until("!document.querySelector('[data-slot=surface-area]:not([inert])')");
+      await page.until("!document.querySelector('[data-slot=inspector]:not([inert])')");
       await page.press("Mod+k");
       await page.ab("wait", "--fn", "!!document.querySelector('[role=dialog]')");
       await page.capture(`06-palette-${scheme}`);

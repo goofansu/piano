@@ -10,7 +10,7 @@ export const BROWSER_MEMORY = {
   catalogs: "local",
   lastDir: "local",
   openGroups: "local",
-  surface: "session",
+  inspector: "session",
 } as const satisfies Record<string, "local" | "session">;
 export type BrowserMemoryName = keyof typeof BROWSER_MEMORY;
 type StoreKind = (typeof BROWSER_MEMORY)[BrowserMemoryName];

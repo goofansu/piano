@@ -126,7 +126,7 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
           </Alert>
         )}
 
-        <ScrollArea className="h-56 shrink-0 rounded-md border border-line bg-surface-1">
+        <ScrollArea className="h-56 shrink-0 rounded-md border border-line bg-layer-1">
           <div key={dir?.path ?? "loading"}>
             {loading && !dir && (
               <div className="flex flex-col gap-2 p-3" aria-busy>
