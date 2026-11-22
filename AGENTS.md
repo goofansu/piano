@@ -108,6 +108,10 @@ If a type, lint rule or test can enforce a rule, enforce it there instead of doc
 docs only for what code cannot explain: a decision and its reason, a contract others rely on, a
 gotcha. When behavior changes, correct or delete the doc lines it made false.
 
+Keep research notes out of Git: write them under `${TMPDIR:-/tmp}/piano-research/` and link the
+findings from the issue or PR. Record a lasting decision as an ADR and a user-facing fact in the
+owning feature's docs.
+
 ## Safeguards
 
 Keep Pi protocol details behind `features/sessions/server/pi/PiSessions.ts`. Extend its public contract through
