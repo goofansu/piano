@@ -201,9 +201,7 @@ export VERIFY_EVIDENCE="$EVIDENCE_RUN/manual"
 
 Pass a separate child path to each explicit-output command, such as
 `node test/browser/start-session.mjs "$EVIDENCE_RUN/start-session"`. For retries or before/after
-comparisons, use new child paths or allocate another run; preserve earlier output. Manual
-`verify-piano` launches use `VERIFY_EVIDENCE` as their parent and append their own run ID.
-It does not configure the baseline or browser harness: those need the positional path.
+comparisons, use new child paths or allocate another run; preserve earlier output.
 
 ## File evidence provenance
 

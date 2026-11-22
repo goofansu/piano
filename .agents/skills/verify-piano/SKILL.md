@@ -5,8 +5,8 @@ description: Launch an isolated scratch Piano (own database, Pi dirs and HOME, f
 
 # Verify Piano
 
-Prove behavior on a scratch instance this skill starts, never on the user's own Piano (local
-`7070`; exe.dev `127.0.0.1:8000`/`8001`), whose database is real. Never POST, open `/ws` or open
+Prove behavior on a scratch instance this skill starts, never on the user's own Piano (see
+[scratch instance](../../../docs/testing.md#scratch-instance)). Never POST, open `/ws` or open
 session pages there: even viewing a session starts a Pi `probe` child for its composer.
 
 Paths are relative to the repository root. Write each script path out in full: a worktree-isolated
@@ -87,8 +87,10 @@ Run it first, and again whenever anything looks off. It changes nothing.
 
 ## Evidence
 
-With the [evidence directory setup](../../../docs/testing.md#evidence-directories), manual launch
-evidence goes to `$EVIDENCE_RUN/manual/<run-id>/`, outside the scratch run dir, so Cleanup keeps it.
+With the [evidence directory setup](../../../docs/testing.md#evidence-directories), `launch.sh`
+uses `VERIFY_EVIDENCE` as the parent and appends its own run ID, so manual launch evidence goes to
+`$EVIDENCE_RUN/manual/<run-id>/`, outside the scratch run dir, and Cleanup keeps it. The baseline
+and the browser harness ignore `VERIFY_EVIDENCE`; give them a positional path.
 After sourcing `run.env`, `$EVIDENCE` names that manual launch directory; `$EVIDENCE_RUN` remains
 the parent for the overall verification run. Keep retained logs and drive scripts there too.
 
@@ -109,7 +111,8 @@ Proof standards:
 - Verify side effects beside the screen: the fake-Pi audit (`$AUDIT`: what Pi was started with and
   received), `git -C "$REPO" worktree list`, `GET /api/folders`, files in `$REPO`.
 - Fake Pi is the only mock: it stands at Piano's real process boundary (`PIANO_PI_CLI`). Git is
-  real. A fake-Pi run proves Piano's handling, not a Pi release.
+  real. For what a fake-Pi run proves, see the
+  [evidence boundary](../../../docs/testing.md#choose-the-right-evidence-boundary).
 - Say plainly what came from a hand-written Pi history (fake Pi makes no tool calls) or only from a
   unit test. A skipped entry point is reported as skipped, not as verified through another one.
 
