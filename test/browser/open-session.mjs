@@ -930,8 +930,10 @@ await run(
     assert.equal(await page.evaluate("!!document.querySelector('[role=dialog]')"), false);
     const answers = () => page.received().filter((r) => r.command === "extension_ui_response");
     // agent-browser releases arrows before the radio group's deferred focus; select with Space.
-    const radio = (name, checked) =>
-      `[...document.querySelectorAll('[role=radio]')].some((r) => r === document.activeElement && r.getAttribute('aria-checked') === '${checked}' && (r.getAttribute('aria-labelledby') ?? '').split(' ').some((id) => document.getElementById(id)?.innerText.trim() === ${JSON.stringify(name)}))`;
+    const radio = (name, checked) => {
+      assert.match(name, /^[A-Za-z ]+$/, "an option label the page check can quote as-is");
+      return `[...document.querySelectorAll('[role=radio]')].some((r) => r === document.activeElement && r.getAttribute('aria-checked') === '${checked === true}' && (r.getAttribute('aria-labelledby') ?? '').split(' ').some((id) => document.getElementById(id)?.innerText.trim() === '${name}'))`;
+    };
     await page.click("radio", "Quick checks");
     await page.until(radio("Quick checks", true));
     await page.press("ArrowDown");
