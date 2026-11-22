@@ -51,12 +51,12 @@ import {
 import { useNavigation } from "@/shared/navigation/useNavigation";
 import type { Client } from "@/shared/state/client";
 import { answeredQuestion } from "@/shared/state/dialogAnswer";
+import { sessionWorking } from "@/shared/state/sessionActivity";
 import { sessionDestination } from "@/shared/state/sessionCatalog";
 import {
   sessionContext,
   sessionProject,
   sessionReferenceChangeable,
-  sessionWorking,
 } from "@/shared/state/sessionContext";
 import { type AppState, sessionKey } from "@/shared/state/state";
 

@@ -6,7 +6,6 @@ import type {
   SessionReference,
   Workspace,
 } from "@shared/wire";
-import { workUnderWay } from "../../../../shared/session/sessionStatus.ts";
 import { sameSession } from "../../../../shared/wire.ts";
 import { findProject } from "../lib/projects.ts";
 import { type DraftKey, sessionDraftKey } from "./draftKey.ts";
@@ -84,12 +83,6 @@ export function sessionMutable(state: AppState, target: SessionRef): boolean {
 
 export function hostOf(state: AppState, target: SessionRef): HostInfo | undefined {
   return state.hosts.find((host) => sameSession(host, target));
-}
-
-export function sessionWorking(state: AppState, target: SessionRef): boolean {
-  const session = state.session;
-  if (session && isSession(session, target)) return workUnderWay(session.state);
-  return !!hostOf(state, target)?.working;
 }
 
 export function sessionCheckoutMissing(state: AppState, target: SessionRef): boolean {

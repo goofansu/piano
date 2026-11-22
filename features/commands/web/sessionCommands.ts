@@ -1,6 +1,7 @@
 import { pullRequestLabel } from "../../../shared/git/pullRequestIdentity.ts";
 import type { ClientCommand, Snapshot } from "../../../shared/wire.ts";
 import type { SessionLayout } from "../../../web/src/shared/navigation/navigation.ts";
+import { sessionWorking } from "../../../web/src/shared/state/sessionActivity.ts";
 import {
   checkoutMissingAt,
   isSelectedSession,
@@ -9,7 +10,6 @@ import {
   sessionMutable,
   sessionReference,
   sessionReferenceChangeable,
-  sessionWorking,
 } from "../../../web/src/shared/state/sessionContext.ts";
 import type { AppState } from "../../../web/src/shared/state/state.ts";
 

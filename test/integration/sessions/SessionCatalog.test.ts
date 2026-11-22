@@ -9,8 +9,8 @@ import {
 } from "../../../features/navigation/web/sidebar/sidebarView.ts";
 import type { FolderView, SessionState, WorktreeView } from "../../../shared/wire.ts";
 import { reduce } from "../../../web/src/app/store.ts";
+import { anySessionWorking } from "../../../web/src/shared/state/sessionActivity.ts";
 import {
-  anySessionWorking,
   archivedSessionCatalog,
   catalogEntry,
   createSessionCatalog,

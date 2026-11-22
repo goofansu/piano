@@ -39,11 +39,8 @@ import { PaneLeadContext, PaneNotFound } from "@/shared/components/Pane";
 import { toastNotify as notify } from "@/shared/lib/toastNotify";
 import { parseRoute } from "@/shared/navigation/routes";
 import { NavigationContext } from "@/shared/navigation/useNavigation";
-import {
-  anySessionWorking,
-  type UnavailableSessionPage,
-  unavailableSessionPage,
-} from "@/shared/state/sessionCatalog";
+import { anySessionWorking } from "@/shared/state/sessionActivity";
+import { type UnavailableSessionPage, unavailableSessionPage } from "@/shared/state/sessionCatalog";
 import { type AppState, initialState } from "@/shared/state/state";
 import { ProjectHomePage, ProjectsPage } from "./ProjectPages";
 import { SessionSidebar } from "./SessionSidebar";

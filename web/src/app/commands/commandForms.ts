@@ -18,8 +18,9 @@ import {
 } from "../../../../shared/wire.ts";
 import { findProject } from "../../shared/lib/projects.ts";
 import { screenKey } from "../../shared/navigation/pageAddress.ts";
+import { sessionWorking } from "../../shared/state/sessionActivity.ts";
 import { sessionLabel } from "../../shared/state/sessionCatalog.ts";
-import { sessionMutable, sessionWorking } from "../../shared/state/sessionContext.ts";
+import { sessionMutable } from "../../shared/state/sessionContext.ts";
 import type { AppState } from "../../shared/state/state.ts";
 
 export type FormAnswer = {

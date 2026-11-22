@@ -1,25 +1,21 @@
-import type { FolderView, Project, SessionReference, WorktreeView } from "@shared/wire";
+import type { FolderView, HostInfo, Project, SessionReference, WorktreeView } from "@shared/wire";
 import { findProject } from "../lib/projects.ts";
+import { hostActivity } from "./sessionActivity.ts";
 import type { UnavailableSessionReason } from "./state.ts";
 import { type AppState, isSession, sessionKey } from "./state.ts";
 
 export type SessionActivity = "working" | "done" | "idle" | "off";
 
-type Host = AppState["hosts"][number];
-
-function liveActivity(
-  host: Host | undefined,
+function sidebarActivity(
+  host: HostInfo | undefined,
   done: boolean,
   hostsCurrent: boolean,
 ): SessionActivity {
-  if (host?.starting) return "off";
-  if (host?.working) return hostsCurrent ? "working" : "off";
+  const live = hostActivity(host, hostsCurrent);
+  if (live === "working") return "working";
+  if (live === "starting" || live === "unknown") return "off";
   if (done) return "done";
-  return host && hostsCurrent ? "idle" : "off";
-}
-
-export function anySessionWorking(state: Pick<AppState, "hosts" | "hostsCurrent">): boolean {
-  return state.hosts.some((h) => liveActivity(h, false, state.hostsCurrent) === "working");
+  return live;
 }
 
 export interface SessionEntry {
@@ -149,7 +145,8 @@ function entries(state: AppState): SessionEntry[] {
     const { folder, folderName } = directoryOf(ref.cwd);
     const project = findProject(state, ref.projectId);
     const host = hosts.get(key);
-    const starting = !!host?.starting && state.hostsCurrent;
+    const activity = sidebarActivity(host, done.has(key), state.hostsCurrent);
+    const starting = state.hostsCurrent && hostActivity(host, state.hostsCurrent) === "starting";
     return {
       cwd: ref.cwd,
       sessionId: ref.sessionId,
@@ -165,7 +162,7 @@ function entries(state: AppState): SessionEntry[] {
       archived: ref.archived,
       pinned: !!ref.pinned,
       listed: !ref.archived && (!!folder || !!project),
-      activity: liveActivity(host, done.has(key), state.hostsCurrent),
+      activity,
       selected: isSession(current, ref),
       unavailable: ref.unavailable,
       hint: ref.unavailable && HINTS[ref.unavailable],
