@@ -29,7 +29,7 @@ Motion is opt-in: the reset at the end of `index.css` stops upstream motion exce
 
 ### Responsive ownership
 
-Use [one-area-at-a-time and side-by-side](glossary.md) for session layouts, not device names.
+Use [one-area-at-a-time and side-by-side](../GLOSSARY.md) for session layouts, not device names.
 Three independent signals retain distinct owners:
 
 - `panelLayout.ts` owns capacity: the actual areas-container width after sidebar/insets.

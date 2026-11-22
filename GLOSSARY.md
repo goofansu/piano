@@ -2,7 +2,7 @@
 
 This glossary is the source of truth for Piano's vocabulary: use these terms in code, wire,
 SQLite, UI and documentation. Some describe the target model in
-[ADR 0001](adr/0001-pi-rpc-workspace-workbench.md) and are not implemented yet.
+[ADR 0001](docs/adr/0001-pi-rpc-workspace-workbench.md) and are not implemented yet.
 
 | Term | Meaning |
 | --- | --- |

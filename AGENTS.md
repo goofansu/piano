@@ -31,7 +31,7 @@ Read the matching entry before working on that surface; follow its linked detail
 | Choosing tests or evidence | [Testing policy](docs/testing.md), [commands and prerequisites](docs/development.md#tests) |
 | Finding a feature's owning modules, or verifying its behavior | Browse the [feature directories](features) for source and the [verification map](.agents/skills/verify-piano/map.md#features) for checks |
 | Measuring performance | [Benchmarks](docs/performance.md) |
-| Naming code, UI or docs | [Glossary](docs/glossary.md); in UI strings use the user's names, such as "Piano's database"; code and docs say "registry" |
+| Naming code, UI or docs | [Glossary](GLOSSARY.md); in UI strings use the user's names, such as "Piano's database"; code and docs say "registry" |
 | Changing UI, including strings and controls | [Quiet UI](docs/quiet-ui.md), [UI evidence scope](docs/testing.md#ui-evidence-scope), [Linear design language](docs/design-moonstone.md#linear) |
 | Writing Effect code or upgrading Effect | [Effect](docs/effect.md) |
 | Adding, renaming or moving browser-storage keys | [Browser storage](docs/browser-storage.md) |
@@ -99,3 +99,20 @@ private authenticated access (INV-11).
 
 Prefix GitHub CLI commands with `GH_HOST=github.int.exe.xyz`. Pass `--repo goofansu/piano` where
 supported; `gh repo view` takes `goofansu/piano` as a positional argument.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live as local markdown under the gitignored `.scratch/<feature>/`. See
+[issue tracker](docs/agents/issue-tracker.md).
+
+### Triage labels
+
+The five default triage roles, recorded as a `Status:` line in each issue file. See
+[triage labels](docs/agents/triage-labels.md).
+
+### Domain docs
+
+Single-context: root [`GLOSSARY.md`](GLOSSARY.md) and [`docs/adr/`](docs/adr). See
+[domain docs](docs/agents/domain.md).
