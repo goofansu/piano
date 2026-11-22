@@ -44,7 +44,7 @@ checks do not replace this baseline, and the baseline does not run browser journ
 journey with `node test/browser/<journey>.mjs <evidence-directory>`; `npm run test:browser` runs the
 committed suite. Use the table above to choose the check, not every journey by default.
 
-Keep local verification output under `~/piano-evidence/`, using the
+Keep local verification output under `${TMPDIR:-/tmp}/piano-evidence/`, using the
 [evidence directory convention](docs/testing.md#evidence-directories) before running checks.
 Retain actual command/browser output on the PR, outside Git, tied to the tested revision and
 environment. Report pass/fail, skipped or blocked checks, the test lines `verify` printed, and

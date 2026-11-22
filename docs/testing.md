@@ -132,14 +132,16 @@ margins. `test/browser/transcript-rows.mjs` measures it; add a new row kind to i
 
 ## Evidence directories
 
-Keep local verification evidence in one root, `~/piano-evidence/`, shared across Piano worktrees.
-Group checks under a uniquely allocated task/run directory rather than creating new top-level
-folders in home. Before running checks, allocate a run in the shell that will invoke them:
+Keep local verification evidence in one root, `${TMPDIR:-/tmp}/piano-evidence/`, shared across
+Piano worktrees. Group checks under a uniquely allocated task/run directory. The system may clear
+the temporary directory after a reboot or days of disuse, so attach evidence to the PR before then.
+Before running checks, allocate a run in the shell that will invoke them:
 
 ```sh
-mkdir -p "$HOME/piano-evidence"
+EVIDENCE_ROOT="${TMPDIR:-/tmp}/piano-evidence"
+mkdir -p "$EVIDENCE_ROOT"
 # Replace short-task-name with an issue ID or task slug.
-EVIDENCE_RUN=$(mktemp -d "$HOME/piano-evidence/short-task-name.XXXXXX")
+EVIDENCE_RUN=$(mktemp -d "$EVIDENCE_ROOT/short-task-name.XXXXXX")
 export VERIFY_EVIDENCE="$EVIDENCE_RUN/manual"
 ```
 
