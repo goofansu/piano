@@ -1,9 +1,9 @@
 import type { FilePreview } from "../../../../shared/workspace/files.ts";
 import type { Page } from "../state/state.ts";
 import type { SettingsSection } from "./routes.ts";
-export type SurfaceView = "changes";
+export type InspectorView = "changes";
 
-export type SurfaceTab = SurfaceView | FileTab;
+export type InspectorTab = InspectorView | FileTab;
 
 export type FileLocation = { kind: "file"; path: string; from: SessionArea };
 
@@ -17,36 +17,36 @@ export interface FileTab extends FileLocation {
   status: string;
 }
 
-export const isView = (tab: SurfaceTab): tab is SurfaceView => typeof tab === "string";
+export const isView = (tab: InspectorTab): tab is InspectorView => typeof tab === "string";
 
-export interface Surface {
-  tabs: SurfaceTab[];
+export interface Inspector {
+  tabs: InspectorTab[];
   active: string;
 }
 
-export const tabKey = (tab: SurfaceView | FileLocation): string =>
+export const tabKey = (tab: InspectorView | FileLocation): string =>
   typeof tab === "string" ? tab : `file:${tab.path}`;
 
-export const activeTab = (surface: Surface | null): SurfaceTab | undefined =>
-  surface?.tabs.find((tab) => tabKey(tab) === surface.active);
+export const activeTab = (inspector: Inspector | null): InspectorTab | undefined =>
+  inspector?.tabs.find((tab) => tabKey(tab) === inspector.active);
 
-export type SessionArea = "agent" | "surface";
+export type SessionArea = "agent" | "inspector";
 
 export interface SessionLayout {
   single: boolean;
   agent: boolean;
-  surface: boolean;
+  inspector: boolean;
   rail: boolean;
   agentTab: boolean;
 }
 
 export interface NavigationState {
   settings: SettingsSection | null;
-  surface: Surface | null;
+  inspector: Inspector | null;
   rail: boolean;
   covered: boolean;
   area: SessionArea;
-  surfaceRequest: number;
+  inspectorRequest: number;
   single: boolean;
   layout: SessionLayout;
   shownTab: string | null;

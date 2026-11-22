@@ -5,7 +5,7 @@ import {
   addressFor,
   createNavigation,
   initialView,
-  type SurfaceMemory,
+  type InspectorMemory,
 } from "../../../features/navigation/web/navigation.ts";
 import type { workspaceFile } from "../../../features/workspace/web/files/fileApi.ts";
 import type { ConnectionHandlers } from "../../../shared/transport/ws.ts";
@@ -61,7 +61,7 @@ function addressBar(start: string) {
   };
 }
 
-function page(url: string, memory?: SurfaceMemory, rail?: Preference<boolean>) {
+function page(url: string, memory?: InspectorMemory, rail?: Preference<boolean>) {
   const address = addressBar(url);
   const sent: ClientMessage[] = [];
   let handlers: ConnectionHandlers | undefined;
@@ -789,13 +789,13 @@ test("back and forward apply the address bar's route; back onto the same New pag
 });
 
 function shownTabs(navigation: ReturnType<typeof createNavigation>) {
-  const { surface, area } = navigation.getState();
-  return surface
-    ? { tabs: surface.tabs.map(tabKey), active: surface.active, area }
+  const { inspector, area } = navigation.getState();
+  return inspector
+    ? { tabs: inspector.tabs.map(tabKey), active: inspector.active, area }
     : { tabs: [], active: null, area };
 }
 
-function tabMemory(): SurfaceMemory {
+function tabMemory(): InspectorMemory {
   let value: string | null = null;
   return {
     read: () => value,
@@ -893,7 +893,7 @@ test("every move among a session's areas leaves Settings, so the move shows", ()
   assert.deepEqual(shownTabs(p.navigation).tabs, ["changes"]);
 });
 
-test("a session's surfaces close when another session is selected, and opening one leaves Settings", () => {
+test("a session's inspectors close when another session is selected, and opening one leaves Settings", () => {
   const p = page("/new");
   p.registry();
   p.navigation.select("/scratch", "a");
@@ -904,7 +904,7 @@ test("a session's surfaces close when another session is selected, and opening o
   assert.deepEqual(shownTabs(p.navigation), {
     tabs: ["changes"],
     active: "changes",
-    area: "surface",
+    area: "inspector",
   });
   p.navigation.openFile("docs/guide.md");
   assert.equal(p.path(), "/s/a", "a file preview never puts its path in the address bar");
@@ -914,7 +914,7 @@ test("a session's surfaces close when another session is selected, and opening o
   assert.equal(
     shownTabs(p.navigation).active,
     "file:docs/guide.md",
-    "the PR opens over the nonmodal Surface area without replacing it",
+    "the PR opens over the nonmodal Inspector area without replacing it",
   );
   p.navigation.closePullRequest();
 
@@ -930,7 +930,7 @@ test("a session's surfaces close when another session is selected, and opening o
   p.navigation.openChanges();
   p.navigation.openPullRequest();
   p.navigation.openNew();
-  assert.equal(p.navigation.getState().surface, null, "the New page has no Surface area");
+  assert.equal(p.navigation.getState().inspector, null, "the New page has no Inspector area");
   assert.equal(p.navigation.getState().pullRequest, false);
 });
 
@@ -962,31 +962,31 @@ test("choosing Changes again shows its one tab in place: no toggle, no duplicate
   p.selected("a");
   const entries = p.entries.length;
   p.navigation.openChanges();
-  const first = p.navigation.getState().surfaceRequest;
+  const first = p.navigation.getState().inspectorRequest;
   p.navigation.openChanges();
   assert.deepEqual(shownTabs(p.navigation), {
     tabs: ["changes"],
     active: "changes",
-    area: "surface",
+    area: "inspector",
   });
   assert.ok(
-    p.navigation.getState().surfaceRequest > first,
+    p.navigation.getState().inspectorRequest > first,
     "a repeat is still a request, so the tab takes focus",
   );
-  assert.equal(p.entries.length, entries, "showing a surface is local view state, not a route");
+  assert.equal(p.entries.length, entries, "showing a inspector is local view state, not a route");
 
   p.navigation.openFile("README.md");
   p.navigation.openChanges();
   assert.deepEqual(
     shownTabs(p.navigation),
-    { tabs: ["changes", "file:README.md"], active: "changes", area: "surface" },
+    { tabs: ["changes", "file:README.md"], active: "changes", area: "inspector" },
     "Changes shows beside the open file's tab, not in place of it",
   );
 });
 
 function rightSide(navigation: ReturnType<typeof createNavigation>) {
   const { layout } = navigation.getState();
-  return layout.rail ? "rail" : layout.surface ? "surface" : null;
+  return layout.rail ? "rail" : layout.inspector ? "inspector" : null;
 }
 
 function railStorage(): PreferenceStorage {
@@ -1003,7 +1003,7 @@ function railStorage(): PreferenceStorage {
 const railPreference = (storage: PreferenceStorage) =>
   createPreference<boolean>({ key: "rail", decode: (raw) => raw === "true", storage });
 
-test("side by side, the session rail and the Surface area share the right side: whichever came in last shows", () => {
+test("side by side, the session rail and the Inspector area share the right side: whichever came in last shows", () => {
   const p = page("/s/a");
   p.registry();
   p.selected("a");
@@ -1013,7 +1013,11 @@ test("side by side, the session rail and the Surface area share the right side: 
   assert.equal(rightSide(p.navigation), "rail");
 
   p.navigation.openChanges();
-  assert.equal(rightSide(p.navigation), "surface", "a surface coming in hides the session rail");
+  assert.equal(
+    rightSide(p.navigation),
+    "inspector",
+    "a inspector coming in hides the session rail",
+  );
   assert.equal(p.navigation.getState().rail, true, "hidden, the session rail stays on");
 
   p.navigation.closeTab("changes");
@@ -1028,20 +1032,20 @@ test("side by side, the session rail and the Surface area share the right side: 
   assert.equal(
     rightSide(p.navigation),
     "rail",
-    "turned on over a surface, the session rail covers it",
+    "turned on over a inspector, the session rail covers it",
   );
   assert.deepEqual(shownTabs(p.navigation).tabs, ["file:README.md"], "the covered tabs wait");
 
   p.navigation.toggleRail();
-  assert.equal(rightSide(p.navigation), "surface", "turned off, the covered surface returns");
+  assert.equal(rightSide(p.navigation), "inspector", "turned off, the covered inspector returns");
 
   p.navigation.toggleRail();
   p.navigation.selectTab("file:README.md");
-  assert.equal(rightSide(p.navigation), "surface", "showing a tab uncovers the surface");
+  assert.equal(rightSide(p.navigation), "inspector", "showing a tab uncovers the inspector");
   p.navigation.toggleRail();
   assert.equal(rightSide(p.navigation), "rail");
   p.navigation.toggleRail();
-  assert.equal(rightSide(p.navigation), "surface");
+  assert.equal(rightSide(p.navigation), "inspector");
   assert.equal(p.navigation.getState().rail, false);
 });
 
@@ -1083,7 +1087,7 @@ test("a reload keeps the session rail over the tabs it covered, unless it was tu
   assert.equal(rightSide(after.navigation), "rail", "the rail still covers the tabs");
   assert.deepEqual(shownTabs(after.navigation).tabs, ["changes"], "the covered tabs wait");
   after.navigation.toggleRail();
-  assert.equal(rightSide(after.navigation), "surface", "turned off, the covered tabs return");
+  assert.equal(rightSide(after.navigation), "inspector", "turned off, the covered tabs return");
 
   const away = tabMemory();
   const left = page("/s/a", away, railPreference(railStorage()));
@@ -1095,7 +1099,7 @@ test("a reload keeps the session rail over the tabs it covered, unless it was tu
   const off = page("/s/a", away, railPreference(storage));
   off.registry();
   off.selected("a");
-  assert.equal(rightSide(off.navigation), "surface", "nothing is covered by a rail that is off");
+  assert.equal(rightSide(off.navigation), "inspector", "nothing is covered by a rail that is off");
 });
 
 test("narrowing does not auto-open the rail sheet, and widening restores the desktop rail", () => {
@@ -1109,7 +1113,7 @@ test("narrowing does not auto-open the rail sheet, and widening restores the des
   assert.deepEqual(p.navigation.getState().layout, {
     single: true,
     agent: true,
-    surface: false,
+    inspector: false,
     rail: false,
     agentTab: false,
   });
@@ -1149,8 +1153,8 @@ test("a reload drops a the session rail tab kept by an older Piano and keeps the
   memory.write(
     JSON.stringify({
       owner: sessionKey({ cwd: "/scratch", sessionId: "a" }),
-      surface: { tabs: ["changes", "details"], active: "changes" },
-      area: "surface",
+      inspector: { tabs: ["changes", "details"], active: "changes" },
+      area: "inspector",
     }),
   );
   const p = page("/s/a", memory);
@@ -1159,7 +1163,7 @@ test("a reload drops a the session rail tab kept by an older Piano and keeps the
   assert.deepEqual(shownTabs(p.navigation), {
     tabs: ["changes"],
     active: "changes",
-    area: "surface",
+    area: "inspector",
   });
 });
 
@@ -1177,7 +1181,7 @@ test("each new view is added at the end, Changes included; reopening one keeps i
   assert.deepEqual(shownTabs(p.navigation), {
     tabs: ["file:docs/a.md", "changes", "file:docs/b.md"],
     active: "file:docs/a.md",
-    area: "surface",
+    area: "inspector",
   });
   p.navigation.closeTab("changes");
   p.navigation.openChanges();
@@ -1202,7 +1206,7 @@ test("files open as tabs once each; closing a tab shows its neighbour, the last 
     {
       tabs: ["changes", "file:docs/a.md", "file:docs/b.md"],
       active: "file:docs/a.md",
-      area: "surface",
+      area: "inspector",
     },
     "an open file is shown again, never opened twice",
   );
@@ -1212,7 +1216,7 @@ test("files open as tabs once each; closing a tab shows its neighbour, the last 
   p.navigation.closeTab("changes");
   assert.deepEqual(
     shownTabs(p.navigation),
-    { tabs: ["file:docs/a.md"], active: "file:docs/a.md", area: "surface" },
+    { tabs: ["file:docs/a.md"], active: "file:docs/a.md", area: "inspector" },
     "closing a tab that is not shown leaves the shown one",
   );
   p.navigation.closeTab("file:docs/a.md");
@@ -1242,7 +1246,7 @@ test("a file opens as one tab however its path is spelled", () => {
         "file:../outside.md",
       ],
       active: "file:../outside.md",
-      area: "surface",
+      area: "inspector",
     },
     "a path outside the session's directory keeps its own spelling",
   );
@@ -1255,11 +1259,11 @@ test("following an HTML sibling link reuses the reference file tab and retains i
   p.selected("a");
   p.navigation.openFile("reference/0001-codemode-map.html");
   p.navigation.openFile("lessons/0001-why-codemode.html");
-  p.navigation.openFile("lessons/../reference/0001-codemode-map.html", "surface");
-  const request = activeTab(p.navigation.getState().surface);
+  p.navigation.openFile("lessons/../reference/0001-codemode-map.html", "inspector");
+  const request = activeTab(p.navigation.getState().inspector);
   assert.ok(request && typeof request !== "string");
   const result = await p.fileReads[2].finish("reference/0001-codemode-map.html");
-  const resolved = activeTab(p.navigation.getState().surface);
+  const resolved = activeTab(p.navigation.getState().inspector);
   assert.ok(resolved && typeof resolved !== "string");
   assert.equal(resolved.result, result, "keep the acquired content, not a second read");
   assert.equal(resolved.key, request.key, "adoption retains the viewer lifetime");
@@ -1268,7 +1272,7 @@ test("following an HTML sibling link reuses the reference file tab and retains i
   assert.deepEqual(shownTabs(p.navigation), {
     tabs: ["file:reference/0001-codemode-map.html", "file:lessons/0001-why-codemode.html"],
     active: "file:reference/0001-codemode-map.html",
-    area: "surface",
+    area: "inspector",
   });
 });
 
@@ -1290,7 +1294,7 @@ test("a spelling that resolved to an open file rereads it in its tab, without ad
   assert.equal(p.fileReads.length, 3, "an explicit open still rereads");
   assert.equal(p.fileReads[2].path, "lessons/../reference/map.html", "as the link spelled it");
   const result = await p.fileReads[2].finish("reference/map.html", "newer content");
-  const after = activeTab(p.navigation.getState().surface);
+  const after = activeTab(p.navigation.getState().inspector);
   assert.ok(after && typeof after !== "string");
   assert.equal(after.result, result);
   assert.deepEqual(shownTabs(p.navigation).tabs, ["file:reference/map.html"]);
@@ -1303,18 +1307,22 @@ test("resolved aliases keep tab order and the latest link's return area, not com
   p.selected("a");
   p.navigation.setSingle(true);
   p.navigation.openFile("lessons/../reference/map.html", "agent");
-  const alias = activeTab(p.navigation.getState().surface);
+  const alias = activeTab(p.navigation.getState().inspector);
   assert.ok(alias && typeof alias !== "string");
   p.navigation.openChanges();
-  p.navigation.openFile("reference/map.html", "surface");
+  p.navigation.openFile("reference/map.html", "inspector");
   const latest = await p.fileReads[1].finish("reference/map.html", "latest content");
   await p.fileReads[0].finish("reference/map.html", "older content");
-  const resolved = activeTab(p.navigation.getState().surface);
+  const resolved = activeTab(p.navigation.getState().inspector);
   assert.ok(resolved && typeof resolved !== "string");
   assert.equal(resolved.result, latest);
   assert.deepEqual(shownTabs(p.navigation).tabs, ["file:reference/map.html", "changes"]);
   p.navigation.closeTab("file:reference/map.html");
-  assert.equal(shownTabs(p.navigation).area, "surface", "latest link wins, even if it read first");
+  assert.equal(
+    shownTabs(p.navigation).area,
+    "inspector",
+    "latest link wins, even if it read first",
+  );
 });
 
 test("resolved file reads do not reopen closed tabs, steal focus or affect another session", async () => {
@@ -1336,7 +1344,7 @@ test("resolved file reads do not reopen closed tabs, steal focus or affect anoth
   assert.deepEqual(shownTabs(p.navigation), {
     tabs: ["file:reference/map.html", "changes"],
     active: "changes",
-    area: "surface",
+    area: "inspector",
   });
   const closed = open();
   p.navigation.closeTab("file:reference/map.html");
@@ -1363,7 +1371,7 @@ test("a path through `..` keeps its spelling until the server resolves the direc
   p.navigation.openFile("alias/../README.md");
   p.navigation.openFile("/scratch/alias/../README.md");
   assert.deepEqual(shownTabs(p.navigation).tabs, ["file:README.md", "file:alias/../README.md"]);
-  const file = activeTab(p.navigation.getState().surface);
+  const file = activeTab(p.navigation.getState().inspector);
   assert.ok(file && typeof file !== "string");
   assert.equal(p.fileReads.at(-1)!.path, "alias/../README.md");
   await p.fileReads.at(-1)!.finish("/sibling/README.md");
@@ -1384,19 +1392,19 @@ test("an alias resolving while a newer canonical read waits keeps that request, 
   p.selected("a");
   p.navigation.openFile("docs/../note.txt", "agent");
   p.navigation.openChanges();
-  p.navigation.openFile("note.txt", "surface");
-  const latest = activeTab(p.navigation.getState().surface);
+  p.navigation.openFile("note.txt", "inspector");
+  const latest = activeTab(p.navigation.getState().inspector);
   assert.ok(latest && typeof latest !== "string");
   await p.fileReads[0].finish("note.txt", "older bytes");
-  const pending = activeTab(p.navigation.getState().surface);
+  const pending = activeTab(p.navigation.getState().inspector);
   assert.ok(pending && typeof pending !== "string");
   assert.equal(pending.key, latest.key);
   assert.equal(pending.result, undefined);
-  assert.equal(pending.from, "surface");
+  assert.equal(pending.from, "inspector");
   assert.equal(p.fileReads[1].signal.aborted, false);
   const result = await p.fileReads[1].finish("note.txt", "latest bytes");
-  assert.equal(pending.key, (activeTab(p.navigation.getState().surface) as typeof pending).key);
-  assert.equal((activeTab(p.navigation.getState().surface) as typeof pending).result, result);
+  assert.equal(pending.key, (activeTab(p.navigation.getState().inspector) as typeof pending).key);
+  assert.equal((activeTab(p.navigation.getState().inspector) as typeof pending).result, result);
   assert.deepEqual(shownTabs(p.navigation).tabs, ["file:note.txt", "changes"]);
   assert.equal(p.fileReads.length, 2);
 });
@@ -1414,16 +1422,16 @@ test("a retained acquisition is not persisted or reread by tab selection; an exp
   p.selected("a");
   p.navigation.openFile("docs/../note.txt");
   const result = await p.fileReads[0].finish("note.txt", "acquired bytes");
-  const file = activeTab(p.navigation.getState().surface);
+  const file = activeTab(p.navigation.getState().inspector);
   assert.ok(file && typeof file !== "string");
   assert.equal(file.result, result);
   p.navigation.openChanges();
   p.navigation.selectTab("file:note.txt");
   p.registry();
-  assert.equal(activeTab(p.navigation.getState().surface), file);
+  assert.equal(activeTab(p.navigation.getState().inspector), file);
   assert.equal(p.fileReads.length, 1);
   assert.ok(kept);
-  assert.deepEqual(JSON.parse(kept).surface.tabs[0], {
+  assert.deepEqual(JSON.parse(kept).inspector.tabs[0], {
     kind: "file",
     path: "note.txt",
     from: "agent",
@@ -1436,7 +1444,7 @@ test("a retained acquisition is not persisted or reread by tab selection; an exp
   p.navigation.openFile("docs/../note.txt");
   assert.equal(p.fileReads.length, 2);
   const fresh = await p.fileReads[1].finish("note.txt", "fresh bytes");
-  const reopened = activeTab(p.navigation.getState().surface);
+  const reopened = activeTab(p.navigation.getState().inspector);
   assert.ok(reopened && typeof reopened !== "string");
   assert.equal(reopened.result, fresh);
   assert.notEqual(reopened.key, file.key);
@@ -1451,7 +1459,7 @@ test("failed reads keep their requested path and only another click retries", as
   p.selected("a");
   p.navigation.openFile("docs/../missing.txt");
   await p.fileReads[0].fail("File not found");
-  const file = activeTab(p.navigation.getState().surface);
+  const file = activeTab(p.navigation.getState().inspector);
   assert.ok(file && typeof file !== "string");
   assert.equal(file.path, "docs/../missing.txt");
   assert.equal(file.status, "File not found");
@@ -1478,11 +1486,11 @@ test("checkout and workspace changes replace acquisitions; stopping navigation c
   p.registry("workspace", false);
   assert.equal(p.fileReads.length, 3);
   const recovered = await p.fileReads[2].finish("note.txt");
-  const file = activeTab(p.navigation.getState().surface);
+  const file = activeTab(p.navigation.getState().inspector);
   assert.ok(file && typeof file !== "string");
   assert.equal(file.result, recovered);
   p.registry("other-workspace");
-  const changed = activeTab(p.navigation.getState().surface);
+  const changed = activeTab(p.navigation.getState().inspector);
   assert.ok(changed && typeof changed !== "string");
   assert.equal(changed.result, undefined);
   assert.notEqual(changed.key, file.key);
@@ -1490,7 +1498,7 @@ test("checkout and workspace changes replace acquisitions; stopping navigation c
   p.stopNavigation();
   assert.equal(p.fileReads[3].signal.aborted, true);
   await p.fileReads[3].finish("wrong.txt");
-  assert.equal(activeTab(p.navigation.getState().surface), changed);
+  assert.equal(activeTab(p.navigation.getState().inspector), changed);
 });
 
 test("one area at a time, closing a file opened from the Agent area returns there", () => {
@@ -1519,12 +1527,12 @@ test("one area at a time, closing a file opened from the Agent area returns ther
   p.navigation.closeTab("file:docs/b.md");
   assert.deepEqual(
     shownTabs(p.navigation),
-    { tabs: ["changes"], active: "changes", area: "surface" },
+    { tabs: ["changes"], active: "changes", area: "inspector" },
     "opened from Changes, back to Changes",
   );
   p.navigation.showAgent();
   p.navigation.selectTab("changes");
-  assert.equal(shownTabs(p.navigation).area, "surface", "the Changes tab shows it again");
+  assert.equal(shownTabs(p.navigation).area, "inspector", "the Changes tab shows it again");
 });
 
 test("a file remembers the area it was opened from when the layout narrows", () => {
@@ -1534,13 +1542,13 @@ test("a file remembers the area it was opened from when the layout narrows", () 
   p.selected("a");
   p.navigation.openChanges();
   p.navigation.openFile("docs/a.md", "agent");
-  p.navigation.openFile("docs/b.md", "surface");
+  p.navigation.openFile("docs/b.md", "inspector");
   p.navigation.setSingle(true);
   p.navigation.closeTab("file:docs/b.md");
   assert.deepEqual(
     shownTabs(p.navigation),
-    { tabs: ["changes", "file:docs/a.md"], active: "file:docs/a.md", area: "surface" },
-    "opened from a file, back to the Surface area",
+    { tabs: ["changes", "file:docs/a.md"], active: "file:docs/a.md", area: "inspector" },
+    "opened from a file, back to the Inspector area",
   );
   p.navigation.closeTab("file:docs/a.md");
   assert.deepEqual(
@@ -1557,12 +1565,12 @@ test("one area at a time, a file opened again returns to the area of its latest 
   p.selected("a");
   p.navigation.setSingle(true);
   p.navigation.openFile("docs/a.md", "agent");
-  p.navigation.openFile("docs/b.md", "surface");
+  p.navigation.openFile("docs/b.md", "inspector");
   p.navigation.showAgent();
   p.navigation.openFile("docs/b.md", "agent");
   assert.deepEqual(
     shownTabs(p.navigation),
-    { tabs: ["file:docs/a.md", "file:docs/b.md"], active: "file:docs/b.md", area: "surface" },
+    { tabs: ["file:docs/a.md", "file:docs/b.md"], active: "file:docs/b.md", area: "inspector" },
     "the open file's one tab shows again",
   );
   p.navigation.closeTab("file:docs/b.md");
@@ -1596,7 +1604,7 @@ test("every tab closes at every width; one area at a time, closing the last retu
   );
 });
 
-test("legacy Preview memory restores remaining Changes but never the retired app surface", () => {
+test("legacy Preview memory restores remaining Changes but never the retired app inspector", () => {
   let value: string | null = null;
   const memory = {
     read: () => value,
@@ -1610,8 +1618,8 @@ test("legacy Preview memory restores remaining Changes but never the retired app
   p.selected("a");
   p.navigation.openChanges();
   const legacy = JSON.parse(value!);
-  legacy.surface.tabs.push("preview");
-  legacy.surface.active = "preview";
+  legacy.inspector.tabs.push("preview");
+  legacy.inspector.active = "preview";
   value = JSON.stringify(legacy);
   const reloaded = page("/s/a", memory);
   reloaded.registry();
@@ -1626,21 +1634,21 @@ test("side by side both areas show while there are tabs; one area at a time, the
   p.navigation.select("/scratch", "a");
   p.selected("a");
   const shown = () => {
-    const { agent, surface } = p.navigation.getState().layout;
-    return { agent, surface };
+    const { agent, inspector } = p.navigation.getState().layout;
+    return { agent, inspector };
   };
-  assert.deepEqual(shown(), { agent: true, surface: false }, "no tabs: only the Agent area");
+  assert.deepEqual(shown(), { agent: true, inspector: false }, "no tabs: only the Agent area");
   p.navigation.openChanges();
-  assert.deepEqual(shown(), { agent: true, surface: true }, "side by side");
+  assert.deepEqual(shown(), { agent: true, inspector: true }, "side by side");
   p.navigation.setSingle(true);
-  assert.deepEqual(shown(), { agent: false, surface: true }, "narrow: Changes, just opened");
+  assert.deepEqual(shown(), { agent: false, inspector: true }, "narrow: Changes, just opened");
   p.navigation.showAgent();
-  assert.deepEqual(shown(), { agent: true, surface: false }, "narrow: back on Agent");
+  assert.deepEqual(shown(), { agent: true, inspector: false }, "narrow: back on Agent");
   p.navigation.setSingle(false);
-  assert.deepEqual(shown(), { agent: true, surface: true }, "wide again: both");
+  assert.deepEqual(shown(), { agent: true, inspector: true }, "wide again: both");
   p.navigation.closeTab("changes");
   p.navigation.setSingle(true);
-  assert.deepEqual(shown(), { agent: true, surface: false }, "nothing open stays on Agent");
+  assert.deepEqual(shown(), { agent: true, inspector: false }, "nothing open stays on Agent");
 });
 
 test("the layout and Settings leave the session's tabs as they were", () => {
@@ -1661,7 +1669,7 @@ test("the layout and Settings leave the session's tabs as they were", () => {
   );
 });
 
-test("a Surface tab is on screen only while nothing covers it", () => {
+test("a Inspector tab is on screen only while nothing covers it", () => {
   const p = page("/new", undefined, railPreference(railStorage()));
   p.registry();
   p.navigation.select("/scratch", "a");
@@ -1675,7 +1683,7 @@ test("a Surface tab is on screen only while nothing covers it", () => {
   p.navigation.closeSettings();
   assert.equal(shownTab(), "changes");
   p.navigation.toggleRail();
-  assert.equal(shownTab(), null, "the rail, turned on last, covers the Surface area");
+  assert.equal(shownTab(), null, "the rail, turned on last, covers the Inspector area");
   p.navigation.toggleRail();
   p.navigation.setSingle(true);
   assert.equal(shownTab(), "changes", "one area at a time, Changes just opened");

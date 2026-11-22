@@ -146,7 +146,7 @@ test("a command only the other layout offers is left out, while an unavailable o
     const groups = freshPalette(inSession, {
       globalCommands: [],
       sessionCommands: sessionCommands(inSession, undefined, {
-        layout: { single, agent: true, surface: false, rail: false, agentTab: false },
+        layout: { single, agent: true, inspector: false, rail: false, agentTab: false },
       }),
     });
     const group = groups.find((g) => g.id === "session");

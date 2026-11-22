@@ -341,7 +341,7 @@ test("pending dialogs expose the queue head and how many follow it", () => {
   assert.equal(pending.attachment, "sel");
   assert.deepEqual(pendingDialogs(ready), {
     head: undefined,
-    surface: null,
+    presentation: null,
     more: 0,
     attachment: "sel",
     session: null,
@@ -349,18 +349,18 @@ test("pending dialogs expose the queue head and how many follow it", () => {
 });
 
 test("a confirmation is asked in a modal, every other method inline", () => {
-  const surface = (method: Dialog["method"]) =>
-    pendingDialogs({ ...ready, session: session([dialog("d1", { method })]) }).surface;
-  assert.equal(surface("confirm"), "modal");
+  const presentation = (method: Dialog["method"]) =>
+    pendingDialogs({ ...ready, session: session([dialog("d1", { method })]) }).presentation;
+  assert.equal(presentation("confirm"), "modal");
   for (const method of ["select", "input", "editor"] as const)
-    assert.equal(surface(method), "inline", method);
+    assert.equal(presentation(method), "inline", method);
 });
 
 test("no dialog is pending during a resync, and answers wait for a settled attachment", () => {
   const queued = session([dialog("d1")]);
   assert.deepEqual(pendingDialogs({ ...ready, resync: true, session: queued }), {
     head: undefined,
-    surface: null,
+    presentation: null,
     more: 0,
     attachment: null,
     session: sessionKey(queued),

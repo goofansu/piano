@@ -152,7 +152,7 @@ test("pending association changes supersede reads and fence late success and fai
   assert.deepEqual(pr.getState().value, { link: c, pullRequest: null });
   assert.deepEqual(notes.error, []);
   pr.present({ visible: true, dialog: false });
-  assert.equal(pr.getState().surface, "details");
+  assert.equal(pr.getState().mode, "details");
   stop();
 });
 
@@ -220,18 +220,18 @@ test("a changed association keeps an edit and a failed refresh uses the new link
   const b: SessionPullRequestLink = { ...registered, apiHost: "github.int.exe.xyz" };
   pr.observe("w1", "s1", b, false);
   assert.equal(pr.getState().value, undefined, "old host facts are not current");
-  assert.equal(pr.getState().surface, "editing");
+  assert.equal(pr.getState().mode, "editing");
   pi.last().reject(new Error("B is offline"));
   await settle();
   assert.deepEqual(pr.getState().value, { link: b, pullRequest: null, error: "B is offline" });
-  assert.equal(pr.getState().surface, "editing");
+  assert.equal(pr.getState().mode, "editing");
   stop();
 });
 
 test("opening while unlinked offers the link form; a link found when work stops closes it", async () => {
   const { pi, pr, closes } = setup(undefined);
   pr.present({ visible: false, dialog: true });
-  assert.equal(pr.getState().surface, "link-form");
+  assert.equal(pr.getState().mode, "link-form");
 
   pr.observe("w1", "s1", undefined, true);
   assert.equal(pi.requests.length, 0, "starting work searches nothing");
@@ -240,16 +240,16 @@ test("opening while unlinked offers the link form; a link found when work stops 
   assert.equal(pi.last().action, undefined, "the search is a read, which discovers server-side");
   pi.last().resolve(linked);
   await settle();
-  assert.equal(pr.getState().surface, "link-form", "the search's own answer shows nothing");
+  assert.equal(pr.getState().mode, "link-form", "the search's own answer shows nothing");
 
   pr.observe("w1", "s1", registered, false);
   assert.equal(pi.requests.length, 2);
   pi.last().resolve(linked);
   await settle();
-  assert.equal(pr.getState().surface, "closed");
+  assert.equal(pr.getState().mode, "closed");
   assert.equal(closes(), 1, "whoever owns the panel learns it closed");
   pr.present({ visible: true, dialog: false });
-  assert.equal(pr.getState().surface, "details", "reopening shows the link");
+  assert.equal(pr.getState().mode, "details", "reopening shows the link");
 });
 
 test("a link removed or added elsewhere closes the open dialog, with or without a read in flight", async () => {
@@ -258,19 +258,19 @@ test("a link removed or added elsewhere closes the open dialog, with or without 
     pi.last().resolve(linked);
     await settle();
     pr.present({ visible: true, dialog: true });
-    assert.equal(pr.getState().surface, "editing");
+    assert.equal(pr.getState().mode, "editing");
     const asked = pi.requests.length;
     pr.observe("w1", "s1", null, false);
-    assert.equal(pr.getState().surface, "closed");
+    assert.equal(pr.getState().mode, "closed");
     assert.equal(closes(), 1, "whoever owns the dialog learns it closed");
     assert.equal(pi.requests.length, asked, "an unlinked session is not read");
   }
   {
     const { pi, pr, closes } = setup(null);
     pr.present({ visible: true, dialog: true });
-    assert.equal(pr.getState().surface, "link-form");
+    assert.equal(pr.getState().mode, "link-form");
     pr.observe("w1", "s1", registered, false);
-    assert.equal(pr.getState().surface, "details");
+    assert.equal(pr.getState().mode, "details");
     assert.equal(closes(), 1, "whoever owns the dialog learns it closed");
     pi.last().resolve(linked);
     await settle();
@@ -282,11 +282,11 @@ test("the dialog closes when its session can no longer be addressed, rather than
   for (const link of [undefined, registered]) {
     const { pi, pr, notes, closes } = setup(link);
     pr.present({ visible: true, dialog: true });
-    assert.equal(pr.getState().surface, link ? "editing" : "link-form");
+    assert.equal(pr.getState().mode, link ? "editing" : "link-form");
     const asked = pi.requests.length;
 
     pr.observe(undefined, "s1", link, false);
-    assert.equal(pr.getState().surface, "closed");
+    assert.equal(pr.getState().mode, "closed");
     assert.equal(closes(), 1, "whoever owns the dialog learns it closed");
     assert.equal((await pr.link(URL))._tag, "superseded");
     assert.equal(pi.requests.length, asked, "nothing is sent for a session it cannot address");
@@ -298,17 +298,13 @@ test("opening a linked session before its first read lands shows its details thr
   const { pi, pr, closes } = setup(registered);
   assert.equal(pi.requests.length, 1, "selection starts the first read");
   pr.present({ visible: true, dialog: false });
-  assert.equal(
-    pr.getState().surface,
-    "details",
-    "the registry's link decides, not the pending read",
-  );
+  assert.equal(pr.getState().mode, "details", "the registry's link decides, not the pending read");
   assert.equal(pr.getState().linked, true);
   assert.equal(pr.getState().value, undefined, "no facts yet");
   assert.equal(pi.requests.length, 1, "opening joins the first read");
   pi.last().resolve(linked);
   await settle();
-  assert.equal(pr.getState().surface, "details", "the read fills the details in place");
+  assert.equal(pr.getState().mode, "details", "the read fills the details in place");
   assert.deepEqual(pr.getState().value, linked);
   assert.equal(closes(), 0, "the panel never closes itself");
   assert.equal(pi.requests.length, 1);
@@ -342,7 +338,7 @@ test("opening details reuses the loaded facts without replacing a background rea
   pi.last().resolve(linked);
   await settle();
   pr.present({ visible: true, dialog: false });
-  assert.equal(pr.getState().surface, "details");
+  assert.equal(pr.getState().mode, "details");
   assert.deepEqual(pr.getState().value, linked);
   assert.equal(pi.requests.length, 1, "opening uses the header's facts");
   pr.present({ visible: false, dialog: false });
@@ -357,7 +353,7 @@ test("opening details reuses the loaded facts without replacing a background rea
   const unavailable = { ...linked, error: "GitHub is unreachable" };
   pi.last().resolve(unavailable);
   await settle();
-  assert.equal(pr.getState().surface, "details");
+  assert.equal(pr.getState().mode, "details");
   assert.deepEqual(pr.getState().value, unavailable, "the refresh updates the open details");
 });
 
@@ -509,7 +505,7 @@ test("selection and visibility are one snapshot, so hidden destinations never st
       1,
       "the previous selection's visibility cannot search this one",
     );
-    assert.equal(pr.getState().surface, "closed");
+    assert.equal(pr.getState().mode, "closed");
     assert.equal(pr.getState().value, undefined);
   } finally {
     stop();
@@ -753,7 +749,7 @@ test("Find from branch with nothing found reports it exactly once", async () => 
   assert.deepEqual(notes.info, ["No open PR found for this branch."]);
   assert.deepEqual(notes.error, []);
   assert.deepEqual(notes.success, []);
-  assert.equal(pr.getState().surface, "link-form", "the form stays for a manual link");
+  assert.equal(pr.getState().mode, "link-form", "the form stays for a manual link");
   assert.equal(pr.getState().finding, false);
 });
 
@@ -778,7 +774,7 @@ for (const existing of [registered, undefined]) {
       assert.deepEqual(notes.success, [], "a retained link is not announced as found");
       assert.deepEqual(pr.getState().link, existing, "does not replace the association");
       if (existing) assert.deepEqual(pr.getState().value, response);
-      assert.equal(pr.getState().surface, existing ? "editing" : "link-form");
+      assert.equal(pr.getState().mode, existing ? "editing" : "link-form");
       assert.equal(pr.getState().finding, false);
       assert.equal(pr.getState().busy, false);
       assert.equal(closes(), 0, "unsuccessful discovery does not close the dialog");
@@ -812,10 +808,10 @@ test("a failed change keeps the saved link with the reason and the edit open", a
   const saving = pr.link("https://github.com/example/repo/pull/7");
   pi.last().reject(new Error("GitHub is unreachable"));
   assert.deepEqual(await saving, { _tag: "failed", reason: "GitHub is unreachable" });
-  const { value, surface, busy } = pr.getState();
+  const { value, mode, busy } = pr.getState();
   assert.equal(value?.link?.url, URL);
   assert.equal(value?.error, "GitHub is unreachable");
-  assert.equal(surface, "editing");
+  assert.equal(mode, "editing");
   assert.equal(busy, false);
   assert.deepEqual(notes.error, ["GitHub is unreachable"]);
   assert.deepEqual(notes.success, []);
@@ -834,10 +830,10 @@ test("background reads never reset an edit in progress", async () => {
   pr.observe("w1", "s1", registered, false);
   pi.last().reject(new Error("rate limited"));
   await settle();
-  assert.equal(pr.getState().surface, "editing");
+  assert.equal(pr.getState().mode, "editing");
   assert.equal(pr.getState().value?.link?.url, URL, "an unreadable PR keeps the saved link");
   pr.present({ visible: true, dialog: false });
-  assert.equal(pr.getState().surface, "details");
+  assert.equal(pr.getState().mode, "details");
 });
 
 test("an unreadable first read still shows the registry's link", async () => {
@@ -901,7 +897,7 @@ test("the row's place coming on screen shows a linked session's details, searche
   pr.present({ visible: true, dialog: false });
   assert.equal(pi.requests.length, 1, "Changes opening on a never-searched session searches once");
   assert.equal(pi.last().action, undefined);
-  assert.equal(pr.getState().surface, "closed", "nothing opens for an unlinked session");
+  assert.equal(pr.getState().mode, "closed", "nothing opens for an unlinked session");
   pr.present({ visible: true, dialog: false });
   assert.equal(pi.requests.length, 1, "while that search runs, nothing is asked again");
   pi.last().resolve(unlinked);
@@ -917,11 +913,11 @@ test("the row's place coming on screen shows a linked session's details, searche
   pr.observe("w1", "s3", registered, false);
   assert.equal(pi.requests.length, 2, "a linked session reads on selection");
   pr.present({ visible: true, dialog: false });
-  assert.equal(pr.getState().surface, "details", "and shows its details in the row");
+  assert.equal(pr.getState().mode, "details", "and shows its details in the row");
   pr.present({ visible: false, dialog: false });
-  assert.equal(pr.getState().surface, "closed", "hiding Changes hides them");
+  assert.equal(pr.getState().mode, "closed", "hiding Changes hides them");
   pr.present({ visible: true, dialog: false });
   pr.observe("w1", "s3", null, false);
   await settle();
-  assert.equal(pr.getState().surface, "closed", "a link removed elsewhere takes the row with it");
+  assert.equal(pr.getState().mode, "closed", "a link removed elsewhere takes the row with it");
 });

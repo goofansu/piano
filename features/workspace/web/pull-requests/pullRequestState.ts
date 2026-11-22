@@ -8,7 +8,7 @@ import type {
   SessionPullRequestAction,
 } from "../../contracts/pull-requests/http.ts";
 
-export type PullRequestSurface = "closed" | "link-form" | "details" | "editing";
+export type PullRequestMode = "closed" | "link-form" | "details" | "editing";
 
 export interface SessionPullRequestState {
   key: string | null;
@@ -18,7 +18,7 @@ export interface SessionPullRequestState {
   loading: boolean;
   busy: boolean;
   finding: boolean;
-  surface: PullRequestSurface;
+  mode: PullRequestMode;
 }
 
 export type PullRequestOutcome =
@@ -108,7 +108,7 @@ export function createSessionPullRequest({
     load: (signal, key) => request(key, undefined, signal),
     interval: (value) => {
       const status = sameLink(value?.link, link) ? value?.pullRequest?.state : undefined;
-      return surface === "details" && link && status !== "closed" && status !== "merged"
+      return mode === "details" && link && status !== "closed" && status !== "merged"
         ? POLL_MS
         : undefined;
     },
@@ -122,7 +122,7 @@ export function createSessionPullRequest({
   let working = false;
   let visible = false,
     dialog = false;
-  let surface: PullRequestSurface = "closed",
+  let mode: PullRequestMode = "closed",
     finding = false,
     changing = false;
   const listeners = new Set<() => void>();
@@ -140,7 +140,7 @@ export function createSessionPullRequest({
       loading,
       busy: mutating,
       finding,
-      surface,
+      mode,
     };
   };
   let state = derive();
@@ -148,13 +148,13 @@ export function createSessionPullRequest({
     state = derive();
     for (const listener of listeners) listener();
   };
-  const show = (next: PullRequestSurface) => {
-    if (surface === next) return;
-    surface = next;
+  const show = (next: PullRequestMode) => {
+    if (mode === next) return;
+    mode = next;
     observation.reschedule();
     publish();
   };
-  const reconcileSurface = () => {
+  const reconcileMode = () => {
     const next =
       observation.getState().key === null
         ? "closed"
@@ -169,7 +169,7 @@ export function createSessionPullRequest({
   };
   const closeItself = () => {
     dialog = false;
-    reconcileSurface();
+    reconcileMode();
     closed?.();
   };
   const endSearch = () => {
@@ -179,7 +179,7 @@ export function createSessionPullRequest({
 
   observation.subscribe(() => {
     state = derive();
-    reconcileSurface();
+    reconcileMode();
     publish();
   });
 
@@ -251,7 +251,7 @@ export function createSessionPullRequest({
       const key = pullRequestKey(workspaceId, sessionId);
       const { key: previous } = observation.getState();
       const revealed = view.visible && !visible;
-      const previousSurface = surface;
+      const previousMode = mode;
       visible = view.visible;
       dialog = view.dialog;
       const previousLink = link;
@@ -264,7 +264,7 @@ export function createSessionPullRequest({
       working = nextWorking;
       if (key !== previous) {
         readAt = undefined;
-        surface = "closed";
+        mode = "closed";
         finding = false;
         endSearch();
       }
@@ -272,13 +272,13 @@ export function createSessionPullRequest({
       observation.observe(key, !!next);
       const alreadyReading = key !== previous || !previousLink;
       if (next && !alreadyReading && (associationChanged || edge)) observation.refreshSoon(0);
-      reconcileSurface();
+      reconcileMode();
       publish();
       if (closing) closed?.();
       const { loading, mutating } = observation.getState();
       if (
-        surface === "details" &&
-        previousSurface !== "details" &&
+        mode === "details" &&
+        previousMode !== "details" &&
         !loading &&
         !mutating &&
         (readAt === undefined || now() - readAt >= POLL_MS)

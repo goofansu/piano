@@ -224,12 +224,12 @@ export function PullRequestLinkDialog({
   pr: PullRequestControl;
   fallbackTrigger: React.RefObject<HTMLButtonElement | null>;
 }) {
-  const editing = pr.surface === "editing";
-  const open = editing || pr.surface === "link-form";
+  const editing = pr.mode === "editing";
+  const open = editing || pr.mode === "link-form";
   const restoreFocus = () =>
     !pointerLast() &&
     (document.querySelector<HTMLButtonElement>(
-      '[data-slot="surface-area"]:not([inert]) [data-pull-request-trigger]',
+      '[data-slot="inspector"]:not([inert]) [data-pull-request-trigger]',
     ) ??
       fallbackTrigger.current ??
       false);

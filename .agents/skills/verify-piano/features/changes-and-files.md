@@ -24,7 +24,7 @@ Preconditions: a seeded launch. Make the workspace dirty through the files, as P
   - Result: `new.txt` leaves the list; `src/answer.ts` stays. Capture `02-refreshed`.
 - `changes-close`
   - Action: with only Changes open, `ab click 'main header [aria-label="Hide changes"]'`
-  - Result: `document.querySelector('[data-slot=surface-area]:not([inert])')` is null and the
+  - Result: `document.querySelector('[data-slot=inspector]:not([inert])')` is null and the
     focused element is the header's "Changes" button. Scope the click: the tab also has a
     "Hide changes" button, whose focus-restoration path differs.
 - `details-open`, `environment`, `files-list` and `file-viewer`
@@ -61,5 +61,5 @@ Preconditions: a seeded launch. Make the workspace dirty through the files, as P
   scratch fixture, separately from the ordinary Changes recipe.
 - Fake Pi makes no tool calls, so Outputs is only reachable through the seeded, hand-written
   history; report it as such. A real Pi write is not exercised.
-- The Surface area is `[data-slot=surface-area]`; hidden, it stays mounted but `inert` (so its
+- The Inspector is `[data-slot=inspector]`; hidden, it stays mounted but `inert` (so its
   scroll survives), so select the shown one with `:not([inert])`.

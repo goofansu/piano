@@ -5,9 +5,9 @@ Colours derive from the Lefos palette; `web/src/index.css` is authoritative.
 ## Palette
 
 Lightness is set by contrast (WCAG 4.5:1 for text, 3:1 for glyphs and meaningful edges) and
-chroma is capped so status hues stay earthy. Roles: `--surface-0` sidebar and shell,
-`--conversation` the sheet, `--surface-1` composer, inputs and user prompts, `--surface-2` menus
-and popovers, `--surface-3` dialogs and mobile navigation; `--busy` working, `--done` finished
+chroma is capped so status hues stay earthy. Roles: `--layer-0` sidebar and shell,
+`--conversation` the sheet, `--layer-1` composer, inputs and user prompts, `--layer-2` menus
+and popovers, `--layer-3` dialogs and mobile navigation; `--busy` working, `--done` finished
 and unseen, `--ok` idle or success, `--warn`, `--err` errors and destructive, `--merged`.
 
 - **The one colour.** `--brand` means "live": the send key, focus ring, selection, links and the

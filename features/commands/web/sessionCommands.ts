@@ -18,7 +18,7 @@ export type SessionTarget = { cwd: string; sessionId: string; title?: string };
 const AGENT_ONLY: SessionLayout = {
   single: false,
   agent: true,
-  surface: false,
+  inspector: false,
   rail: false,
   agentTab: false,
 };

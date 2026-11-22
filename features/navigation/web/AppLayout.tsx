@@ -52,7 +52,7 @@ export function AppLayout({
       keyboardShortcut={false}
       open={!collapsed}
       onOpenChange={(open) => layout.setCollapsed(!open)}
-      className="relative h-dvh min-h-0 overflow-hidden bg-surface-0 text-ink"
+      className="relative h-dvh min-h-0 overflow-hidden bg-layer-0 text-ink"
     >
       <aside
         data-slot="layout-sidebar"

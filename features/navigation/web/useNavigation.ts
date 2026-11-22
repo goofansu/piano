@@ -3,7 +3,7 @@ import { createPreference } from "../../../web/src/shared/lib/preference.ts";
 import { type Navigation } from "../../../web/src/shared/navigation/navigation.ts";
 import {
   browserAddressBar,
-  browserSurfaceMemory,
+  browserInspectorMemory,
   createNavigation,
   type NavigationOptions,
 } from "./navigation.ts";
@@ -23,7 +23,7 @@ export function useNavigationController(
       client,
       address: browserAddressBar,
       readFile,
-      memory: browserSurfaceMemory(),
+      memory: browserInspectorMemory(),
       rail: railPreference,
       moved,
     }),

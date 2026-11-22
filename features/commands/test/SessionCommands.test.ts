@@ -349,29 +349,29 @@ test("view commands offer the rail side by side, Agent one at a time beside an o
         .map((c) => [c.id, c.enabled]),
     );
   const sideBySide = { single: false, agent: true, rail: false, agentTab: false };
-  assert.deepEqual(ofLayout({ ...sideBySide, surface: false }), {
+  assert.deepEqual(ofLayout({ ...sideBySide, inspector: false }), {
     changes: true,
     "session-rail": true,
     agent: false,
   });
-  assert.deepEqual(ofLayout({ ...sideBySide, surface: true }), {
+  assert.deepEqual(ofLayout({ ...sideBySide, inspector: true }), {
     changes: true,
     "session-rail": true,
     agent: false,
   });
   assert.deepEqual(
-    ofLayout({ single: true, agent: false, surface: true, rail: false, agentTab: true }),
+    ofLayout({ single: true, agent: false, inspector: true, rail: false, agentTab: true }),
     { changes: true, "session-rail": false, agent: true },
   );
   assert.deepEqual(
-    ofLayout({ single: true, agent: true, surface: false, rail: false, agentTab: false }),
+    ofLayout({ single: true, agent: true, inspector: false, rail: false, agentTab: false }),
     { changes: true, "session-rail": false, agent: false },
   );
 });
 
 test("one area at a time the rail command is left out: the session menu holds its facts", () => {
   const command = sessionCommands(base, undefined, {
-    layout: { single: true, agent: true, surface: false, rail: false, agentTab: false },
+    layout: { single: true, agent: true, inspector: false, rail: false, agentTab: false },
   }).find((c) => c.id === "session-rail")!;
   assert.equal(command.hidden, true);
   assert.equal(command.enabled, false);

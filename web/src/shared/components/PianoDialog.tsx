@@ -30,7 +30,7 @@ export function DialogContent({
       ref={still ? ref : exitFace}
       {...props}
       finalFocus={finalFocus}
-      className={cn("rounded-2xl bg-surface-3", className)}
+      className={cn("rounded-2xl bg-layer-3", className)}
     />
   );
 }

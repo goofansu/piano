@@ -14,13 +14,13 @@ import { useLastShown } from "@/shared/lib/useLastShown";
 import type { Client } from "@/shared/state/client";
 
 export function DialogHost({
-  pending: { head, surface, more, attachment },
+  pending: { head, presentation, more, attachment },
   send,
 }: {
   pending: PendingDialogs;
   send: Client["send"];
 }) {
-  const confirmation = surface === "modal" ? head : undefined;
+  const confirmation = presentation === "modal" ? head : undefined;
   const shown = useLastShown(confirmation);
   return shown ? (
     <DialogView

@@ -9,7 +9,7 @@ import {
 import { IconButton } from "@/shared/components/IconButton";
 import { trackPointerDrag } from "@/shared/lib/pointerDrag";
 import { ScrollRootContext } from "@/shared/lib/scrollRoot";
-import { type SurfaceTab, tabKey } from "@/shared/navigation/navigation";
+import { type InspectorTab, tabKey } from "@/shared/navigation/navigation";
 import {
   clampPanelWidth,
   PANEL_WIDTH,
@@ -25,27 +25,27 @@ const ownKeys = (event: ReactKeyboardEvent<HTMLElement>) => {
 
 const fileName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
 
-export function surfaceTabNames(tab: SurfaceTab) {
+export function inspectorTabNames(tab: InspectorTab) {
   return tab === "changes"
     ? { name: "Changes", close: "Hide changes", region: "Changes" }
     : { name: fileName(tab.path), close: `Close ${fileName(tab.path)}`, region: "File viewer" };
 }
 
-export function SurfaceFrame({
+export function InspectorFrame({
   tab,
   status,
   actions,
   below,
   children,
 }: {
-  tab: SurfaceTab;
+  tab: InspectorTab;
   status?: ReactNode;
   actions?: ReactNode;
   below?: ReactNode;
   children: ReactNode;
 }) {
   const { single, closeTab } = useNavigation();
-  const names = surfaceTabNames(tab);
+  const names = inspectorTabNames(tab);
   const close = () => closeTab(tabKey(tab));
   const toolbar = status !== undefined || actions !== undefined || single;
   const [body, setBody] = useState<HTMLDivElement | null>(null);
@@ -82,7 +82,7 @@ export function SurfaceFrame({
   );
 }
 
-export function SurfaceColumn({
+export function InspectorColumn({
   id,
   labelledBy,
   label,
@@ -131,7 +131,7 @@ export function SurfaceColumn({
   return (
     <aside
       id={id}
-      data-slot="surface-area"
+      data-slot="inspector"
       data-dragging={resizing}
       role={labelledBy ? "tabpanel" : undefined}
       aria-labelledby={labelledBy}
@@ -143,7 +143,7 @@ export function SurfaceColumn({
         "relative flex min-h-0 min-w-0 flex-col bg-conversation",
         single
           ? "flex-1"
-          : "max-w-[calc(100%-var(--agent-min))] min-w-(--surface-min) shrink border-l border-line",
+          : "max-w-[calc(100%-var(--agent-min))] min-w-(--inspector-min) shrink border-l border-line",
         !shown && (single ? "invisible absolute inset-0" : "invisible absolute inset-y-0 right-0"),
       )}
     >

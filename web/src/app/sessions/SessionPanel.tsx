@@ -3,6 +3,7 @@ import type { PullRequestControl } from "@features/workspace/web/browser";
 import { FileDiffIcon, XIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { IconButton } from "@/shared/components/IconButton";
+import { InspectorColumn, inspectorTabNames } from "@/shared/components/Inspector";
 import {
   PianoStripBar,
   PianoStripTab,
@@ -10,20 +11,19 @@ import {
   PianoStripTabTrigger,
   Tabs,
 } from "@/shared/components/PianoTabs";
-import { SurfaceColumn, surfaceTabNames } from "@/shared/components/SurfaceArea";
-import { activeTab, isView, type SurfaceTab, tabKey } from "@/shared/navigation/navigation";
+import { activeTab, isView, type InspectorTab, tabKey } from "@/shared/navigation/navigation";
 import { useNavigation } from "@/shared/navigation/useNavigation";
 import { sessionContext } from "@/shared/state/sessionContext";
 import { type AppState, sessionKey } from "@/shared/state/state";
 
-const surfaceTabId = (key: string) => `surface-tab-${encodeURIComponent(key)}`;
-const viewId = (key: string) => `surface-view-${encodeURIComponent(key)}`;
-export function SurfaceTabTrigger({
+const inspectorTabId = (key: string) => `inspector-tab-${encodeURIComponent(key)}`;
+const viewId = (key: string) => `inspector-view-${encodeURIComponent(key)}`;
+export function InspectorTabTrigger({
   tab,
   id,
   controls,
 }: {
-  tab: SurfaceTab;
+  tab: InspectorTab;
   id: string;
   controls: string;
 }) {
@@ -41,7 +41,7 @@ export function SurfaceTabTrigger({
         )
       }
     >
-      {surfaceTabNames(tab).name}
+      {inspectorTabNames(tab).name}
     </PianoStripTabTrigger>
   );
 }
@@ -60,16 +60,16 @@ export function SessionPanel({
   pullRequest: PullRequestControl;
 }) {
   const navigation = useNavigation();
-  const { surface, surfaceRequest, single, selectTab, closeTab } = navigation;
+  const { inspector, inspectorRequest, single, selectTab, closeTab } = navigation;
   const t = state.session;
   const key = t ? sessionKey(t) : null;
-  const tabs = surface?.tabs ?? [];
-  const active = surface?.active ?? null;
+  const tabs = inspector?.tabs ?? [];
+  const active = inspector?.active ?? null;
   const changesOpen = tabs.includes("changes");
   const [changesFor, setChangesFor] = useState<string | null>(null);
   if (changesOpen && key && changesFor !== key) setChangesFor(key);
   const keepChanges = !!key && (changesFor === key || changesOpen);
-  const shown = navigation.layout.surface;
+  const shown = navigation.layout.inspector;
 
   const focusShown = () => {
     if (!active) return false;
@@ -78,10 +78,10 @@ export function SessionPanel({
     return !!target;
   };
 
-  const seen = useRef(surfaceRequest);
+  const seen = useRef(inspectorRequest);
   useEffect(() => {
-    if (seen.current === surfaceRequest) return;
-    seen.current = surfaceRequest;
+    if (seen.current === inspectorRequest) return;
+    seen.current = inspectorRequest;
     if (!shown) return;
     const frame = requestAnimationFrame(() => {
       if (document.activeElement?.getAttribute("role") === "tab") return;
@@ -102,7 +102,7 @@ export function SessionPanel({
       if (shown && active) {
         (single
           ? document.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
-          : document.getElementById(surfaceTabId(active))
+          : document.getElementById(inspectorTabId(active))
         )?.focus({ preventScroll: true });
         return;
       }
@@ -124,17 +124,17 @@ export function SessionPanel({
 
   if (!t) return null;
   const { changesWorkspace, changesUnavailable } = sessionContext(state);
-  const files = tabs.filter((tab): tab is Exclude<SurfaceTab, string> => !isView(tab));
+  const files = tabs.filter((tab): tab is Exclude<InspectorTab, string> => !isView(tab));
   const view = (k: string, children: React.ReactNode, identity: string | number = k) => (
-    <SurfaceView key={identity} tab={k} shown={active === k} single={single}>
+    <InspectorView key={identity} tab={k} shown={active === k} single={single}>
       {children}
-    </SurfaceView>
+    </InspectorView>
   );
   return (
-    <SurfaceColumn
+    <InspectorColumn
       id={id}
       labelledBy={labelledBy}
-      label={surfaceTabNames(activeTab(surface) ?? "changes").region}
+      label={inspectorTabNames(activeTab(inspector) ?? "changes").region}
       single={single}
       shown={shown}
     >
@@ -145,15 +145,15 @@ export function SessionPanel({
             onValueChange={selectTab}
             className="min-w-0 flex-1 gap-0 self-stretch"
           >
-            <PianoStripTabsList aria-label="Surface views">
+            <PianoStripTabsList aria-label="Inspector views">
               {tabs.map((tab) => {
                 const k = tabKey(tab);
                 return (
                   <PianoStripTab key={k} selected={k === active}>
-                    <SurfaceTabTrigger tab={tab} id={surfaceTabId(k)} controls={viewId(k)} />
+                    <InspectorTabTrigger tab={tab} id={inspectorTabId(k)} controls={viewId(k)} />
                     <IconButton
                       size="row"
-                      label={surfaceTabNames(tab).close}
+                      label={inspectorTabNames(tab).close}
                       onClick={() => closeTab(k)}
                     >
                       <XIcon />
@@ -187,11 +187,11 @@ export function SessionPanel({
           ),
         )}
       </div>
-    </SurfaceColumn>
+    </InspectorColumn>
   );
 }
 
-function SurfaceView({
+function InspectorView({
   tab,
   shown,
   single,
@@ -205,7 +205,7 @@ function SurfaceView({
   return (
     <div
       id={viewId(tab)}
-      {...(!single && { role: "tabpanel", "aria-labelledby": surfaceTabId(tab) })}
+      {...(!single && { role: "tabpanel", "aria-labelledby": inspectorTabId(tab) })}
       tabIndex={-1}
       inert={!shown}
       aria-hidden={!shown}

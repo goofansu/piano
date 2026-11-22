@@ -47,7 +47,7 @@ export function LibraryProposalCard({
       <form
         aria-labelledby={`${id}-title`}
         data-slot="library-proposal"
-        className="mx-auto flex w-full max-w-3xl flex-col gap-3 rounded-md border border-line bg-surface-1 p-4"
+        className="mx-auto flex w-full max-w-3xl flex-col gap-3 rounded-md border border-line bg-layer-1 p-4"
         onSubmit={(event) => {
           event.preventDefault();
           if (!dialog.concealed) answer({ confirmed: true });
