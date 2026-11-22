@@ -127,6 +127,27 @@ test("live changes: >10k tracked paths do not gate a tiny edit; index remains un
   assert.deepEqual(readFileSync(join(repo, ".git/index")), index);
 });
 
+test("non-UTF-8 patch content leaves the file list and other files available", async (t) => {
+  const { repo, git, preview } = fixture(t);
+  const csv = join(repo, "roster.csv");
+  writeFileSync(csv, Buffer.from("René\n", "latin1"));
+  git("add", ".");
+  git("commit", "-qm", "base");
+  writeFileSync(csv, Buffer.from("André\n", "latin1"));
+  writeFileSync(join(repo, "app.ts"), "export const answer = 42;\n");
+
+  const result = ready(await preview());
+  assert.deepEqual(
+    result.files.map((file) => file.path),
+    ["app.ts", "roster.csv"],
+  );
+  assert.equal(result.truncated, true);
+  assert.match(ready(await preview("app.ts")).diff, /\+export const answer = 42/);
+  const csvResult = (await preview("roster.csv")).result;
+  assert.equal(csvResult.status, "error");
+  assert.match(csvResult.detail, /non-UTF-8/);
+});
+
 test("live changes: unborn HEAD, literal unusual untracked paths, binary and ignored files", async (t) => {
   const { repo, git, preview } = fixture(t);
   const name = 'odd\n\t"雪[*].txt\\';

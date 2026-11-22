@@ -53,12 +53,13 @@ test("the prefix filter ignores case and caps visible rows", () => {
   assert.equal(hidden, 7);
 });
 
-test("Enter picks the single prefix match, else the listed directory", () => {
+test("Enter picks the exact entry, a unique prefix, or the explicitly browsed directory", () => {
   const one = [entry("piano")];
-  const two = [entry("piano"), entry("pi-mono")];
+  const two = [entry("piano"), entry("piano.fix")];
+  assert.equal(pickTarget("/home/u", two, "piano"), "/home/u/piano");
   assert.equal(pickTarget("/home/u", one, "pia"), "/home/u/piano");
-  assert.equal(pickTarget("/home/u", two, "pi"), "/home/u");
-  assert.equal(pickTarget("/home/u", [], "zz"), "/home/u");
+  assert.equal(pickTarget("/home/u", two, "pi"), undefined);
+  assert.equal(pickTarget("/home/u", [], "zz"), undefined);
   assert.equal(pickTarget("/home/u", one, ""), "/home/u");
 });
 

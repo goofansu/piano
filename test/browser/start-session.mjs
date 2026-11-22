@@ -1,15 +1,18 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { run } from "./harness.mjs";
 
+let webDirectory;
 await run(
   "start-session",
-  ({ repository }) => ({
-    folders: [repository("api"), repository("web")],
-    projects: [{ id: "launch", name: "Launch" }],
-  }),
+  ({ repository }) => {
+    const api = repository("api");
+    webDirectory = repository("web");
+    mkdirSync(`${webDirectory}.fix`);
+    return { folders: [api, webDirectory], projects: [{ id: "launch", name: "Launch" }] };
+  },
   async (page) => {
     await page.open("/settings/preferences");
     await page.see("Voice input");
@@ -32,7 +35,11 @@ await run(
       await page.until(`!document.body.innerText.includes(${JSON.stringify(retrying)})`);
     }
 
-    await page.choose("Directory", "web");
+    await page.choose("Directory", "Browse…");
+    await page.ab("fill", 'input[placeholder="/path/to/folder"]', webDirectory);
+    await page.see("web.fix");
+    await page.press("Enter");
+    await page.until("!document.querySelector('[role=dialog]')");
     await page.until("document.querySelector('[aria-label^=\"Model:\"]')?.disabled === false");
     await page.until("!!document.querySelector('[aria-label=\"Voice input\"]')");
     await page.ab("fill", '[aria-label="First message"]', "Keep this draft");

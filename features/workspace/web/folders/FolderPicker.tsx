@@ -48,8 +48,6 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
     return () => clearTimeout(timer);
   }, [open]);
 
-  const selected = dir?.path ?? "";
-
   const select = () => {
     const path = browser.pick();
     if (path === undefined) return;
@@ -244,12 +242,12 @@ export function FolderPicker({ open, onOpenChange, onPick, initialPath }: Props)
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="button" disabled={!ready} onClick={select}>
+            <Button type="button" disabled={!browser.selectedPath} onClick={select}>
               Use this directory
             </Button>
           </div>
         </DialogFooter>
-        <span className="sr-only">{selected}</span>
+        <span className="sr-only">{browser.selectedPath}</span>
       </DialogContent>
     </Dialog>
   );

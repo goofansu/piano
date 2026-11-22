@@ -801,7 +801,16 @@ await run(
     await page.ab("set", "viewport", "1146", "900");
     const areasWidth = `document.querySelector('[data-slot="agent-area"]').parentElement.getBoundingClientRect().width`;
     await page.until(`${areasWidth} === 848 && !document.querySelector('[data-rail-trigger]')`);
+    const liveCheckout = join(scratchRoot, "api.live");
+    writeFileSync(join(liveCheckout, "README.md"), "Ready for release\n");
+    writeFileSync(join(liveCheckout, "roster.csv"), Buffer.from("André\n", "latin1"));
     await page.click("button", "Changes");
+    await page.see("roster.csv");
+    const readme = 'li[data-path="README.md"] button[aria-expanded]';
+    await page.ab("wait", readme);
+    if ((await page.ab("get", "attr", readme, "aria-expanded")) === "false")
+      await page.ab("click", readme);
+    await page.ab("wait", 'section[aria-label="Diff of README.md"]');
     await page.until(`!!document.querySelector('[role="tab"][aria-selected="true"]')`);
     assert.equal(
       await page.evaluate(`document.querySelector('[data-slot="agent-area"]').inert`),
