@@ -39,13 +39,15 @@ violation, report uncertainty or ask before expanding product behavior.
 | New critical path | Add a journey in `test/browser/`; otherwise extend relevant existing coverage rather than adding another browser journey. |
 | New transcript row kind | Extend and run `node test/browser/transcript-rows.mjs <evidence-directory>`; see [Alignment](#alignment). |
 
-Locally, run only the checks your claims need, keeping output under the
-[evidence root](#evidence-directories). CI is the baseline: on every PR it runs typecheck, lint,
-build, the full module suite, the critical-path journeys and `npm run test-changes`. Run an affected
-journey with `node test/browser/<journey>.mjs <evidence-directory>`, and anything beyond a row's
-check only for a named risk it leaves open. `npm run verify` runs the full baseline locally when CI
-cannot. Keep assertions at full strength; give each skip or net-removed assertion that Test changes
-flags a reason in the PR. Stop once the claim and relevant risk are covered and CI passes.
+Locally, run the checks your claim needs and keep output under the [evidence root](#evidence-directories).
+`npm run verify` runs typecheck, lint, and the full module suite. For a browser behavior change, run
+the affected journey with `node test/browser/<journey>.mjs <evidence-directory>`.
+
+CI runs those three checks on every PR, plus the production build (`npm run build`) and the
+critical-path browser journeys (`npm run test:browser` locally). Both `verify` and CI report test
+changes. Run `npm run test-changes` for that report alone. Keep assertions at full strength and
+explain any skip or net-removed assertion flagged by the report in the PR.
+Stop once the claim and relevant risk are covered and CI passes.
 
 ### Fresh-context review
 

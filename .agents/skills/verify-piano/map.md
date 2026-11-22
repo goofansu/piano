@@ -50,6 +50,12 @@ Add a recipe to [Features](#features) when you create one. Link each recipe to t
   Docs: [Session navigation](../../../features/navigation/README.md),
   [Transcript performance](../../../docs/performance.md),
   [Radius artifacts](../../../features/radius/radius-artifacts.md).
+  - **Recover queued text when the connection drops during Edit or Stop.** The
+    [session integration tests](../../../test/integration/sessions/ClientSessions.test.ts) cover both
+    actions when Pi clears the queue and the connection drops before the reply arrives. The
+    [client tests](../../../test/Client.test.ts) check that the originating tab restores the text once.
+    The [open-session browser journey](../../../test/browser/open-session.mjs) drops the reply to
+    Edit and checks the composer after reconnect.
 - [Share a session](../../../features/sharing/verify/session-sharing.md).
   Docs: [Session sharing](../../../features/sharing/README.md).
 - [Projects index](../../../features/projects/verify/projects-index.md).
