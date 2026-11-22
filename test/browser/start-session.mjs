@@ -151,6 +151,15 @@ await run(
     assert.deepEqual(page.prompts(), ["Plan the launch"], "a reload never sends the message again");
     await page.capture("3-after-reload");
 
+    const rejected = "Follow up without credentials";
+    await page.ab("fill", '[aria-label="Message"]', rejected);
+    await page.click("button", "Send");
+    await page.see("Message rejected.");
+    await page.until(
+      `document.querySelector('[aria-label="Message"]').value === ${JSON.stringify(rejected)}`,
+    );
+    assert.deepEqual(page.prompts(), ["Plan the launch", rejected], "recovery does not resend");
+
     const origin = await page.evaluate("location.origin");
     const marker = join(start.cwd, "shell-executed");
     const prompt = [

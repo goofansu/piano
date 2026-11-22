@@ -14,8 +14,10 @@ Choose **steer** to give Pi a correction for its current task, or **follow-up** 
 
 To interrupt Pi, choose **Stop** when the composer is empty. To answer a question from Pi, use the controls in the question itself.
 
-## Recover a first message
+## Recover a message
 
 If you see **Could not start session**, your draft is available to edit. Choose **Retry** to send it again. If delivery is uncertain, look for the session in the sidebar and check its transcript and queue before sending another copy.
+
+If Pi rejects a message, its text, quotes and images return to the composer. You can edit the draft and send it again when you’re ready.
 
 [Read and navigate the transcript](session-transcripts.md) · [Find a session](../navigation/README.md)

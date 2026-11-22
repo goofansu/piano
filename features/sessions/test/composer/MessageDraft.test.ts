@@ -456,7 +456,7 @@ test("PIN-132: two tabs' first sends carry distinct input IDs, so one tab's rece
   assert.equal(b.get(key), EMPTY_DRAFT, "B's accepted input stays sent");
 });
 
-test("PIN-132: refused images returned while another is added stay editable past the limit, never sent", async () => {
+test("Pi-rejected images returned while another is added stay editable past the limit, never sent", async () => {
   const page = source();
   const drafts = createDrafts();
   drafts.follow(page, () => {});
@@ -484,7 +484,7 @@ test("PIN-132: refused images returned while another is added stay editable past
   });
   while (!finish) await new Promise((resolve) => setImmediate(resolve));
   drafts.setText(key, "and one more");
-  page.emit(refusal(inputId));
+  page.emit(receipt(inputId, "rejected"));
   finish();
   await reading;
   const draft = drafts.get(key);
