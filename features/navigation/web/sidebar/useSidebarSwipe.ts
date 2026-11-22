@@ -98,10 +98,10 @@ export function useSidebarSwipe({
       const touch = event.touches[0];
       const target = event.target;
       if (!(target instanceof Element)) return;
-      const surface = target.closest('[data-slot="layout-main"], [data-slot="mobile-sidebar"]');
-      if (!surface) return;
+      const pane = target.closest('[data-slot="layout-main"], [data-slot="mobile-sidebar"]');
+      if (!pane) return;
       const { open } = current();
-      if (open !== surface.matches('[data-slot="mobile-sidebar"]')) return;
+      if (open !== pane.matches('[data-slot="mobile-sidebar"]')) return;
       if (touch.clientX < 24 || touch.clientX > innerWidth - 24) return;
       const control = target.closest(
         'input, textarea, select, button, a, [contenteditable]:not([contenteditable="false"]), [role="slider"]',
@@ -114,7 +114,7 @@ export function useSidebarSwipe({
           /auto|scroll/.test(getComputedStyle(element).overflowX)
         )
           return;
-        if (element === surface) break;
+        if (element === pane) break;
       }
       if (hasSelection()) return;
       gesture = {

@@ -100,7 +100,7 @@ export function createDialogAnswer({
   const label =
     dialog.deadlineKind === "pi-timeout" ? "Estimated Pi timeout" : "Host recovery cancellation";
   const waiting =
-    dialogSurface(dialog) === "modal"
+    dialogPresentation(dialog) === "modal"
       ? "Waiting for the host’s resolution."
       : owned
         ? "Waiting for Pi to confirm…"
@@ -147,7 +147,7 @@ export function createDialogAnswer({
   };
 }
 
-export type DialogSurface = "modal" | "inline";
+export type DialogPresentation = "modal" | "inline";
 
-export const dialogSurface = (dialog: Dialog): DialogSurface =>
+export const dialogPresentation = (dialog: Dialog): DialogPresentation =>
   dialog.method === "confirm" && !readProposal(dialog) ? "modal" : "inline";

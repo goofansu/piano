@@ -4,13 +4,13 @@ import { Question } from "@features/sessions/web/browser";
 import { readProposal } from "@shared/session/libraryTools";
 import type { Client } from "@/shared/state/client";
 export function InlineQuestion({
-  pending: { head, surface, more, attachment, session },
+  pending: { head, presentation, more, attachment, session },
   send,
 }: {
   pending: PendingDialogs;
   send: Client["send"];
 }) {
-  if (!head || surface !== "inline") return null;
+  if (!head || presentation !== "inline") return null;
   const proposal = readProposal(head);
   if (proposal)
     return (

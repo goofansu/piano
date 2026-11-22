@@ -1,14 +1,14 @@
 import type { Dialog } from "@shared/wire";
 import {
-  type DialogSurface,
-  dialogSurface,
+  type DialogPresentation,
+  dialogPresentation,
 } from "../../../../web/src/shared/state/dialogAnswer.ts";
 import { sessionReady } from "../../../../web/src/shared/state/sessionContext.ts";
 import { type AppState, sessionKey } from "../../../../web/src/shared/state/state.ts";
 
 export interface PendingDialogs {
   head: Dialog | undefined;
-  surface: DialogSurface | null;
+  presentation: DialogPresentation | null;
   more: number;
   attachment: string | null;
   session: string | null;
@@ -18,7 +18,7 @@ export function pendingDialogs(state: AppState): PendingDialogs {
   const dialogs = state.resync ? [] : (state.session?.dialogs ?? []);
   return {
     head: dialogs[0],
-    surface: dialogs[0] ? dialogSurface(dialogs[0]) : null,
+    presentation: dialogs[0] ? dialogPresentation(dialogs[0]) : null,
     more: Math.max(0, dialogs.length - 1),
     attachment: sessionReady(state) ? state.selectionId : null,
     session: state.session ? sessionKey(state.session) : null,

@@ -224,8 +224,8 @@ export function PullRequestLinkDialog({
   pr: PullRequestControl;
   fallbackTrigger: React.RefObject<HTMLButtonElement | null>;
 }) {
-  const editing = pr.surface === "editing";
-  const open = editing || pr.surface === "link-form";
+  const editing = pr.mode === "editing";
+  const open = editing || pr.mode === "link-form";
   const restoreFocus = () =>
     !pointerLast() &&
     (document.querySelector<HTMLButtonElement>(

@@ -64,7 +64,7 @@ export function useSessionPullRequest(
     loading: current && state.loading,
     busy: current && state.busy,
     finding: current && state.finding,
-    surface: current ? state.surface : "closed",
+    mode: current ? state.mode : "closed",
     open: () => dialog.onOpenChange(true),
     cancel: () => dialog.onOpenChange(false),
     link: pr.link,
