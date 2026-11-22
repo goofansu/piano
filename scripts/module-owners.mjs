@@ -49,7 +49,7 @@ for (const file of files) {
         a.wildcard ? bare.startsWith(a.prefix) : bare === a.prefix,
       );
       if (!alias) continue;
-      target = alias.target.replace("*", bare.slice(alias.prefix.length));
+      target = alias.target.replaceAll("*", () => bare.slice(alias.prefix.length));
     }
     const module = canonical(target);
     if (!module) continue;
