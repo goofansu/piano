@@ -34,6 +34,24 @@ jobs:
       - name: Lint and formatting
         run: npm run lint
 
+  # Advisory: lists skipped and net-removed tests for review; never fails the gate.
+  test-changes:
+    name: Test changes
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Full history so the merge base with origin/main exists.
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Report test changes since origin/main
+        run: node scripts/test-changes.mjs
+
   # Its own runner: the build is the longest static step and needs nothing from the others.
   build:
     name: Build

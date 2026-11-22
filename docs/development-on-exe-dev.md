@@ -24,7 +24,7 @@ the origin/access controls in INV-11. Serve generated application previews separ
 ## PR evidence
 
 Stage local captures and logs under the [shared evidence root](testing.md#evidence-directories),
-`~/piano-evidence/`, with separate task/run directories rather than new home-level folders.
+`${TMPDIR:-/tmp}/piano-evidence/`, with separate task/run directories.
 
 The GitHub proxy rejects `gh pr comment --attach` with “attaching files is not supported on GitHub
 Enterprise Server”. Include textual results directly in the PR. For screenshots or recordings,

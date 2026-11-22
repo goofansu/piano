@@ -15,6 +15,7 @@
     "build": "npm --prefix web run build",
     "test": "node --test --import ./test/setup.ts 'test/**/*.test.ts' 'features/*/test/**/*.test.ts'",
     "verify": "node scripts/verify.mjs",
+    "test-changes": "node scripts/test-changes.mjs",
     "test:browser": "node test/browser/start-session.mjs && node test/browser/open-session.mjs && node test/browser/transcript-rows.mjs && node test/browser/session-sharing.mjs && node test/browser/voice-input.mjs",
     "typecheck": "tsc -p tsconfig.json && npm --prefix web run typecheck",
     "format": "oxfmt",

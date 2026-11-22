@@ -251,3 +251,23 @@ export function saveRun(evidence, record) {
   writeFileSync(`${file}.tmp`, JSON.stringify(record, null, 2) + "\n");
   renameSync(`${file}.tmp`, file);
 }
+
+export function testChangesReport(lines, weakening) {
+  const report = [
+    lines.unavailable
+      ? `Test lines since ${lines.base}: unavailable — ${lines.unavailable}`
+      : `Test lines since ${lines.base}: +${lines.added} −${lines.removed} in ${lines.files} file(s) in the test directories.`,
+  ];
+  if (weakening.unavailable)
+    return [
+      ...report,
+      `Test weakening since ${weakening.base}: unavailable — ${weakening.unavailable}`,
+    ];
+  report.push(
+    `Test weakening since ${weakening.base}: ${weakening.skips.length} skip/only/todo added; assertion lines +${weakening.assertionsAdded} −${weakening.assertionsRemoved}.`,
+    ...weakening.skips.map((skip) => `  ${skip.file}: ${skip.line}`),
+  );
+  if (weakening.skips.length || weakening.assertionsRemoved > weakening.assertionsAdded)
+    report.push("REVIEW: justify each skip and removed assertion in the PR, or restore it.");
+  return report;
+}
