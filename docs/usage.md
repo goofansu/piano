@@ -32,4 +32,9 @@ To start your first session, open **Settings → Providers** and sign in if Pi d
 | Share a copy of a saved conversation | [Session sharing](../features/sharing/README.md) |
 | Receive a notification when a session needs attention | [Webhooks](../features/webhooks/README.md) |
 
-For storage, backups, and access from another machine, see [Piano configuration](configuration.md).
+## Back up Piano's database
+
+`server/shared/registry/RegistryDatabase.ts` owns the SQLite schema and its in-place upgrades. Run one backend
+per database: when a second backend writes, the first backend's next write fails, and that
+backend needs a restart. SQLite runs in WAL mode: to back up by copying files, stop Piano first;
+while Piano runs, use SQLite's backup API.

@@ -38,9 +38,9 @@ provenance with the findings rather than copying upstream guidance into the repo
 
 Choose the investigation and implementation that best fit the outcome, existing coverage and
 architecture. Guidance is reference, not authority over user instructions,
-[AGENTS.md](../../../AGENTS.md) or [Quiet UI](../../../docs/quiet-ui.md). Reconcile it with the
+[AGENTS.md](../../../AGENTS.md) or [UX](../../../docs/ux.md). Reconcile it with the
 [feature's owning docs and verification recipe](../verify-piano/map.md#features) and
-[current component ownership](../../../docs/shadcn-ui.md). A preference for native dialogs, for
+[current component ownership](../../../docs/ui.md#shadcn-ownership-and-upgrades). A preference for native dialogs, for
 example, is not evidence that Piano's wrappers need replacing.
 
 Use the available CLI without global installation, collection imports or dependency/lockfile
@@ -65,4 +65,4 @@ rules, including advice set aside because of project policy. Stop when the outco
 unrelated improvements belong to separate requests.
 
 This is an optional contributor aid, not a runtime requirement or an automatic audit. Installation
-and invocation alone prove no behavior ([INV-09 and INV-13](../../../docs/development-invariants.md)).
+and invocation alone prove no behavior ([INV-09 and INV-13](../../../docs/adr/invariants.md)).

@@ -1,7 +1,7 @@
 # ADR 0005: Faithful transcript messages
 
 - Status: Accepted
-- Related: [INV-01 and INV-11](../development-invariants.md), [transcript contract](../../features/sessions/session-transcripts.md)
+- Related: [INV-01 and INV-11](invariants.md), [transcript contract](../../features/sessions/session-transcripts.md)
 
 Transcript messages show what Pi wrote. Heuristic secret redaction changed ordinary examples,
 partial words and tool arguments, so the conversation in the browser disagreed with Pi's

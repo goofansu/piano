@@ -1,4 +1,86 @@
-# shadcn ownership and upgrades
+# UI
+
+How Piano looks and how its components are built. The rules for wording and behavior are in
+[UX](ux.md).
+
+## Theme "Moonstone"
+
+Colours derive from the Lefos palette; `web/src/index.css` is authoritative.
+
+### Palette
+
+Lightness is set by contrast (WCAG 4.5:1 for text, 3:1 for glyphs and meaningful edges) and
+chroma is capped so status hues stay earthy. Roles: `--layer-0` sidebar and shell,
+`--conversation` the sheet, `--layer-1` composer, inputs and user prompts, `--layer-2` menus
+and popovers, `--layer-3` dialogs and mobile navigation; `--busy` working, `--done` finished
+and unseen, `--ok` idle or success, `--warn`, `--err` errors and destructive, `--merged`.
+
+- **The one colour.** `--brand` means "live": the send key, focus ring, selection, links and the
+  streaming caret. `--brand-ink` is the opposite surface.
+- **Theme switch.** next-themes sets `disableTransitionOnChange`. A fade was tried and dropped:
+  inherited text and controls with their own colour transitions faded on different clocks.
+
+Limitation: light-mode status colours drop below 4.5:1 as text over a selected (`--fill-active`)
+row; they stay above 3:1 there, which is what their glyph use needs.
+
+### Type
+
+Two system faces and no web fonts: Tailwind's default sans stack for the interface and body
+(the transcript, controls, menus, titles), and its default mono stack for anything the machine
+produced verbatim (code, commands, paths, branches, the model chip and the usage meta).
+
+### Linear
+
+Linear is the design guide: Codex and T3 Code remain references for the web harness around Pi.
+What Piano takes from it, in Moonstone's palette:
+
+- **Structure over ornament.** One header shape everywhere (a title with its context beneath,
+  controls at the end), hairline dividers instead of spaced cards, small quiet controls (28–32px)
+  at the row's end, and the one primary action of a page in its header. Settings pages are
+  groups of hairline-divided rows with no intro line: the rows say what the page does. Piano takes Linear's structure and
+  restraint, not its chrome: the palette, type and radii stay Moonstone's.
+- **State at a glance, once** ([agent interaction guidelines](https://linear.app/developers/aig)
+  §4): the sidebar row says whether Pi is working; a `StatusDot` names an answered question's
+  outcome and a webhook's last delivery, so one vocabulary covers every state: busy
+  (breathing), ok, warn, err, muted. A state appears in one place. A header dot beside the sidebar
+  row's was tried and removed, as the header mark playing beside the rows was before.
+- **Instant, unobtrusive feedback** (§3): a dot breathes while something is in progress; a refresh
+  control turns its own icon while it reads; a test delivery answers with a toast that names the
+  HTTP status.
+- **Self-evident, so fewer words.** A control says what it does and no more ("Details", "New
+  webhook", "Save"); the checks every added string passes are [quiet UI](ux.md#checks).
+- **Confirm what cannot be undone.** Deleting a webhook asks first, as Delete session does.
+
+### The one memorable element: the keys play
+
+Wherever Pi is working the three-key mark plays. This is the only ornament; everything else is
+structure.
+
+### Motion
+
+Motion is opt-in: `index.css` ends with a reset that stops all animation and transition except
+on an element marked `data-motion` (and spinners, Sonner's toasts and the overlay behind a moving
+dialog). The upstream shadcn components in `components/ui/` keep their own motion classes; the
+`Piano*` wrappers opt in and the `data-motion` rules retune them. Each piece is added only with
+a reason.
+
+One curve, `--ease-out`, for every entrance; exits are 120ms `ease-out`. Reduced motion keeps the
+fades and drops the scale.
+
+| Surface | Motion | Why |
+| --- | --- | --- |
+| Command palette, model picker | none (`still`) | opened by Mod+K and Mod+/ many times a day |
+| Transcript, streaming output, fold content, loading placeholder, jumps | none | the transcript never moves under the reader |
+| Desktop sidebar collapse (⌘B or its button), sidebar rows, right sidebar | none | a keyboard shortcut and frequent navigation should answer at once |
+| Refresh while reading | the control's own icon turns (`animate-spin`) | the answer arrives where the question was asked, with no second spinner |
+| Settings: section switches, loading placeholders giving way to content, notices that replace them, the sign-in dialog's steps | none | navigation and content arriving answer at once |
+| New session page entrance | none | seen many times a day, often from the keyboard |
+
+A spinner never stands in where a skeleton could: it remains only inside controls that are
+genuinely waiting on one request.
+
+
+## shadcn ownership and upgrades
 
 `web/src/components/ui/` is upstream source, not Piano's design layer. The project uses the
 Base UI base and the Vega style (`base-vega` in `components.json`, chosen on
@@ -20,14 +102,14 @@ Server Components, and those directives do not change its runtime behavior. Keep
 as generated rather than stripping them. This also avoids the order-dependent stripping observed
 with the shadcn CLI's `rsc: false` transformer.
 
-## Where customizations belong
+### Where customizations belong
 
 Wrappers merge only Piano's changes, not copies of upstream class lists. Custom button/badge/alert
 variants pass `variant={null}` to avoid inheriting an unrelated upstream variant's hover/dark rules.
 Motion is opt-in: the reset at the end of `index.css` stops upstream motion except on elements a
 `Piano*` wrapper marks `data-motion`, whose rules retune the upstream classes.
 
-### Responsive ownership
+#### Responsive ownership
 
 Use [one-area-at-a-time and side-by-side](../GLOSSARY.md) for session layouts, not device names.
 Three independent signals retain distinct owners:
@@ -41,7 +123,7 @@ The stock provider and Settings tooltip still use upstream `hooks/use-mobile.ts`
 `isMobile` can disagree with CSS and the application at fractional widths or a non-default
 browser font baseline. Neither upstream consumer owns session capacity.
 
-### Base UI conventions
+#### Base UI conventions
 
 - Compose with `render`. A link that looks like a button is a `PianoLinkButton` or `IconLink`,
   not a `Button` rendering an anchor: Base UI's Button gives a non-button element `role="button"`.
@@ -53,7 +135,7 @@ browser font baseline. Neither upstream consumer owns session capacity.
 - A single-choice `ToggleGroup` is a group of pressed buttons, not a radio group. Keep one item
   pressed by ignoring the empty value Base UI reports when the pressed item is pressed again.
 
-### Patches in `ui/`
+#### Patches in `ui/`
 
 Each is marked `Piano patch` in its source and must be restored after an upgrade overwrites the
 file.
@@ -71,7 +153,7 @@ because its portal is added to the page later.
 **Unused import.** `ui/scroll-area.tsx` ships `import * as React` without using it, which fails
 `noUnusedLocals`; the line is removed.
 
-### Stock sidebar shortcut
+#### Stock sidebar shortcut
 
 `ui/sidebar.tsx` carries the third patch, marked the same way: an
 optional `keyboardShortcut` provider prop (default `true`) that disables the stock listener
@@ -85,7 +167,7 @@ connected to Piano's reveal.
 During a sidebar drag, do not update inherited motion variables per frame: that invalidates
 styles across the transcript and navigation.
 
-## Upgrade procedure
+### Upgrade procedure
 
 1. From `web/`, preview `npx shadcn@latest add <component> --dry-run`, then
    `npx shadcn@latest add <component> --dry-run --diff <file>`. Include transitive components,

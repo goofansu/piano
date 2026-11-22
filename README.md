@@ -25,7 +25,7 @@ Piano has no login and runs commands as your user:
 - Keep it on `127.0.0.1`, or behind a private proxy that requires sign-in.
 - Never expose it to the internet.
 
-See the [Piano user guides](docs/use.md) for each task.
+See the [Piano user guides](docs/usage.md) for each task.
 
 ## Develop Piano
 

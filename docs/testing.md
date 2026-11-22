@@ -35,7 +35,7 @@ violation, report uncertainty or ask before expanding product behavior.
 | Documentation or comments only | Review accuracy, links and the diff; confirm no runtime or tooling directives changed. No tests or app run needed. |
 | Logic, protocol or lifecycle behavior | Cover an uncovered failure at the public boundary by the [test ladder](#when-to-add-a-test), in a focused module test. Run `node --test --import ./test/setup.ts features/<feature>/test/<name>.test.ts`. |
 | Application behavior | Observe the affected journey on a [scratch instance](#scratch-instance), using an existing browser journey or a focused `agent-browser` check. Module tests alone do not prove the user journey. |
-| UI strings, controls or styling | Apply [Quiet UI](quiet-ui.md) and choose evidence by the [UI evidence scope](#ui-evidence-scope). |
+| UI strings, controls or styling | Apply [UX](ux.md) and choose evidence by the [UI evidence scope](#ui-evidence-scope). |
 | New critical path | Add a journey in `test/browser/`; otherwise extend relevant existing coverage rather than adding another browser journey. |
 | New transcript row kind | Extend and run `node test/browser/transcript-rows.mjs <evidence-directory>`; see [Alignment](#alignment). |
 
@@ -161,7 +161,7 @@ Choose coverage by the changed contract:
   `index.css` tokens, run `test/browser/style-shots.mjs` before and after into separate directories
   and compare affected surfaces. Done when differences are explained; publish representative
   changed surfaces rather than the entire screenshot set. Follow the
-  [upgrade procedure](shadcn-ui.md#upgrade-procedure) for shadcn upgrades.
+  [upgrade procedure](ui.md#upgrade-procedure) for shadcn upgrades.
 
 Keep the PR evidence proportional too: a short observation and the relevant capture suffice for
 an isolated cosmetic edit. The repository's code-check gates still apply.

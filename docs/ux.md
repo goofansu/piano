@@ -1,7 +1,7 @@
-# Quiet UI
+# UX
 
 The rules every screen, string and control in Piano follows; the design language behind
-them is in [Moonstone](design-moonstone.md#linear).
+them is in [UI](ui.md#linear).
 
 ## Checks
 
@@ -127,7 +127,7 @@ Build UI from shadcn/ui components (the `shadcn` skill: search the registry, add
 and says so in a comment. The shadcn CLI owns `web/src/components/ui/`. Piano's reusable wrappers
 and `StatusBadge` live in `web/src/shared/components/`. Sidebar-specific controls live under
 `features/navigation/web/sidebar/`, and design tokens live in `web/src/index.css`. Before adding a customization or
-upgrading shadcn, read [the ownership and upgrade guide](shadcn-ui.md); review every
+upgrading shadcn, read [the ownership and upgrade guide](ui.md#shadcn-ownership-and-upgrades); review every
 `--diff` before writing over a file in `ui/`.
 
 ## Links and icons

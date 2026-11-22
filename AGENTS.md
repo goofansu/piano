@@ -10,7 +10,7 @@ feature. A screen can compose several features, and one feature can span browser
 For example, image attachments belong to Sessions because they travel with a message from draft
 to transcript. Voice input owns microphone access and transcription, which can evolve independently
 of message delivery. Apply the same test when splitting a growing feature. See the
-[feature layout](docs/README.md#feature-inventory) for where its code belongs.
+[feature layout](docs/development.md#feature-inventory) for where its code belongs.
 
 ## Verification
 
@@ -31,10 +31,10 @@ Read the matching entry before working on that surface; follow its linked detail
 | --- | --- |
 | Finding a feature's owning modules, or verifying its behavior | Browse the [feature directories](features) for source and the [verification map](.agents/skills/verify-piano/map.md#features) for checks |
 | Measuring performance | [Benchmarks](docs/performance.md) |
-| Changing UI, including strings and controls | [Quiet UI](docs/quiet-ui.md), [Linear design language](docs/design-moonstone.md#linear) |
+| Changing UI, including strings and controls | [UX](docs/ux.md), [UI](docs/ui.md) |
 | Writing Effect code or upgrading Effect | [Effect](docs/effect.md) |
-| Adding, renaming or moving browser-storage keys | [Browser storage](docs/browser-storage.md) |
-| Changing architecture or workflow | [Development direction](docs/README.md), then its ADR and invariants; cite affected invariant IDs in the PR |
+| Adding, renaming or moving browser-storage keys | [Browser storage](docs/development.md#browser-storage) |
+| Changing architecture or workflow | [Architecture](docs/development.md#architecture), then its ADR and invariants; cite affected invariant IDs in the PR |
 | User-authorized exe.dev deployment | The user-invoked [deploy-exe-dev](.agents/skills/deploy-exe-dev/SKILL.md) skill, run on the VM itself, installs or updates Piano there. There is no SSH or remote deployment. |
 
 ## Code comments

@@ -1,6 +1,6 @@
 # Development invariants
 
-These are Piano's target contracts, governed by [ADR 0001](adr/0001-pi-rpc-workspace-workbench.md).
+These are Piano's target contracts, governed by [ADR 0001](0001-pi-rpc-workspace-workbench.md).
 They guide implementation and review; several are not yet implemented.
 Do not infer compliance from the existence of this document.
 
@@ -197,10 +197,10 @@ access, origin checks, session expiry and preview-to-control separation.
 application. Render transcripts/tool output as untrusted content. Redact known secrets consistently
 before browser delivery and exported artifacts, except transcript and queued messages and the text
 the UI saves back (session titles, editor dialog prefills, extension editor text, voice transcripts),
-which show the text as written ([ADR 0005](adr/0005-faithful-transcript-messages.md)); document that heuristic redaction is not
+which show the text as written ([ADR 0005](0005-faithful-transcript-messages.md)); document that heuristic redaction is not
 containment.
 The explicit raw Session Share action is the narrow exception defined in
-[ADR 0006](adr/0006-confirmed-raw-session-sharing.md): one explicit "Share to Radius" confirmation
+[ADR 0006](0006-confirmed-raw-session-sharing.md): one explicit "Share to Radius" confirmation
 uploads the complete unredacted saved file as a Radius artifact with `private` visibility.
 Do not forward the whole developer credential environment into an untrusted preview.
 
@@ -233,7 +233,7 @@ Contributor preferences for developing Piano must not become requirements for us
 
 ## Applying the guardrails
 
-Apply these contracts while developing Piano itself, using [the testing policy](testing.md).
+Apply these contracts while developing Piano itself, using [the testing policy](../testing.md).
 The verification scenarios above describe outcomes to protect, not a requirement to create one unit
 test per bullet or to run every scenario for every change. Prefer existing evidence where adequate;
 add tests for uncovered meaningful failure modes at the appropriate boundary.
