@@ -149,22 +149,30 @@ test("archive, delete and close folder send their registry change", () => {
   });
 });
 
-test("deleting a working session says it stops the work; an idle one just deletes", () => {
-  const working: AppState = { ...online, hosts: [{ ...other, working: true }] };
-  assert.deepEqual(confirmation(working, del()), {
+test("deleting a working session, or one last reported working, says it stops the work; an idle one just deletes", () => {
+  const working: AppState = { ...online, hosts: [{ ...other, working: true }], hostsCurrent: true };
+  const stopAndDelete = {
     title: "Delete session?",
     description:
       'This will stop the session and interrupt its current work. "Other" and its transcript are removed from Pi\'s session store. This cannot be undone.',
     confirmLabel: "Stop and delete",
     destructive: true,
-  });
-  assert.deepEqual(confirmation(online, del()), {
-    title: "Delete session?",
-    description:
-      '"Other" and its transcript are removed from Pi\'s session store. This cannot be undone.',
-    confirmLabel: "Delete",
-    destructive: true,
-  });
+  };
+  assert.deepEqual(confirmation(working, del()), stopAndDelete);
+  assert.deepEqual(
+    confirmation({ ...working, hostsCurrent: false }, del()),
+    stopAndDelete,
+    "a stale report of work still warns before deleting",
+  );
+  const idle = { ...working, hosts: [{ ...other, working: false }] };
+  for (const state of [online, idle])
+    assert.deepEqual(confirmation(state, del()), {
+      title: "Delete session?",
+      description:
+        '"Other" and its transcript are removed from Pi\'s session store. This cannot be undone.',
+      confirmLabel: "Delete",
+      destructive: true,
+    });
 });
 
 test("archive and close folder name their subject; an untitled session reads Untitled", () => {

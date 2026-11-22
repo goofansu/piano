@@ -5,8 +5,9 @@ import {
   creationVerdictOf,
 } from "../../../shared/session/creationVerdict.ts";
 import { applySessionEvent, cursorStep } from "../../../shared/session/sessionProjection.ts";
-import { type ServerMessage, sameSession } from "../../../shared/wire.ts";
+import type { ServerMessage } from "../../../shared/wire.ts";
 import { observeTrust } from "../shared/state/directoryTrust.ts";
+import { finishedTurns } from "../shared/state/sessionActivity.ts";
 import { startPage } from "../shared/state/startPage.ts";
 import type { Page, PendingCreate } from "../shared/state/state.ts";
 import { type Action, type AppState, sessionKey } from "../shared/state/state.ts";
@@ -144,19 +145,12 @@ function applyServer(s: AppState, m: ServerMessage): AppState {
         registryLoaded: true,
       };
     case "hosts": {
-      const viewing = s.session
-        ? sessionKey(s.session)
-        : s.selecting
-          ? sessionKey(s.selecting)
-          : null;
-      const done = new Set(s.done);
-      for (const prev of s.hosts) {
-        if (!prev.working) continue;
-        const now = m.hosts.find((h) => sameSession(h, prev));
-        const k = sessionKey(prev);
-        if (now && !now.working && k !== viewing) done.add(k);
-      }
-      return { ...s, hosts: [...m.hosts], hostsCurrent: s.connected, done: [...done] };
+      return {
+        ...s,
+        hosts: [...m.hosts],
+        hostsCurrent: s.connected,
+        done: finishedTurns(s, m.hosts),
+      };
     }
     case "models":
       return { ...s, catalogs: { ...s.catalogs, [m.catalog.cwd]: m.catalog } };

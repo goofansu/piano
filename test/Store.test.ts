@@ -157,14 +157,37 @@ test("INV-02/05: reconnect retains the view until a fresh attachment snapshot, e
   );
 });
 
-test("a disappearing host is not a completed turn; an actual idle transition is", () => {
-  const host = { cwd: "/scratch/a", sessionId: "a", working: true };
+test("a disappearing, still-working or watched host is not a completed turn; an actual idle transition is", () => {
+  const host = { cwd: "/scratch", sessionId: "a", working: true };
   const running = reduce(initialState, {
     type: "server",
     message: { _tag: "hosts", hosts: [host] },
   });
   const exited = reduce(running, { type: "server", message: { _tag: "hosts", hosts: [] } });
   assert.deepEqual(exited.done, []);
+  const still = reduce(running, { type: "server", message: { _tag: "hosts", hosts: [host] } });
+  assert.deepEqual(still.done, []);
+  const watched = reduce(
+    reduce(running, {
+      type: "selecting",
+      cwd: host.cwd,
+      sessionId: host.sessionId,
+      selectionId: "w",
+    }),
+    { type: "server", message: { _tag: "hosts", hosts: [{ ...host, working: false }] } },
+  );
+  assert.deepEqual(watched.done, [], "a turn that ends on screen needs no Finished cue");
+  const opening = reduce(
+    { ...running, connected: true },
+    { type: "selecting", cwd: "/scratch", sessionId: "a", selectionId: "o" },
+  );
+  const open = reduce(opening, { type: "server", message: selection("a", "o") });
+  assert.equal(open.session?.sessionId, "a");
+  const openEnded = reduce(open, {
+    type: "server",
+    message: { _tag: "hosts", hosts: [{ ...host, working: false }] },
+  });
+  assert.deepEqual(openEnded.done, [], "nor does one that ends in the open session");
   const settled = reduce(running, {
     type: "server",
     message: { _tag: "hosts", hosts: [{ ...host, working: false }] },

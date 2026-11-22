@@ -17,6 +17,7 @@ import {
 import type { FolderView, SessionState, WorktreeView } from "../../../shared/wire.ts";
 import { directoryTrust } from "../../../web/src/shared/state/directoryTrust.ts";
 import { sessionDraftKey } from "../../../web/src/shared/state/draftKey.ts";
+import { sessionWorking } from "../../../web/src/shared/state/sessionActivity.ts";
 import { catalogEntry, sessionDirectories } from "../../../web/src/shared/state/sessionCatalog.ts";
 import {
   checkoutMissingAt,
@@ -27,7 +28,6 @@ import {
   sessionContext,
   sessionMutable,
   sessionReady,
-  sessionWorking,
 } from "../../../web/src/shared/state/sessionContext.ts";
 import {
   type AppState,
