@@ -14,62 +14,13 @@ of message delivery. Apply the same test when splitting a growing feature. See t
 
 ## Verification
 
-Before changing behavior, name the claim, relevant invariant and smallest check that could disprove
-it. Inspect existing coverage first. For a bug, reproduce it before fixing it when feasible, then
-show the same check passing; that reproduction is PR evidence. Every check you report must be able
-to go **red**: seen failing before the fix or with the change reverted, or naming the observation
-that would differ if the change were broken. Drop a check that would stay green with the change
-broken; it is decoration, not evidence. Commit a regression test only for a
-meaningful failure that is not already protected, by the
-[test ladder](docs/testing.md#when-to-add-a-test): close the class, extend a case, else add a test.
-Test observable contracts, not private helpers or mock choreography.
-
-Ground new fallback states, retries and compatibility branches in observed reproducible behavior,
-documented supported contracts or explicit requirements. Fake or mutated external replies alone
-do not establish a real bug. Trust documented guarantees while retaining ordinary boundary
-validation and required security/resource protections. For a hypothetical upstream contract
-violation, report uncertainty or ask before expanding product behavior.
-
-### What to add and run
-
-| Change | Verification |
-| --- | --- |
-| Documentation or comments only | Review accuracy, links and the diff; confirm no runtime or tooling directives changed. No tests or app run needed. |
-| Logic, protocol or lifecycle behavior | Cover an uncovered failure at the public boundary by the test ladder, in a focused module test. Run `node --test --import ./test/setup.ts features/<feature>/test/<name>.test.ts`. |
-| Application behavior | Observe the affected journey on scratch Piano, using an existing browser journey or a focused `agent-browser` check. Module tests alone do not prove the user journey. |
-| UI strings, controls or styling | Apply Quiet UI and choose evidence using the [UI evidence scope](docs/testing.md#ui-evidence-scope): a focused capture for a local cosmetic edit, the affected journey for behavior, broader comparisons for shared styles. |
-| New critical path | Add a journey in `test/browser/`; otherwise extend relevant existing coverage rather than adding another browser journey. |
-| New transcript row kind | Extend and run `node test/browser/transcript-rows.mjs <evidence-directory>`. Its gutter glyph must centre on the first text line; a screenshot alone is insufficient. |
-
-Locally, run only the checks your claims need. CI is the baseline: on every PR it runs typecheck,
-lint, build, the full module suite and the critical-path journeys. Run an affected journey with
-`node test/browser/<journey>.mjs <evidence-directory>`. Give each claim the check its row names; run
-anything beyond that only for a named risk the row leaves open. After opening the PR, wait for CI
-with `gh pr checks <number> --watch` and fix failures before reporting the task done.
-`npm run verify` runs the full baseline locally when CI cannot.
-
-Keep local verification output under `${TMPDIR:-/tmp}/piano-evidence/`, using the
-[evidence directory convention](docs/testing.md#evidence-directories) before running checks.
-Retain actual command/browser output on the PR, outside Git, tied to the tested revision and
-environment. Report it in the [verification block](docs/testing.md#completion-evidence). Keep
-assertions at full strength; `npm run test-changes` (also a CI job) flags added skips and
-net-removed assertions, and each needs a reason in the PR. Stop once the claim and relevant risk are
-covered and CI passes.
-
-For logic, protocol, lifecycle, application behavior or test changes, before opening the PR give a
-fresh-context reviewer (a subagent without your reasoning) only the diff and the verification block.
-Ask which check would stay green if its claim were broken, what breakage no check covers, and where
-the code falls short of this file and the documents it routes to. Fix each finding or answer it in
-the PR. Documentation, comments and other local edits skip the reviewer unless a named risk calls
-for one.
-
-### Scratch instance
-
-Use `verify-piano` for scratch launch, doctor, browser checks, evidence and cleanup. Committed
-browser journeys own their scratch setup; do not launch another instance beside them. Leave the
-user's real Piano, backend and database alone (local 7070; exe.dev 8000/8001).
-
-Prefer fake Pi; when a real model call is needed, prompt "Reply with exactly: X" and read it back.
+Follow the [testing policy](docs/testing.md) for every change. Name the claim and prove it with a
+check that can go **red**; pick that check from
+[what to add and run](docs/testing.md#what-to-add-and-run) and run the
+[fresh-context review](docs/testing.md#fresh-context-review) it requires. After opening the PR,
+wait for CI with `gh pr checks <number> --watch` and fix failures before reporting the task done.
+Use `verify-piano` for scratch instances, and leave the user's real Piano, backend and database
+alone (local 7070; exe.dev 8000/8001).
 
 ## Document routes
 
