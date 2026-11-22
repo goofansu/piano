@@ -5,6 +5,17 @@
 Use Node.js 24, npm and Git. Browser checks also need `agent-browser` on `PATH` and its Chromium:
 `agent-browser install`.
 
+## Develop on exe.dev
+
+On an exe.dev VM, push through the VM's GitHub integration, not `github.com`:
+
+```bash
+git remote set-url origin https://github.int.exe.xyz/goofansu/piano.git
+```
+
+Prefix GitHub CLI commands with `GH_HOST=github.int.exe.xyz`. A 403 means the integration for
+`goofansu/piano` is not attached to the VM; attach it from the exe.dev dashboard.
+
 ## Node.js version
 
 Use the latest Node 24 patch: the locked dependencies need a later patch than the `>=24` range in
