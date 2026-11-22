@@ -88,7 +88,7 @@ When changing HTML previews, use a scratch browser to check that page scripts st
 
 ## Feature verification map
 
-For a new or substantially changed feature, update its entry in the [verification map](../.agents/skills/verify-piano/features/README.md#features). Link to its user guide and identify the relevant module tests and browser journey or focused check there. Choose coverage according to the risk of the change.
+For a new or substantially changed feature, update its recipe in `features/<feature>/verify/` and its entry in the [verification map](../.agents/skills/verify-piano/map.md#features). Link to its user guide and identify the relevant module tests and browser journey or focused check there. Choose coverage according to the risk of the change.
 
 ## UI evidence scope
 

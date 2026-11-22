@@ -9,7 +9,7 @@ Prove behavior on a scratch instance this skill starts, never on the user's own 
 `7070`; exe.dev `127.0.0.1:8000`/`8001`), whose database is real.
 
 Paths are relative to the repository root. Write each script path out in full: a worktree-isolated
-session refuses a command whose name comes from a variable. [`features/README.md`](features/README.md)
+session refuses a command whose name comes from a variable. [`map.md`](map.md)
 says what to drive; this file says how.
 
 ## Run limits
@@ -95,7 +95,7 @@ Run it first, and again whenever anything looks off. It changes nothing.
    `ab.sh "$RUN" eval "document.querySelector('main header').innerText"`.
 
 3. **The dispatch CLI** (`scripts/dispatch-session.ts`) after `. "$RUN/run.env"`; see
-   [`features/session-dispatch.md`](features/session-dispatch.md).
+   [`features/dispatch/verify/session-dispatch.md`](../../../features/dispatch/verify/session-dispatch.md).
 
 4. **HTTP** for side effects, with `Origin: $ORIGIN` on anything but GET:
    `curl -s "$API_URL/api/folders"`;
@@ -177,4 +177,4 @@ browser.
 ## Keeping it current
 
 When a journey fails because the app changed (a renamed button, a moved menu item, a new route),
-update the feature file in the same change, never the assertion's intent.
+update the recipe in the same change, never the assertion's intent.

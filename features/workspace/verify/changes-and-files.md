@@ -49,7 +49,7 @@ Preconditions: a seeded launch. Make the workspace dirty through the files, as P
     ab wait '[role=tablist][aria-label="Session views"]'`: tabs read `Agent | Changes`.
     The header shows the folder `repo` and branch `main` below the title and offers Changes and
     "Session information and actions", not Show session rail. Capture `05-narrow-changes`.
-    Drive [`open-session.md`](./open-session.md) `phone-menu` for its sheet, dismissal and resize
+    Drive [`open-session.md`](../../navigation/verify/open-session.md) `phone-menu` for its sheet, dismissal and resize
     checks. Outputs and Environment copy menus require widening; there is no narrow rail
     sheet or Outputs picker. Phone viewport evidence is emulation, not a real-device keyboard,
     safe-area or touch-scroll check.
