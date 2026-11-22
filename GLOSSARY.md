@@ -1,8 +1,7 @@
 # Piano domain glossary
 
 This glossary is the source of truth for Piano's vocabulary: use these terms in code, wire,
-SQLite, UI and documentation. Some describe the target model in
-[ADR 0001](docs/adr/0001-pi-rpc-workspace-workbench.md) and are not implemented yet.
+SQLite, UI and documentation.
 
 | Term | Meaning |
 | --- | --- |
@@ -22,13 +21,13 @@ SQLite, UI and documentation. Some describe the target model in
 | Side-by-side | The session layout keeping the Agent area shown, with room on its right for either the Inspector or the session rail, whichever was brought in last. Neither must be open; this does not mean three simultaneous columns. |
 | Session rail | The selected session's column of facts about its workspace and outputs, available only side-by-side and sharing the right side with the Inspector. One switch applies to every session, remembered by the browser: "Show session rail" / "Hide session rail". Not "Details", which names the Details popovers. |
 | Artifact | A document a session published to Radius with the bundled artifact tools, opened at its Radius URL. The session header's Artifacts menu lists them by title; not a file Pi wrote (an output). |
-| Task | An intended outcome that may span sessions; session completion does not establish task acceptance. |
-| Acceptance criterion | An observable requirement with an identity and captured version, against which evidence can be evaluated. |
-| Revision | A captured identity for relevant repository content, including uncommitted inputs; HEAD alone is insufficient. |
-| Evidence | Recorded observations with revision, environment and execution provenance, such as test results or browser assertions. |
-| Verification | Evaluation of evidence against identified acceptance criteria and project policy. It has a bounded scope and can become stale. |
-| Approval | A human or authorized policy decision permitting a specific action on a specific candidate, subject to its recorded conditions. |
-| Integration | Applying the approved candidate to a target. Local branch integration and forge PR merge are distinct actions. |
+| Task | An intended outcome that may span sessions; session completion does not establish task acceptance. Not implemented yet. |
+| Acceptance criterion | An observable requirement with an identity and captured version, against which evidence can be evaluated. Not implemented yet. |
+| Revision | A captured identity for relevant repository content, including uncommitted inputs; HEAD alone is insufficient. Not implemented yet. |
+| Evidence | Recorded observations with revision, environment and execution provenance, such as test results or browser assertions. Not implemented yet. |
+| Verification | Evaluation of evidence against identified acceptance criteria and project policy. It has a bounded scope and can become stale. Not implemented yet. |
+| Approval | A human or authorized policy decision permitting a specific action on a specific candidate, subject to its recorded conditions. Not implemented yet. |
+| Integration | Applying the approved candidate to a target. Local branch integration and forge PR merge are distinct actions. Not implemented yet. |
 | Registry | Piano's SQLite store of folders, projects, workspace identities, session references and preferences; not a transcript or evidence database. |
 | Prompt | A Pi prompt template created in Piano, offered as a `/name` command in the composer. Settings lists only these; Pi's own prompt templates stay Pi's. |
 | Skill | Agent instructions for a method or discipline, loaded by Pi; skill use does not by itself constitute evidence. |
