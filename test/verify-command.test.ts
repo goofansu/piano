@@ -122,6 +122,79 @@ test("baseline reports changes in feature and shared tests since origin/main, un
   }
 });
 
+test("baseline flags added skips and net-removed assertions in tests, and not moved ones", () => {
+  const f = fixture();
+  const lines = (...text: string[]) => `${text.join("\n")}\n`;
+  const commit = (message: string) => {
+    for (const args of [
+      ["add", "."],
+      ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", message],
+    ])
+      execFileSync("git", args, { cwd: f.root });
+  };
+  try {
+    f.configure("node -e \"console.log('linted')\"");
+    mkdirSync(join(f.root, "features/math/test"), { recursive: true });
+    writeFileSync(
+      join(f.root, "features/math/test/add.test.ts"),
+      lines(
+        'test("adds", () => {',
+        "  assert.equal(add(1, 2), 3);",
+        "  assert.equal(add(0, 0), 0);",
+        "});",
+      ),
+    );
+    commit("main");
+    execFileSync("git", ["update-ref", "refs/remotes/origin/main", "HEAD"], { cwd: f.root });
+
+    writeFileSync(
+      join(f.root, "features/math/test/add.test.ts"),
+      lines(
+        'test("adds", () => {',
+        "  assert.equal(add(1, 2), 3);",
+        "});",
+        'test("sums", () => {',
+        "  assert.equal(sum([0, 0]), 0);",
+        "});",
+      ),
+    );
+    const moved = f.run("moved");
+    assert.match(moved.stdout, /0 skip\/only\/todo added; assertion lines \+1 −1\./);
+    assert.doesNotMatch(moved.stdout, /REVIEW:/);
+
+    writeFileSync(
+      join(f.root, "features/math/test/add.test.ts"),
+      lines(
+        'test("works only: when ready", () => {',
+        "  // assert.equal(add(1, 2), 3);",
+        '  const message = "assert.equal(a, b)";',
+        "});",
+        "test(",
+        '  "adds negatives",',
+        "  { skip: true },",
+        "  () => {},",
+        ");",
+        'test("parent", async (t) => {',
+        '  await t.test("child", { timeout: 10, only: true }, () => {});',
+        "});",
+      ),
+    );
+    mkdirSync(join(f.root, "test"));
+    writeFileSync(join(f.root, "test/new.test.ts"), lines('test.todo("subtracts");'));
+    const weakened = f.run("weakened");
+    assert.match(weakened.stdout, /3 skip\/only\/todo added; assertion lines \+0 −2\./);
+    for (const skip of [
+      "features/math/test/add.test.ts: { skip: true },",
+      'features/math/test/add.test.ts: await t.test("child", { timeout: 10, only: true }, () => {});',
+      'test/new.test.ts: test.todo("subtracts");',
+    ])
+      assert.ok(weakened.stdout.includes(`  ${skip}\n`), skip);
+    assert.match(weakened.stdout, /REVIEW: justify each skip and removed assertion/);
+  } finally {
+    rmSync(f.temp, { recursive: true, force: true });
+  }
+});
+
 test("cancelled baseline retains diagnostics and never runs remaining gates", async () => {
   const f = fixture();
   let child;
