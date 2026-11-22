@@ -1,5 +1,5 @@
-# Bulk moves into features/. Enable locally with:
-#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# Bulk moves into features/. GitHub's blame view reads this file; locally, pass it per command:
+#   git blame --ignore-revs-file .git-blame-ignore-revs <path>
 
 # refactor: organize Piano by feature ownership
 346a64bbb22d9f321e27f771f68b6180e11e3427
