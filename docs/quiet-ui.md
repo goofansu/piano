@@ -15,7 +15,7 @@ passes these checks:
   description line.
 - **Once:** each fact appears once per screen. A header's context line, a title or a placeholder
   holds only what the screen does not already show.
-- **Same names:** things are named as the UI and [the glossary](glossary.md) already name
+- **Same names:** things are named as the UI and [the glossary](../GLOSSARY.md) already name
   them, case included ("No project", "Delete project").
 - **Same shape:** a new screen matches an existing screen of its kind (a settings page matches
   Webhooks); compare their screenshots side by side. A destructive action is the red
