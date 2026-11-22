@@ -6,7 +6,7 @@ A session keeps a conversation with Pi together with the directory where Pi work
 
 1. Choose **New session** and select the **Directory** where Pi should work.
 2. To group the conversation with related work, choose a **Project**. You can also start the session from a project’s home page.
-3. Write your first message and choose **Send**. You can [attach images](image-attachments.md) or [choose a model and effort level](../models/README.md) before sending.
+3. Write your first message and choose **Send**. Before sending, you can [Attach an image](image-attachments.md) or [Choose a model and effort level](../models/README.md).
 
 ## Send another message while Pi is working
 
@@ -20,4 +20,4 @@ If you see **Could not start session**, your draft is available to edit. Choose 
 
 If Pi rejects a message, its text, quotes and images return to the composer. You can edit the draft and send it again when you’re ready.
 
-[Read and navigate the transcript](session-transcripts.md) · [Find a session](../navigation/README.md)
+[Read and navigate a transcript](session-transcripts.md) · [Navigate between sessions](../navigation/README.md)

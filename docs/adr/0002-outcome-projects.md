@@ -2,7 +2,7 @@
 
 - Status: Accepted. Grouping and project instructions are implemented; shared context remains
   deferred. See [evidence](https://github.com/goofansu/piano/blob/67209d27959989376f52ea7c5954f586b198a41a/docs/research/outcome-projects-step1.md).
-- Related: [projects](../../features/projects/README.md), [glossary](../../GLOSSARY.md#projects),
+- Related: [Projects](../../features/projects/README.md), glossary [Projects](../../GLOSSARY.md#projects),
   [ADR 0001](0001-pi-rpc-workspace-workbench.md).
 - Naming: code now calls added directories folders and outcome projects simply projects.
 
@@ -33,8 +33,8 @@ instruction selection unambiguous; repositories remain reusable across projects.
 - Membership and archive actions do not change cwd, host ownership, trust, session history, checkout
   lifecycle or verification/approval state (INV-02–11). Archive is organization, not acceptance.
 - Project instructions reach a member session through the `piano-project` extension, preserving
-  normal Pi configuration and trust; see [projects](../../features/projects/README.md#project-instructions).
+  normal Pi configuration and trust; see [Project instructions](../../features/projects/README.md#project-instructions).
   Later shared context needs the same explicit delivery, version and application-boundary
   semantics; no second loader or required skill set (INV-12–13).
-- Terminology is in the [glossary](../../GLOSSARY.md#projects). Automatic orchestration and
+- Terminology is in the glossary under [Projects](../../GLOSSARY.md#projects). Automatic orchestration and
   cross-repository integration are not consequences of introducing this grouping.

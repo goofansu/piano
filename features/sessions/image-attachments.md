@@ -6,4 +6,4 @@ You can send up to **10 images in one message**. Choose PNG, JPEG, GIF, or WebP 
 
 After you send the message, select a thumbnail in the transcript to open the full image in a new tab. If you see **Preview unavailable**, reopen the session to reload it.
 
-[Back to sessions](README.md)
+Back to [Start or continue a session](README.md)

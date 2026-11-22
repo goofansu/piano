@@ -127,7 +127,7 @@ Preconditions: a seeded launch.
 - The sidebar group name only folds the group; its "New session in <name>" button is the way home.
 - On desktop, "Group by" is a submenu whose trigger's name includes the current choice
   (`Group by Date`). On narrow viewports its choices are inline in View options; see
-  [Open a session](../../navigation/verify/open-session.md) `view-options-phone`.
+  [Open and continue a session](../../navigation/verify/open-session.md) `view-options-phone`.
 - Scope home menus to `main`: a project-grouped sidebar repeats the project menu, and both
   surfaces have session row menus. A global name lookup can act on the sidebar instead.
 - `ab wait --text "X" --state hidden` is not a valid form; wait on a URL or a `--fn` predicate.

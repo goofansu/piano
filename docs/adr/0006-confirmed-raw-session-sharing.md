@@ -14,4 +14,4 @@ identity and confirmation; the file and provider credential stay on the server, 
 directly to Radius (INV-07/11/12). An unconfirmed upload is not success and warns the user to inspect Radius before sharing
 again. Verification uses synthetic data; live transcript publication requires separate permission.
 
-For the steps to share a saved session, see [Session sharing](../../features/sharing/README.md).
+For the steps to share a saved session, see [Share a saved session](../../features/sharing/README.md).

@@ -23,7 +23,7 @@ Preconditions for the manual checks: a seeded launch; `printf 'dispatch hello' >
     `"changes": {"branch": "verify-wt", "files": 0, "pullRequest": null}`.
 - `status` for an archived session
   - Preconditions: archive the stopped Loose session through its row menu, as in
-    [Data controls](../../data-controls/verify/data-controls.md#driving-it-with-agent-browser), before continuing it.
+    [Settings › Data controls](../../data-controls/verify/data-controls.md#driving-it-with-agent-browser), before continuing it.
   - Command: `node scripts/dispatch-session.ts status verify-loose; echo $?`.
   - Result: stderr `Session verify-loose is archived. Unarchive it in Settings → Data controls
     to read its status.`, exit 2, no status JSON. Save stderr and the exit code too. Unarchive

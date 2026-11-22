@@ -9,4 +9,4 @@ Search by provider or model name, select the model, then choose an effort level 
 
 If a model you expect is missing, check your account in **Settings → Providers**, then choose **Refresh models** when available. After adding credentials, start a new session to use them.
 
-[Connect a provider](../providers/README.md) · [Start a session](../sessions/README.md)
+[Connect a model provider](../providers/README.md) · [Start or continue a session](../sessions/README.md)

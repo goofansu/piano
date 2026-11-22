@@ -6,7 +6,7 @@ Sign in to Radius to publish documents from a conversation or share a saved sess
 2. Beside **Account**, choose **Sign in** and complete the sign-in prompt. If Piano runs on a remote machine, choose the device-code method.
 3. When the account shows **Signed in**, start a new session to publish your first artifact. To share a conversation you already have, use **Share** in that session’s menu.
 
-[Publish a Radius artifact](radius-artifacts.md) · [Share a saved session](../sharing/README.md)
+[Publish a document to Radius](radius-artifacts.md) · [Share a saved session](../sharing/README.md)
 
 ## Add Radius tools
 

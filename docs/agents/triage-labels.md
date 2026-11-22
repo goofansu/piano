@@ -1,7 +1,7 @@
 # Triage Labels
 
-When a skill names a triage role, describe the decision on the issue in [Linear](issue-tracker.md)
-so the next contributor knows who can act and what they need.
+When a skill names a triage role, describe the decision on the Linear issue so the next contributor
+knows who can act and what they need. See [Issue tracker](issue-tracker.md).
 
 | Role | What to record on the issue |
 | --- | --- |

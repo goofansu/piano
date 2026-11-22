@@ -9,13 +9,13 @@ feature. A screen can compose several features, and one feature can span browser
 
 For example, image attachments belong to Sessions because they travel with a message from draft
 to transcript. Voice input owns microphone access and transcription, which can evolve independently
-of message delivery. Apply the same test when splitting a growing feature. See the
-[feature layout](docs/development.md#feature-inventory) for where its code belongs.
+of message delivery. Apply the same test when splitting a growing feature. See
+[Feature inventory](docs/development.md#feature-inventory) for where its code belongs.
 
 ## Verification
 
-Follow the [testing policy](docs/testing.md) for every change, using its
-[commands and prerequisites](docs/development.md#tests). Name the claim and prove it with a
+Follow [Testing](docs/testing.md) for every change, using the commands in
+[Tests](docs/development.md#tests). Name the claim and prove it with a
 check that can go **red**; pick that check from
 [what to add and run](docs/testing.md#what-to-add-and-run) and run the
 [fresh-context review](docs/testing.md#fresh-context-review) it requires. After opening the PR,
@@ -29,8 +29,8 @@ Read the matching entry before working on that surface; follow its linked detail
 
 | When | Read |
 | --- | --- |
-| Finding a feature's owning modules, or verifying its behavior | Browse the [feature directories](features) for source and the [verification map](.agents/skills/verify-piano/map.md#features) for checks |
-| Measuring performance | [Benchmarks](docs/performance.md) |
+| Finding a feature's owning modules, or verifying its behavior | Browse the [feature directories](features) for source and the [Piano verification map](.agents/skills/verify-piano/map.md#features) for checks |
+| Measuring performance | [Performance](docs/performance.md) |
 | Changing UI, including strings and controls | [UX](docs/ux.md), [UI](docs/ui.md) |
 | Writing Effect code or upgrading Effect | [Effect](docs/effect.md) |
 | Adding, renaming or moving browser-storage keys | [Browser storage](docs/development.md#browser-storage) |
