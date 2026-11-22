@@ -48,7 +48,8 @@ function location(path) {
   const parts = relative(root, path).split(sep);
   const [area, second, third] = parts;
   if (parts.includes("node_modules") && area !== "..") return { kind: "package" };
-  if (area === "features") return { kind: "feature", feature: second, runtime: third };
+  if (area === "features")
+    return { kind: "feature", feature: second, runtime: third, rest: parts.slice(3).join("/") };
   if (area === "shared") return { kind: "shared", runtime: "contracts" };
   if (area === "server") return { kind: second === "shared" ? "shared" : "app", runtime: "server" };
   if (area === "web" && second === "src") {
@@ -59,13 +60,19 @@ function location(path) {
   return { kind: "other", area };
 }
 
+const entries = { server: ["index.ts"], web: ["index.ts", "browser.ts"] };
+const isEntry = (module) =>
+  module.kind === "feature" && (entries[module.runtime] ?? []).includes(module.rest);
+
 function canImport(source, target) {
   if (target.kind === "package") return ["server", "extension", "test"].includes(source.runtime);
   if (target.kind === "other")
     return source.kind === "app" && source.runtime === "server" && target.area === "scripts";
   if (target.kind === "app" && source.kind !== "app") return false;
-  if (target.kind === "feature" && source.kind !== "app" && source.feature !== target.feature)
-    return false;
+  if (target.kind === "feature" && source.feature !== target.feature) {
+    if (source.kind !== "app" && source.kind !== "feature") return false;
+    if (target.runtime !== "contracts" && !isEntry(target)) return false;
+  }
   if (source.runtime === "test") return true;
   if (target.runtime === "contracts" || target.runtime === source.runtime) return true;
   return source.runtime === "extension" && target.runtime === "server";
@@ -147,6 +154,7 @@ export default {
         }
         const report = (node, specifier, reason) =>
           context.report({ node, messageId: "boundary", data: { reason, specifier } });
+        const entry = isEntry(sourceModule);
         function localTargets(bare) {
           const alias = (sourceModule.runtime === "web" ? byRuntime.web : byRuntime.node).find(
             (a) => (a.wildcard ? bare.startsWith(a.prefix) : bare === a.prefix),
@@ -218,6 +226,19 @@ export default {
           }
         }
         return {
+          Program(node) {
+            if (!entry) return;
+            for (const statement of node.body)
+              if (
+                statement.type !== "ExportAllDeclaration" &&
+                !(statement.type === "ExportNamedDeclaration" && statement.source)
+              )
+                report(
+                  statement,
+                  relative(root, file),
+                  "A feature entry file only re-exports the feature's modules",
+                );
+          },
           ImportDeclaration: (node) => check(node, node.source),
           ExportNamedDeclaration: (node) => check(node, node.source),
           ExportAllDeclaration: (node) => check(node, node.source),

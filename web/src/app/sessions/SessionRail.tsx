@@ -1,14 +1,8 @@
-import { SessionCommandMenuItem, useSessionCommands } from "@features/commands/web/commandContext";
-import {
-  type EnvironmentRowKind,
-  environmentRowMenu,
-} from "@features/commands/web/sessionCommands";
-import { sessionPlace } from "@features/sessions/web/sessionScreen";
-import type { TranscriptViewport } from "@features/sessions/web/transcript/transcriptViewport";
-import { useTranscriptViewport } from "@features/sessions/web/transcript/useTranscriptViewport";
-import { SessionOutputs } from "@features/workspace/web/files/SessionOutputs";
-import { useSessionFiles } from "@features/workspace/web/files/useSessionFiles";
-import { pullRequestView } from "@features/workspace/web/pull-requests/pullRequestView";
+import { type EnvironmentRowKind, environmentRowMenu } from "@features/commands/web";
+import { SessionCommandMenuItem, useSessionCommands } from "@features/commands/web/browser";
+import { sessionPlace, useTranscriptViewport } from "@features/sessions/web/browser";
+import type { TranscriptViewport } from "@features/sessions/web/browser";
+import { SessionOutputs, useSessionFiles, pullRequestView } from "@features/workspace/web/browser";
 import { cn } from "cn";
 import {
   ChevronDownIcon,

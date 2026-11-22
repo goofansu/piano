@@ -1,23 +1,21 @@
-import { CommandsContext } from "@features/commands/web/commandContext";
 import {
   type Command,
   type CommandEffects,
   type CommandForm,
   runCommand,
-} from "@features/commands/web/commands";
-import { useSidebarLayout } from "@features/navigation/web/sidebar/useSidebarLayout";
-import { useSidebarView } from "@features/navigation/web/sidebar/useSidebarView";
+} from "@features/commands/web";
+import { CommandsContext } from "@features/commands/web/browser";
+import { useSidebarLayout, useSidebarView } from "@features/navigation/web/browser";
 import {
   openProjectCommands,
   projectPageActions,
   sessionProjectMenu,
-} from "@features/projects/web/projectActions";
-import { ProjectDialogView } from "@features/projects/web/Projects";
-import { ProjectSettingsDialog } from "@features/projects/web/ProjectSettings";
-import { hasSessionArtifacts } from "@features/radius/web/artifactList";
-import { artifactsMenu } from "@features/radius/web/artifactsMenu";
-import { useMessagesOnly } from "@features/sessions/web/transcript/useMessagesOnly";
-import { ShareSessionDialog, type ShareTarget } from "@features/sharing/web/ShareSessionDialog";
+  ProjectDialogView,
+  ProjectSettingsDialog,
+} from "@features/projects/web/browser";
+import { hasSessionArtifacts, artifactsMenu } from "@features/radius/web/browser";
+import { useMessagesOnly } from "@features/sessions/web/browser";
+import { ShareSessionDialog, type ShareTarget } from "@features/sharing/web/browser";
 import { type ClientCommand, SESSION_TITLE_MAX, type ServerMessage } from "@shared/wire";
 import { useTheme } from "next-themes";
 import { useRef, useState, useSyncExternalStore } from "react";

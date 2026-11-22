@@ -1,18 +1,14 @@
+import { sessionHeaderMenu } from "@features/commands/web";
 import {
   CommandIcon,
   SessionCommandMenuItem,
   useSessionCommands,
   useSessionProjectMenu,
-} from "@features/commands/web/commandContext";
-import { sessionHeaderMenu } from "@features/commands/web/sessionCommands";
-import { ProjectMenu } from "@features/projects/web/Projects";
-import { ArtifactsMenu } from "@features/radius/web/SessionArtifacts";
-import { SessionIdDetails } from "@features/sessions/web/SessionIdDetails";
-import { sessionPlace } from "@features/sessions/web/sessionScreen";
-import {
-  type PullRequestControl,
-  PullRequestLinkDialog,
-} from "@features/workspace/web/pull-requests/SessionPullRequest";
+} from "@features/commands/web/browser";
+import { ProjectMenu } from "@features/projects/web/browser";
+import { ArtifactsMenu } from "@features/radius/web/browser";
+import { SessionIdDetails, sessionPlace } from "@features/sessions/web/browser";
+import { type PullRequestControl, PullRequestLinkDialog } from "@features/workspace/web/browser";
 import { cn } from "cn";
 import { ListIcon, MoreHorizontalIcon } from "lucide-react";
 import { Fragment, useRef, useState } from "react";

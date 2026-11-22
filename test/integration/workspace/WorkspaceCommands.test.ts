@@ -11,10 +11,10 @@ import { PiCli } from "../../../features/sessions/server/pi/PiCli.ts";
 import type { SessionHosts } from "../../../features/sessions/server/SessionHosts.ts";
 import { worktreeInstance } from "../../../features/workspace/server/GitCheckout.ts";
 import { WorkspaceCommands } from "../../../features/workspace/server/WorkspaceCommands.ts";
-import { FolderWorktreesLive } from "../../../features/workspace/server/worktrees/FolderWorktrees.ts";
+import { FolderWorktrees } from "../../../features/workspace/server/worktrees/FolderWorktrees.ts";
+import { FolderWorktreesLive } from "../../../features/workspace/server/worktrees/FolderWorktreesLive.ts";
 import { PianoCoreLive } from "../../../server/app/PianoServices.ts";
 import { DirectoryFacts } from "../../../server/shared/DirectoryFacts.ts";
-import { FolderWorktrees } from "../../../server/shared/FolderWorktrees.ts";
 import {
   Registry,
   RegistryDatabasePath,

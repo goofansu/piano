@@ -1,7 +1,5 @@
-import { useGlobalCommands } from "@features/commands/web/commandContext";
-import { type RadioChoice } from "@features/commands/web/commands";
-import { GlobalCommandIcon } from "@features/commands/web/GlobalCommandIcon";
-import { type GlobalCommand, radioChoice } from "@features/commands/web/globalCommands";
+import { type RadioChoice, type GlobalCommand, radioChoice } from "@features/commands/web";
+import { useGlobalCommands, GlobalCommandIcon } from "@features/commands/web/browser";
 import { SlidersHorizontalIcon } from "lucide-react";
 import { PianoButton as Button } from "@/shared/components/PianoButton";
 import {

@@ -1,6 +1,5 @@
-import { useCommands } from "@features/commands/web/commandContext";
-import { ProjectHome } from "@features/projects/web/ProjectHome";
-import { ProjectsIndex } from "@features/projects/web/ProjectsIndex";
+import { useCommands } from "@features/commands/web/browser";
+import { ProjectHome, ProjectsIndex } from "@features/projects/web/browser";
 import type { ComponentProps } from "react";
 import { PageHeaderActions } from "@/app/commands/PageHeaderActions";
 import { NewSessionComposer } from "@/app/sessions/NewSession";

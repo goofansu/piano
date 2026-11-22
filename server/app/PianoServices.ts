@@ -1,23 +1,26 @@
 import { Effect, Layer } from "effect";
-import { PromptsLive } from "../../features/library/server/Prompts.ts";
-import { UserSkillsLive } from "../../features/library/server/UserSkills.ts";
-import { McpSetupLive } from "../../features/mcp/server/McpSetup.ts";
-import { PiSettingsLive } from "../../features/models/server/PiSettings.ts";
-import { type SidebarViewOptions } from "../../features/navigation/server/SidebarView.ts";
-import { ProviderLoginLive } from "../../features/providers/server/ProviderLogin.ts";
-import { RadiusSetupLive } from "../../features/radius/server/RadiusSetup.ts";
-import { CreationAttemptsLive } from "../../features/sessions/server/CreationAttempts.ts";
-import { PiSessionsLive } from "../../features/sessions/server/pi/PiSessions.ts";
-import { SessionHostsLive } from "../../features/sessions/server/SessionHosts.ts";
-import { SessionReferencesLive } from "../../features/sessions/server/SessionReferences.ts";
-import { VoiceInputLive } from "../../features/voice-input/server/VoiceInput.ts";
-import { Webhooks, WebhooksLive } from "../../features/webhooks/server/Webhooks.ts";
-import { SessionChangesLive } from "../../features/workspace/server/changes/SessionChanges.ts";
-import { WorkspaceChangesLive } from "../../features/workspace/server/changes/WorkspaceChanges.ts";
-import { GitHubPullRequestsLive } from "../../features/workspace/server/pull-requests/GitHubPullRequests.ts";
-import { SessionPullRequestsLive } from "../../features/workspace/server/pull-requests/SessionPullRequests.ts";
-import { WorkspaceCommandsLive } from "../../features/workspace/server/WorkspaceCommands.ts";
-import { FolderWorktreesLive } from "../../features/workspace/server/worktrees/FolderWorktrees.ts";
+import { PromptsLive, UserSkillsLive } from "../../features/library/server/index.ts";
+import { McpSetupLive } from "../../features/mcp/server/index.ts";
+import { PiSettingsLive } from "../../features/models/server/index.ts";
+import { type SidebarViewOptions } from "../../features/navigation/server/index.ts";
+import { ProviderLoginLive } from "../../features/providers/server/index.ts";
+import { RadiusSetupLive } from "../../features/radius/server/index.ts";
+import {
+  CreationAttemptsLive,
+  PiSessionsLive,
+  SessionHostsLive,
+  SessionReferencesLive,
+} from "../../features/sessions/server/index.ts";
+import { VoiceInputLive } from "../../features/voice-input/server/index.ts";
+import { Webhooks, WebhooksLive } from "../../features/webhooks/server/index.ts";
+import {
+  SessionChangesLive,
+  WorkspaceChangesLive,
+  GitHubPullRequestsLive,
+  SessionPullRequestsLive,
+  WorkspaceCommandsLive,
+  FolderWorktreesLive,
+} from "../../features/workspace/server/index.ts";
 import { RegistryLive } from "../shared/registry/Registry.ts";
 import { SessionStatusLive } from "./FeatureServices.ts";
 import { SidebarViewLive } from "./FeatureServices.ts";

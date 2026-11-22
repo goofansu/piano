@@ -1,11 +1,10 @@
+import { sessionRowMenu } from "@features/commands/web";
 import {
   SessionCommandMenuItem,
   useCommands,
   useSessionCommands,
-} from "@features/commands/web/commandContext";
-import { sessionRowMenu } from "@features/commands/web/sessionCommands";
-import { sessionProjectMenu } from "@features/projects/web/projectActions";
-import { ProjectMenu } from "@features/projects/web/Projects";
+} from "@features/commands/web/browser";
+import { sessionProjectMenu, ProjectMenu } from "@features/projects/web/browser";
 import { Fragment } from "react";
 import {
   DropdownMenuGroup,

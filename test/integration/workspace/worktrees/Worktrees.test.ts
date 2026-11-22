@@ -21,13 +21,13 @@ import {
 } from "../../../../features/workspace/server/changes/SessionChanges.ts";
 import { WorkspaceChangesLive } from "../../../../features/workspace/server/changes/WorkspaceChanges.ts";
 import { worktreeInstance } from "../../../../features/workspace/server/GitCheckout.ts";
+import { FolderWorktrees } from "../../../../features/workspace/server/worktrees/FolderWorktrees.ts";
 import {
   checkoutHint,
   createWorktree,
   listWorktrees,
 } from "../../../../features/workspace/server/worktrees/Worktrees.ts";
 import { PianoCoreLive } from "../../../../server/app/PianoServices.ts";
-import { FolderWorktrees } from "../../../../server/shared/FolderWorktrees.ts";
 import { Registry, RegistryDatabasePath } from "../../../../server/shared/registry/Registry.ts";
 import { forkWorktree } from "../../../shared/forkWorktree.ts";
 

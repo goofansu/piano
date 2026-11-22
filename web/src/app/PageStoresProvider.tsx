@@ -1,12 +1,12 @@
-import { DraftFileView } from "@features/library/web/DraftDialogs";
-import { CatalogsContext } from "@features/models/web/useCatalogs";
-import { DraftsContext } from "@features/sessions/web/composer/useDrafts";
-import { QuestionRepliesContext } from "@features/sessions/web/dialogs/useQuestionReplies";
+import { DraftFileView } from "@features/library/web/browser";
+import { CatalogsContext } from "@features/models/web/browser";
 import {
+  DraftsContext,
+  QuestionRepliesContext,
   type LibraryFile,
   RenderLibraryFile,
-} from "@features/sessions/web/transcript/LibraryFileView";
-import { workspaceFile } from "@features/workspace/web/files/fileApi";
+} from "@features/sessions/web/browser";
+import { workspaceFile } from "@features/workspace/web/browser";
 import type { ReactNode } from "react";
 import { MarkdownFileReader } from "@/shared/markdown/useMarkdownImages";
 import type { PageStores } from "./pageStores.ts";

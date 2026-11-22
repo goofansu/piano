@@ -1,21 +1,22 @@
 import { Effect, Stream } from "effect";
-import { sessionStatusLayer } from "../../features/dispatch/server/SessionStatus.ts";
+import { sessionStatusLayer } from "../../features/dispatch/server/index.ts";
 import {
   sidebarViewLayer,
   type SidebarViewOptions,
-} from "../../features/navigation/server/SidebarView.ts";
+} from "../../features/navigation/server/index.ts";
+import { RadiusAuthenticationError, RadiusClient } from "../../features/radius/server/index.ts";
 import {
-  RadiusAuthenticationError,
-  RadiusClient,
-} from "../../features/radius/server/RadiusClient.ts";
-import { PiSessions } from "../../features/sessions/server/pi/PiSessions.ts";
-import { SessionHosts } from "../../features/sessions/server/SessionHosts.ts";
-import { SessionReferences } from "../../features/sessions/server/SessionReferences.ts";
-import { sessionSharingLayer } from "../../features/sharing/server/SessionSharing.ts";
-import { WorkspaceChanges } from "../../features/workspace/server/changes/WorkspaceChanges.ts";
-import { directoryFactsLayer } from "../../features/workspace/server/DirectoryFactsLive.ts";
-import { GitHubPullRequests } from "../../features/workspace/server/pull-requests/GitHubPullRequests.ts";
-import { listWorktrees } from "../../features/workspace/server/worktrees/Worktrees.ts";
+  PiSessions,
+  SessionHosts,
+  SessionReferences,
+} from "../../features/sessions/server/index.ts";
+import { sessionSharingLayer } from "../../features/sharing/server/index.ts";
+import {
+  WorkspaceChanges,
+  directoryFactsLayer,
+  GitHubPullRequests,
+  listWorktrees,
+} from "../../features/workspace/server/index.ts";
 import type { SessionEntry } from "../shared/registry/Registry.ts";
 
 export const SessionStatusLive = sessionStatusLayer(

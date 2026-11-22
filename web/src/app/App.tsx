@@ -1,31 +1,29 @@
-import { CommandPalette } from "@features/commands/web/CommandPalette";
-import { AppLayout, LayoutView } from "@features/navigation/web/AppLayout";
-import { initialView } from "@features/navigation/web/navigation";
+import { CommandPalette } from "@features/commands/web/browser";
 import {
+  AppLayout,
+  LayoutView,
+  initialView,
   SidebarActivityContext,
   SidebarPaneLead,
-} from "@features/navigation/web/sidebar/ShowSidebarButton";
-import {
   SidebarLayoutContext,
   useSidebarLayout,
   useSidebarLayoutController,
   useSidebarShortcut,
-} from "@features/navigation/web/sidebar/useSidebarLayout";
-import { useSidebarList } from "@features/navigation/web/sidebar/useSidebarList";
-import { useSidebarSessionNavigation } from "@features/navigation/web/sidebar/useSidebarSessionNavigation";
-import { useSidebarView } from "@features/navigation/web/sidebar/useSidebarView";
-import { useNavigationController } from "@features/navigation/web/useNavigation";
-import { providerAccounts } from "@features/providers/web/useProviderAccounts";
-import { DialogHost } from "@features/sessions/web/dialogs/DialogHost";
-import { pendingDialogs } from "@features/sessions/web/dialogs/piDialogs";
-import { observeDictationPage } from "@features/voice-input/web/browserDictation";
-import { voiceInputSettings } from "@features/voice-input/web/useVoiceInput";
-import { checkoutRefresh } from "@features/workspace/web/changes/checkoutRefresh";
-import { workspaceFile } from "@features/workspace/web/files/fileApi";
+  useSidebarList,
+  useSidebarSessionNavigation,
+  useSidebarView,
+  useNavigationController,
+} from "@features/navigation/web/browser";
+import { providerAccounts } from "@features/providers/web/browser";
+import { pendingDialogs } from "@features/sessions/web";
+import { DialogHost } from "@features/sessions/web/browser";
+import { observeDictationPage, voiceInputSettings } from "@features/voice-input/web/browser";
 import {
+  checkoutRefresh,
+  workspaceFile,
   SessionFilesContext,
   useSessionFilesController,
-} from "@features/workspace/web/files/useSessionFiles";
+} from "@features/workspace/web/browser";
 import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { storedLastDirectory } from "@/app/client";
 import { CommandHost } from "@/app/commands/CommandHost";

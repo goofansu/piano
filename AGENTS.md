@@ -101,7 +101,8 @@ gotcha. When behavior changes, correct or delete the doc lines it made false.
 
 Keep Pi protocol details behind `features/sessions/server/pi/PiSessions.ts`. Extend its public contract through
 `SessionAction`/`SessionEvent` in `shared/wire.ts`; test through that contract.
-Name server modules in PascalCase after their export; `main.ts` is the sole entry point.
+Name server modules in PascalCase after their export, except a feature's re-export-only `server/index.ts`;
+`main.ts` is the sole server entry point.
 
 Use workspace/session IDs in URLs, never filesystem paths. Send arbitrary paths in POST JSON bodies
 to keep them out of URL logs.

@@ -1,10 +1,9 @@
-import { modelPickerEnabled } from "@features/models/web/modelPicker";
-import { ModelSelect } from "@features/models/web/ModelSelect";
-import type { ModelControl } from "@features/models/web/useModelChoice";
-import type { EditorToolbar } from "@features/sessions/web/composer/DraftEditor";
-import { useDrafts } from "@features/sessions/web/composer/useDrafts";
+import { modelPickerEnabled, ModelSelect } from "@features/models/web/browser";
+import type { ModelControl } from "@features/models/web/browser";
+import type { EditorToolbar } from "@features/sessions/web/browser";
+import { useDrafts } from "@features/sessions/web/browser";
 import type { VoiceHints } from "@features/voice-input/contracts/voiceInput";
-import { VoiceInputButton } from "@features/voice-input/web/VoiceInputButton";
+import { VoiceInputButton } from "@features/voice-input/web/browser";
 
 export function useComposerToolbar(
   control: ModelControl,

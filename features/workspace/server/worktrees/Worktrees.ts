@@ -2,7 +2,6 @@ import { existsSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import { Effect } from "effect";
-import { WorktreeError } from "../../../../server/shared/FolderWorktrees.ts";
 import { cutText } from "../../../../shared/cutText.ts";
 import {
   WORKTREE_CREATION_MS,
@@ -11,6 +10,7 @@ import {
 } from "../../../../shared/wire.ts";
 import { type BranchHome, branchHomes, gitText, observeGit } from "../GitCheckout.ts";
 import { branchRemote, githubRemote } from "../pull-requests/GitHubPullRequests.ts";
+import { WorktreeError } from "./FolderWorktrees.ts";
 
 const git = (cwd: string, args: string[]): Effect.Effect<string, WorktreeError> =>
   gitText(cwd, args).pipe(Effect.mapError((e) => new WorktreeError({ detail: e.detail })));

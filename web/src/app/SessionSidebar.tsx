@@ -1,8 +1,6 @@
-import { useCommands } from "@features/commands/web/commandContext";
-import { folderCommands } from "@features/commands/web/folderCommands";
-import { PALETTE_NAME } from "@features/commands/web/paletteModel";
-import { Sidebar } from "@features/navigation/web/sidebar/Sidebar";
-import { projectRowActions } from "@features/projects/web/Projects";
+import { useCommands, folderCommands, PALETTE_NAME } from "@features/commands/web/browser";
+import { Sidebar } from "@features/navigation/web/browser";
+import { projectRowActions } from "@features/projects/web/browser";
 import type { FolderView } from "@shared/wire";
 import { MoreHorizontalIcon, SquarePenIcon, XIcon } from "lucide-react";
 import type { ComponentProps } from "react";

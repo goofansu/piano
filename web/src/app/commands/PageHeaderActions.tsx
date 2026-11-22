@@ -1,6 +1,5 @@
-import { useCommands } from "@features/commands/web/commandContext";
-import { GlobalCommandIcon } from "@features/commands/web/GlobalCommandIcon";
-import { pageCommands } from "@features/commands/web/globalCommands";
+import { pageCommands } from "@features/commands/web";
+import { useCommands, GlobalCommandIcon } from "@features/commands/web/browser";
 import { Button } from "@/components/ui/button";
 
 export function PageHeaderActions({ page }: { page: "settings" | "projects" }) {

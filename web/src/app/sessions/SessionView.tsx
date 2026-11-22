@@ -1,23 +1,23 @@
-import { useSessionCommands } from "@features/commands/web/commandContext";
-import { useLibraryToasts } from "@features/library/web/useLibraryToasts";
-import { completionTarget } from "@features/sessions/web/composer/completionTarget";
-import { AddToChat } from "@features/sessions/web/composer/Quotes";
-import { useDrafts } from "@features/sessions/web/composer/useDrafts";
-import { AnsweredQuestion } from "@features/sessions/web/dialogs/AnsweredQuestion";
-import { pendingDialogs } from "@features/sessions/web/dialogs/piDialogs";
-import { type SessionNotice, sessionNotices } from "@features/sessions/web/sessionNotices";
-import { sessionActivity, sessionPane } from "@features/sessions/web/sessionScreen";
+import { useSessionCommands } from "@features/commands/web/browser";
+import { useLibraryToasts } from "@features/library/web/browser";
+import { pendingDialogs } from "@features/sessions/web";
 import {
+  completionTarget,
+  AddToChat,
+  useDrafts,
+  AnsweredQuestion,
+  type SessionNotice,
+  sessionNotices,
+  sessionActivity,
+  sessionPane,
   MessageList,
   SessionDestinationContext,
-} from "@features/sessions/web/transcript/MessageList";
-import { createTranscriptProjector } from "@features/sessions/web/transcript/transcript";
-import { useMessagesOnly } from "@features/sessions/web/transcript/useMessagesOnly";
-import {
+  createTranscriptProjector,
+  useMessagesOnly,
   TranscriptViewportContext,
   useNewTranscriptViewport,
-} from "@features/sessions/web/transcript/useTranscriptViewport";
-import { useSessionPullRequest } from "@features/workspace/web/pull-requests/useSessionPullRequest";
+} from "@features/sessions/web/browser";
+import { useSessionPullRequest } from "@features/workspace/web/browser";
 import { isWorking } from "@shared/session/sessionProjection";
 import type { ExtensionState, RenderMsg } from "@shared/wire";
 import { cn } from "cn";

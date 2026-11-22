@@ -1,6 +1,5 @@
-import { useModelCatalog } from "@features/models/web/useModelCatalog";
-import { useModelChoice } from "@features/models/web/useModelChoice";
-import { Composer, type ComposerProps } from "@features/sessions/web/composer/Composer";
+import { useModelCatalog, useModelChoice } from "@features/models/web/browser";
+import { Composer, type ComposerProps } from "@features/sessions/web/browser";
 import type { VoiceHints } from "@features/voice-input/contracts/voiceInput";
 import { useComposerToolbar } from "./composerToolbar";
 export function SessionComposer(

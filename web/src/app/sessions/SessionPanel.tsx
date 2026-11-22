@@ -1,6 +1,5 @@
-import { ChangesPanel } from "@features/workspace/web/changes/Changes";
-import { FileTabIcon, WorkspaceFile } from "@features/workspace/web/files/WorkspaceFile";
-import type { PullRequestControl } from "@features/workspace/web/pull-requests/SessionPullRequest";
+import { ChangesPanel, FileTabIcon, WorkspaceFile } from "@features/workspace/web/browser";
+import type { PullRequestControl } from "@features/workspace/web/browser";
 import { FileDiffIcon, XIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { IconButton } from "@/shared/components/IconButton";

@@ -1,30 +1,28 @@
 import { Cause, Data, Effect, Option, Schema, Semaphore, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import { Prompts } from "../../features/library/server/Prompts.ts";
-import { UserSkills } from "../../features/library/server/UserSkills.ts";
-import { McpSetup } from "../../features/mcp/server/McpSetup.ts";
-import { PiSettings } from "../../features/models/server/PiSettings.ts";
-import { SidebarView } from "../../features/navigation/server/SidebarView.ts";
-import { ProviderLogin } from "../../features/providers/server/ProviderLogin.ts";
-import { RadiusSetup } from "../../features/radius/server/RadiusSetup.ts";
+import { Prompts, UserSkills } from "../../features/library/server/index.ts";
+import { McpSetup } from "../../features/mcp/server/index.ts";
+import { PiSettings } from "../../features/models/server/index.ts";
+import { SidebarView } from "../../features/navigation/server/index.ts";
+import { ProviderLogin } from "../../features/providers/server/index.ts";
+import { RadiusSetup } from "../../features/radius/server/index.ts";
 import {
   IMAGE_PREVIEW_HEADERS,
   IMAGE_PREVIEW_ROUTE,
   imagePreviewHash,
 } from "../../features/sessions/contracts/attachments/imagePreviews.ts";
-import { getImagePreview } from "../../features/sessions/server/attachments/ImagePreviews.ts";
-import { SessionHosts } from "../../features/sessions/server/SessionHosts.ts";
-import { SessionSharing } from "../../features/sharing/server/SessionSharing.ts";
-import { VoiceInput } from "../../features/voice-input/server/VoiceInput.ts";
-import { Webhooks } from "../../features/webhooks/server/Webhooks.ts";
-import { SessionChanges } from "../../features/workspace/server/changes/SessionChanges.ts";
-import { WorkspaceChanges } from "../../features/workspace/server/changes/WorkspaceChanges.ts";
-import { Directories } from "../../features/workspace/server/Directories.ts";
+import { getImagePreview, SessionHosts } from "../../features/sessions/server/index.ts";
+import { SessionSharing } from "../../features/sharing/server/index.ts";
+import { VoiceInput } from "../../features/voice-input/server/index.ts";
+import { Webhooks } from "../../features/webhooks/server/index.ts";
 import {
+  SessionChanges,
+  WorkspaceChanges,
+  Directories,
   downloadWorkspaceFile,
   readWorkspaceFile,
-} from "../../features/workspace/server/files/WorkspaceFiles.ts";
-import { SessionPullRequests } from "../../features/workspace/server/pull-requests/SessionPullRequests.ts";
+  SessionPullRequests,
+} from "../../features/workspace/server/index.ts";
 import {
   type Endpoint,
   answerJson,
