@@ -7,9 +7,12 @@ export async function checkMessageFidelity(page) {
   await page.press("Enter");
   await page.see("echo: a: 1");
   await page.until("!document.querySelector('[aria-label=Stop]')");
-  const measure = async (stage, count) => {
-    const rows = await page.evaluate(`(() => {
-      return [...document.querySelectorAll('[data-slot="transcript"] article')].flatMap(article => {
+  const read = () =>
+    page.evaluate(`(() => {
+      const transcript = document.querySelector('[data-slot="transcript"]');
+      const settled = !!transcript && !transcript.hasAttribute('data-window-pending') &&
+        !transcript.querySelector('[data-slot="transcript-placeholder"]');
+      const rows = [...document.querySelectorAll('[data-slot="transcript"] article')].flatMap(article => {
         const p = [...article.querySelectorAll('p')].find(p => p.textContent.includes('a: 1') && p.textContent.includes('c: 3'));
         if (!p) return [];
         const tops = ['a: 1', 'b: 2', 'c: 3'].map(line => {
@@ -26,10 +29,19 @@ export async function checkMessageFidelity(page) {
         });
         return [{ tops, text: article.textContent }];
       });
+      return { settled, rows };
     })()`);
-    console.log(JSON.stringify({ stage, rows }));
+  const measure = async (stage, count) => {
+    const deadline = Date.now() + 10_000;
+    let { settled, rows } = await read();
+    while (!settled && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      ({ settled, rows } = await read());
+    }
+    console.log(JSON.stringify({ stage, settled, rows }));
     await page.capture(`message-fidelity-${stage}`);
-    assert.equal(rows.length, count);
+    assert.ok(settled, `${stage}: transcript rows rendered, not placeholders`);
+    assert.equal(rows.length, count, `${stage}: rows with the message text`);
     for (const row of rows) {
       const [a, b, c] = row.tops;
       assert.ok(a !== null && b > a + 5 && c > b + 5, `${stage}: three separate rendered lines`);
