@@ -43,7 +43,7 @@ Write no comments in code. Keep only functional directives a tool reads, such as
 `oxlint-disable-next-line`, `@ts-expect-error`, `/// <reference>` and `# shellcheck`, without a
 reason. Let names, types and tests carry what a comment would say; a script describes its usage,
 options and environment in `--help` output. What none of these can say follows [Docs](#docs).
-Leave vendored code alone.
+Config files (workflows, systemd units, tool configs) may keep comments. Leave vendored code alone.
 
 ## Docs
 
