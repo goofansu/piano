@@ -25,8 +25,8 @@
     "prepare": "node .husky/install.mjs"
   },
   "dependencies": {
-    "@earendil-works/pi-coding-agent": "^1.5.2",
-    "@earendil-works/pi-schema": "^1.5.2",
+    "@earendil-works/pi-coding-agent": "^1.6.0",
+    "@earendil-works/pi-schema": "^1.6.0",
     "@effect/platform-node": "^4.1.2",
     "cn": "^0.5.0",
     "effect": "^4.1.2",
