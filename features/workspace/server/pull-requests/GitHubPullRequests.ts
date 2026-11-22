@@ -11,6 +11,7 @@ import {
   pullRequestIdentity,
 } from "../../../../shared/git/pullRequestIdentity.ts";
 import type { PullRequest } from "../../contracts/pull-requests/http.ts";
+import type { PullRequestBranches } from "../../contracts/pull-requests/pullRequestBranches.ts";
 import { type BranchHome, gitText, observeGit } from "../GitCheckout.ts";
 
 export class PullRequestError extends Data.TaggedError("PullRequestError")<{
@@ -70,15 +71,13 @@ export const observeBranchRemote = Effect.fn("GitHubPullRequests.observeBranchRe
   return branchRemote(observed.home);
 });
 
-// A fork's pull request is listed only in its base repository. Without --repo, gh 2.101 lists one
-// repository it picks from the remotes (origin over a base remote named parent), so search every
-// repository a remote on the same host names, and the default `gh repo set-default` records on a
-// remote: "base" for that remote's repository, or owner/repo for one no remote names.
-const searchRepos = Effect.fn("GitHubPullRequests.searchRepos")(function* (
+const remoteRepos = Effect.fn("GitHubPullRequests.remoteRepos")(function* (
   cwd: string,
   host: GitHubHost,
-  headRepo: string,
-): Effect.fn.Return<string[], PullRequestError> {
+): Effect.fn.Return<
+  { readonly repo: string; readonly resolved: string | null }[],
+  PullRequestError
+> {
   const read = (args: string[]) =>
     gitText(cwd, args, { userConfig: true }).pipe(
       Effect.map((text) => text.trim()),
@@ -94,12 +93,26 @@ const searchRepos = Effect.fn("GitHubPullRequests.searchRepos")(function* (
       ]),
     { concurrency: "unbounded" },
   );
-  const repos = remotes.flatMap(([url, resolved]) => {
+  return remotes.flatMap(([url, resolved]) => {
     const github = githubRemote(url);
     if (github?.apiHost !== host) return [];
     const chosen = /^[\w.-]+\/[\w.-]+$/.test(resolved) ? resolved.toLowerCase() : null;
-    return chosen ? [github.repo, chosen] : [github.repo];
+    return [{ repo: github.repo, resolved: chosen }];
   });
+});
+
+// A fork's pull request is listed only in its base repository. Without --repo, gh 2.101 lists one
+// repository it picks from the remotes (origin over a base remote named parent), so search every
+// repository a remote on the same host names, and the default `gh repo set-default` records on a
+// remote: "base" for that remote's repository, or owner/repo for one no remote names.
+const searchRepos = Effect.fn("GitHubPullRequests.searchRepos")(function* (
+  cwd: string,
+  host: GitHubHost,
+  headRepo: string,
+): Effect.fn.Return<string[], PullRequestError> {
+  const repos = (yield* remoteRepos(cwd, host)).flatMap(({ repo, resolved }) =>
+    resolved ? [repo, resolved] : [repo],
+  );
   return [...new Set([headRepo, ...repos])];
 });
 
@@ -310,6 +323,12 @@ export class GitHubPullRequests extends Context.Service<
       ReadonlyArray<{ readonly link: PullRequestLink; readonly pullRequest: PullRequest }>,
       PullRequestError
     >;
+    readonly checkoutNames: (
+      cwd: string,
+      branch: BranchHead | null,
+      host: GitHubHost,
+      branches: PullRequestBranches,
+    ) => Effect.Effect<PullRequestBranches, PullRequestError>;
   }
 >()("piano/GitHubPullRequests") {}
 
@@ -350,6 +369,29 @@ export const GitHubPullRequestsLive = Layer.effect(
           }),
         ),
       );
+    const currentNames = (cwd: string, host: GitHubHost) => {
+      const known = new Map<string, string>();
+      return (repo: string) => {
+        const name = known.get(repo);
+        return name !== undefined
+          ? Effect.succeed(name)
+          : currentName(cwd, repo, host).pipe(
+              Effect.tap((current) => Effect.sync(() => known.set(repo, current))),
+            );
+      };
+    };
+    // GitHub follows repository renames and reports a pull request's repositories by their current
+    // names, while a checkout's remote may still use an old one.
+    const trackedHeadRepo = (
+      current: (repo: string) => Effect.Effect<string, PullRequestError>,
+      branch: BranchHead,
+      pr: { readonly head?: string | undefined; readonly headRepo?: string | undefined },
+    ): Effect.Effect<string | undefined, PullRequestError> =>
+      pr.head === branch.name && pr.headRepo && pr.headRepo !== branch.repo
+        ? current(branch.repo).pipe(
+            Effect.map((name) => (name === pr.headRepo ? branch.repo : pr.headRepo)),
+          )
+        : Effect.succeed(pr.headRepo);
     return GitHubPullRequests.of({
       link: Effect.fn("GitHubPullRequests.link")(function* (url, cwd) {
         const identity = yield* parse(url);
@@ -414,27 +456,46 @@ export const GitHubPullRequestsLive = Layer.effect(
             ),
           { concurrency: "unbounded" },
         );
-        // GitHub follows repository renames, so a remote under an upstream's old name lists the
-        // same pull requests as one under its current name, and names a head fork by its current
-        // name even when the checkout tracks the fork's old one.
-        const listed = lists.flat();
-        const headRepo = listed.some(
-          ({ head, pullRequest }) =>
-            head === branch && pullRequest.headRepo && pullRequest.headRepo !== repo,
-        )
-          ? yield* currentName(cwd, repo, host)
-          : repo;
+        // A remote under an upstream's old name lists the same pull requests as one under its
+        // current name.
+        const current = currentNames(cwd, host);
+        const tracked = { name: branch, repo };
         const matches = new Map<string, PullRequest>();
-        for (const { head, pullRequest } of listed)
-          if (
-            isFromBranch({ head, headRepo: pullRequest.headRepo }, { name: branch, repo: headRepo })
-          )
+        for (const { head, pullRequest } of lists.flat()) {
+          const headRepo = yield* trackedHeadRepo(current, tracked, {
+            head,
+            headRepo: pullRequest.headRepo,
+          });
+          if (isFromBranch({ head, headRepo }, tracked))
             matches.set(pullRequestIdentity(pullRequest.url)?.url ?? pullRequest.url, pullRequest);
+        }
         return [...matches.values()].map((pullRequest) => ({
           link: linkFor(pullRequest.url, host),
           pullRequest,
         }));
       }),
+      checkoutNames: Effect.fn("GitHubPullRequests.checkoutNames")(
+        function* (cwd, branch, host, branches) {
+          if (!branch) return branches;
+          const current = currentNames(cwd, host);
+          const headRepo = yield* trackedHeadRepo(current, branch, branches);
+          let baseRepo = branches.baseRepo;
+          if (baseRepo && isFromBranch({ head: branches.head, headRepo }, branch)) {
+            const named = [...new Set((yield* remoteRepos(cwd, host)).map(({ repo }) => repo))];
+            if (!named.includes(baseRepo))
+              for (const repo of named)
+                if ((yield* current(repo).pipe(Effect.orElseSucceed(() => null))) === baseRepo) {
+                  baseRepo = repo;
+                  break;
+                }
+          }
+          return {
+            ...branches,
+            ...(headRepo ? { headRepo } : {}),
+            ...(baseRepo ? { baseRepo } : {}),
+          };
+        },
+      ),
     });
   }),
 );

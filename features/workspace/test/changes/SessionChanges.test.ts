@@ -53,11 +53,17 @@ async function fixture(t: TestContext) {
     `#!${process.execPath}\nprocess.env.PIANO_TEST_GH_FIXTURE=${JSON.stringify(forge)};\nawait import(${JSON.stringify(resolvePath("test/shared/fake-gh.mjs"))});\n`,
     { mode: 0o755 },
   );
-  const serve = (headRepo: string, baseRepo: string, base = "release") => {
+  const serve = (
+    headRepo: string,
+    baseRepo: string,
+    base = "release",
+    renamedRepos: Record<string, string> = {},
+  ) => {
     const [login, name] = headRepo.split("/");
     writeFileSync(
       forge,
       JSON.stringify({
+        renamedRepos,
         prs: [
           {
             url: `https://github.com/${baseRepo}/pull/7`,
@@ -360,28 +366,39 @@ test("INV-01/07: a fork PR uses only its base repository's locally held remote r
 });
 
 for (const host of ["github.com", "github.int.exe.xyz"] as const)
-  for (const [layout, fork, extra] of [
-    ["a fork tracked at a remote named -fork", "-fork", []],
-    ["a fork at origin beside a remote named -archive", "origin", ["-archive"]],
+  for (const [layout, fork, extra, tracked, upstream] of [
+    ["a fork tracked at a remote named -fork", "-fork", [], "me/fork", "up/repo"],
+    [
+      "a fork at origin beside a remote named -archive",
+      "origin",
+      ["-archive"],
+      "me/fork",
+      "up/repo",
+    ],
+    ["a fork tracked at its pre-rename URL", "origin", [], "me/old-fork", "up/repo"],
+    ["an upstream fetched at its pre-rename URL", "origin", [], "me/fork", "up/old-name"],
   ] as const)
     test(`${host}: with ${layout}, discovery and both Changes scopes reach the upstream base`, async (t) => {
       const f = await fixture(t);
       f.git(f.repo, "remote", "remove", "origin");
-      f.git(f.repo, "remote", "add", "--", fork, `https://${host}/me/fork.git`);
-      f.git(f.repo, "remote", "add", "parent", `https://${host}/up/repo.git`);
+      f.git(f.repo, "remote", "add", "--", fork, `https://${host}/${tracked}.git`);
+      f.git(f.repo, "remote", "add", "parent", `https://${host}/${upstream}.git`);
       for (const name of extra)
         f.git(f.repo, "remote", "add", "--", name, "https://git.example/archive/repo.git");
       f.git(f.repo, "update-ref", `refs/remotes/${fork}/feature`, "feature");
       f.git(f.worktree, "branch", `--set-upstream-to=${fork}/feature`);
       f.git(f.repo, "update-ref", "refs/remotes/parent/release", "main");
-      f.serve("me/fork", "up/repo");
+      f.serve("me/fork", "up/repo", "release", {
+        "me/old-fork": "me/fork",
+        "up/old-name": "up/repo",
+      });
       const found = await f.discover();
       assert.equal(found.error, undefined);
       assert.equal(found.pullRequest?.number, 7, JSON.stringify(found));
-      assert.deepEqual([found.link?.headRepo, found.link?.baseRepo], ["me/fork", "up/repo"]);
       for (const scope of ["branch", "uncommitted"] as const) {
         const changes = ready(await f.read(f.worktree, "one", { scope }));
         assert.equal(changes.comparison.scope, scope);
+        assert.equal(changes.pullRequestFromBranch, true);
         if (scope === "branch") {
           assert.equal(changes.comparison.target?.ref, "refs/remotes/parent/release");
           assert.equal(changes.comparison.target?.from, "pull-request");
@@ -391,6 +408,7 @@ for (const host of ["github.com", "github.int.exe.xyz"] as const)
           );
         }
       }
+      assert.deepEqual([found.link?.headRepo, found.link?.baseRepo], [tracked, upstream]);
     });
 
 test("legacy links do not retarget until a successful refresh proves repository identities", async (t) => {
