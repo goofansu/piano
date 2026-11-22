@@ -239,8 +239,6 @@ export function createClient({
     if (m._tag === "error") notify(m.message, "error");
     else if (elsewhere) notify(`Could not start session: ${m.message}`, "error");
     else if (m._tag === "toast") notify(m.message, m.level);
-    else if (m._tag === "action_result" && m.result._tag === "queue_restored" && m.result.stopError)
-      notify(m.result.stopError, "error");
     else if (notifySession && m._tag === "session" && m.event._tag === "notice")
       notify(m.event.message, m.event.level);
     else if (

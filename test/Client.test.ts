@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { trustCommand } from "../features/commands/web/globalCommands.ts";
 import { createModelCatalogs } from "../features/models/web/modelCatalogs.ts";
-import { createDrafts } from "../features/sessions/web/composer/messageDraft.ts";
+import {
+  createDrafts,
+  QUEUE_IMAGES_REMOVED_NOTICE,
+  QUEUE_RESTORED_NOTICE,
+} from "../features/sessions/web/composer/messageDraft.ts";
 import { pendingDialogs } from "../features/sessions/web/dialogs/piDialogs.ts";
 import type {
   ConnectionHandlers,
@@ -359,8 +363,10 @@ test("notifications: applied session notices notify; rejected frames do not", ()
   ]);
 });
 
-test("a restored queue reports only a failed stop; the drafts announce what was restored", () => {
+test("a restored queue is announced once, by the drafts: a failed stop alone, otherwise what reached the draft", () => {
   const h = harness();
+  const drafts: Array<[string, NotifyLevel]> = [];
+  createDrafts().follow(h.client, (message, level) => drafts.push([message, level]));
   h.status(true);
   const restored = (
     messages: { kind: "steering" | "follow-up"; text: string }[],
@@ -372,7 +378,6 @@ test("a restored queue reports only a failed stop; the drafts announce what was 
     result: { _tag: "queue_restored", messages, ...(stopError ? { stopError } : {}) },
   });
   h.server(restored([]));
-  assert.deepEqual(h.notes, [], "Stop with nothing queued restores nothing");
   h.server(restored([{ kind: "follow-up", text: "" }]));
   h.server(
     restored([
@@ -387,7 +392,15 @@ test("a restored queue reports only a failed stop; the drafts announce what was 
       { kind: "steering", text: "typed" },
     ]),
   );
-  assert.deepEqual(h.notes, [["Stop failed: no", "error"]]);
+  h.server(restored([], "Stop failed: nothing queued"));
+  assert.deepEqual(h.notes, [], "the client adds no toast of its own");
+  assert.deepEqual(drafts, [
+    [QUEUE_IMAGES_REMOVED_NOTICE, "info"],
+    [QUEUE_IMAGES_REMOVED_NOTICE, "info"],
+    ["Stop failed: no", "error"],
+    [QUEUE_RESTORED_NOTICE, "info"],
+    ["Stop failed: nothing queued", "error"],
+  ]);
 });
 
 for (const tag of ["stop", "restore_queue"] as const) {

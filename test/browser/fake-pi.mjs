@@ -49,6 +49,7 @@ let thinkingLevel = arg("--thinking") ?? settings.defaultThinkingLevel ?? "mediu
 let sessionName = arg("--name");
 let streaming = false;
 let streamTimer;
+let refuseStop = false;
 const steering = [],
   followUp = [];
 const queueUpdate = () =>
@@ -197,6 +198,10 @@ function handle(cmd) {
       return respond(cmd, restored);
     }
     case "abort":
+      if (refuseStop) {
+        refuseStop = false;
+        return respond(cmd, undefined, "fake Pi refused to stop");
+      }
       clearInterval(streamTimer);
       streaming = false;
       out({ type: "agent_end", messages: [], willRetry: false });
@@ -265,7 +270,8 @@ function handle(cmd) {
           clearInterval(streamTimer);
           reply("released");
         }, 50);
-      } else if (cmd.message !== "hold") reply(`echo: ${cmd.message}`);
+      } else if (cmd.message === "hold, refuse stop") refuseStop = true;
+      else if (cmd.message !== "hold") reply(`echo: ${cmd.message}`);
       return;
     }
     default:

@@ -1217,15 +1217,15 @@ for (const mode of ["success", "abort-failure", "abort-exit", "clear-failure", "
         assert.deepEqual(result.messages, expected);
         assert.equal((yield* session.state).isStopping, false);
         assert.deepEqual((yield* session.state).queuedMessages, []);
-        if (mode === "abort-failure" || mode === "abort-exit") {
+        if (mode === "abort-failure")
+          assert.equal(result.stopError, "Could not stop Pi: fixture abort failed");
+        else if (mode === "abort-exit")
           assert.match(
             result.stopError ?? "",
-            /Stop failed:/,
+            /^Could not stop Pi: \S/,
             "partial failure must reach the caller even after the event stream closes",
           );
-          if (mode === "abort-failure")
-            assert.match(result.stopError ?? "", /fixture abort failed/);
-        } else {
+        else {
           assert.equal(result.stopError, undefined);
           assert.equal(
             (yield* session.state).dialogResolution?.reason,

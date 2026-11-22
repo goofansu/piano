@@ -1006,6 +1006,44 @@ await run(
     await page.press("Backspace");
     await page.ab("wait", 'button[aria-label="Stop"]');
     await page.click("button", "Stop");
+    await page.ab("wait", 'button[aria-label="Send"]');
+    const aborts = () => page.received().filter((r) => r.command === "abort").length;
+    const abortsBefore = aborts();
+    await page.ab("fill", '[aria-label="Message"]', "hold, refuse stop");
+    await page.press("Enter");
+    await page.ab("wait", 'button[aria-label="Stop"]');
+    await page.ab("fill", '[aria-label="Message"]', "Kept after a refused Stop");
+    await page.press("Enter");
+    await page.ab("wait", 'button[aria-label="Edit queued message"]');
+    await page.evaluate(`(() => {
+      const earlier = new Set(document.querySelectorAll('[data-sonner-toast]'));
+      window.toastsAfterStop = () =>
+        [...document.querySelectorAll('[data-sonner-toast]')]
+          .filter((t) => !earlier.has(t))
+          .map((t) => t.innerText.trim());
+    })()`);
+    await page.click("button", "Stop");
+    await page.see("Could not stop Pi: fake Pi refused to stop");
+    assert.equal(
+      await page.evaluate(`document.querySelector('[aria-label="Message"]').value`),
+      "Kept after a refused Stop",
+    );
+    assert.deepEqual(
+      await page.evaluate("window.toastsAfterStop()"),
+      ["Could not stop Pi: fake Pi refused to stop"],
+      "a refused Stop shows its error alone; the returned text is already in the draft",
+    );
+    await page.until(
+      `document.querySelector('[data-session-key*="login-bug"]')?.innerText.includes('working')`,
+    );
+    await page.capture("26b-stop-refused");
+    await page.ab("focus", '[aria-label="Message"]');
+    await page.press("Escape");
+    await page.ab("wait", 'button[aria-label="Send"]');
+    assert.equal(aborts(), abortsBefore + 2, "Esc retries the Stop Pi refused");
+    await page.ab("focus", '[aria-label="Message"]');
+    await page.press("Mod+a");
+    await page.press("Backspace");
     await homeActivity(page);
   },
 );
