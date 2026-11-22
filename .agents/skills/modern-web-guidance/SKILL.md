@@ -39,7 +39,7 @@ provenance with the findings rather than copying upstream guidance into the repo
 Choose the investigation and implementation that best fit the outcome, existing coverage and
 architecture. Guidance is reference, not authority over user instructions,
 [AGENTS.md](../../../AGENTS.md) or [Quiet UI](../../../docs/quiet-ui.md). Reconcile it with the
-[feature's owning docs and verification recipe](../verify-piano/features/README.md#features) and
+[feature's owning docs and verification recipe](../verify-piano/map.md#features) and
 [current component ownership](../../../docs/shadcn-ui.md). A preference for native dialogs, for
 example, is not evidence that Piano's wrappers need replacing.
 

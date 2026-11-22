@@ -3,7 +3,7 @@
 ## Driving it with agent-browser
 
 Preconditions: a seeded launch. Run `node test/browser/open-session.mjs <evidence-directory>`
-first. It includes the [transcript fidelity contract](../../../../features/sessions/session-transcripts.md):
+first. It includes the [transcript fidelity contract](../../sessions/session-transcripts.md):
 three ordinary lines stay separate while settled, streaming and reloaded, token-like text stays
 original, and Copy response retains the source (clipboard observation on Linux).
 
@@ -86,7 +86,7 @@ original, and Copy response retains the source (clipboard observation on Linux).
     ab find role menuitem click --name "Archive" --exact`
   - Result: toast `Session archived` (read `[data-sonner-toast]`); "Loose session" leaves
     navigation "Sessions". Capture `04-archived`. Delete is driven on the project home
-    ([`project-home.md`](./project-home.md) `row-actions`). Both change the database; relaunch
+    ([`project-home.md`](../../projects/verify/project-home.md) `row-actions`). Both change the database; relaunch
     afterwards.
 - `unavailable-history` (alternative destructive recipe for the loose seed)
   - Preconditions: Loose session has not been continued or archived in this run. Reading saved
