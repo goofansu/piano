@@ -1,6 +1,5 @@
 # Shared by the verify-piano scripts; sourced, never run on its own.
 # Puts exe.dev's Node and user-installed tools on PATH when present, and locates the skill and the repo.
-# A root systemd job, as a hosted deploy runs doctor.sh --deployed, has no HOME.
 for d in ${HOME:+"$HOME/node/bin" "$HOME/.local/bin"}; do
   if [ -d "$d" ]; then
     case ":$PATH:" in *":$d:"*) ;; *) PATH="$d:$PATH" ;; esac

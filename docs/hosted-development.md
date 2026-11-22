@@ -1,18 +1,15 @@
 # Hosted deployment
 
 Shared policy for Piano on private exe.dev VMs. This describes the repository's deployment layout,
-not the observed state of any particular VM. Resolve the requested machine, installed checkout and
-revision before acting; an old hostname or a development worktree is not a deployment target.
+not the observed state of any particular VM.
 
-## Deployment routes
+## Deployment route
 
-| Request | Procedure |
-| --- | --- |
-| Provision a new VM | User-invoked [deploy-exe-dev](../.agents/skills/deploy-exe-dev/SKILL.md), including its fresh-VM reference and completion checks. It does not update existing machines. |
-| Update all tagged Piano VMs | User-invoked [sync-exe-dev](../.agents/skills/sync-exe-dev/SKILL.md). It freezes one SHA, builds locally without restarting local services, and gates remote restarts on idle RPC processes. |
-| Update one existing VM | The authorized [existing-machine update](#deliberate-updates) below. Do not substitute fresh-VM provisioning or all-machine sync. |
-| Check deployment health without changing it | The read-only [verify-piano doctor](../.agents/skills/verify-piano/SKILL.md#a-deployed-instance). |
-| Verify application behavior | [Scratch verification](../AGENTS.md#scratch-instance), not the user's live database or sessions. |
+Deploy with the user-invoked [deploy-exe-dev](../.agents/skills/deploy-exe-dev/SKILL.md) skill, run
+on the VM being deployed. It covers both a fresh install and an update of an existing checkout to
+latest `main`. Deployment never goes through `ssh` or `ssh exe.dev`: there is no remote
+provisioning, fleet sync or remote health check. To verify application behavior, use
+[scratch verification](../AGENTS.md#scratch-instance), not the user's live database or sessions.
 
 ## Supported layout
 
@@ -27,32 +24,14 @@ for development. A proxy-only restart does not restart the backend or its Pi chi
 
 ## Deliberate updates
 
-Coding, committing and pushing do not authorize deployment. An explicit single-machine deploy
-request authorizes the build/install and prompt backend restart, even if it interrupts active Pi
-work, including the deploying session. Do not wait for idle or ask again for that interruption.
-The `sync-exe-dev` skill has a different, explicit idle-session gate; do not bypass it.
-
-For an authorized update to an existing machine:
-
-1. Confirm the requested target revision and installed checkout. Preserve unrelated changes,
-   database, Pi history, credentials and access configuration. Use existing verification evidence;
-   deploy-only work does not require rerunning the development suite.
-2. Install changed dependencies and run `npm run build` in that checkout. If unit files changed,
-   install only the intended templates with the configured origin, then daemon-reload.
-3. Restart `piano.service` from an external terminal or independent systemd job, outside its
-   process tree, so the restart and health checks survive the deploying session's termination.
-   A frontend-only deployment still includes the requested backend restart. Do not restart the
-   proxy unless its configuration changed.
-4. Retain this run's deployed SHA and health output. Use a unique root-owned log under
-   `/var/log/piano-deploy/` for root-owned jobs; root may be unable to write another user's `/tmp`
-   file under `fs.protected_regular`. A queued restart or an old `DEPLOY OK` is not completion.
-5. After startup, run `.agents/skills/verify-piano/scripts/doctor.sh --deployed` from the checkout
-   on the target VM. Require exit 0 and confirm the checkout SHA equals the requested SHA. The
-   doctor checks active units, listener ownership, serving health and coarse checkout/build/start
-   ordering; it does not prove the build's exact contents or application/session behavior.
-
-Report the target, SHA, actual outcome and evidence location, and ask the user to reload the
-browser. A failed or unreachable check is a limitation or blocker, not a pass.
+Coding, committing and pushing do not authorize deployment. An explicit deploy request authorizes
+the build/install and prompt backend restart, even if it interrupts active Pi work, including the
+deploying session. Do not wait for idle or ask again for that interruption. Preserve unrelated
+local changes, the database, Pi history, credentials and access configuration: an update only
+fast-forwards a clean checkout. Restart `piano.service` from an independent systemd job, outside
+its control group, and run the completion check in that same job, logging to a root-owned file
+under `/var/log/piano-deploy/`, so the restart and its health check survive the deploying session's
+termination. Do not restart the proxy unless its configuration changed.
 
 ## Private access
 
@@ -61,14 +40,10 @@ Both listeners must stay on loopback, with exe.dev private authenticated access 
 and WebSockets. Missing built-in login is not alone evidence of a vulnerability; public exposure
 or a requirement for untrusted users would change the accepted deployment model.
 
-For provisioning or access-configuration changes, run
-`.agents/skills/verify-piano/scripts/doctor.sh --deployed-auth <vm>` wherever `ssh exe.dev` works
-and retain its output. It reads `ssh exe.dev share show <vm> --json` and requires private access,
-port 8000 and no user, link or team shares. That is exe.dev's own access setting; an HTTPS probe
-from outside answers from exe.dev's proxy whether or not Piano is running, and its reply format
-has changed before. Whether Piano serves is `--deployed`'s loopback check on the VM. Inspect the
-actual listening addresses; listener ownership alone does not establish loopback-only binding.
-Keep generated previews on separate origins and do not change the primary proxy route for them.
+Private access is an exe.dev setting that the VM cannot read; an HTTPS probe answers from exe.dev's
+proxy whether or not Piano is running, and its reply format has changed before. The user confirms
+in exe.dev that the VM is private, shares port 8000, and has no user, link or team shares. Keep
+generated previews on separate origins and do not change the primary proxy route for them.
 
 ## Origin configuration
 
