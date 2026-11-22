@@ -9,7 +9,7 @@ Deploy with the user-invoked [deploy-exe-dev](../.agents/skills/deploy-exe-dev/S
 on the VM being deployed. It covers both a fresh install and an update of an existing checkout to
 latest `main`. Deployment never goes through `ssh` or `ssh exe.dev`: there is no remote
 provisioning, fleet sync or remote health check. To verify application behavior, use
-[scratch verification](../AGENTS.md#scratch-instance), not the user's live database or sessions.
+[scratch verification](testing.md#scratch-instance), not the user's live database or sessions.
 
 ## Supported layout
 
