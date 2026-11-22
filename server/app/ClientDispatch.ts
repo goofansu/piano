@@ -97,6 +97,8 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
   const status = yield* SessionStatus;
   const sessions = yield* makeClientSessions(output);
   const { send } = output;
+  const socketScope = yield* Effect.scope;
+  const readingQueues = new Set<string>();
 
   const projectRequest = <R extends ClientRequest>(
     run: (request: R) => Effect.Effect<string, unknown>,
@@ -178,6 +180,24 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
       }),
       confirmed: null,
     },
+    queue_receipt: {
+      admission: "immediate",
+      run: Effect.fn("ClientDispatch.queueReceipt")(function* ({ queueRequestId, operation }) {
+        if (operation === "ack") return yield* hosts.queueReceipts.ack(queueRequestId);
+        if (readingQueues.has(queueRequestId)) return;
+        readingQueues.add(queueRequestId);
+        yield* hosts.queueReceipts
+          .read(queueRequestId)
+          .pipe(
+            Effect.flatMap(send),
+            Effect.catchTag("DeliveryOverflow", output.overflow),
+            Effect.ensuring(Effect.sync(() => readingQueues.delete(queueRequestId))),
+            Effect.forkIn(socketScope, { startImmediately: true }),
+          );
+      }),
+      unanswered: plainError,
+      confirmed: null,
+    },
     act: {
       admission: ({ action }) =>
         sessionActionPolicy[action._tag].priority ? "control" : "ordinary",
@@ -186,6 +206,7 @@ export const makeClientDispatch = Effect.fn("ClientDispatch.make")(function* (
         _tag: "error",
         message: unansweredText(reason),
         selectionId,
+        ...("queueRequestId" in action && { queueRequestId: action.queueRequestId }),
         ...("inputId" in action &&
         action.inputId !== undefined &&
         (reason._tag !== "failed" || reason.error instanceof InputNotSent)

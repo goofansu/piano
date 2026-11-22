@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
-import { Deferred, Effect, Fiber, Layer, Queue, type Scope, Stream } from "effect";
+import { Deferred, Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect";
 import { saveProject } from "../../../features/projects/server/ProjectCommands.ts";
 import { makeClientSessions } from "../../../features/sessions/server/ClientSessions.ts";
 import {
@@ -23,8 +23,10 @@ import {
 } from "../../../features/sessions/server/CreationAttempts.ts";
 import { PiCli } from "../../../features/sessions/server/pi/PiCli.ts";
 import { type PiSession, PiSessionsLive } from "../../../features/sessions/server/pi/PiSessions.ts";
+import { makeQueueReceipts } from "../../../features/sessions/server/QueueReceipts.ts";
 import { SessionHosts } from "../../../features/sessions/server/SessionHosts.ts";
 import { SessionServicesLive } from "../../../server/app/PianoServices.ts";
+import { socketLimits } from "../../../server/shared/BoundedDelivery.ts";
 import {
   Registry,
   RegistryDatabasePath,
@@ -95,6 +97,75 @@ const resultFor = (sent: ServerMessage[]) =>
   sent
     .filter((m) => m._tag === "action_result")
     .map((m) => m._tag === "action_result" && m.sessionId);
+
+for (const operation of ["stop", "restore_queue"] as const) {
+  test(`a disconnected ${operation} returns Pi's cleared queue to a receipt reader`, async () => {
+    await run(
+      Effect.gen(function* () {
+        const hosts = yield* SessionHosts;
+        const session = yield* started("stop-concurrent");
+        const scope = yield* Scope.make();
+        const { sessions, next } = yield* client.pipe(Scope.provide(scope));
+        yield* yield* sessions.select({ cwd, sessionId: session.spec.sessionId, selectionId: "a" });
+        yield* sessions.act("a", { _tag: "prompt", text: "ask queue" });
+        yield* sessions.act("a", { _tag: "prompt", text: "expand queue" });
+        yield* next(
+          (m) =>
+            m._tag === "session" &&
+            m.event._tag === "queue_update" &&
+            m.event.messages.length === 1,
+        );
+        const queueRequestId = crypto.randomUUID();
+        yield* sessions.act("a", { _tag: operation, queueRequestId }).pipe(Effect.forkIn(scope));
+        yield* next(
+          (m) =>
+            m._tag === "session" && m.event._tag === "queue_update" && !m.event.messages.length,
+        );
+        yield* Scope.close(scope, Exit.void);
+        const reading = yield* hosts.queueReceipts.read(queueRequestId).pipe(Effect.forkChild);
+        yield* session.commands;
+        const reply = yield* Fiber.join(reading);
+        assert.deepEqual(reply, {
+          _tag: "action_result",
+          cwd,
+          sessionId: session.spec.sessionId,
+          queueRequestId,
+          result: {
+            _tag: "queue_restored",
+            messages: [{ kind: "follow-up", text: "expanded follow-up" }],
+          },
+        });
+        assert.deepEqual(yield* hosts.queueReceipts.read(queueRequestId), reply);
+        yield* hosts.queueReceipts.ack(queueRequestId);
+        assert.equal((yield* hosts.queueReceipts.read(queueRequestId))._tag, "error");
+      }),
+    );
+  });
+}
+
+test("checking an unclaimed queue action prevents a late clear, even while other actions fill the byte budget", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const receipts = yield* makeQueueReceipts;
+      const held = yield* Deferred.make<Extract<ServerMessage, { _tag: "error" }>>();
+      const request = Deferred.await(held);
+      yield* receipts.run("one", request).pipe(Effect.forkChild({ startImmediately: true }));
+      yield* receipts.run("two", request).pipe(Effect.forkChild({ startImmediately: true }));
+      const unclaimed = yield* receipts.read("late");
+      assert.equal(unclaimed._tag, "error");
+      yield* Deferred.succeed(held, { _tag: "error", message: "First actions complete" });
+      yield* receipts.read("one");
+      assert.deepEqual(
+        yield* receipts.run("late", Effect.die("late clear must not run")),
+        unclaimed,
+      );
+      for (let i = 3; i < socketLimits.queue.messages; i++) yield* receipts.read(String(i));
+      assert.equal((yield* receipts.read("overflow").pipe(Effect.flip)).oversized, false);
+      yield* receipts.ack("one");
+      assert.equal((yield* receipts.read("overflow"))._tag, "error");
+    }).pipe(Effect.scoped),
+  );
+});
 
 test("INV-01/02: selecting saved history spends one discovery read budget without starting Pi", async (t) => {
   const store = mkdtempSync(join(root, "selection-history-"));

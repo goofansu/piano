@@ -304,7 +304,7 @@ export const observeGit = Effect.fn("GitCheckout.observeGit")(function* (
   );
 });
 
-class CheckoutError extends Error {
+export class CheckoutError extends Error {
   readonly reason: "root" | "limit" | "encoding" | "incomplete" | "path";
   constructor(reason: CheckoutError["reason"], message: string) {
     super(message);

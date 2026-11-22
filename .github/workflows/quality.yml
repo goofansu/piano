@@ -74,7 +74,7 @@ jobs:
       # Same preload and file glob as npm test. Node partitions all files across the shards;
       # keep options before the glob (npm test -- --test-shard=... would not shard).
       - name: Test (fake Pi, no model credentials)
-        run: node --test --test-shard=${{ matrix.shard }}/8 --import ./test/setup.ts 'test/**/*.test.ts' 'features/*/tests/**/*.test.ts'
+        run: node --test --test-shard=${{ matrix.shard }}/8 --import ./test/setup.ts 'test/**/*.test.ts' 'features/*/test/**/*.test.ts'
 
   # Preserve the existing required-check name. A skipped/cancelled/failed dependency must
   # never turn into a passing (or skipped) gate, including a failure in just one matrix leg.

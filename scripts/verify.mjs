@@ -15,7 +15,7 @@ if (process.argv.includes("--help")) {
 Runs npm run typecheck, npm run lint, npm test. No browser or model calls.
 Reports lines changed in the test directories since origin/main, uncommitted and new files included.
 Fresh checkout: npm ci (see docs/development.md).
-Focused: node --test --import ./test/setup.ts features/<feature>/tests/<name>.test.ts
+Focused: node --test --import ./test/setup.ts features/<feature>/test/<name>.test.ts
 Browser: npm run test:browser (or node test/browser/<journey>.mjs <evidence-directory>)
 Policy, prerequisites and manual scratch checks: docs/testing.md, .agents/skills/verify-piano/SKILL.md
 Evidence defaults to .scratch/verify/<timestamp>-<pid>; a pass covers only this baseline.`);

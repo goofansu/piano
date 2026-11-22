@@ -353,19 +353,48 @@ export const makeClientSessions = Effect.fn("ClientSessions.make")(function* (
     start?: StartOptions,
   ) {
     const inputId = "inputId" in action ? action.inputId : undefined;
-    const session = yield* target(selectionId, start).pipe(
-      Effect.mapError((cause) =>
-        inputId === undefined ? cause : new InputNotSent({ inputId, detail: cause.detail, cause }),
-      ),
-    );
-    const result = yield* deliver(session, action);
-    if (result)
-      yield* send({
-        _tag: "action_result",
-        cwd: session.spec.cwd,
-        sessionId: session.spec.sessionId,
-        result,
-      });
+    const queueRequestId = "queueRequestId" in action ? action.queueRequestId : undefined;
+    const result = Effect.gen(function* () {
+      const session = yield* target(selectionId, start).pipe(
+        Effect.mapError((cause) =>
+          inputId === undefined
+            ? cause
+            : new InputNotSent({ inputId, detail: cause.detail, cause }),
+        ),
+      );
+      const result = yield* deliver(session, action);
+      return (
+        result && {
+          _tag: "action_result" as const,
+          cwd: session.spec.cwd,
+          sessionId: session.spec.sessionId,
+          result,
+        }
+      );
+    });
+    if (queueRequestId) {
+      const work = result.pipe(
+        Effect.match({
+          onSuccess: (reply) =>
+            reply
+              ? { ...reply, queueRequestId }
+              : {
+                  _tag: "error" as const,
+                  queueRequestId,
+                  message: "Pi did not return the cleared queue.",
+                },
+          onFailure: (error) => ({
+            _tag: "error" as const,
+            queueRequestId,
+            selectionId,
+            message: error.detail,
+          }),
+        }),
+      );
+      return yield* send(yield* hosts.queueReceipts.run(queueRequestId, work));
+    }
+    const reply = yield* result;
+    if (reply) yield* send(reply);
   });
 
   const recheck = Effect.gen(function* () {

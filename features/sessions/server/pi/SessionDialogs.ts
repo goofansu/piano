@@ -37,7 +37,28 @@ export const makeSessionDialogs = ({
   publication,
   abortInProgress,
 }: SessionDialogsOptions) => {
-  const closed = new Map<string, Deferred.Deferred<void>>();
+  const closed = new Map<string, { signal: Deferred.Deferred<void>; sequence: number }>();
+  let commandDialogSequence = 0;
+  let lastCommandDialogClosedAt = 0;
+
+  // Pi gives extension dialogs their own ID, without the originating prompt RPC ID.
+  const waitForCommandDialogs = () => {
+    const before = commandDialogSequence;
+    return (graceMs: number) =>
+      Effect.gen(function* () {
+        while (commandDialogSequence > before) {
+          const open = [...closed.values()].filter((dialog) => dialog.sequence > before);
+          if (open.length) {
+            yield* Effect.forEach(open, ({ signal }) => Deferred.await(signal), { discard: true });
+          } else {
+            const remaining =
+              lastCommandDialogClosedAt + graceMs - (yield* Clock.currentTimeMillis);
+            if (remaining <= 0) return;
+            yield* Effect.sleep(remaining);
+          }
+        }
+      }).pipe(Effect.timeoutOption(recoveryMs + graceMs), Effect.asVoid);
+  };
   const ownedReceipt = (resolution: DialogResolution | undefined, toolCallId?: string) =>
     resolution?.generation === generation &&
     resolution.toolCallId !== undefined &&
@@ -137,9 +158,12 @@ export const makeSessionDialogs = ({
     transaction: PublicationTransaction,
     resolution: DialogResolution,
   ) {
-    const signal = closed.get(resolution.id);
-    if (signal) yield* Deferred.succeed(signal, undefined);
-    closed.delete(resolution.id);
+    const waiting = closed.get(resolution.id);
+    if (waiting) {
+      if (waiting.sequence) lastCommandDialogClosedAt = yield* Clock.currentTimeMillis;
+      closed.delete(resolution.id);
+      yield* Deferred.succeed(waiting.signal, undefined);
+    }
     yield* transaction.publish({ _tag: "dialog_resolved", resolution });
     const state = yield* publication.state;
     if (state.dialogResolution && unsettled(state.dialogResolution) && !resolution.answer) return;
@@ -254,13 +278,16 @@ export const makeSessionDialogs = ({
         : { ...request, deadlineAt: null, deadlineKind: "tool-end" };
     if (toolCallId !== undefined)
       yield* advance(transaction, { _tag: "question-opened", toolCallId });
-    closed.set(dialog.id, yield* Deferred.make<void>());
+    closed.set(dialog.id, {
+      signal: yield* Deferred.make<void>(),
+      sequence: dialog.deadlineAt === null ? 0 : ++commandDialogSequence,
+    });
     yield* transaction.publish({ _tag: "dialog", dialog });
     return dialog;
   });
 
   const watch = Effect.fnUntraced(function* (dialog: Dialog) {
-    const signal = closed.get(dialog.id);
+    const signal = closed.get(dialog.id)?.signal;
     if (!signal) return;
     const abort = abortInProgress();
     yield* Effect.gen(function* () {
@@ -340,5 +367,5 @@ export const makeSessionDialogs = ({
   const runStarted = (transaction: PublicationTransaction) =>
     advance(transaction, { _tag: "run-started" });
 
-  return { opened, watch, answer, toolEnded, runStarted, resolveAll };
+  return { opened, watch, answer, toolEnded, runStarted, resolveAll, waitForCommandDialogs };
 };

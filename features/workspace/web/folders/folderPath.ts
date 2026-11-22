@@ -26,8 +26,15 @@ export function listing(
   return { matches, visible, hidden: matches.length - visible.length };
 }
 
-export function pickTarget(dirPath: string, matches: readonly DirEntry[], prefix: string): string {
-  return prefix && matches.length === 1 ? matches[0].path : dirPath;
+export function pickTarget(
+  dirPath: string,
+  matches: readonly DirEntry[],
+  prefix: string,
+): string | undefined {
+  if (!prefix) return dirPath;
+  return matches.length === 1
+    ? matches[0].path
+    : matches.find((entry) => entry.name === prefix)?.path;
 }
 
 export function childPath(parent: string, name: string): { path: string } | { error: string } {

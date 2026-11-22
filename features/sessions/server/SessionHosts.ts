@@ -26,6 +26,7 @@ import {
 } from "../../../shared/wire.ts";
 import type { StartingAttempt } from "./CreationAttempts.ts";
 import { type PiSession, PiSessionError, type PiSessions } from "./pi/PiSessions.ts";
+import { makeQueueReceipts } from "./QueueReceipts.ts";
 import {
   type CloseHow,
   listedFacts,
@@ -83,6 +84,7 @@ const reopenFailed = (e: PiSessionError) => e;
 export class SessionHosts extends Context.Service<
   SessionHosts,
   {
+    readonly queueReceipts: Effect.Success<typeof makeQueueReceipts>;
     readonly get: (
       cwd: string,
       sessionId: string,
@@ -591,6 +593,7 @@ export const SessionHostsLive = <R>(
         }),
       );
       return SessionHosts.of({
+        queueReceipts: yield* makeQueueReceipts,
         open,
         start: (spec) => start(spec, reopenFailed),
         commands,

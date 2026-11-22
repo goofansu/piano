@@ -293,7 +293,8 @@ export function createDrafts(): Drafts {
       source.listen((m) => {
         const verdict = inputVerdictOf(m);
         if (verdict)
-          if (verdict.outcome === "not_sent") giveBack(verdict.inputId, sessionOf(m, source));
+          if (verdict.outcome === "not_sent" || verdict.outcome === "rejected")
+            giveBack(verdict.inputId, sessionOf(m, source));
           else unconfirmed.delete(verdict.inputId);
         else if (
           m._tag === "action_result" &&

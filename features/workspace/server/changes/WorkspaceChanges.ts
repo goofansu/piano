@@ -17,7 +17,12 @@ import type {
   WorkspaceWrittenFiles as WrittenObservation,
 } from "../../contracts/files/http.ts";
 import { place, spell } from "../files/WorkspaceFiles.ts";
-import { type Checkout, type CheckoutObservation, observeCheckout } from "../GitCheckout.ts";
+import {
+  type Checkout,
+  CheckoutError,
+  type CheckoutObservation,
+  observeCheckout,
+} from "../GitCheckout.ts";
 import {
   type Comparisons,
   commitsNotPushed,
@@ -186,10 +191,13 @@ async function preview(
       let text = "";
       for (const selection of selections) {
         if (rest <= 0) return { text, truncated: true };
-        const part = await reader.excerpt(
-          [...diffArgs, ...args, "--patch", base, "--", ...selection],
-          rest,
-        );
+        const part = await reader
+          .excerpt([...diffArgs, ...args, "--patch", base, "--", ...selection], rest)
+          .catch((error: unknown) => {
+            if (path === undefined && error instanceof CheckoutError && error.reason === "encoding")
+              return { text: "", truncated: true };
+            throw error;
+          });
         text += part.text;
         rest -= Buffer.byteLength(part.text);
         if (part.truncated) return { text, truncated: true };

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { trustCommand } from "../features/commands/web/globalCommands.ts";
 import { createModelCatalogs } from "../features/models/web/modelCatalogs.ts";
+import { createDrafts } from "../features/sessions/web/composer/messageDraft.ts";
 import { pendingDialogs } from "../features/sessions/web/dialogs/piDialogs.ts";
 import type {
   ConnectionHandlers,
@@ -12,6 +13,7 @@ import type { ClientMessage, Dialog, ServerMessage, SessionClosure } from "../sh
 import { createClient } from "../web/src/app/client.ts";
 import { type NotifyLevel } from "../web/src/shared/state/client.ts";
 import { createDialogAnswer } from "../web/src/shared/state/dialogAnswer.ts";
+import { sessionDraftKey } from "../web/src/shared/state/draftKey.ts";
 import { initialState } from "../web/src/shared/state/state.ts";
 import { sessionReference } from "./shared/sessionReference.ts";
 
@@ -387,6 +389,60 @@ test("a restored queue reports only a failed stop; the drafts announce what was 
   );
   assert.deepEqual(h.notes, [["Stop failed: no", "error"]]);
 });
+
+for (const tag of ["stop", "restore_queue"] as const) {
+  test(`a lost ${tag} receipt restores the original tab's draft once after reconnect`, () => {
+    const h = harness();
+    const peer = harness();
+    const drafts = createDrafts();
+    const other = createDrafts();
+    drafts.follow(h.client, () => {});
+    other.follow(peer.client, () => {});
+    h.status(true);
+    h.client.select("/scratch", "a");
+    h.server(h.selected("a"));
+    h.client.send({ _tag: "act", action: { _tag: tag } });
+    const sent = h.sent.at(-1);
+    assert.ok(sent?._tag === "act" && sent.action._tag === tag);
+    const queueRequestId = sent.action.queueRequestId;
+    assert.ok(queueRequestId);
+    h.client.select("/scratch", "b");
+    h.server(h.selected("b"));
+    h.status(false);
+    h.status(true);
+    assert.ok(
+      h.sent.some(
+        (m) =>
+          m._tag === "queue_receipt" &&
+          m.operation === "read" &&
+          m.queueRequestId === queueRequestId,
+      ),
+    );
+    const receipt = {
+      _tag: "action_result",
+      cwd: "/scratch",
+      sessionId: "a",
+      queueRequestId,
+      result: {
+        _tag: "queue_restored",
+        messages: [{ kind: "follow-up", text: "the text Pi returned" }],
+      },
+    } as const;
+    const key = sessionDraftKey(receipt);
+    drafts.setText(key, "a later draft");
+    for (const client of [h, h, peer]) client.server(receipt);
+    assert.equal(drafts.get(key).text, "a later draft\n\nthe text Pi returned");
+    assert.equal(other.get(key).text, "");
+    assert.equal(drafts.get(sessionDraftKey({ cwd: "/scratch", sessionId: "b" })).text, "");
+    h.status(false);
+    h.status(true);
+    assert.deepEqual(
+      h.sent.filter((m) => m._tag === "queue_receipt").map((m) => m.operation),
+      ["read", "ack"],
+    );
+    assert.equal(h.sent.filter((m) => m._tag === "act").length, 1);
+  });
+}
 
 test("answer acceptance stays in session state without a toast, including duplicate frames and snapshots", () => {
   const h = harness();

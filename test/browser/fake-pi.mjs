@@ -203,6 +203,8 @@ function handle(cmd) {
       out({ type: "agent_settled" });
       return respond(cmd);
     case "prompt": {
+      if (cmd.message === "Follow up without credentials")
+        return respond(cmd, undefined, "No API key found for the selected model");
       if (streaming) {
         if (!["steer", "followUp"].includes(cmd.streamingBehavior))
           return respond(cmd, undefined, "Agent is streaming");

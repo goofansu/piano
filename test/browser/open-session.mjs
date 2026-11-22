@@ -801,7 +801,16 @@ await run(
     await page.ab("set", "viewport", "1146", "900");
     const areasWidth = `document.querySelector('[data-slot="agent-area"]').parentElement.getBoundingClientRect().width`;
     await page.until(`${areasWidth} === 848 && !document.querySelector('[data-rail-trigger]')`);
+    const liveCheckout = join(scratchRoot, "api.live");
+    writeFileSync(join(liveCheckout, "README.md"), "Ready for release\n");
+    writeFileSync(join(liveCheckout, "roster.csv"), Buffer.from("André\n", "latin1"));
     await page.click("button", "Changes");
+    await page.see("roster.csv");
+    const readme = 'li[data-path="README.md"] button[aria-expanded]';
+    await page.ab("wait", readme);
+    if ((await page.ab("get", "attr", readme, "aria-expanded")) === "false")
+      await page.ab("click", readme);
+    await page.ab("wait", 'section[aria-label="Diff of README.md"]');
     await page.until(`!!document.querySelector('[role="tab"][aria-selected="true"]')`);
     assert.equal(
       await page.evaluate(`document.querySelector('[data-slot="agent-area"]').inert`),
@@ -947,6 +956,56 @@ await run(
     await page.open("/s/login-bug");
     await page.see("echo: Add a regression test");
     await checkMessageFidelity(page);
+    await page.ab("fill", '[aria-label="Message"]', "hold");
+    await page.press("Enter");
+    await page.ab("wait", 'button[aria-label="Stop"]');
+    await page.ab("fill", '[aria-label="Message"]', "Recover this queue edit");
+    await page.press("Enter");
+    await page.ab("wait", 'button[aria-label="Edit queued message"]');
+    await page.until(`document.querySelector('[aria-label="Message"]')?.value === ""`);
+    await page.evaluate(`(() => {
+      const send = WebSocket.prototype.send;
+      window.queueRecovery = { dropped: false, read: false };
+      let id;
+      WebSocket.prototype.send = function(data) {
+        const request = JSON.parse(data);
+        if (request.action?._tag === "restore_queue") {
+          id = request.action.queueRequestId;
+          const deliver = this.onmessage;
+          this.onmessage = event => {
+            const reply = JSON.parse(event.data);
+            if (reply._tag === "action_result" && reply.queueRequestId === request.action.queueRequestId) {
+              window.queueRecovery.dropped = true;
+              this.close();
+              return;
+            }
+            deliver.call(this, event);
+          };
+        }
+        if (request._tag === "queue_receipt" && request.operation === "read" && request.queueRequestId === id) {
+          window.queueRecovery.read = true;
+          WebSocket.prototype.send = send;
+        }
+        return send.call(this, data);
+      };
+    })()`);
+    const clears = () => page.received().filter((r) => r.command === "clear_queue").length;
+    const before = clears();
+    await page.click("button", "Edit queued message");
+    await page.until(
+      `window.queueRecovery.read && document.querySelector('[aria-label="Message"]')?.value === "Recover this queue edit"`,
+    );
+    assert.equal(
+      clears(),
+      before + 1,
+      "reconnect reads the receipt without clearing Pi's queue again",
+    );
+    assert.deepEqual(await page.evaluate("window.queueRecovery"), { dropped: true, read: true });
+    await page.ab("focus", '[aria-label="Message"]');
+    await page.press("Mod+a");
+    await page.press("Backspace");
+    await page.ab("wait", 'button[aria-label="Stop"]');
+    await page.click("button", "Stop");
     await homeActivity(page);
   },
 );

@@ -111,8 +111,8 @@ test("baseline reports changes in feature and shared tests since origin/main, un
       ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "branch"],
     ])
       execFileSync("git", args, { cwd: f.root });
-    mkdirSync(join(f.root, "features/demo/tests"), { recursive: true });
-    writeFileSync(join(f.root, "features/demo/tests/new.test.ts"), "x\ny\nz\n");
+    mkdirSync(join(f.root, "features/demo/test"), { recursive: true });
+    writeFileSync(join(f.root, "features/demo/test/new.test.ts"), "x\ny\nz\n");
     const result = f.run("changed");
     const { added, removed, files } = f.record("changed").testLines;
     assert.deepEqual({ added, removed, files }, { added: 7, removed: 1, files: 3 });

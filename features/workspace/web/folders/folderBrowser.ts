@@ -15,6 +15,7 @@ export interface FolderBrowserState {
   loading: boolean;
   mutating: boolean;
   ready: boolean;
+  selectedPath: string | undefined;
   creating: boolean;
   matches: readonly DirEntry[];
   visible: readonly DirEntry[];
@@ -64,6 +65,8 @@ export function createFolderBrowser({
   const derive = (): FolderBrowserState => {
     const { prefix } = parsePathInput(input);
     const { value: dir, error, loading, mutating } = observation.getState();
+    const ready = open && !!dir && !error && !loading && !mutating;
+    const entries = listing(dir?.entries ?? [], prefix);
     return {
       input,
       prefix,
@@ -71,9 +74,10 @@ export function createFolderBrowser({
       error,
       loading,
       mutating,
-      ready: open && !!dir && !error && !loading && !mutating,
+      ready,
+      selectedPath: ready ? pickTarget(dir.path, entries.matches, prefix) : undefined,
       creating,
-      ...listing(dir?.entries ?? [], prefix),
+      ...entries,
     };
   };
   let state = derive();
@@ -114,11 +118,9 @@ export function createFolderBrowser({
     setInput,
     goTo,
     pick: () => {
-      const { ready, dir, matches, prefix } = state;
-      if (!ready || !dir) return undefined;
-      const path = pickTarget(dir.path, matches, prefix);
-      lastPicked.set(path);
-      return path;
+      const { selectedPath } = state;
+      if (selectedPath !== undefined) lastPicked.set(selectedPath);
+      return selectedPath;
     },
     startCreating: () => {
       if (!state.ready || creating) return;

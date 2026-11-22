@@ -140,6 +140,38 @@ test("INV-04: competing tabs claim one supported dialog before writing; late att
 });
 
 test(
+  "a slash command can wait for a human beyond the RPC deadline and still retire",
+  { timeout: 10_000 },
+  async () => {
+    await run(
+      Effect.gen(function* () {
+        const session = yield* (yield* PiSessions).open({
+          cwd: process.cwd(),
+          sessionId: "slow-command-dialog",
+        });
+        const { dialog, prompt } = yield* openDialog(session);
+        yield* TestClock.adjust(31_000);
+        const pending = (yield* session.state).submission;
+        assert.equal(pending?.outcome, "submitting");
+        const handled = yield* watch(
+          session,
+          (event) =>
+            event._tag === "submission" &&
+            event.submission.id === pending.id &&
+            event.submission.outcome === "handled",
+        );
+        yield* session.act({ _tag: "prompt", text: "/audit", inputId: "newer" });
+        yield* session.act(answer(dialog));
+        yield* Fiber.join(prompt);
+        yield* Fiber.join(handled);
+        assert.equal((yield* session.state).submission?.inputId, "newer");
+        while (!(yield* session.state).isQuiescent) yield* Effect.yieldNow;
+      }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
+    );
+  },
+);
+
+test(
   "INV-04: estimated timeout survives attachment, rejects expired answers, and races answers only once",
   {
     timeout: 10_000,
@@ -180,6 +212,9 @@ test(
         assert.equal((yield* session.state).dialogResolution?.reason, "expired");
         assert.equal((yield* session.state).dialogResolution?.answer, undefined);
         assert.deepEqual((yield* snapshot(session)).dialogs, []);
+        yield* TestClock.adjust(500);
+        const expiredPrompt = yield* Fiber.join(first.prompt).pipe(Effect.flip);
+        assert.equal(expiredPrompt.reason, "timeout");
         const second = yield* openDialog(session, "/dialog input 1000");
         yield* Effect.all(
           [session.act(answer(second.dialog)).pipe(Effect.result), TestClock.adjust(1000)],
@@ -189,7 +224,11 @@ test(
           (yield* audit(session)).filter((record) => record.id === second.dialog.id).length <= 1,
         );
         assert.deepEqual((yield* snapshot(session)).dialogs, []);
-      }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(TestClock.layer()),
+        Effect.provideService(PiRequestTimeoutMs, 500),
+      ),
     );
   },
 );

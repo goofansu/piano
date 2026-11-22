@@ -8,7 +8,7 @@ import { Effect, Layer } from "effect";
 import { PiSettings, PiSettingsLive } from "../../../features/models/server/PiSettings.ts";
 import { PiCli } from "../../../features/sessions/server/pi/PiCli.ts";
 import { PiSessions, PiSessionsLive } from "../../../features/sessions/server/pi/PiSessions.ts";
-import { createPiCompatibilityFixture } from "../../../features/sessions/tests/fixtures/PiCompatibility.ts";
+import { createPiCompatibilityFixture } from "../../../features/sessions/test/fixtures/PiCompatibility.ts";
 import { DirectoryFactsLive } from "../../../server/app/FeatureServices.ts";
 import { DirectoryFacts } from "../../../server/shared/DirectoryFacts.ts";
 

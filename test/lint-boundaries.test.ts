@@ -41,7 +41,7 @@ test("oxlint enforces layer edges, including types, aliases and a shared bridge"
     put("shared/Thing.ts", "export type Thing = string;\n");
     put("web/src/Thing.ts", "export type Thing = string;\n");
     for (const owner of ["sessions", "navigation"])
-      for (const runtime of ["web", "server", "extension", "contracts", "tests"])
+      for (const runtime of ["web", "server", "extension", "contracts", "test"])
         put(`features/${owner}/${runtime}/Thing.ts`, "export type Thing = string;\n");
     mkdirSync(join(root, "features/sessions/node_modules"), { recursive: true });
     symlinkSync(
@@ -112,7 +112,7 @@ test("oxlint enforces layer edges, including types, aliases and a shared bridge"
         "export const load = () => import(`../../navigation/server/Thing.ts`);",
         false,
       ],
-      ["features/sessions/server/check.ts", 'export * from "../tests/Thing.ts";', false],
+      ["features/sessions/server/check.ts", 'export * from "../test/Thing.ts";', false],
       ["features/sessions/contracts/check.ts", 'export * from "node:fs";', false],
       ["features/sessions/contracts/check.ts", 'export * from "../server/Thing.ts";', false],
       [
@@ -125,15 +125,15 @@ test("oxlint enforces layer edges, including types, aliases and a shared bridge"
         'export const load = () => require("../../navigation/extension/Thing.ts");',
         false,
       ],
-      ["features/sessions/tests/check.ts", 'export * from "../server/Thing.ts";', true],
-      ["features/sessions/tests/check.ts", 'export * from "../../../test/shared/Thing.ts";', true],
+      ["features/sessions/test/check.ts", 'export * from "../server/Thing.ts";', true],
+      ["features/sessions/test/check.ts", 'export * from "../../../test/shared/Thing.ts";', true],
       [
-        "features/sessions/tests/check.ts",
+        "features/sessions/test/check.ts",
         'export * from "../../navigation/contracts/Thing.ts";',
         false,
       ],
-      ["features/sessions/tests/check.ts", 'export * from "../../../server/app/Thing.ts";', false],
-      ["test/shared/check.ts", 'export * from "../../features/sessions/tests/Thing.ts";', false],
+      ["features/sessions/test/check.ts", 'export * from "../../../server/app/Thing.ts";', false],
+      ["test/shared/check.ts", 'export * from "../../features/sessions/test/Thing.ts";', false],
       ["features/sessions/web/check.ts", 'export * from "node:fs";', false],
       ["features/sessions/extension/check.ts", 'export * from "../server/Thing.ts";', true],
       [
@@ -146,7 +146,7 @@ test("oxlint enforces layer edges, including types, aliases and a shared bridge"
         'export type { Thing } from "@features/navigation/contracts/Thing";',
         false,
       ],
-      ["features/sessions/tests/check.ts", 'export type { Thing } from "@/app/Thing";', false],
+      ["features/sessions/test/check.ts", 'export type { Thing } from "@/app/Thing";', false],
       [
         "features/sessions/server/check.ts",
         'export type { Thing } from "navigation-fixture/server/Thing.ts";',

@@ -58,10 +58,16 @@ const validResponse = Schema.is(
 
 export type PiLane = "control" | "ordinary";
 
+interface PiRequestOptions {
+  readonly lane: PiLane;
+  readonly dispatched?: Deferred.Deferred<void>;
+  readonly waitForDialog?: (graceMs: number) => Effect.Effect<void>;
+}
+
 export interface PiTransport {
   readonly request: <A>(
     exchange: PiExchange<A>,
-    options: { readonly lane: PiLane; readonly dispatched?: Deferred.Deferred<void> },
+    options: PiRequestOptions,
   ) => Effect.Effect<A, PiSessionError>;
   readonly read: <A>(readback: PiReadback<A>) => Effect.Effect<A, PiSessionError>;
   readonly write: (
@@ -455,11 +461,7 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
 
   const send = Effect.fn("PiTransport.request")(function* (
     command: Record<string, unknown>,
-    {
-      lane,
-      dispatched,
-      readback,
-    }: { lane: PiLane; dispatched?: Deferred.Deferred<void>; readback: boolean },
+    { lane, dispatched, readback, waitForDialog }: PiRequestOptions & { readback: boolean },
   ) {
     const size = inputBytes(command);
     const d = yield* Deferred.make<unknown, PiSessionError>();
@@ -476,18 +478,31 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
     pending.set(id, d);
     debug("request", id, command.type);
     const deadline = deliveryDeadline(timeoutMs, size);
+    const timeout = Effect.failSync(() => {
+      const limit = waitForDialog ? "its deadline" : `${deadline}ms`;
+      return new PiSessionError({
+        reason: "timeout",
+        detail: `Pi did not acknowledge ${command.type} within ${limit}. Delivery may have occurred; inspect the session before sending again.`,
+      });
+    });
+    let written = false;
     return yield* write({ id, ...command }, { lane }).pipe(
+      Effect.tap(() =>
+        Effect.sync(() => {
+          written = true;
+        }),
+      ),
       Effect.ensuring(dispatched ? Deferred.succeed(dispatched, undefined) : Effect.void),
       Effect.andThen(Deferred.await(d)),
       Effect.timeoutOrElse({
         duration: deadline,
         orElse: () =>
-          Effect.fail(
-            new PiSessionError({
-              reason: "timeout",
-              detail: `Pi did not acknowledge ${command.type} within ${deadline}ms. Delivery may have occurred; inspect the session before sending again.`,
-            }),
-          ),
+          written && waitForDialog
+            ? Effect.raceFirst(
+                Deferred.await(d),
+                waitForDialog(timeoutMs).pipe(Effect.andThen(timeout)),
+              )
+            : timeout,
       }),
       Effect.tapError((error) =>
         Effect.sync(() => {
@@ -505,7 +520,7 @@ const spawn = Effect.fn("PiTransport.spawn")(function* (
 
   const exchange = Effect.fnUntraced(function* <A>(
     { command, decode, invalid }: PiExchange<A>,
-    options: { lane: PiLane; dispatched?: Deferred.Deferred<void>; readback: boolean },
+    options: PiRequestOptions & { readback: boolean },
   ) {
     const value = decode(yield* send(command, options));
     if (value === undefined)

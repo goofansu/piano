@@ -330,6 +330,8 @@ export const ProviderLoginState = Schema.Struct({
 });
 export type ProviderLoginState = Types.Mutable<typeof ProviderLoginState.Type>;
 
+const QueueRequestId = Schema.String.check(Schema.isUUID());
+
 export const SessionAction = Schema.Union([
   Schema.TaggedStruct("prompt", {
     text: Schema.String,
@@ -342,8 +344,8 @@ export const SessionAction = Schema.Union([
     inputId: Schema.optional(Schema.String),
   }),
   Schema.TaggedStruct("abort", {}),
-  Schema.TaggedStruct("stop", {}),
-  Schema.TaggedStruct("restore_queue", {}),
+  Schema.TaggedStruct("stop", { queueRequestId: Schema.optional(QueueRequestId) }),
+  Schema.TaggedStruct("restore_queue", { queueRequestId: Schema.optional(QueueRequestId) }),
   Schema.TaggedStruct("set_model", { model: Schema.String }),
   Schema.TaggedStruct("set_thinking_level", { level: ThinkingLevel }),
   Schema.TaggedStruct("set_name", { name: Schema.String }),
@@ -608,6 +610,10 @@ export const ClientMessage = Schema.Union([
     action: SessionAction,
     start: Schema.optional(StartOptions),
   }),
+  Schema.TaggedStruct("queue_receipt", {
+    queueRequestId: QueueRequestId,
+    operation: Schema.Literals(["read", "ack"]),
+  }),
   Schema.TaggedStruct("ping", { nonce: Schema.String }),
   Schema.TaggedStruct("ack", { deliveryId: Schema.Number }),
   Schema.TaggedStruct("rename_session", {
@@ -692,6 +698,7 @@ export const ServerMessage = Schema.Union([
     event: SessionEvent,
   }),
   Schema.TaggedStruct("action_result", {
+    queueRequestId: Schema.optional(QueueRequestId),
     cwd: Schema.String,
     sessionId: Schema.String,
     result: SessionActionResult,
@@ -724,6 +731,7 @@ export const ServerMessage = Schema.Union([
     message: Schema.String,
   }),
   Schema.TaggedStruct("error", {
+    queueRequestId: Schema.optional(QueueRequestId),
     message: Schema.String,
     selectionId: Schema.optional(Schema.String),
     inputId: Schema.optional(Schema.String),

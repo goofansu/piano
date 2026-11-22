@@ -11,7 +11,7 @@ import {
   PiSessionsLive,
 } from "../../../../features/sessions/server/pi/PiSessions.ts";
 import { SessionHosts } from "../../../../features/sessions/server/SessionHosts.ts";
-import { createPiCompatibilityFixture } from "../../../../features/sessions/tests/fixtures/PiCompatibility.ts";
+import { createPiCompatibilityFixture } from "../../../../features/sessions/test/fixtures/PiCompatibility.ts";
 import { SessionServicesLive } from "../../../../server/app/PianoServices.ts";
 import {
   Registry,
@@ -54,7 +54,7 @@ const withHosts = async (
   copyFileSync(
     fileURLToPath(
       new URL(
-        "../../../../features/sessions/tests/fixtures/SessionReplacementExtension.ts",
+        "../../../../features/sessions/test/fixtures/SessionReplacementExtension.ts",
         import.meta.url,
       ),
     ),
