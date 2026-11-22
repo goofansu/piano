@@ -18,5 +18,5 @@ Find hot spots in `feat` and `fix` commits since the last review; `refactor` com
 ground. When no candidate qualifies, report "no useful candidates" and stop.
 
 Commits before the move to `features/` name pre-feature paths; `.git-blame-ignore-revs` lists the
-moves. Count a current file's history with `git log --follow --oneline -- <path>`, and set
-`git config blame.ignoreRevsFile .git-blame-ignore-revs` so blame reaches past them.
+moves. Count a current file's history with `git log --follow --oneline -- <path>`, and blame past
+the moves with `git blame --ignore-revs-file .git-blame-ignore-revs <path>`.
