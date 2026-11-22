@@ -443,7 +443,10 @@ const openSession = (
               ]);
             const work = Effect.gen(function* () {
               yield* submit("submitting");
-              yield* child.request(exchange, { lane }).pipe(
+              const waitForDialog = action.text.startsWith("/")
+                ? dialogs.waitForCommandDialogs()
+                : undefined;
+              yield* child.request(exchange, { lane, waitForDialog }).pipe(
                 Effect.flatMap((disposition) => submit(disposition)),
                 Effect.catchTag("PiSessionError", (error) =>
                   submit(
