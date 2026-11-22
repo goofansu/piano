@@ -15,7 +15,7 @@ writeFileSync(
   shim,
   `const keep = /^(PATH|HOME|TMPDIR|XDG_.*|PI_CODING_AGENT_.*|PIANO_.*|PI_OFFLINE|NODE_COMPILE_CACHE|NODE_DISABLE_COMPILE_CACHE)$/;
 for (const key of Object.keys(process.env)) if (!keep.test(key)) delete process.env[key];
-await import(${JSON.stringify(join(root, "server/PiRpcCli.ts"))});\n`,
+await import(${JSON.stringify(join(root, "features/sessions/server/pi/PiRpcCli.ts"))});\n`,
 );
 const modelTools = new Set();
 let modelCalls = 0;

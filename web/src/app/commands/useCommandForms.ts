@@ -1,4 +1,4 @@
-import type { ProjectFormPage } from "@features/projects/web/projectForms";
+import type { ProjectFormPage } from "@features/projects/web";
 import type { ClientCommand, ServerMessage } from "@shared/wire";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { AppState } from "@/shared/state/state";

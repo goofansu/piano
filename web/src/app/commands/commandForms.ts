@@ -1,5 +1,5 @@
-import type { CommandForm } from "../../../../features/commands/web/commands.ts";
-import { canRenameSession } from "../../../../features/commands/web/sessionCommands.ts";
+import type { CommandForm } from "../../../../features/commands/web/index.ts";
+import { canRenameSession } from "../../../../features/commands/web/index.ts";
 import {
   saveNewProject,
   deleteProject,
@@ -9,7 +9,7 @@ import {
   type ProjectDraft,
   type ProjectDraftCheck,
   projectSettingsSave,
-} from "../../../../features/projects/web/projectForms.ts";
+} from "../../../../features/projects/web/index.ts";
 import type { SendDisposition } from "../../../../shared/transport/ws.ts";
 import {
   type ClientCommand,

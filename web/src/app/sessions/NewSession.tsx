@@ -1,22 +1,23 @@
-import { useCommands } from "@features/commands/web/commandContext";
-import { type GlobalCommand, trustCommand } from "@features/commands/web/globalCommands";
-import { useModelCatalog } from "@features/models/web/useModelCatalog";
-import { useModelChoice } from "@features/models/web/useModelChoice";
-import { useSidebarLayout } from "@features/navigation/web/sidebar/useSidebarLayout";
-import { newProjectCommand, projectDestinations } from "@features/projects/web/projectActions";
-import { ProjectDestinationItems } from "@features/projects/web/Projects";
-import { completionTarget } from "@features/sessions/web/composer/completionTarget";
+import { type GlobalCommand, trustCommand } from "@features/commands/web";
+import { useCommands } from "@features/commands/web/browser";
+import { useModelCatalog, useModelChoice } from "@features/models/web/browser";
+import { useSidebarLayout } from "@features/navigation/web/browser";
 import {
+  newProjectCommand,
+  projectDestinations,
+  ProjectDestinationItems,
+} from "@features/projects/web/browser";
+import {
+  completionTarget,
   newSessionCommand,
   newSessionReady,
-} from "@features/sessions/web/composer/composerControl";
-import {
   ComposerSend,
   DraftEditor,
   useDraftEditor,
-} from "@features/sessions/web/composer/DraftEditor";
-import { directoryChoices, startPlace } from "@features/sessions/web/start/startDirectory";
-import { FolderPicker } from "@features/workspace/web/folders/FolderPicker";
+  directoryChoices,
+  startPlace,
+} from "@features/sessions/web/browser";
+import { FolderPicker } from "@features/workspace/web/browser";
 import { cn } from "cn";
 import {
   CircleOffIcon,

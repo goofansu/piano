@@ -4,12 +4,9 @@ import { fileURLToPath } from "node:url";
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
 import { HttpRouter } from "effect/http";
-import {
-  sessionEndpoint,
-  sessionEnvironment,
-} from "../features/dispatch/server/SessionEndpoint.ts";
-import { ensurePianoFolders, pianoFolder } from "../features/library/server/PianoFolders.ts";
-import { PiCli } from "../features/sessions/server/pi/PiCli.ts";
+import { sessionEndpoint, sessionEnvironment } from "../features/dispatch/server/index.ts";
+import { ensurePianoFolders, pianoFolder } from "../features/library/server/index.ts";
+import { PiCli } from "../features/sessions/server/index.ts";
 import { PianoAdaptersLive, PianoServicesLive } from "./app/PianoServices.ts";
 import { defaultPiCli } from "./app/PiLaunch.ts";
 import { AppRouter } from "./app/Router.ts";

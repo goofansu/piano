@@ -2,8 +2,6 @@ import { randomUUID } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import { Context, Data, Effect, Fiber, Layer, PubSub, Scope, Semaphore, Stream } from "effect";
 import { requireDirectory } from "../../../server/shared/Directory.ts";
-import { FolderWorktrees } from "../../../server/shared/FolderWorktrees.ts";
-import { WorktreeError } from "../../../server/shared/FolderWorktrees.ts";
 import { directoryPath } from "../../../server/shared/PiEnv.ts";
 import {
   archivable,
@@ -24,6 +22,7 @@ import {
   sessionKey,
   type WorktreeRequest,
 } from "../../../shared/wire.ts";
+import { FolderWorktrees, WorktreeError } from "../../workspace/server/index.ts";
 import type { StartingAttempt } from "./CreationAttempts.ts";
 import { type PiSession, PiSessionError, type PiSessions } from "./pi/PiSessions.ts";
 import { makeQueueReceipts } from "./QueueReceipts.ts";

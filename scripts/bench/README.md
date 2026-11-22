@@ -13,7 +13,7 @@ concurrent tests/builds. Compare distributions, not a wall-clock test threshold.
 
 To compare a historical bootstrap, use a dedicated benchmark worktree with this benchmark and
 its `PiTransport` timestamp instrumentation applied identically to both revisions. Change only
-`server/PiRpcCli.ts` between runs. Do not set `NODE_COMPILE_CACHE` externally as a baseline control:
+`features/sessions/server/pi/PiRpcCli.ts` between runs. Do not set `NODE_COMPILE_CACHE` externally as a baseline control:
 Node enables its cache automatically when that variable is set (even to an empty string).
 The benchmark explicitly removes it from the backend environment. `NODE_DISABLE_COMPILE_CACHE=1`
 is a supported ablation/fallback check, not a reproduction of the historical static import.

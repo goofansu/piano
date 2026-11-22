@@ -29,10 +29,10 @@ import {
 } from "@/shared/components/ComposerActionButton";
 import { isModelPickerKey, isSendKey } from "@/shared/lib/keys";
 import { composerCard, composerToolbar } from "@/shared/lib/styles";
-import { useAutoGrow } from "@/shared/lib/useAutoGrow";
 import { type DraftKey } from "@/shared/state/draftKey";
 import type { SendDisposition } from "../../../../shared/transport/ws.ts";
 import { useTypeToFocus } from "./typeToFocus";
+import { useAutoGrow } from "./useAutoGrow";
 
 export function useDraftEditor(key: DraftKey | null) {
   const drafts = useDrafts();

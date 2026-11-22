@@ -1,4 +1,4 @@
-import type { EditorPage } from "../../../features/commands/web/globalCommands.ts";
+import type { EditorPage } from "../../../features/commands/web/index.ts";
 import type { McpServerSetup } from "../../../features/mcp/contracts/mcp.ts";
 import type { Webhook } from "../../../features/webhooks/contracts/webhooks.ts";
 import { pageEditor } from "../shared/lib/pageEditor.ts";

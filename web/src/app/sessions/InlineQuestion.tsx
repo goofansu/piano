@@ -1,6 +1,6 @@
-import { LibraryProposalCard } from "@features/library/web/LibraryProposal";
-import { Question } from "@features/sessions/web/dialogs/InlineQuestion";
-import type { PendingDialogs } from "@features/sessions/web/dialogs/piDialogs";
+import { LibraryProposalCard } from "@features/library/web/browser";
+import type { PendingDialogs } from "@features/sessions/web";
+import { Question } from "@features/sessions/web/browser";
 import { readProposal } from "@shared/session/libraryTools";
 import type { Client } from "@/shared/state/client";
 export function InlineQuestion({

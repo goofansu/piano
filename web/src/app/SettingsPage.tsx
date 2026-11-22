@@ -1,13 +1,15 @@
-import { DataControlsSettings } from "@features/data-controls/web/DataControlsSettings";
-import { LibrarySettings } from "@features/library/web/LibrarySettings";
-import { McpSettings } from "@features/mcp/web/McpSettings";
-import { LayoutFooter, LayoutHeader } from "@features/navigation/web/AppLayout";
-import { providerLogin } from "@features/providers/web/providerApi";
-import { ProvidersSettings } from "@features/providers/web/ProvidersSettings";
-import { providerAccounts } from "@features/providers/web/useProviderAccounts";
-import { RadiusSection } from "@features/radius/web/RadiusSection";
-import { PreferencesSettings } from "@features/voice-input/web/PreferencesSettings";
-import { WebhookSettings } from "@features/webhooks/web/WebhookSettings";
+import { DataControlsSettings } from "@features/data-controls/web/browser";
+import { LibrarySettings } from "@features/library/web/browser";
+import { McpSettings } from "@features/mcp/web/browser";
+import { LayoutFooter, LayoutHeader } from "@features/navigation/web/browser";
+import {
+  providerLogin,
+  ProvidersSettings,
+  providerAccounts,
+} from "@features/providers/web/browser";
+import { RadiusSection } from "@features/radius/web/browser";
+import { PreferencesSettings } from "@features/voice-input/web/browser";
+import { WebhookSettings } from "@features/webhooks/web/browser";
 import { cn } from "cn";
 import { HomeIcon } from "lucide-react";
 import { PageHeaderActions } from "@/app/commands/PageHeaderActions";

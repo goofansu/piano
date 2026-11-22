@@ -1,12 +1,12 @@
+import { type SessionCommand, sessionHeaderMenu } from "@features/commands/web";
 import {
   CommandIcon,
   useCommands,
   useSessionCommands,
   useSessionProjectMenu,
-} from "@features/commands/web/commandContext";
-import { type SessionCommand, sessionHeaderMenu } from "@features/commands/web/sessionCommands";
-import { SessionIdDetails } from "@features/sessions/web/SessionIdDetails";
-import { pullRequestView } from "@features/workspace/web/pull-requests/pullRequestView";
+} from "@features/commands/web/browser";
+import { SessionIdDetails } from "@features/sessions/web/browser";
+import { pullRequestView } from "@features/workspace/web/browser";
 import { cn } from "cn";
 import {
   ArrowLeftIcon,

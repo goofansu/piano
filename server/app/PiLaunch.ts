@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { basePiCli } from "../../features/sessions/server/pi/PiCli.ts";
+import { basePiCli } from "../../features/sessions/server/index.ts";
 
 export const defaultPiCli = () => ({
   ...basePiCli(),

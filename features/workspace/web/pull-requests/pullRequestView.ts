@@ -67,7 +67,7 @@ export function pullRequestView(
 
 export const STATUS_UNAVAILABLE = "Status unavailable";
 
-export interface PullRequestRow {
+export interface PullRequestRowModel {
   name: string;
   title: string | undefined;
   url: string;
@@ -84,7 +84,7 @@ export function pullRequestRow(
     local,
     loading = false,
   }: { fromBranch: boolean | undefined; local: LocalWork | undefined; loading?: boolean },
-): PullRequestRow {
+): PullRequestRowModel {
   const { status } = view;
   return {
     name: view.name,
