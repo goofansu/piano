@@ -74,6 +74,25 @@ Add a recipe to [Features](#features) when you create one. Link each recipe to t
 - [Settings › MCP](../../../features/mcp/verify/settings-mcp.md).
   Docs: [MCP setup](../../../features/mcp/README.md).
 
+### Checked in other recipes
+
+These features have no recipe of their own; drive the named steps. Add a recipe when a change
+needs a check none of these steps makes.
+
+- Search palette ([commands](../../../features/commands/README.md)): `palette-row`,
+  `palette-projects`, `palette-filter` and `palette-keyboard` in
+  [Projects index](../../../features/projects/verify/projects-index.md); other recipes open it
+  to reach their own feature. Unchecked: matching a session by folder or branch, and which actions
+  each page offers.
+- Model and effort ([models](../../../features/models/README.md)): `model-defaults` in
+  [Start a session](../../../features/sessions/verify/start-session.md). Unchecked: Refresh
+  models, which needs a real provider account.
+- Radius ([radius](../../../features/radius/README.md)): `providers` in
+  [Settings › Providers](../../../features/providers/verify/settings-providers.md) (signed-out
+  controls), `artifacts` in [Open a session](../../../features/navigation/verify/open-session.md)
+  (dialogs fake) and Sign-in in [Share a session](../../../features/sharing/verify/session-sharing.md).
+  Unchecked: sign-in, tool installation and publishing, which need controlled credentials.
+
 ## Coverage boundaries
 
 Report entry points individually: one visited path does not prove every branch in a recipe.
