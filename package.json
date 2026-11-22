@@ -19,7 +19,7 @@
     "typecheck": "tsc -p tsconfig.json && npm --prefix web run typecheck",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "lint": "oxlint --deny-warnings --report-unused-disable-directives && stylelint \"web/src/**/*.css\" && oxfmt --check",
+    "lint": "oxlint --deny-warnings --report-unused-disable-directives && node scripts/module-owners.mjs && stylelint \"web/src/**/*.css\" && oxfmt --check",
     "lint:fix": "oxlint --fix && oxfmt",
     "prepare": "node .husky/install.mjs"
   },

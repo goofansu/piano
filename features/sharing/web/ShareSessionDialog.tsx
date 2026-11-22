@@ -16,8 +16,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/PianoDialog";
-import { openLink } from "@/shared/lib/openLink";
 import { ApiError } from "@/shared/transport/api";
+import { openLink } from "./openLink";
 
 export interface ShareTarget {
   workspaceId: string;

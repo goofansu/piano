@@ -18,7 +18,6 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { CopyButton } from "@/shared/components/CopyButton";
 import { IconButton } from "@/shared/components/IconButton";
-import { PianoViewToggle, PianoViewToggleItem } from "@/shared/components/PianoViewToggle";
 import { SurfaceFrame } from "@/shared/components/SurfaceArea";
 import { relativeToDocument } from "@/shared/markdown/file-link";
 import { LocalFileContext, Markdown } from "@/shared/markdown/Markdown";
@@ -27,6 +26,7 @@ import { useMarkdownImages } from "@/shared/markdown/useMarkdownImages";
 import type { FileTab } from "@/shared/navigation/navigation";
 import { useNavigation } from "@/shared/navigation/useNavigation";
 import { WrapButton } from "../WrapButton";
+import { PianoViewToggle, PianoViewToggleItem } from "./PianoViewToggle";
 
 const FilePdf = lazy(() =>
   import("@features/workspace/web/files/FilePdf").catch(() => ({
