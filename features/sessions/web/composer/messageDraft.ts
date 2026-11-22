@@ -297,12 +297,11 @@ export function createDrafts(): Drafts {
             giveBack(verdict.inputId, sessionOf(m, source));
           else unconfirmed.delete(verdict.inputId);
         else if (m._tag === "action_result" && m.result._tag === "queue_restored") {
-          if (m.result.messages.length) {
-            const restored = restoredQueueText(m.result.messages);
-            if (restored) paragraph(sessionDraftKey(m), restored);
-            notify(restored ? QUEUE_RESTORED_NOTICE : QUEUE_IMAGES_REMOVED_NOTICE, "info");
-          }
+          const restored = restoredQueueText(m.result.messages);
+          if (restored) paragraph(sessionDraftKey(m), restored);
           if (m.result.stopError) notify(m.result.stopError, "error");
+          else if (m.result.messages.length)
+            notify(restored ? QUEUE_RESTORED_NOTICE : QUEUE_IMAGES_REMOVED_NOTICE, "info");
         }
       }),
   };

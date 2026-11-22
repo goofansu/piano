@@ -514,7 +514,7 @@ const openSession = (
               const stopError = yield* act({ _tag: "abort" }).pipe(
                 Effect.as(undefined),
                 Effect.catchTag("PiSessionError", (error) =>
-                  Effect.succeed(`Queued input was taken back, but Stop failed: ${error.detail}`),
+                  Effect.succeed(`Could not stop Pi: ${error.detail}`),
                 ),
               );
               return stopError ? { ...restored, stopError } : restored;

@@ -363,7 +363,7 @@ test("notifications: applied session notices notify; rejected frames do not", ()
   ]);
 });
 
-test("a restored queue is announced once, by the drafts: what reached the draft, then a failed stop", () => {
+test("a restored queue is announced once, by the drafts: a failed stop alone, otherwise what reached the draft", () => {
   const h = harness();
   const drafts: Array<[string, NotifyLevel]> = [];
   createDrafts().follow(h.client, (message, level) => drafts.push([message, level]));
@@ -397,7 +397,6 @@ test("a restored queue is announced once, by the drafts: what reached the draft,
   assert.deepEqual(drafts, [
     [QUEUE_IMAGES_REMOVED_NOTICE, "info"],
     [QUEUE_IMAGES_REMOVED_NOTICE, "info"],
-    [QUEUE_RESTORED_NOTICE, "info"],
     ["Stop failed: no", "error"],
     [QUEUE_RESTORED_NOTICE, "info"],
     ["Stop failed: nothing queued", "error"],

@@ -12,7 +12,7 @@ A session keeps a conversation with Pi together with the directory where Pi work
 
 Choose **steer** to give Pi a correction for its current task, or **follow-up** to queue work for after it finishes. You can put queued text back into the composer with **Edit** and revise it while Pi continues. If the connection drops during Edit or Stop, leave the tab open. When the same tab reconnects within a day, Piano returns the text Pi removed to that session’s draft. Reloading the page discards unsent drafts. Reattach any images before sending the edited message.
 
-To interrupt Pi, choose **Stop** when the composer is empty. To answer a question from Pi, use the controls in the question itself.
+To interrupt Pi, choose **Stop** when the composer is empty. Stop moves any queued text to the draft. If Pi doesn't stop, Piano says so and Pi keeps working: press Esc in the message box, or clear the draft and choose **Stop** again. To answer a question from Pi, use the controls in the question itself.
 
 ## Recover a message
 
