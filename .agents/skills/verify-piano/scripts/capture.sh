@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
-# Capture one proof step from this run's browser into the evidence dir, which cleanup keeps:
-# $EVIDENCE/<feature>/<step>.png (screenshot), .aria.txt (accessibility snapshot) and .state.json
-# (URL, title, session header text, fake-Pi command count at capture time).
-# Usage: capture.sh <run-dir> <feature-id> <step>
 set -euo pipefail
+usage() {
+  cat <<'USAGE'
+Usage: capture.sh <run-dir> <feature-id> <step>
+Capture one proof step from this run's browser into the evidence dir, which cleanup keeps:
+  $EVIDENCE/<feature>/<step>.png         screenshot
+  $EVIDENCE/<feature>/<step>.aria.txt    accessibility snapshot
+  $EVIDENCE/<feature>/<step>.state.json  URL, title, session header text, fake-Pi command count
+USAGE
+}
+case "${1:-}" in -h | --help) usage; exit 0 ;; esac
 # shellcheck source=lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 load_run "${1:-}"

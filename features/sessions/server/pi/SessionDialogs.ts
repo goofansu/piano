@@ -41,7 +41,6 @@ export const makeSessionDialogs = ({
   let commandDialogSequence = 0;
   let lastCommandDialogClosedAt = 0;
 
-  // Pi gives extension dialogs their own ID, without the originating prompt RPC ID.
   const waitForCommandDialogs = () => {
     const before = commandDialogSequence;
     return (graceMs: number) =>

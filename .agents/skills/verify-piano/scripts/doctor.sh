@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
-# Read-only check: is this Piano worth driving? Starts, stops and writes nothing.
-# Usage: doctor.sh <run-dir>   an isolated instance from launch.sh
-# Exit 0 when every check passes; each line starts with ok, FAIL or note.
 set -uo pipefail
+usage() {
+  cat <<'USAGE'
+Usage: doctor.sh <run-dir>
+Read-only check of an isolated instance from launch.sh: is this Piano worth driving?
+Starts, stops and writes nothing. Each line starts with ok, FAIL or note.
+Exit 0 when every check passes.
+USAGE
+}
 # shellcheck source=lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
@@ -44,7 +49,6 @@ isolated() {
   else
     [ -z "$folders" ] && ok "GET /api/folders: empty database" || note "GET /api/folders lists '$folders'"
   fi
-  # No login exists (docs/configuration.md): the Origin check is what guards state changes.
   c=$(code -X POST -H 'Content-Type: application/json' -d '{}' "$API_URL/api/ls")
   [ "$c" = 403 ] && ok "POST without Origin is refused (403)" || bad "POST without Origin answered $c, expected 403"
   c=$(code -X POST -H 'Content-Type: application/json' -H "Origin: $ORIGIN" -d '{}' "$API_URL/api/ls")
@@ -54,7 +58,8 @@ isolated() {
 }
 
 case "${1:-}" in
-  "" | -h | --help) sed -n '2,4p' "$0"; exit 2 ;;
+  -h | --help) usage; exit 0 ;;
+  "") usage >&2; exit 2 ;;
   *) isolated "$1" ;;
 esac
 exit "$failed"

@@ -37,6 +37,14 @@ Read the matching entry before working on that surface; follow its linked detail
 | Changing architecture or workflow | [Development direction](docs/README.md), then its ADR and invariants; cite affected invariant IDs in the PR |
 | User-authorized exe.dev deployment | [Deployment routes and policy](docs/hosted-development.md): `deploy-exe-dev`, run on the VM itself, installs or updates Piano there. It is user-invoked only; there is no SSH or remote deployment. |
 
+## Code comments
+
+Write no comments in code. Keep only functional directives a tool reads, such as
+`oxlint-disable-next-line`, `@ts-expect-error`, `/// <reference>` and `# shellcheck`, without a
+reason. Let names, types and tests carry what a comment would say; a script describes its usage,
+options and environment in `--help` output. What none of these can say follows [Docs](#docs).
+Leave vendored code alone.
+
 ## Docs
 
 Write feature READMEs and their linked feature topics for people using Piano. Describe tasks, visible controls, outcomes, and limits that affect a user’s decision. Keep maintainer decisions, benchmarks, and verification instructions in the development docs and verification recipes.

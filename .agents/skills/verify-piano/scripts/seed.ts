@@ -1,14 +1,18 @@
 #!/usr/bin/env node
-// Seeds launch.sh's empty scratch database with the throwaway repo, two projects and two saved
-// sessions that have Pi history ("Plan the verification" includes one successful write of
-// src/answer.ts). Run by launch.sh before the backend starts (one backend per database).
-// Usage: node seed.ts <database> <repo> <pi-session-dir>
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { seedRegistry } from "../../../../test/shared/registry.ts";
 
+const help = `Usage: node seed.ts <database> <repo> <pi-session-dir>
+Seed launch.sh's empty scratch database with the throwaway repo, two projects and two saved sessions
+with Pi history. "Plan the verification" includes one successful write of src/answer.ts.
+Run by launch.sh before the backend starts.`;
+if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  console.log(help);
+  process.exit(0);
+}
 const [database, repo, sessionDir] = process.argv.slice(2);
-if (!database || !repo || !sessionDir) throw new Error("usage: node seed.ts <database> <repo> <pi-session-dir>");
+if (!database || !repo || !sessionDir) throw new Error(help);
 
 const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
 const sessions = [
@@ -52,8 +56,6 @@ const assistant = (content: unknown[], extra: object = {}) => ({
   timestamp: Date.now(),
   ...extra,
 });
-// "Plan the verification" also wrote src/answer.ts with Pi's write tool (fake Pi makes no tool
-// calls), so the composer's Files list has an entry; its usage is counted once, on the reply.
 const noUsage = { ...usage, input: 0, output: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
 const wrote = [
   assistant([{ type: "toolCall", id: "w1", name: "write", arguments: { path: "src/answer.ts", content: "export const answer = 4;\n" } }], { usage: noUsage, stopReason: "toolUse" }),

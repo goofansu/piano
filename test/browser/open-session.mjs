@@ -598,7 +598,6 @@ await run(
       `Number(getComputedStyle(document.querySelector('button[aria-label="Code copied"]')).opacity) === 1`,
     );
     await page.capture("code-copy-copied");
-    // Headless Chrome on macOS cannot paste or read the clipboard, even with CDP permission.
     if (process.platform === "darwin") {
       console.log(
         "SKIP copied-content check on macOS (headless Chrome cannot paste); CI covers it",
@@ -929,7 +928,6 @@ await run(
     await page.see("Which checks?");
     assert.equal(await page.evaluate("!!document.querySelector('[role=dialog]')"), false);
     const answers = () => page.received().filter((r) => r.command === "extension_ui_response");
-    // agent-browser releases arrows before the radio group's deferred focus; select with Space.
     const radio = (name, checked) => {
       assert.match(name, /^[A-Za-z ]+$/, "an option label the page check can quote as-is");
       return `[...document.querySelectorAll('[role=radio]')].some((r) => r === document.activeElement && r.getAttribute('aria-checked') === '${checked === true}' && (r.getAttribute('aria-labelledby') ?? '').split(' ').some((id) => document.getElementById(id)?.innerText.trim() === '${name}'))`;

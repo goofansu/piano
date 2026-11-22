@@ -415,8 +415,6 @@ async function runJourney(name, setup, journey, options, owned, record) {
         mod ??= JSON.parse(
           await ab("eval", `/Mac|iPhone|iPad/.test(navigator.platform) ? "Meta" : "Control"`),
         );
-        // Headless Chrome on macOS skips its editing shortcuts for CDP key events, so Meta+a
-        // selects nothing; run the selectAll command the shortcut maps to instead.
         if (mod === "Meta" && key === "Mod+a")
           return ab("eval", "document.execCommand('selectAll')");
         key = `${mod}${key.slice(3)}`;

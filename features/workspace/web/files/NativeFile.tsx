@@ -48,7 +48,7 @@ export function NativeFile({
     );
   return kind === "audio" ? (
     <div className="p-4">
-      {/* oxlint-disable-next-line jsx-a11y/media-has-caption -- arbitrary local audio has no supplied caption track. */}
+      {/* oxlint-disable-next-line jsx-a11y/media-has-caption */}
       <audio
         ref={media}
         src={url}
@@ -60,7 +60,7 @@ export function NativeFile({
     </div>
   ) : (
     <div className="flex flex-1 items-center justify-center p-4">
-      {/* oxlint-disable-next-line jsx-a11y/media-has-caption -- arbitrary local video has no supplied caption track. */}
+      {/* oxlint-disable-next-line jsx-a11y/media-has-caption */}
       <video
         ref={(element) => {
           media.current = element;

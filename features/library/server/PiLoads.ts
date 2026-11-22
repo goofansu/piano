@@ -53,7 +53,6 @@ async function resolveHere(
       if (!within(skill.filePath, piano)) found.set(skill.name, skill.filePath);
     return [...found];
   }
-  // Pi does not export its prompt loader; replace this shim when it does.
   for (const path of paths) {
     if (!path.endsWith(".md")) continue;
     const name = basename(path).slice(0, -3);

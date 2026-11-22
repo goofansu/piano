@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
-# Read-only completion check for deploy-exe-dev, run on the VM (as root inside the restart job, or with sudo).
-# Usage: check.sh <full-target-SHA>
-# Exit 0 when every check passes; each line starts with ok or FAIL.
 set -uo pipefail
+usage() {
+  cat <<'USAGE'
+Usage: check.sh <full-target-SHA>
+Read-only completion check for deploy-exe-dev, run on the VM (as root inside the restart job, or
+with sudo). Each line starts with ok or FAIL. Exit 0 when every check passes.
+USAGE
+}
+case "${1:-}" in -h | --help) usage; exit 0 ;; esac
 
 target=${1:-}
 if [[ ! "$target" =~ ^[0-9a-f]{40}$ ]]; then
@@ -16,7 +21,6 @@ bad() {
   echo "FAIL $*"
   failed=1
 }
-# Retries while the backend starts.
 code() {
   local c
   for _ in $(seq 1 30); do
@@ -28,13 +32,11 @@ code() {
 }
 
 echo "check $(date -u +%FT%TZ) target $target"
-# Root's git refuses a checkout owned by exedev without this.
 head=$(git -c safe.directory="$dir" -C "$dir" rev-parse HEAD 2>&1)
 [ "$head" = "$target" ] && ok "checkout $dir at $head" || bad "checkout $dir at $head, expected $target"
 
 c=$(code http://127.0.0.1:8001/api/folders)
 [ "$c" = 200 ] && ok "GET 127.0.0.1:8001/api/folders 200" || bad "GET 127.0.0.1:8001/api/folders answered $c"
-# The socket starts piano-web.service on first connection, so probe 8000 before checking it.
 c=$(code http://127.0.0.1:8000/)
 [ "$c" = 200 ] && ok "GET 127.0.0.1:8000/ 200 (built UI through the socket proxy)" || bad "GET 127.0.0.1:8000/ answered $c"
 

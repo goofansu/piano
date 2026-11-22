@@ -829,7 +829,6 @@ test(
       assert.equal(h.http.writes.length, 0);
       assert.equal(intents(h).length, 0);
     } finally {
-      // Releases a reader blocked in open(2) on the FIFO if the refusal regresses.
       try {
         closeSync(openSync(fifo, constants.O_WRONLY | constants.O_NONBLOCK));
       } catch {}
@@ -905,8 +904,6 @@ test("cancelling while a file is read publishes and records nothing", async () =
     const controller = new AbortController();
     globalThis.fetch = async (input, init) => {
       const response = await h.http.fetch(input, init);
-      // The tools/list reply settles in microtasks, so this timer fires once connect has
-      // finished and the file open is in flight.
       if (String(init?.body).includes('"tools/list"')) setTimeout(() => controller.abort(), 0);
       return response;
     };

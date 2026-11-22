@@ -288,17 +288,17 @@ export function SlashTextarea({
         <ul
           ref={list}
           id={id}
-          // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-to-interactive-role -- the textarea drives this listbox through aria-activedescendant.
+          // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-to-interactive-role
           role="listbox"
           aria-label="Slash commands"
           className="max-h-[min(18rem,var(--available-height))] overflow-y-auto"
         >
           {commands.map((command, index) => (
-            // oxlint-disable-next-line jsx-a11y/click-events-have-key-events -- the textarea keeps focus and handles keys.
+            // oxlint-disable-next-line jsx-a11y/click-events-have-key-events
             <li
               key={command.name}
               id={`${id}-${index}`}
-              // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-to-interactive-role -- options stay unfocusable; the textarea keeps focus and handles keys.
+              // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-to-interactive-role
               role="option"
               aria-selected={index === active}
               className={cn(

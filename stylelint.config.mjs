@@ -11,7 +11,6 @@ const runtimeProperties = {
   "--sidebar-easing": "linear",
 };
 
-/** @type {import("stylelint").Config} */
 export default {
   plugins: ["stylelint-value-no-unknown-custom-properties"],
   rules: {

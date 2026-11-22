@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
-# Tear down one launch.sh run: close its browser session, stop only the PIDs launch.sh recorded
-# (each checked against its kernel start time, never looked up by name), keep the logs, fake-Pi
-# audit and run.env with the evidence, then delete the scratch run dir. Evidence is never deleted.
-# Usage: cleanup.sh <run-dir>
 set -uo pipefail
+usage() {
+  cat <<'USAGE'
+Usage: cleanup.sh <run-dir>
+Tear down one launch.sh run: close its browser session, stop only the PIDs launch.sh recorded
+(each checked against its start time, never looked up by name), keep the logs, fake-Pi audit and
+run.env with the evidence, then delete the scratch run dir. Evidence is never deleted.
+USAGE
+}
+case "${1:-}" in -h | --help) usage; exit 0 ;; esac
 # shellcheck source=lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 load_run "${1:-}"

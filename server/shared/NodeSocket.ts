@@ -41,7 +41,6 @@ export function nodeSocketEnvironment(config: DispatchConfiguration): SocketEnvi
     frameBytes: MAX_MESSAGE_BYTES,
     nonce: () => crypto.randomUUID(),
     open: (url, events) => {
-      // Node's WebSocket accepts Undici headers, but its DOM typings omit that overload.
       const NodeWebSocket = WebSocket as unknown as {
         new (url: string, options: { headers: Record<string, string> }): WebSocket;
       };

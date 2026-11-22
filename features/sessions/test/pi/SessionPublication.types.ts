@@ -8,15 +8,15 @@ export const publicationContract = (
   dialogs: ReturnType<typeof makeSessionDialogs>,
   request: DialogRequest,
 ) => {
-  // @ts-expect-error Unlocked event publication is not offered.
+  // @ts-expect-error
   publication.publish({ _tag: "notice", level: "info", message: "unsafe" });
-  // @ts-expect-error Unlocked state merging is not offered.
+  // @ts-expect-error
   publication.mergeState({ sessionName: "unsafe" });
-  // @ts-expect-error An arbitrary effect cannot claim to hold the lock.
+  // @ts-expect-error
   publication.locked(Effect.void);
-  // @ts-expect-error Opening a dialog requires the record transaction.
+  // @ts-expect-error
   dialogs.opened(request);
-  // @ts-expect-error A structurally similar object is not a publication capability.
+  // @ts-expect-error
   dialogs.opened({ publish: () => Effect.void, mergeState: () => Effect.void }, request);
 
   return publication.transaction((transaction) =>

@@ -74,7 +74,6 @@ export const makeQueueReceipts = Effect.gen(function* () {
           oversized: false,
           detail: "Queue recovery is at capacity. Reconnect to check again.",
         });
-      // A reconnect may reach the server before the old socket's action.
       const cancelled = Deferred.makeUnsafe<Reply>();
       Deferred.doneUnsafe(cancelled, Effect.succeed(reply));
       const refused = { reply: cancelled, bytes: 0 };

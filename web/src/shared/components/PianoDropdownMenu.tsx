@@ -22,7 +22,6 @@ export {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-// Base UI's menu typeahead matches an item's untrimmed text, so the space after a leading icon hides the item from it.
 function typeaheadLabel(children: ReactNode) {
   const text = Children.toArray(children)
     .filter((child) => typeof child === "string" || typeof child === "number")

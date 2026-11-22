@@ -108,7 +108,7 @@ export function ContextDetails({ figures, usage: session, messages }: Props) {
             <div
               ref={chartRef}
               className="min-w-0 overflow-x-auto overscroll-x-contain"
-              // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a scrollable region must be keyboard-focusable to scroll.
+              // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex
               tabIndex={0}
               role="region"
               aria-label="Scrollable response chart"

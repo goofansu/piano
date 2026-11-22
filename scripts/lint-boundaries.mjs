@@ -108,8 +108,6 @@ const runtimes = new Set(["web", "server", "extension", "contracts", "test"]);
 export default {
   meta: { name: "piano" },
   rules: {
-    // CodeQL js/bad-tag-filter reports any regex that matches a script tag or HTML comment as a
-    // weak sanitizer, even an assertion in a test.
     "no-html-tag-regex": {
       meta: {
         type: "problem",

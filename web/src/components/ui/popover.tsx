@@ -18,7 +18,6 @@ function PopoverContent({
   alignOffset = 0,
   side = "bottom",
   sideOffset = 4,
-  // Piano patch: Base UI takes the anchor and collision padding on the Positioner, which shadcn's wrapper does not expose.
   anchor,
   collisionPadding,
   ...props

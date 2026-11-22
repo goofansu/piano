@@ -144,7 +144,6 @@ export function MessageList({
   const measureRow = useCallback(
     (row: HTMLElement) => {
       if (unmeasured.size === 0)
-        // Base UI unmounts a closed panel in a nested commit; measure in the next microtask.
         queueMicrotask(() => {
           const rows = [...unmeasured].filter((row) => row.isConnected);
           unmeasured.clear();
@@ -163,7 +162,6 @@ export function MessageList({
       virtual.measureElement(row);
       if (!row) return;
       if (virtual.isScrolling) budget.mounted();
-      // TanStack defers new-row measurements while scrolling; settle them before paint.
       measureRow(row);
     },
     [virtual, measureRow, budget],
@@ -211,7 +209,6 @@ export function MessageList({
               )}
               <TranscriptDisclosures value={disclosures}>
                 <TranscriptMeasure value={measureRow}>
-                  {/* Clip unmeasured rows to avoid Firefox's scroll/unmount loop. Chromium needs both axes clipped for overflow-clip-margin. */}
                   <div
                     ref={list}
                     className="relative overflow-clip [overflow-clip-margin:6px]"
@@ -462,7 +459,6 @@ function FoldRow({
         return el && head ? domFoldEdges(el, head) : undefined;
       });
     }
-    // Refocusing a clicked header paints a spurious ring in WebKit, where clicks do not focus buttons.
     const active = document.activeElement;
     if (
       toolOutput &&
@@ -682,7 +678,7 @@ function UserMessage({
   const long = overflows || open;
   const toggle = () => setOpen((o) => !o);
   return (
-    // oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- the click is a pointer shortcut for the toggle button below, which keyboard users reach.
+    // oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
     <article
       id={id ? messageAnchorId(id) : undefined}
       data-slot={id ? undefined : "submitted-input"}
@@ -789,7 +785,6 @@ function DispatchRow({
     >
       {detail && <p className="text-xs text-ink-3">{detail}</p>}
       {params && (
-        // A scrollable <pre> breaks drag selection in Firefox; scroll its wrapper instead.
         <div className="overflow-x-auto rounded-lg bg-fill">
           <pre className="whitespace-pre-wrap break-words px-3 py-2 text-ink-2">
             {clamp(params, 8000)}
@@ -953,7 +948,6 @@ function ToolDetails({
   return (
     <>
       {details && (
-        // A scrollable <pre> breaks drag selection in Firefox; scroll its wrapper instead.
         <div className="overflow-x-auto rounded-lg bg-fill">
           <pre className="whitespace-pre px-3 py-2 text-ink-2">{clamp(details, 4000)}</pre>
         </div>

@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
-# Start an isolated scratch Piano for verification: a new run dir with its own database, Pi agent
-# and session dirs and HOME, a throwaway Git repo, fake Pi, a backend and the Vite UI on free
-# loopback ports. Waits until the UI's session socket answers, then prints the run dir.
-# Usage: launch.sh [--empty] [--fake-pi browser|dialogs|ask]
-#   --empty            start from an empty database: no folder, project or session
-#   --fake-pi browser  test/browser/fake-pi.mjs (default): echoes, "hold" runs until Stop, audits
-#   --fake-pi dialogs  test/fake-pi.mjs: "ask..." opens an input dialog, "crash..." exits Pi
-#   --fake-pi ask      test/fake-dialog-pi.mjs: "/ask [mode] [count] [numeric]" runs ask_user
-# Env: VERIFY_SCRATCH (default ${TMPDIR:-/tmp}/verify-piano), VERIFY_EVIDENCE (default
-#   ${TMPDIR:-/tmp}/piano-evidence/manual), VERIFY_RUN_ID, VERIFY_PORT, VERIFY_WEB_PORT.
 set -euo pipefail
+usage() {
+  cat <<'USAGE'
+Usage: launch.sh [--empty] [--fake-pi browser|dialogs|ask]
+Start an isolated scratch Piano: a new run dir with its own database, Pi agent and session dirs and
+HOME, a throwaway Git repo, fake Pi, a backend and the Vite UI on free loopback ports. Waits until
+the UI's session socket answers, then prints the run dir.
+  --empty            start from an empty database: no folder, project or session
+  --fake-pi browser  test/browser/fake-pi.mjs (default): echoes, "hold" runs until Stop, audits
+  --fake-pi dialogs  test/fake-pi.mjs: "ask..." opens an input dialog, "crash..." exits Pi
+  --fake-pi ask      test/fake-dialog-pi.mjs: "/ask [mode] [count] [numeric]" runs ask_user
+Env: VERIFY_SCRATCH (default ${TMPDIR:-/tmp}/verify-piano), VERIFY_EVIDENCE (default
+  ${TMPDIR:-/tmp}/piano-evidence/manual), VERIFY_RUN_ID, VERIFY_PORT, VERIFY_WEB_PORT.
+USAGE
+}
 # shellcheck source=lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
@@ -19,7 +23,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --empty) SEED=0 ;;
     --fake-pi) FAKE=${2:?--fake-pi browser|dialogs|ask}; shift ;;
-    -h | --help) sed -n '2,11p' "$0"; exit 0 ;;
+    -h | --help) usage; exit 0 ;;
     *) die "unknown option $1 (see --help)" ;;
   esac
   shift
@@ -37,7 +41,6 @@ EVIDENCE=${VERIFY_EVIDENCE:-$TMP_ROOT/piano-evidence/manual}/$RUN_ID
 [ -e "$RUN" ] && die "$RUN already exists"
 [ -d "$ROOT/node_modules" ] || (cd "$ROOT" && npm ci --no-audit --no-fund)
 
-# Both ports come from one batch so the OS cannot hand the same port to the backend and the UI.
 read -r FREE_PORT FREE_WEB_PORT < <(cd "$ROOT" && node --input-type=module -e \
   'const { freePorts } = await import("./test/shared/ports.ts"); console.log((await freePorts(2)).join(" "))') || true
 PORT=${VERIFY_PORT:-$FREE_PORT}
@@ -53,7 +56,6 @@ mkdir -p "$RUN"/home "$RUN"/pi-agent "$RUN"/pi-sessions "$RUN"/db "$RUN"/logs "$
   "$RUN"/config/system "$RUN"/cache "$RUN"/state "$RUN"/data
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 
-# The throwaway repository Piano registers; worktrees Piano creates land beside it, inside $RUN.
 REPO=$RUN/repo
 mkdir -p "$REPO/src"
 git -C "$REPO" init -q -b main
@@ -94,8 +96,6 @@ export PIANO_SESSION_ORIGIN=$WEB_URL
 EOF
 
 cd "$ROOT"
-# The server passes no launch variable on to its children (server/shared/ChildEnvironment.ts); see Gotchas
-# for PIANO_API_SOCKET.
 detach env -u PIANO_API_SOCKET \
   HOME="$RUN/home" HOST=127.0.0.1 PORT="$PORT" PIANO_DB_PATH="$DB" \
   XDG_CONFIG_HOME="$RUN/config" XDG_CONFIG_DIRS="$RUN/config/system" \
@@ -117,8 +117,6 @@ sleep 0.2
   echo "web $WEB_PID $(starttime "$WEB_PID") $ROOT/web"
 } > "$RUN/pids"
 
-# Ready means usable: the API answers, the UI serves its page, and the UI's /ws proxy delivers
-# the registry with the UI's origin, which is what the browser waits for.
 ready=0
 for _ in $(seq 1 150); do
   for pid in "$SERVER_PID" "$WEB_PID"; do

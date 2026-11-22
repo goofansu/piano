@@ -50,7 +50,7 @@ export function InspectorFrame({
   const toolbar = status !== undefined || actions !== undefined || single;
   const [body, setBody] = useState<HTMLDivElement | null>(null);
   return (
-    // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Escape closes the tab from anywhere inside it.
+    // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <section
       aria-label={names.region}
       className="flex min-h-0 min-w-0 flex-1 flex-col"

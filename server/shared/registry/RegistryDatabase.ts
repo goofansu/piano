@@ -457,9 +457,6 @@ export function openRegistryDatabase(path: string, initial: RegistryData = empty
         db.exec("PRAGMA user_version = 19;");
       }
       if (Number(version) < 20)
-        // Schema 18 backfilled created_branch from the last observed branch, which may not be
-        // the branch the base was recorded for. Without a creation commit, a recorded pair is
-        // indistinguishable from that backfill, so it becomes unknown (PIN-167).
         db.exec(
           "UPDATE worktrees SET created_branch = NULL WHERE created_commit IS NULL; PRAGMA user_version = 20;",
         );

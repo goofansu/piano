@@ -102,15 +102,9 @@ async function preview(
     const index = (
       await checkout.text(["rev-parse", "--path-format=absolute", "--git-path", "index"])
     ).trimEnd();
-    // Two copies: intent-to-add entries for untracked paths can displace a staged file at a
-    // colliding path (a staged `dir` and an untracked `dir/child`), so staged reads keep the copy
-    // that intent-to-add never touches.
     const stagedIndex = join(temp, "index");
     const workingIndex = join(temp, "working-index");
     try {
-      // Git trusts cached stat data for entries older than the index file, so a fresh copy's mtime
-      // would hide a same-size edit made in the tick of the last index write. Stat before copying
-      // and round down, so the copy is never newer than what it holds.
       const { atimeMs, mtimeMs } = await stat(index);
       for (const copy of [stagedIndex, workingIndex]) {
         await copyFile(index, copy);
@@ -236,14 +230,9 @@ async function preview(
   }
 }
 
-// A literal or plain-glob pathspec also matches every path beneath it, so selecting a file `dir`
-// would also pull in `dir/child`. Escaping each character makes Git's glob matcher compare the
-// whole path, matching only the file itself.
 const exactGlob = (path: string): string =>
   `:(top,glob)${path.replace(/[^/]/gu, (char) => `\\${char}`)}`;
 
-// Thousands of long paths in one Git command exceed Linux's exec argument limit (spawn E2BIG), so
-// paths are selected in batches of bounded size.
 const PATHSPEC_BATCH_BYTES = 128 * 1024;
 
 function* exactBatches(files: readonly ChangeFile[]): Generator<string[]> {

@@ -54,7 +54,6 @@ export function Question({
         }}
       >
         <FieldSet disabled={disabled} aria-labelledby={`${id}-title`} className="min-w-0 gap-3">
-          {/* iOS Safari cannot reliably scroll fieldset overflow; scroll a div instead. */}
           <div className="flex max-h-[min(24rem,50dvh)] min-h-0 flex-col gap-3 overflow-y-auto overscroll-contain p-1">
             <QuestionText id={`${id}-title`} text={title} />
             <FieldGroup className="gap-3">

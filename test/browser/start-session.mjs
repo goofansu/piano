@@ -23,7 +23,6 @@ await run(
     if (process.env.PIANO_BROWSER_PRODUCTION === "1") {
       await page.open("/new");
     } else {
-      // Vite keeps serving the page while the scratch backend is down.
       const retrying = "Can’t connect to Piano. Retrying…";
       await page.restartBackend({
         beforeRestart: async () => {
@@ -213,7 +212,6 @@ await run(
     await page.capture("4-structured-dispatch");
   },
   {
-    // Headless Chromium can expose no pointer; force a mouse for this journey.
     browserArgs:
       "--blink-settings=primaryPointerType=4,availablePointerTypes=4,primaryHoverType=2,availableHoverTypes=2",
   },

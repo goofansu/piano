@@ -95,7 +95,7 @@ export function WebhookSettings({
   useEffect(() => {
     const timer = setInterval(() => void observed.refresh(), 3000);
     return () => clearInterval(timer);
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- the poll restarts only when refresh changes.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [observed.refresh]);
   const now = Date.now();
   return (

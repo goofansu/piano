@@ -137,7 +137,7 @@ function PaletteContents({
     (group: PalettePage["group"]["id"], page: number) => {
       if (ready()) results.page(group, page);
     },
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- page is the only member read.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
     [results.page, ready],
   );
   const replaceText = useRef<(text: string) => void>(() => {});
@@ -160,8 +160,6 @@ function PaletteContents({
   const keyed = useCallback(() => {
     pointerSelects.current = false;
   }, []);
-  // cmdk 1.1.1 scrolls to the row still marked aria-selected, which is the previous one here:
-  // the memoized rows re-render only after its layout effect. Scroll to the row by value instead.
   useEffect(() => {
     if (pointerSelects.current) return;
     const row = list.current?.querySelector(`[cmdk-item][data-value="${CSS.escape(selected)}"]`);

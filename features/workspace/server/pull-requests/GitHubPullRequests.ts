@@ -101,10 +101,6 @@ const remoteRepos = Effect.fn("GitHubPullRequests.remoteRepos")(function* (
   });
 });
 
-// A fork's pull request is listed only in its base repository. Without --repo, gh 2.101 lists one
-// repository it picks from the remotes (origin over a base remote named parent), so search every
-// repository a remote on the same host names, and the default `gh repo set-default` records on a
-// remote: "base" for that remote's repository, or owner/repo for one no remote names.
 const searchRepos = Effect.fn("GitHubPullRequests.searchRepos")(function* (
   cwd: string,
   host: GitHubHost,
@@ -380,8 +376,6 @@ export const GitHubPullRequestsLive = Layer.effect(
             );
       };
     };
-    // GitHub follows repository renames and reports a pull request's repositories by their current
-    // names, while a checkout's remote may still use an old one.
     const trackedHeadRepo = (
       current: (repo: string) => Effect.Effect<string, PullRequestError>,
       branch: BranchHead,
@@ -456,8 +450,6 @@ export const GitHubPullRequestsLive = Layer.effect(
             ),
           { concurrency: "unbounded" },
         );
-        // A remote under an upstream's old name lists the same pull requests as one under its
-        // current name.
         const current = currentNames(cwd, host);
         const tracked = { name: branch, repo };
         const matches = new Map<string, PullRequest>();

@@ -13,7 +13,7 @@ export function localFilePath(destination: string): string | undefined {
       path = path.split(/[?#]/, 1)[0];
     }
     path = path.replace(/(?:%[\da-f]{2})+/gi, (escapes) => decodeURIComponent(escapes));
-    // oxlint-disable-next-line no-control-regex -- reject path control characters.
+    // oxlint-disable-next-line no-control-regex
     return path && !/[\u0000-\u001f\u007f]/.test(path) ? path : undefined;
   } catch {
     return;

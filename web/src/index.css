@@ -2,7 +2,6 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @source "../../features/*/web/**/*.{ts,tsx}";
-/* shadcn attachments need scrollbar-none; shadcn/tailwind.css 4.21 only ships no-scrollbar. */
 @utility scrollbar-none {
   -ms-overflow-style: none;
   scrollbar-width: none;
