@@ -171,9 +171,9 @@ export function testLinesSince(cwd, base = "origin/main") {
     execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   try {
     const from = quiet("merge-base", "HEAD", base).trim();
-    const testPaths = ["test", ":(glob)features/*/tests/**"];
+    const testPaths = ["test", ":(glob)features/*/test/**"];
     const rows = [
-      quiet("diff", "--numstat", "-M", from, "--", ...testPaths),
+      quiet("diff", "--numstat", "-M", from, "--", ...testPaths, ":(glob)features/*/tests/**"),
       ...quiet("ls-files", "--others", "--exclude-standard", "-z", "--", ...testPaths)
         .split("\0")
         .filter(Boolean)

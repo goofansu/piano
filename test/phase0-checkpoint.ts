@@ -14,7 +14,7 @@ import {
 import {
   createPiCompatibilityFixture,
   sentinelTool,
-} from "../features/sessions/tests/fixtures/PiCompatibility.ts";
+} from "../features/sessions/test/fixtures/PiCompatibility.ts";
 import type { SessionEvent } from "../shared/wire.ts";
 
 const evidence = resolve(process.argv[2] ?? "/tmp/piano-phase0-evidence/runtime");

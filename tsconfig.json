@@ -23,7 +23,7 @@
     "features/*/extension/**/*.ts",
     "features/*/server/**/*.ts",
     "features/*/contracts/**/*.ts",
-    "features/*/tests/**/*.ts",
+    "features/*/test/**/*.ts",
     "scripts/**/*.ts",
     "test/**/*.ts"
   ]

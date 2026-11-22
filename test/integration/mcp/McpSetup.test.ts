@@ -408,7 +408,7 @@ test("INV-01/12: a URL server authenticated by a /login provider connects with t
 });
 
 const sentinel = fileURLToPath(
-  new URL("../../../features/sessions/tests/fixtures/phase0-mcp.mjs", import.meta.url),
+  new URL("../../../features/sessions/test/fixtures/phase0-mcp.mjs", import.meta.url),
 );
 const spawned = (log: string): { event: string; pid: number }[] =>
   existsSync(log)

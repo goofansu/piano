@@ -55,18 +55,18 @@ function location(path) {
     const common = third === "shared" || third === "components" || third === "hooks";
     return { kind: common ? "shared" : "app", runtime: "web" };
   }
-  if (area === "test" && second === "shared") return { kind: "shared", runtime: "tests" };
+  if (area === "test" && second === "shared") return { kind: "shared", runtime: "test" };
   return { kind: "other", area };
 }
 
 function canImport(source, target) {
-  if (target.kind === "package") return ["server", "extension", "tests"].includes(source.runtime);
+  if (target.kind === "package") return ["server", "extension", "test"].includes(source.runtime);
   if (target.kind === "other")
     return source.kind === "app" && source.runtime === "server" && target.area === "scripts";
   if (target.kind === "app" && source.kind !== "app") return false;
   if (target.kind === "feature" && source.kind !== "app" && source.feature !== target.feature)
     return false;
-  if (source.runtime === "tests") return true;
+  if (source.runtime === "test") return true;
   if (target.runtime === "contracts" || target.runtime === source.runtime) return true;
   return source.runtime === "extension" && target.runtime === "server";
 }
@@ -96,7 +96,7 @@ const literal = (source) =>
       ? source.quasis[0].value.cooked
       : undefined;
 
-const runtimes = new Set(["web", "server", "extension", "contracts", "tests"]);
+const runtimes = new Set(["web", "server", "extension", "contracts", "test"]);
 
 export default {
   meta: { name: "piano" },
@@ -138,7 +138,7 @@ export default {
                 node,
                 messageId: "boundary",
                 data: {
-                  reason: "Put feature modules in web, server, contracts, extension or tests",
+                  reason: "Put feature modules in web, server, contracts, extension or test",
                   specifier: relative(root, file),
                 },
               });

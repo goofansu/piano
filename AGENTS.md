@@ -32,7 +32,7 @@ violation, report uncertainty or ask before expanding product behavior.
 | Change | Verification |
 | --- | --- |
 | Documentation or comments only | Review accuracy, links and the diff; confirm no runtime or tooling directives changed. No tests or app run needed. |
-| Logic, protocol or lifecycle behavior | Cover an uncovered failure at the public boundary by the test ladder, in a focused module test. Run `node --test --import ./test/setup.ts features/<feature>/tests/<name>.test.ts`. |
+| Logic, protocol or lifecycle behavior | Cover an uncovered failure at the public boundary by the test ladder, in a focused module test. Run `node --test --import ./test/setup.ts features/<feature>/test/<name>.test.ts`. |
 | Application behavior | Observe the affected journey on scratch Piano, using an existing browser journey or a focused `agent-browser` check. Module tests alone do not prove the user journey. |
 | UI strings, controls or styling | Apply Quiet UI and choose evidence using the [UI evidence scope](docs/testing.md#ui-evidence-scope): a focused capture for a local cosmetic edit, the affected journey for behavior, broader comparisons for shared styles. |
 | New critical path | Add a journey in `test/browser/`; otherwise extend relevant existing coverage rather than adding another browser journey. |

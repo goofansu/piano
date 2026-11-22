@@ -24,7 +24,7 @@ rung that holds:
    that differ only in shape or size, such as path names, counts or encodings, share one table.
 3. **Add a test** for a contract no existing test title states, at the smallest reliable boundary.
 
-`npm run verify` prints the lines changed in `test/` and `features/*/tests/` since `origin/main`. A behavior-preserving
+`npm run verify` prints the lines changed in `test/` and `features/*/test/` since `origin/main`. A behavior-preserving
 refactor adds no more test lines than it removes; when it adds more, name the uncovered risk each
 added test protects.
 

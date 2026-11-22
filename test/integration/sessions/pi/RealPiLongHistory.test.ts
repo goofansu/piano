@@ -8,7 +8,7 @@ import { Effect, Layer } from "effect";
 import { PiCli } from "../../../../features/sessions/server/pi/PiCli.ts";
 import { PiSessionsLive } from "../../../../features/sessions/server/pi/PiSessions.ts";
 import { SessionHosts } from "../../../../features/sessions/server/SessionHosts.ts";
-import { createPiCompatibilityFixture } from "../../../../features/sessions/tests/fixtures/PiCompatibility.ts";
+import { createPiCompatibilityFixture } from "../../../../features/sessions/test/fixtures/PiCompatibility.ts";
 import { SessionServicesLive } from "../../../../server/app/PianoServices.ts";
 import { inboundLimits } from "../../../../server/shared/InboundCapacity.ts";
 import {
