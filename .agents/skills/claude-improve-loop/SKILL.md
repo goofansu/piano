@@ -54,6 +54,6 @@ As the last command of each completed round, send this prompt separately:
 
 Confirm the reset and record the current session identity; a reset can change it without normal working activity. If rounds remain, always start the next round with the architecture prompt from section 2, without another reset or a request for approval to continue.
 
-End when the round count is exhausted or Claude reports no useful candidates. Blockers pause the loop rather than end it; user instructions to pause or stop still take precedence. Do not deploy or send `/sync-exe-dev`.
+End when the round count is exhausted or Claude reports no useful candidates. Blockers pause the loop rather than end it; user instructions to pause or stop still take precedence. Do not deploy.
 
 Report the completed rounds, the PRs and merge results Claude reported, and any blocker. Label results as Claude-reported. Do not claim independent review or verification.

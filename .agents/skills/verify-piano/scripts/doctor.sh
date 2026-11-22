@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 # Read-only check: is this Piano worth driving? Starts, stops and writes nothing.
-# Usage: doctor.sh <run-dir>            an isolated instance from launch.sh
-#        doctor.sh --deployed           ON an exe.dev VM: piano.service (8001) behind piano-web (8000)
-#        doctor.sh --deployed-auth <vm> with exe.dev SSH access: the VM's share is private on port 8000
+# Usage: doctor.sh <run-dir>   an isolated instance from launch.sh
 # Exit 0 when every check passes; each line starts with ok, FAIL or note.
 set -uo pipefail
 # shellcheck source=lib.sh
@@ -17,7 +15,6 @@ bad() {
 note() { echo "note $*"; }
 code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
 owner() { listeners "$1" | head -n 1; }
-moved() { git -C "$1" reflog -1 --date=unix --format=%gd 2> /dev/null | tr -dc 0-9; }
 
 isolated() {
   load_run "$1"
@@ -56,64 +53,8 @@ isolated() {
   note "fake Pi commands so far: $(cat "$AUDIT" 2> /dev/null | wc -l) (audit $AUDIT)"
 }
 
-deployed() {
-  for unit in piano.service piano-web.socket piano-web.service; do
-    s=$(systemctl is-active "$unit")
-    [ "$s" = active ] && ok "$unit active" || bad "$unit is $s"
-  done
-  main=$(systemctl show -p MainPID --value piano.service)
-  [ "$(owner 8001)" = "$main" ] && ok "127.0.0.1:8001 is owned by piano.service (pid $main)" || bad "8001 owner '$(owner 8001)' is not piano.service pid $main"
-  proxy=$(systemctl show -p MainPID --value piano-web.service)
-  holders=$(listeners 8000 | tr '\n' ' ')
-  case " $holders" in
-    *" 1 "* | *" $proxy "*) ok "127.0.0.1:8000 is held by piano-web (systemd socket / proxy pid $proxy)" ;;
-    *) bad "8000 is held by pid(s) $holders, not piano-web" ;;
-  esac
-  dir=$(systemctl show -p WorkingDirectory --value piano.service)
-  head=$(git -C "$dir" rev-parse HEAD)
-  ok "checkout $dir at $head ($(git -C "$dir" log -1 --format=%s | cut -c1-70))"
-  fetched=$(git -C "$dir" rev-parse origin/main 2> /dev/null)
-  [ "$head" = "$fetched" ] && ok "HEAD equals origin/main as last fetched (no fetch done here)" || note "HEAD differs from origin/main as last fetched ($fetched)"
-  started=$(date -d "$(systemctl show -p ActiveEnterTimestamp --value piano.service)" +%s)
-  head_moved=$(moved "$dir")
-  if [ -n "$head_moved" ] && [ "$head_moved" -gt "$started" ]; then
-    bad "HEAD moved after piano.service started: the running backend predates $head (restart is the owner's call, not this skill's)"
-  else
-    ok "piano.service started after HEAD last moved"
-  fi
-  built=$(stat -c %Y "$dir/web/dist/index.html" 2> /dev/null || echo 0)
-  if [ -n "$head_moved" ] && [ "$built" -lt "$head_moved" ]; then bad "web/dist is older than HEAD: the UI served on 8000 predates $head"; else ok "web/dist built after HEAD last moved"; fi
-  c=$(code http://127.0.0.1:8001/api/folders)
-  [ "$c" = 200 ] && ok "GET 127.0.0.1:8001/api/folders 200" || bad "GET 8001/api/folders answered $c"
-  c=$(code http://127.0.0.1:8000/)
-  [ "$c" = 200 ] && ok "GET 127.0.0.1:8000/ 200 (built UI through the socket proxy)" || bad "GET 8000/ answered $c"
-  origins=$(systemctl show -p Environment --value piano.service | tr ' ' '\n' | sed -n 's/^PIANO_ALLOWED_ORIGINS=//p')
-  note "allowed origins: $origins (a browser on any other origin, including http://127.0.0.1:8000, cannot open the session socket)"
-  note "auth is exe.dev private access: run 'doctor.sh --deployed-auth <vm>' where 'ssh exe.dev' works"
-}
-
-deployed_auth() {
-  vm=${1:?usage: doctor.sh --deployed-auth <vm>}
-  if ! share=$(ssh -o BatchMode=yes -o ConnectTimeout=15 exe.dev share show "$vm" --json 2>&1); then
-    bad "exe.dev share show $vm failed: $share"
-    return
-  fi
-  result=$(SHARE=$share node -e '
-    const s = JSON.parse(process.env.SHARE);
-    const line = (pass, okText, badText) => console.log(pass ? `ok   ${okText}` : `FAIL ${badText}`);
-    line(s.status === "private", `${s.vm_name} is private`, `${s.vm_name} access is ${s.status}; expected private`);
-    line(s.port === 8000, `${s.vm_name} proxies port 8000`, `${s.vm_name} proxies port ${s.port}; expected 8000`);
-    const shares = s.users.length + s.links.length + s.teams.length + (s.team_access ? 1 : 0);
-    line(shares === 0, `${s.vm_name} has no user, link or team shares`, `${s.vm_name} has ${shares} user, link or team shares; expected none`);
-  ' 2>&1) || result="FAIL could not read exe.dev share for $vm: $result"
-  echo "$result"
-  case "$result" in *FAIL*) failed=1 ;; esac
-}
-
 case "${1:-}" in
-  --deployed) deployed ;;
-  --deployed-auth) deployed_auth "${2:-}" ;;
-  "" | -h | --help) sed -n '2,6p' "$0"; exit 2 ;;
+  "" | -h | --help) sed -n '2,4p' "$0"; exit 2 ;;
   *) isolated "$1" ;;
 esac
 exit "$failed"

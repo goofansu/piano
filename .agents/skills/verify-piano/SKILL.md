@@ -1,12 +1,13 @@
 ---
 name: verify-piano
-description: Launch an isolated scratch Piano (own database, Pi dirs and HOME, fake Pi, throwaway Git repo, backend plus Vite UI on free loopback ports), check it with a read-only doctor, drive the web UI with the repo's browser harness or the installed agent-browser and the dispatch CLI, keep evidence that survives cleanup, and tear down by recorded PID. Also read-only health checks for a deployed instance on an exe.dev VM. Use whenever a Piano change needs its user-visible behavior proved.
+description: Launch an isolated scratch Piano (own database, Pi dirs and HOME, fake Pi, throwaway Git repo, backend plus Vite UI on free loopback ports), check it with a read-only doctor, drive the web UI with the repo's browser harness or the installed agent-browser and the dispatch CLI, keep evidence that survives cleanup, and tear down by recorded PID. Use whenever a Piano change needs its user-visible behavior proved.
 ---
 
 # Verify Piano
 
 Prove behavior on a scratch instance this skill starts, never on the user's own Piano (local
-`7070`; exe.dev `127.0.0.1:8000`/`8001`), whose database is real.
+`7070`; exe.dev `127.0.0.1:8000`/`8001`), whose database is real. Never POST, open `/ws` or open
+session pages there: even viewing a session starts a Pi `probe` child for its composer.
 
 Paths are relative to the repository root. Write each script path out in full: a worktree-isolated
 session refuses a command whose name comes from a variable. [`map.md`](map.md)
@@ -36,30 +37,12 @@ run dir anyway.
 
 Seed data: `.agents/skills/verify-piano/scripts/seed.ts`.
 
-### A deployed instance
-
-`https://<vm>.exe.xyz` is the owner's real Piano behind exe.dev private access: it has no login of
-its own, and the origin check is its only write guard. The Piano VMs are the ones `ssh exe.dev ls
---json` tags `goofansu-piano` (for example `eng-1`). Target them read-only:
-
-- Where `ssh exe.dev` works: `.agents/skills/verify-piano/scripts/doctor.sh --deployed-auth eng-1`
-  requires exe.dev to report eng-1 private on port 8000 with no other shares; a `share show`
-  failure usually means no such VM. A headless `agent-browser` has no exe.dev login, so it
-  cannot open that UI; UI observation there needs the owner's signed-in browser.
-- On the VM, from any checkout there (the script sources its `lib.sh`, so it cannot be piped over
-  SSH): `.agents/skills/verify-piano/scripts/doctor.sh --deployed`.
-- Plain GETs to `http://127.0.0.1:8001/api/folders` and `http://127.0.0.1:8000/` need no Origin.
-  Never POST, open `/ws`, or open session pages there: even viewing a session starts a Pi `probe`
-  child for its composer. Never restart, sync or rebuild it; that is the owner's call
-  (`docs/hosted-development.md`).
-
 ## Doctor
 
 Run it first, and again whenever anything looks off. It changes nothing.
 
 ```bash
-.agents/skills/verify-piano/scripts/doctor.sh "$RUN"            # exit 0 = worth driving
-.agents/skills/verify-piano/scripts/doctor.sh --deployed         # on the VM, read-only
+.agents/skills/verify-piano/scripts/doctor.sh "$RUN"   # exit 0 = worth driving
 ```
 
 ## Drive
