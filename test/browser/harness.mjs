@@ -89,6 +89,14 @@ async function fixture(root, setup) {
 }
 
 export async function run(name, setup, journey, options = {}) {
+  if (process.argv.includes("--help") || process.argv.includes("-h")) {
+    console.log(`Usage: node test/browser/${name}.mjs [evidence-directory]
+Run the ${name} browser journey on its own scratch Piano and agent-browser session, then clean up.
+Evidence defaults to .scratch/browser/${name}.
+Env:
+  PIANO_BROWSER_PRODUCTION=1  serve the existing web/dist build instead of Vite`);
+    process.exit(0);
+  }
   const evidence = resolve(process.argv[2] ?? join(ROOT, ".scratch/browser", name));
   mkdirSync(evidence, { recursive: true });
   const production = process.env.PIANO_BROWSER_PRODUCTION === "1";

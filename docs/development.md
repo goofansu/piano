@@ -74,6 +74,10 @@ installation, before the session arguments, so a repository cannot supply or sha
 starting a child cannot widen the [origin policy](#browser-origins). See
 [session dispatch](../features/dispatch/README.md).
 
+### Registry storage
+
+`server/shared/registry/RegistryDatabase.ts` owns the SQLite schema and its in-place upgrades.
+
 ### Browser origins
 
 `server/shared/OriginPolicy.ts` owns the Origin and Host checks. The origin check blocks cross-site

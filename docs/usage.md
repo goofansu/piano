@@ -34,7 +34,12 @@ To start your first session, open **Settings → Providers** and sign in if Pi d
 
 ## Back up Piano's database
 
-`server/shared/registry/RegistryDatabase.ts` owns the SQLite schema and its in-place upgrades. Run one backend
-per database: when a second backend writes, the first backend's next write fails, and that
-backend needs a restart. SQLite runs in WAL mode: to back up by copying files, stop Piano first;
-while Piano runs, use SQLite's backup API.
+Piano keeps its folders, projects, session references and preferences in one SQLite file:
+`~/.local/share/piano/piano.db`, or `$XDG_DATA_HOME/piano/piano.db` when `XDG_DATA_HOME` is set.
+Set `PIANO_DB_PATH` to use another file. Pi keeps the session histories, not this file.
+
+- To back up by copying, stop Piano first, then copy `piano.db` and any `piano.db-wal` beside it.
+- While Piano runs, use SQLite's backup command instead:
+  `sqlite3 ~/.local/share/piano/piano.db ".backup piano-backup.db"`.
+- Run one Piano per database. If a second one writes to it, the first one's next write fails until
+  you restart it.

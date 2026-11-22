@@ -6,6 +6,12 @@ import { Effect, Layer, ManagedRuntime } from "effect";
 import { PiSessions, PiSessionsLive } from "../features/sessions/server/pi/PiSessions.ts";
 import { largeHistory } from "./shared/large-history.ts";
 
+if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  console.log(`Usage: node test/performance-saved-history.mjs [output.json]
+Measure saved-history peeks on a large synthetic Pi history: latency, CPU and timer gaps for cold,
+warm and concurrent reads. Output defaults to .scratch/saved-history.json.`);
+  process.exit(0);
+}
 const output = resolve(process.argv[2] ?? ".scratch/saved-history.json");
 const root = mkdtempSync(join(tmpdir(), "piano-history-benchmark-"));
 process.env.PI_CODING_AGENT_DIR = join(root, "agent");

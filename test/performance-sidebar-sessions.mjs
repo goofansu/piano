@@ -5,6 +5,12 @@ import { cpus, platform, release } from "node:os";
 import { resolve } from "node:path";
 import { run } from "./browser/harness.mjs";
 
+if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  console.log(`Usage: node test/performance-sidebar-sessions.mjs [evidence-directory] [count...]
+Measure sidebar rendering by session count in a Vite development build, with agent-browser.
+Counts default to 100 500 1000 2000. Evidence defaults to .scratch/sidebar-performance.`);
+  process.exit(0);
+}
 const evidence = resolve(process.argv[2] ?? ".scratch/sidebar-performance");
 process.argv[2] = evidence;
 mkdirSync(evidence, { recursive: true });

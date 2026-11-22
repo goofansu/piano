@@ -17,6 +17,14 @@ import {
 import { openRegistryDatabase } from "../server/shared/registry/RegistryDatabase.ts";
 import { seedRegistry } from "./shared/registry.ts";
 
+if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  console.log(`Usage: node test/performance-folder-registry.mjs [output.json]
+Measure folder picker and registry latency across folder, session and entry counts, including one
+case with slow filesystem metadata. Needs Linux \`ss\`. Output defaults to /tmp/piano-performance.json.
+Env:
+  PIANO_BENCH_SLOW_ONLY=1  run only the slow-filesystem case`);
+  process.exit(0);
+}
 const output = resolve(process.argv[2] ?? "/tmp/piano-performance.json");
 const root = mkdtempSync(join(tmpdir(), "piano-performance-"));
 const report = {
