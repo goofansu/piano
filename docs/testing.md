@@ -11,6 +11,8 @@ The goal is justified confidence in changed behavior, not more tests or a covera
   that the failure was the intended defect, not a broken fixture or missing dependency.
 - On exe.dev, publish evidence by [PR evidence](development-on-exe-dev.md#pr-evidence).
 - A passing test proves only its assertions; a build or agent summary proves no user journey.
+- For a behavior claim, read the result from state: a reply, a database row, DOM text. A
+  screenshot proves appearance; pair it with a read value when the claim is about behavior.
 
 ## When to add a test
 
@@ -26,7 +28,9 @@ rung that holds:
 
 `npm run verify` prints the lines changed in `test/` and `features/*/test/` since `origin/main`. A behavior-preserving
 refactor adds no more test lines than it removes; when it adds more, name the uncovered risk each
-added test protects.
+added test protects. It also lists added `skip`, `only` and `todo` markers and flags assertion lines
+removed beyond those added. A line-based heuristic, it misses assertions inside callbacks and
+can flag an unrelated `only:` property; read its list rather than trusting the count.
 
 Repeated manual verification of important behavior is a signal to automate it.
 
@@ -163,11 +167,24 @@ observation of the executed assertions; the PR still names the claim and any che
 
 ## Completion evidence
 
-In the PR, summarize what changed, what evidence supports it, the tested revision/environment and
-any material gaps. For new or substantially changed features, name the starting document from the
-[feature verification map](#feature-verification-map). Give the test lines `npm run verify`
-reported and the [ladder](#when-to-add-a-test) rung each added test stands on, or say why existing
-coverage was sufficient.
+Report evidence in the PR as one verification block, one row per claim:
+
+```markdown
+Revision: <commit> · <OS, Node, fake or real Pi>
+
+| Claim | Check | Goes red when | Result |
+| --- | --- | --- | --- |
+| Reopening a session restores its draft | `node test/browser/open-session.mjs` | the fix is reverted (seen) | pass |
+
+Baseline: <the PASS/FAIL, test lines and test weakening lines `npm run verify` printed>
+Not checked: <claim or risk> — <why>
+```
+
+Keep each cell to a line and link or collapse logs; a reviewer reads the block, not the output.
+For each skip or net-removed assertion that `verify` flagged, give its reason under the block. For new or
+substantially changed features, name the starting document from the
+[feature verification map](#feature-verification-map). Name the [ladder](#when-to-add-a-test) rung
+each added test stands on, or say why existing coverage was sufficient.
 
 Evidence belongs to the PR, not the repository. Do not commit per-issue verification reports,
 captured output, screenshots or recordings, including under `docs/`. When a change settles a

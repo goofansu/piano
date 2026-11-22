@@ -166,31 +166,75 @@ export function executionEnvironment(cwd, commands = ["npm", "git"]) {
   };
 }
 
-export function testLinesSince(cwd, base = "origin/main") {
+const TEST_PATHS = ["test", ":(glob)features/*/test/**", ":(glob)features/*/tests/**"];
+
+function testDiffSince(cwd, base, format) {
   const quiet = (...args) =>
     execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  const from = quiet("merge-base", "HEAD", base).trim();
+  const options = [format, "--no-ext-diff", "--no-color", "--src-prefix=a/", "--dst-prefix=b/"];
+  const untracked = quiet("ls-files", "--others", "--exclude-standard", "-z", "--", ...TEST_PATHS)
+    .split("\0")
+    .filter(Boolean)
+    .map((path) => {
+      try {
+        return quiet("diff", ...options, "--no-index", "--", "/dev/null", path);
+      } catch (error) {
+        if (error.status === 1) return error.stdout;
+        throw error;
+      }
+    });
+  return {
+    from,
+    outputs: [quiet("diff", ...options, "-M", from, "--", ...TEST_PATHS), ...untracked],
+  };
+}
+
+export function testLinesSince(cwd, base = "origin/main") {
   try {
-    const from = quiet("merge-base", "HEAD", base).trim();
-    const testPaths = ["test", ":(glob)features/*/test/**"];
-    const rows = [
-      quiet("diff", "--numstat", "-M", from, "--", ...testPaths, ":(glob)features/*/tests/**"),
-      ...quiet("ls-files", "--others", "--exclude-standard", "-z", "--", ...testPaths)
-        .split("\0")
-        .filter(Boolean)
-        .map((path) => {
-          try {
-            return quiet("diff", "--numstat", "--no-index", "--", "/dev/null", path);
-          } catch (error) {
-            if (error.status === 1) return error.stdout;
-            throw error;
-          }
-        }),
-    ]
+    const { from, outputs } = testDiffSince(cwd, base, "--numstat");
+    const rows = outputs
       .flatMap((out) => out.split("\n"))
       .filter(Boolean)
       .map((line) => line.split("\t"));
     const sum = (column) => rows.reduce((total, row) => total + (Number(row[column]) || 0), 0);
     return { base, from, added: sum(0), removed: sum(1), files: rows.length };
+  } catch (error) {
+    return { base, unavailable: String(error.stderr || error.message).trim() };
+  }
+}
+
+const TEST_CALL = String.raw`^\s*(?:await\s+)?(?:t\.)?(?:test|it|describe|suite)`;
+const SKIP_OPTION = String.raw`\b(?:skip|only|todo)\s*:\s*(?!false\b)[^,}\s]`;
+const SKIP = new RegExp(
+  [
+    String.raw`${TEST_CALL}\.(?:skip|only|todo)\b`,
+    String.raw`^\s*(?:await\s+)?t\.(?:skip|todo)\s*\(`,
+    String.raw`${TEST_CALL}\s*\(.*\{\s*(?:\w+\s*:[^,{}]*,\s*)*${SKIP_OPTION}`,
+    String.raw`^\s*(?:\{\s*)?${SKIP_OPTION}`,
+  ].join("|"),
+);
+const ASSERTION = /^\s*(?:await\s+)?(?:assert(?:\.\w+)*|expect)\s*\(/;
+
+export function testWeakeningSince(cwd, base = "origin/main") {
+  try {
+    const { from, outputs } = testDiffSince(cwd, base, "-U0");
+    const skips = [];
+    let assertionsAdded = 0;
+    let assertionsRemoved = 0;
+    for (const out of outputs) {
+      let file;
+      for (const line of out.split("\n")) {
+        if (line.startsWith("+++ ")) file = line.slice(4).replace(/^b\//, "");
+        else if (line.startsWith("--- ")) continue;
+        else if (line.startsWith("+")) {
+          const added = line.slice(1);
+          if (SKIP.test(added)) skips.push({ file, line: added.trim() });
+          if (ASSERTION.test(added)) assertionsAdded++;
+        } else if (line.startsWith("-") && ASSERTION.test(line.slice(1))) assertionsRemoved++;
+      }
+    }
+    return { base, from, skips, assertionsAdded, assertionsRemoved };
   } catch (error) {
     return { base, unavailable: String(error.stderr || error.message).trim() };
   }

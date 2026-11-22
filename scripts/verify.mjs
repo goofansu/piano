@@ -7,13 +7,15 @@ import {
   revisionOutcome,
   saveRun,
   testLinesSince,
+  testWeakeningSince,
 } from "./verification-evidence.mjs";
 
 const cwd = resolve(import.meta.dirname, "..");
 if (process.argv.includes("--help")) {
   console.log(`Usage: npm run verify -- [evidence-directory]
 Runs npm run typecheck, npm run lint, npm test. No browser or model calls.
-Reports lines changed in the test directories since origin/main, uncommitted and new files included.
+Reports lines changed in the test directories since origin/main, uncommitted and new files included,
+and flags added skip/only/todo and net-removed assertion lines.
 Fresh checkout: npm ci (see docs/development.md).
 Focused: node --test --import ./test/setup.ts features/<feature>/test/<name>.test.ts
 Browser: npm run test:browser (or node test/browser/<journey>.mjs <evidence-directory>)
@@ -143,6 +145,7 @@ Evidence defaults to .scratch/verify/<timestamp>-<pid>; a pass covers only this 
       record.outcome = record.contentObservation;
     if (signal) record.outcome = "cancelled";
     record.testLines = testLinesSince(cwd);
+    record.testWeakening = testWeakeningSince(cwd);
     record.finishedAt = new Date().toISOString();
     record.exitCode =
       record.outcome === "passed" ? 0 : signal === "SIGINT" ? 130 : signal === "SIGTERM" ? 143 : 1;
@@ -161,6 +164,17 @@ Evidence defaults to .scratch/verify/<timestamp>-<pid>; a pass covers only this 
       ? `Test lines since ${lines.base}: unavailable — ${lines.unavailable}`
       : `Test lines since ${lines.base}: +${lines.added} −${lines.removed} in ${lines.files} file(s) in the test directories.`,
   );
+  const weakening = record.testWeakening;
+  if (weakening.unavailable)
+    console.log(`Test weakening since ${weakening.base}: unavailable — ${weakening.unavailable}`);
+  else {
+    console.log(
+      `Test weakening since ${weakening.base}: ${weakening.skips.length} skip/only/todo added; assertion lines +${weakening.assertionsAdded} −${weakening.assertionsRemoved}.`,
+    );
+    for (const skip of weakening.skips) console.log(`  ${skip.file}: ${skip.line}`);
+    if (weakening.skips.length || weakening.assertionsRemoved > weakening.assertionsAdded)
+      console.log("REVIEW: justify each skip and removed assertion in the PR, or restore it.");
+  }
   console.log(
     "Pass means command exit 0; skipped subtests are not coverage (see logs). Browser journeys and acceptance claims are not evaluated here.",
   );

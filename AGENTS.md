@@ -16,7 +16,10 @@ of message delivery. Apply the same test when splitting a growing feature. See t
 
 Before changing behavior, name the claim, relevant invariant and smallest check that could disprove
 it. Inspect existing coverage first. For a bug, reproduce it before fixing it when feasible, then
-show the same check passing; that reproduction is PR evidence. Commit a regression test only for a
+show the same check passing; that reproduction is PR evidence. Every check you report must be able
+to go **red**: seen failing before the fix or with the change reverted, or naming the observation
+that would differ if the change were broken. Drop a check that would stay green with the change
+broken; it is decoration, not evidence. Commit a regression test only for a
 meaningful failure that is not already protected, by the
 [test ladder](docs/testing.md#when-to-add-a-test): close the class, extend a case, else add a test.
 Test observable contracts, not private helpers or mock choreography.
@@ -42,14 +45,20 @@ For **code or dependency changes**, run `npm run verify -- <evidence-directory>`
 and the full module suite must all pass. It uses fake Pi and needs no model credentials. Focused
 checks do not replace this baseline, and the baseline does not run browser journeys. Run an affected
 journey with `node test/browser/<journey>.mjs <evidence-directory>`; `npm run test:browser` runs the
-committed suite. Use the table above to choose the check, not every journey by default.
+committed suite. Give each claim the check its row names; run anything beyond that only for a named
+risk the row leaves open.
 
 Keep local verification output under `~/piano-evidence/`, using the
 [evidence directory convention](docs/testing.md#evidence-directories) before running checks.
 Retain actual command/browser output on the PR, outside Git, tied to the tested revision and
-environment. Report pass/fail, skipped or blocked checks, the test lines `verify` printed, and
-limitations. Never weaken assertions to make a change green. Stop once the claim and relevant risk
-are covered and required gates pass.
+environment. Report it in the [verification block](docs/testing.md#completion-evidence). Keep
+assertions at full strength; `verify` flags added skips and net-removed assertions, and each needs a
+reason in the PR. Stop once the claim and relevant risk are covered and required gates pass.
+
+Before opening the PR, give a fresh-context reviewer (a subagent without your reasoning) only the
+diff and the verification block. Ask which check would stay green if its claim were broken, what
+breakage no check covers, and where the code falls short of this file and the documents it routes
+to. Fix each finding or answer it in the PR.
 
 ### Scratch instance
 
