@@ -21,7 +21,7 @@ function fixture() {
   mkdirSync(join(root, "scripts"), { recursive: true });
   mkdirSync(join(root, "node_modules"));
   mkdirSync(join(root, ".scratch"));
-  for (const file of ["verify.mjs", "verification-evidence.mjs"])
+  for (const file of ["verify.mjs", "verification-evidence.mjs", "test-changes.mjs"])
     copyFileSync(join(ROOT, "scripts", file), join(root, "scripts", file));
   writeFileSync(join(root, ".gitignore"), "node_modules/\n.scratch/\n");
   const configure = (lint: string) =>
@@ -49,7 +49,14 @@ function fixture() {
       timeout: 30000,
     });
   const record = (name: string) => JSON.parse(readFileSync(join(temp, name, "run.json"), "utf8"));
-  return { temp, root, configure, run, record };
+  const changes = (env: Record<string, string> = {}) =>
+    spawnSync(process.execPath, [join(root, "scripts/test-changes.mjs")], {
+      cwd: root,
+      encoding: "utf8",
+      timeout: 30000,
+      env: { ...process.env, GITHUB_STEP_SUMMARY: "", ...env },
+    });
+  return { temp, root, configure, run, record, changes };
 }
 
 test("baseline retains exact checks and diagnostics; failed and blocked are not passes", () => {
@@ -94,6 +101,9 @@ test("baseline reports changes in feature and shared tests since origin/main, un
     f.configure("node -e \"console.log('linted')\"");
     f.run("no-base");
     assert.match(f.record("no-base").testLines.unavailable, /origin\/main/);
+    const unavailable = f.changes();
+    assert.equal(unavailable.status, 1);
+    assert.match(unavailable.stdout, /Test lines since origin\/main: unavailable/);
     mkdirSync(join(f.root, "test"));
     writeFileSync(join(f.root, "test/kept.test.ts"), "one\ntwo\nthree\n");
     writeFileSync(join(f.root, "source.ts"), "outside test\n");
@@ -190,6 +200,13 @@ test("baseline flags added skips and net-removed assertions in tests, and not mo
     ])
       assert.ok(weakened.stdout.includes(`  ${skip}\n`), skip);
     assert.match(weakened.stdout, /REVIEW: justify each skip and removed assertion/);
+
+    const summary = join(f.temp, "summary.md");
+    const changes = f.changes({ GITHUB_STEP_SUMMARY: summary });
+    assert.equal(changes.status, 0, changes.stderr);
+    const report = changes.stdout.trim();
+    assert.ok(weakened.stdout.includes(report), "test-changes prints the report verify prints");
+    assert.equal(readFileSync(summary, "utf8"), `### Test changes\n\n\`\`\`\n${report}\n\`\`\`\n`);
   } finally {
     rmSync(f.temp, { recursive: true, force: true });
   }

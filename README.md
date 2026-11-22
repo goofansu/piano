@@ -27,6 +27,7 @@ Browse the [Piano user guides](docs/use.md) to find a task, or see [configuratio
 ## Develop
 
 See the [feature inventory and source layout](docs/README.md#feature-inventory) to find an owner.
-Install development dependencies with `npm ci`, then run `npm run verify` for the required
-typecheck, lint and module-test baseline. See [development setup and checks](docs/development.md)
-for tool prerequisites, focused checks and scratch browser journeys.
+Install development dependencies with `npm ci`. CI runs the required typecheck, lint and
+module-test baseline on every pull request; `npm run verify` runs it locally. See
+[development setup and checks](docs/development.md) for tool prerequisites, focused checks and
+scratch browser journeys.

@@ -6,6 +6,7 @@ import {
   executionEnvironment,
   revisionOutcome,
   saveRun,
+  testChangesReport,
   testLinesSince,
   testWeakeningSince,
 } from "./verification-evidence.mjs";
@@ -158,23 +159,7 @@ Evidence defaults to .scratch/verify/<timestamp>-<pid>; a pass covers only this 
   console.log(
     `${record.outcome.toUpperCase()}: baseline${record.reason ? ` — ${record.reason}` : ""}. Evidence: ${evidence}/run.json`,
   );
-  const lines = record.testLines;
-  console.log(
-    lines.unavailable
-      ? `Test lines since ${lines.base}: unavailable — ${lines.unavailable}`
-      : `Test lines since ${lines.base}: +${lines.added} −${lines.removed} in ${lines.files} file(s) in the test directories.`,
-  );
-  const weakening = record.testWeakening;
-  if (weakening.unavailable)
-    console.log(`Test weakening since ${weakening.base}: unavailable — ${weakening.unavailable}`);
-  else {
-    console.log(
-      `Test weakening since ${weakening.base}: ${weakening.skips.length} skip/only/todo added; assertion lines +${weakening.assertionsAdded} −${weakening.assertionsRemoved}.`,
-    );
-    for (const skip of weakening.skips) console.log(`  ${skip.file}: ${skip.line}`);
-    if (weakening.skips.length || weakening.assertionsRemoved > weakening.assertionsAdded)
-      console.log("REVIEW: justify each skip and removed assertion in the PR, or restore it.");
-  }
+  for (const line of testChangesReport(record.testLines, record.testWeakening)) console.log(line);
   console.log(
     "Pass means command exit 0; skipped subtests are not coverage (see logs). Browser journeys and acceptance claims are not evaluated here.",
   );

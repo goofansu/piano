@@ -41,24 +41,27 @@ violation, report uncertainty or ask before expanding product behavior.
 | New critical path | Add a journey in `test/browser/`; otherwise extend relevant existing coverage rather than adding another browser journey. |
 | New transcript row kind | Extend and run `node test/browser/transcript-rows.mjs <evidence-directory>`. Its gutter glyph must centre on the first text line; a screenshot alone is insufficient. |
 
-For **code or dependency changes**, run `npm run verify -- <evidence-directory>`: typecheck, lint
-and the full module suite must all pass. It uses fake Pi and needs no model credentials. Focused
-checks do not replace this baseline, and the baseline does not run browser journeys. Run an affected
-journey with `node test/browser/<journey>.mjs <evidence-directory>`; `npm run test:browser` runs the
-committed suite. Give each claim the check its row names; run anything beyond that only for a named
-risk the row leaves open.
+Locally, run only the checks your claims need. CI is the baseline: on every PR it runs typecheck,
+lint, build, the full module suite and the critical-path journeys. Run an affected journey with
+`node test/browser/<journey>.mjs <evidence-directory>`. Give each claim the check its row names; run
+anything beyond that only for a named risk the row leaves open. After opening the PR, wait for CI
+with `gh pr checks <number> --watch` and fix failures before reporting the task done.
+`npm run verify` runs the full baseline locally when CI cannot.
 
-Keep local verification output under `~/piano-evidence/`, using the
+Keep local verification output under `${TMPDIR:-/tmp}/piano-evidence/`, using the
 [evidence directory convention](docs/testing.md#evidence-directories) before running checks.
 Retain actual command/browser output on the PR, outside Git, tied to the tested revision and
 environment. Report it in the [verification block](docs/testing.md#completion-evidence). Keep
-assertions at full strength; `verify` flags added skips and net-removed assertions, and each needs a
-reason in the PR. Stop once the claim and relevant risk are covered and required gates pass.
+assertions at full strength; `npm run test-changes` (also a CI job) flags added skips and
+net-removed assertions, and each needs a reason in the PR. Stop once the claim and relevant risk are
+covered and CI passes.
 
-Before opening the PR, give a fresh-context reviewer (a subagent without your reasoning) only the
-diff and the verification block. Ask which check would stay green if its claim were broken, what
-breakage no check covers, and where the code falls short of this file and the documents it routes
-to. Fix each finding or answer it in the PR.
+For logic, protocol, lifecycle, application behavior or test changes, before opening the PR give a
+fresh-context reviewer (a subagent without your reasoning) only the diff and the verification block.
+Ask which check would stay green if its claim were broken, what breakage no check covers, and where
+the code falls short of this file and the documents it routes to. Fix each finding or answer it in
+the PR. Documentation, comments and other local edits skip the reviewer unless a named risk calls
+for one.
 
 ### Scratch instance
 

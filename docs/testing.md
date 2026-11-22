@@ -26,7 +26,7 @@ rung that holds:
    that differ only in shape or size, such as path names, counts or encodings, share one table.
 3. **Add a test** for a contract no existing test title states, at the smallest reliable boundary.
 
-`npm run verify` prints the lines changed in `test/` and `features/*/test/` since `origin/main`. A behavior-preserving
+`npm run test-changes` prints the lines changed in `test/` and `features/*/test/` since `origin/main`. A behavior-preserving
 refactor adds no more test lines than it removes; when it adds more, name the uncovered risk each
 added test protects. It also lists added `skip`, `only` and `todo` markers and flags assertion lines
 removed beyond those added. A line-based heuristic, it misses assertions inside callbacks and
@@ -136,19 +136,20 @@ margins. `test/browser/transcript-rows.mjs` measures it; add a new row kind to i
 
 ## Evidence directories
 
-Keep local verification evidence in one root, `~/piano-evidence/`, shared across Piano worktrees.
-Group checks under a uniquely allocated task/run directory rather than creating new top-level
-folders in home. Before running checks, allocate a run in the shell that will invoke them:
+Keep local verification evidence in one root, `${TMPDIR:-/tmp}/piano-evidence/`, shared across
+Piano worktrees. Group checks under a uniquely allocated task/run directory. The system may clear
+the temporary directory after a reboot or days of disuse, so attach evidence to the PR before then.
+Before running checks, allocate a run in the shell that will invoke them:
 
 ```sh
-mkdir -p "$HOME/piano-evidence"
+EVIDENCE_ROOT="${TMPDIR:-/tmp}/piano-evidence"
+mkdir -p "$EVIDENCE_ROOT"
 # Replace short-task-name with an issue ID or task slug.
-EVIDENCE_RUN=$(mktemp -d "$HOME/piano-evidence/short-task-name.XXXXXX")
+EVIDENCE_RUN=$(mktemp -d "$EVIDENCE_ROOT/short-task-name.XXXXXX")
 export VERIFY_EVIDENCE="$EVIDENCE_RUN/manual"
 ```
 
 Pass a separate child path to each explicit-output command, such as
-`npm run verify -- "$EVIDENCE_RUN/baseline"` or
 `node test/browser/start-session.mjs "$EVIDENCE_RUN/start-session"`. For retries or before/after
 comparisons, use new child paths or allocate another run; preserve earlier output. Manual
 `verify-piano` launches use `VERIFY_EVIDENCE` as their parent and append their own run ID.
@@ -176,12 +177,12 @@ Revision: <commit> · <OS, Node, fake or real Pi>
 | --- | --- | --- | --- |
 | Reopening a session restores its draft | `node test/browser/open-session.mjs` | the fix is reverted (seen) | pass |
 
-Baseline: <the PASS/FAIL, test lines and test weakening lines `npm run verify` printed>
+CI: <Quality gates and each Critical paths result>; Test changes: <the test lines and test weakening lines it printed>
 Not checked: <claim or risk> — <why>
 ```
 
 Keep each cell to a line and link or collapse logs; a reviewer reads the block, not the output.
-For each skip or net-removed assertion that `verify` flagged, give its reason under the block. For new or
+For each skip or net-removed assertion that Test changes flagged, give its reason under the block. For new or
 substantially changed features, name the starting document from the
 [feature verification map](#feature-verification-map). Name the [ladder](#when-to-add-a-test) rung
 each added test stands on, or say why existing coverage was sufficient.
