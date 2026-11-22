@@ -1,7 +1,7 @@
 # ADR 0002: Separate outcome projects from execution locations
 
 - Status: Accepted. Grouping and project instructions are implemented; shared context remains
-  deferred. See [evidence](../research/outcome-projects-step1.md).
+  deferred. See [evidence](https://github.com/goofansu/piano/blob/67209d27959989376f52ea7c5954f586b198a41a/docs/research/outcome-projects-step1.md).
 - Related: [projects](../../features/projects/README.md), [glossary](../glossary.md#projects),
   [ADR 0001](0001-pi-rpc-workspace-workbench.md).
 - Naming: code now calls added directories folders and outcome projects simply projects.

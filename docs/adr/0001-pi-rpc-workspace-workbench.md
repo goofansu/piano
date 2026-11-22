@@ -3,7 +3,7 @@
 - Date: 2026-10-04
 - Status: Accepted
 - Related: [invariants](../development-invariants.md),
-  [original research](../research/2026-10-02-harness-direction.md)
+  [original research](https://github.com/goofansu/piano/blob/67209d27959989376f52ea7c5954f586b198a41a/docs/research/2026-10-02-harness-direction.md)
 
 Organizational extension: [ADR 0002](0002-outcome-projects.md) separates outcome-project organization from
 workspace execution. It scopes the change to decision 4 without reinterpreting existing directory
