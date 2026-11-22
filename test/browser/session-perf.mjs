@@ -5,6 +5,19 @@ import { cpus, platform, release } from "node:os";
 import { resolve } from "node:path";
 import { run } from "./harness.mjs";
 
+if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  console.log(`Usage: node test/browser/session-perf.mjs [evidence-directory]
+Measure transcript size against opening, scrolling and sending, on a synthetic conversation served
+by a Vite development build. Each sample starts a fresh browser and backend. Ready time is when
+the transcript is usable. Heap is read after appending messages and forcing garbage collection.
+Results report the maximum beside the 95th percentile, so one visible stall still counts.
+The scroll sweep behaves like dragging a scrollbar; test/browser/transcript-scroll.mjs covers
+native wheel input. Evidence defaults to .scratch/browser/session-perf.
+Env:
+  PERF_SIZES=<n,n,...>  even message counts (default 100,500,1000)
+  PERF_REPEATS=<n>      samples per size and shape (default 3)`);
+  process.exit(0);
+}
 const sizes = (process.env.PERF_SIZES ?? "100,500,1000").split(",").map(Number);
 const repeats = Number(process.env.PERF_REPEATS ?? 3);
 assert.ok(sizes.every((n) => Number.isInteger(n) && n > 0 && n % 2 === 0));

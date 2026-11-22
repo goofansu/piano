@@ -25,7 +25,6 @@ To start your first session, open **Settings → Providers** and sign in if Pi d
 
 | I want to… | Guide |
 | --- | --- |
-| Find a setting | [Settings](settings.md) |
 | Sign in to a model provider or use an API key | [Providers](../features/providers/README.md) |
 | Give Pi access to tools on an MCP server | [MCP](../features/mcp/README.md) |
 | Reuse instructions or a prompt across sessions | [Skills and prompts](../features/library/README.md) |

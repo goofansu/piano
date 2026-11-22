@@ -48,7 +48,7 @@ Add a recipe to [Features](#features) when you create one. Link each recipe to t
   [Image attachments](../../../features/sessions/image-attachments.md).
 - [Open and continue a session](../../../features/navigation/verify/open-session.md).
   Docs: [Session navigation](../../../features/navigation/README.md),
-  [Transcript performance](../../../docs/session-performance.md),
+  [Transcript performance](../../../docs/performance.md),
   [Radius artifacts](../../../features/radius/radius-artifacts.md).
 - [Share a session](../../../features/sharing/verify/session-sharing.md).
   Docs: [Session sharing](../../../features/sharing/README.md).

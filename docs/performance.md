@@ -12,7 +12,7 @@ from the module suite and browser journeys.
 
 | Measures | Command | Also needs | Detail |
 | --- | --- | --- | --- |
-| Transcript size against opening, scrolling and sending | `node test/browser/session-perf.mjs <directory>` | agent-browser | [Session page](session-performance.md) |
+| Transcript size against opening, scrolling and sending | `node test/browser/session-perf.mjs <directory>` | agent-browser | `--help` |
 | Sidebar rendering by session count | `node test/performance-sidebar-sessions.mjs <directory> [counts…]` | agent-browser |  |
 | New-session startup stages | `node scripts/bench/start-session.mjs <directory>` | agent-browser; the locked real Pi | [`scripts/bench`](../scripts/bench/README.md) |
 | Folder picker and registry latency | `node test/performance-folder-registry.mjs <file>.json` | Linux `ss` |  |
