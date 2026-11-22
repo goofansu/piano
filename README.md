@@ -1,11 +1,11 @@
-# piano
+# Piano
 
-A browser UI for [Pi](https://github.com/earendil-works/pi) sessions across folders and Git worktrees.
+Piano is a browser UI for [Pi](https://github.com/earendil-works/pi). Use it to run Pi sessions
+in your folders and Git worktrees, and to come back to them later.
 
-## Use
+## Run Piano
 
-Requires **Node.js 24 or later** (use the latest patch release), npm and Git.
-Pi is included; no separate Pi installation is needed.
+You need Node.js 24 or later, npm, and Git. Piano includes Pi.
 
 ```bash
 git clone https://github.com/goofansu/piano.git
@@ -15,19 +15,16 @@ npm run build
 npm start
 ```
 
-Open <http://127.0.0.1:7070>. [Sign in to a model provider](features/providers/README.md) in
-**Settings → Providers**, or reuse existing Pi credentials in `~/.pi/agent`.
-Then start a new session.
+Open <http://127.0.0.1:7070>. In **Settings → Providers**, sign in to a model provider. If Pi
+already has credentials in `~/.pi/agent`, Piano uses them. Then start a new session.
 
-Piano has no login and runs commands as your user. Keep it on loopback or behind a private,
-authenticated proxy; never expose it publicly.
+Piano has no login and runs commands as your user. Keep it on `127.0.0.1`, or put it behind a
+private proxy that requires sign-in. Never expose it to the internet.
 
-Browse the [Piano user guides](docs/use.md) to find a task, or see [configuration](docs/configuration.md) for storage, backups and browser origins.
+To find a task, see the [Piano user guides](docs/use.md).
 
-## Develop
+## Develop Piano
 
-See the [feature inventory and source layout](docs/README.md#feature-inventory) to find an owner.
-Install development dependencies with `npm ci`. CI runs the required typecheck, lint and
-module-test baseline on every pull request; `npm run verify` runs it locally. See
-[development setup and checks](docs/development.md) for tool prerequisites, focused checks and
-scratch browser journeys.
+Install dependencies with `npm ci`. Run `npm run verify` to run the checks that CI runs on every
+pull request. [Development setup and checks](docs/development.md) lists the tools you need and the
+focused checks.

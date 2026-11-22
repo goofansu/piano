@@ -27,7 +27,7 @@ First allocate an [evidence run](../../../docs/testing.md#evidence-directories) 
 any harness journey finish its cleanup. Then run `.agents/skills/verify-piano/scripts/launch.sh`
 (`--help` lists `--empty` and `--fake-pi`; `VERIFY_GH_CLI=<path>` supplies a stand-in `gh`).
 
-Install the [development prerequisites](../../../README.md#develop), including agent-browser and
+Install the [development prerequisites](../../../docs/development.md#setup), including agent-browser and
 Chromium, first.
 
 Only the default `test/browser/fake-pi.mjs` writes the audit (`$AUDIT`); on `--fake-pi dialogs` and

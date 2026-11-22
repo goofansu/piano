@@ -1,6 +1,6 @@
 # Using Piano
 
-To start your first session, open **Settings → Providers** and sign in if Pi does not already have credentials. Choose **Home**, then **New session** in the sidebar. Select the folder you want Pi to work in, write your request, and send it. [Install Piano](../README.md#use) · [Start and continue sessions](../features/sessions/README.md)
+To start your first session, open **Settings → Providers** and sign in if Pi does not already have credentials. Choose **Home**, then **New session** in the sidebar. Select the folder you want Pi to work in, write your request, and send it. [Install Piano](../README.md#run-piano) · [Start and continue sessions](../features/sessions/README.md)
 
 ## Work in a session
 
