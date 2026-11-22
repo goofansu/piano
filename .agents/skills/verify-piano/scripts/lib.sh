@@ -11,7 +11,10 @@ export PATH
 SKILL_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 # .agents/skills/verify-piano -> repository root (the .claude/skills symlink has the same depth).
 ROOT=$(cd "$SKILL_DIR/../../.." && pwd)
-SCRATCH_ROOT=${VERIFY_SCRATCH:-/tmp/verify-piano}
+# macOS TMPDIR ends in "/"; Node logs the normalized path, which doctor.sh matches exactly.
+TMP_ROOT=${TMPDIR:-/tmp}
+TMP_ROOT=${TMP_ROOT%/}
+SCRATCH_ROOT=${VERIFY_SCRATCH:-$TMP_ROOT/verify-piano}
 
 die() {
   echo "verify-piano: $*" >&2
