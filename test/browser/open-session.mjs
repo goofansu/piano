@@ -956,6 +956,53 @@ await run(
     await page.open("/s/login-bug");
     await page.see("echo: Add a regression test");
     await checkMessageFidelity(page);
+    await page.ab("fill", '[aria-label="Message"]', "hold");
+    await page.press("Enter");
+    await page.ab("wait", 'button[aria-label="Stop"]');
+    await page.ab("fill", '[aria-label="Message"]', "Recover this queue edit");
+    await page.press("Enter");
+    await page.ab("wait", 'button[aria-label="Edit queued message"]');
+    await page.evaluate(`(() => {
+      const send = WebSocket.prototype.send;
+      window.queueRecovery = { dropped: false, read: false };
+      let id;
+      WebSocket.prototype.send = function(data) {
+        const request = JSON.parse(data);
+        if (request.action?._tag === "restore_queue") {
+          id = request.action.queueRequestId;
+          this.addEventListener("message", event => {
+            const reply = JSON.parse(event.data);
+            if (reply._tag === "action_result" && reply.queueRequestId === request.action.queueRequestId) {
+              window.queueRecovery.dropped = true;
+              event.stopImmediatePropagation();
+              this.close();
+            }
+          }, { capture: true });
+        }
+        if (request._tag === "queue_receipt" && request.operation === "read" && request.queueRequestId === id) {
+          window.queueRecovery.read = true;
+          WebSocket.prototype.send = send;
+        }
+        return send.call(this, data);
+      };
+    })()`);
+    const clears = () => page.received().filter((r) => r.command === "clear_queue").length;
+    const before = clears();
+    await page.click("button", "Edit queued message");
+    await page.until(
+      `document.querySelector('[aria-label="Message"]')?.value === "Recover this queue edit"`,
+    );
+    assert.equal(
+      clears(),
+      before + 1,
+      "reconnect reads the receipt without clearing Pi's queue again",
+    );
+    assert.deepEqual(await page.evaluate("window.queueRecovery"), { dropped: true, read: true });
+    await page.ab("focus", '[aria-label="Message"]');
+    await page.press("Mod+a");
+    await page.press("Backspace");
+    await page.ab("wait", 'button[aria-label="Stop"]');
+    await page.click("button", "Stop");
     await homeActivity(page);
   },
 );

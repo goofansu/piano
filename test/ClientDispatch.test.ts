@@ -836,6 +836,19 @@ const refusals: {
     { _tag: "session_status", requestId: "st1", target: { sessionId: "x" } },
     { _tag: "session_status", requestId: "st1", result: { status: "error", detail: "REFUSED" } },
   ],
+  queue_receipt: [
+    {
+      _tag: "queue_receipt",
+      queueRequestId: "dd6413f9-f920-483b-9572-09610ec85094",
+      operation: "read",
+    },
+    {
+      _tag: "error",
+      queueRequestId: "dd6413f9-f920-483b-9572-09610ec85094",
+      message:
+        "Could not recover the queue result. Check the session and queue before trying again.",
+    },
+  ],
   act: [
     { _tag: "act", selectionId: "s3", action: { _tag: "prompt", text: "hi" } },
     { _tag: "error", message: "REFUSED", selectionId: "s3" },

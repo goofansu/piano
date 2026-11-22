@@ -103,6 +103,7 @@ export function createClient({
   let observing: string | null = null;
   const listeners = new Set<(update: ClientUpdate) => void>();
   const messageListeners = new Set<(message: ServerMessage) => void>();
+  const pendingQueues = new Set<string>();
 
   const askAboutFocus = () => {
     if (!state.connected) {
@@ -163,6 +164,22 @@ export function createClient({
       return disposition;
     } else if (m._tag === "act") {
       const ready = sessionReady(state) && state.selectionId;
+      const action = m.action;
+      if (ready && (action._tag === "stop" || action._tag === "restore_queue")) {
+        const queueRequestId = crypto.randomUUID();
+        pendingQueues.add(queueRequestId);
+        const disposition =
+          connection?.send({
+            ...m,
+            selectionId: state.selectionId!,
+            action: { ...action, queueRequestId },
+          }) ?? "not-sent";
+        if (disposition === "not-sent") {
+          pendingQueues.delete(queueRequestId);
+          notify("Queue action not sent. Check the queue before trying again.", "warning");
+        }
+        return disposition;
+      }
       const disposition = ready
         ? (connection?.send({ ...m, selectionId: state.selectionId! }) ?? "not-sent")
         : "not-sent";
@@ -185,6 +202,8 @@ export function createClient({
   const onStatus = (connected: boolean, reason?: DisconnectReason) => {
     apply({ type: "connected", connected, reason });
     if (connected) {
+      for (const queueRequestId of pendingQueues)
+        connection?.send({ _tag: "queue_receipt", operation: "read", queueRequestId });
       const pending = state.pendingCreate;
       if (pending && pending.outcome === "uncertain" && !state.session?.sessionId)
         send({ _tag: "select", cwd: pending.cwd, sessionId: null, attemptId: pending.attemptId });
@@ -193,6 +212,8 @@ export function createClient({
   };
 
   const onMessage = (m: ServerMessage) => {
+    const queueRequestId = "queueRequestId" in m ? m.queueRequestId : undefined;
+    if (queueRequestId && !pendingQueues.has(queueRequestId)) return;
     if (m._tag === "directory") {
       if (m.requestId !== observing) return;
       if (m.result.status === "ready") {
@@ -233,6 +254,10 @@ export function createClient({
     )
       notify(`Pi stopped: ${m.event.closure.detail}`, "warning");
     for (const listener of messageListeners) listener(m);
+    if (queueRequestId) {
+      pendingQueues.delete(queueRequestId);
+      connection?.send({ _tag: "queue_receipt", operation: "ack", queueRequestId });
+    }
   };
 
   const subscribe = (listener: (update: ClientUpdate) => void) => {
