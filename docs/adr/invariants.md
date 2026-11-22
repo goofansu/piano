@@ -233,7 +233,7 @@ Contributor preferences for developing Piano must not become requirements for us
 
 ## Applying the guardrails
 
-Apply these contracts while developing Piano itself, using [Testing](../testing.md).
+Apply these contracts while developing Piano itself, using [the testing policy](../testing.md).
 The verification scenarios above describe outcomes to protect, not a requirement to create one unit
 test per bullet or to run every scenario for every change. Prefer existing evidence where adequate;
 add tests for uncovered meaningful failure modes at the appropriate boundary.

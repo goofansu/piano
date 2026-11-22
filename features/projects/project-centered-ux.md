@@ -1,6 +1,6 @@
 # Review project activity
 
-Open **Projects** in the sidebar to see your active projects. Each row shows the folders in use, the session count, and the most recent session activity. Select a project name to open its home. You can also jump straight to an active project by searching for `!p` followed by its name in the command palette; see [Search sessions, projects and commands](../commands/README.md).
+Open **Projects** in the sidebar to see your active projects. Each row shows the folders in use, the session count, and the most recent session activity. Select a project name to open its home. You can also jump straight to an active project by searching for `!p` followed by its name in the [command palette](../commands/README.md).
 
 ## Pick up a session
 

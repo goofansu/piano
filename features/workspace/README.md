@@ -10,7 +10,7 @@ In a session working in a Git checkout, open **Changes**. Choose **Uncommitted**
 
 Expand a file to read its diff. **Ask about this file** adds the displayed patch to your draft so you can add a question and send it to Pi. Choose **Refresh changes** to read the checkout again after more edits.
 
-To connect a GitHub pull request, choose **Pull request** from the command palette ([Search sessions, projects and commands](../commands/README.md)). Enter the PR URL and choose **Link**, or select **Find from branch**. Once linked, open **Changes** to see the PR and its available check and review statuses.
+To connect a GitHub pull request, choose **Pull request** from the [command palette](../commands/README.md). Enter the PR URL and choose **Link**, or select **Find from branch**. Once linked, open **Changes** to see the PR and its available check and review statuses.
 
 ## Local file previews
 

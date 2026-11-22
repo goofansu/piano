@@ -23,12 +23,11 @@ start a replacement.
 
 ## Launch
 
-In this shell, first allocate an evidence run as described in
-[Evidence directories](../../../docs/testing.md#evidence-directories), and let any harness journey
-finish its cleanup. Then run `.agents/skills/verify-piano/scripts/launch.sh`
+First allocate an [evidence run](../../../docs/testing.md#evidence-directories) in this shell and let
+any harness journey finish its cleanup. Then run `.agents/skills/verify-piano/scripts/launch.sh`
 (`--help` lists `--empty` and `--fake-pi`; `VERIFY_GH_CLI=<path>` supplies a stand-in `gh`).
 
-Install the [Setup](../../../docs/development.md#setup), including agent-browser and
+Install the [development prerequisites](../../../docs/development.md#setup), including agent-browser and
 Chromium, first.
 
 Only the default `test/browser/fake-pi.mjs` writes the audit (`$AUDIT`); on `--fake-pi dialogs` and
@@ -88,7 +87,7 @@ Run it first, and again whenever anything looks off. It changes nothing.
 
 ## Evidence
 
-With the [Evidence directories](../../../docs/testing.md#evidence-directories), `launch.sh`
+With the [evidence directory setup](../../../docs/testing.md#evidence-directories), `launch.sh`
 uses `VERIFY_EVIDENCE` as the parent and appends its own run ID, so manual launch evidence goes to
 `$EVIDENCE_RUN/manual/<run-id>/`, outside the scratch run dir, and Cleanup keeps it. The baseline
 and the browser harness ignore `VERIFY_EVIDENCE`; give them a positional path.
@@ -98,7 +97,7 @@ the parent for the overall verification run. Keep retained logs and drive script
 Capture a step with `.agents/skills/verify-piano/scripts/capture.sh "$RUN" <feature-id> <step>`.
 
 The committed harness additionally records content identities, command/environment/journey and
-outcome in `run.json`; see [File evidence provenance](../../../docs/testing.md#file-evidence-provenance).
+outcome in `run.json`; see [capture scope and limitations](../../../docs/testing.md#file-evidence-provenance).
 The manual shell flow below has its existing captures/logs, **not** that content fingerprint. Keep
 its drive script and separately identify the tested changes/environment on the PR; invoking the
 skill alone is not evidence.
@@ -113,7 +112,7 @@ Proof standards:
   received), `git -C "$REPO" worktree list`, `GET /api/folders`, files in `$REPO`.
 - Fake Pi is the only mock: it stands at Piano's real process boundary (`PIANO_PI_CLI`). Git is
   real. For what a fake-Pi run proves, see the
-  [Choose the right evidence boundary](../../../docs/testing.md#choose-the-right-evidence-boundary).
+  [evidence boundary](../../../docs/testing.md#choose-the-right-evidence-boundary).
 - Say plainly what came from a hand-written Pi history (fake Pi makes no tool calls) or only from a
   unit test. A skipped entry point is reported as skipped, not as verified through another one.
 

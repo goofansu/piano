@@ -12,4 +12,4 @@ To keep a session handy when you change the grouping, open its session menu and 
 
 Use **Option+↑** or **Option+↓** on macOS, or **Alt+↑** or **Alt+↓** on Windows and Linux, to move to the previous or next session in sidebar order. The shortcuts follow expanded groups and skip unavailable sessions. You can use them while typing in the session composer.
 
-To find a session outside the expanded groups, search for its title, folder, or branch in the command palette; see [Search sessions, projects and commands](../commands/README.md).
+To find a session outside the expanded groups, search for its title, folder, or branch in the [command palette](../commands/README.md).

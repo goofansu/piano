@@ -25,7 +25,7 @@ launch, check, drive, capture and clean up is in [`SKILL.md`](./SKILL.md).
 
 ## Proof and skip reporting
 
-The [Evidence](./SKILL.md#evidence) apply to every recipe. In addition:
+The [proof standards](./SKILL.md#evidence) apply to every recipe. In addition:
 
 - CLI proof is the command, stdout, stderr and exit code, saved under `$EVIDENCE/<feature-id>/`.
 - Record the feature ID and the entry point used with every artifact.
@@ -39,7 +39,7 @@ then labeled bullets pairing each action with an exact command and the observabl
 `Gotchas`. Keep implementation details out; name user paths, handles, required state, commands and
 proof.
 
-Add a recipe to [Features](#features) when you create one. Link each recipe to the guide for the user task it exercises. Keep test commands and evidence requirements in the recipe. See [Feature verification map](../../../docs/testing.md#feature-verification-map).
+Add a recipe to [Features](#features) when you create one. Link each recipe to the guide for the user task it exercises. Keep test commands and evidence requirements in the recipe. See the [feature verification mapping policy](../../../docs/testing.md#feature-verification-map).
 
 ## Features
 

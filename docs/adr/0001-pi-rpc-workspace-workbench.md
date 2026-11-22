@@ -24,7 +24,7 @@ A fuller transcript alone does not establish a better development product.
 
 Build Piano as the control plane and web workbench for evidence-based software development.
 The initial scope is intent → implementation → verification → review → integration, not production
-operations or a prescribed development methodology. Use the [Piano domain glossary](../../GLOSSARY.md) for domain terms.
+operations or a prescribed development methodology. Use the [glossary](../../GLOSSARY.md) for domain terms.
 
 1. **Keep the process boundary.** One active session has at most one server-owned
    `pi --mode rpc` child. Keep Pi protocol details behind `features/sessions/server/pi/PiSessions.ts` and its

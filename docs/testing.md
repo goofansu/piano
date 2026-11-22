@@ -10,7 +10,7 @@ show the same check passing; that reproduction is PR evidence. Every check you r
 to go **red**: seen failing before the fix or with the change reverted, or naming the observation
 that would differ if the change were broken. Drop a check that would stay green with the change
 broken; it is decoration, not evidence. Commit a regression test only for a meaningful failure that
-is not already protected, by the ladder in [When to add a test](#when-to-add-a-test). Test observable contracts, not
+is not already protected, by the [test ladder](#when-to-add-a-test). Test observable contracts, not
 private helpers or mock choreography.
 
 Ground new fallback states, retries and compatibility branches in observed reproducible behavior,
@@ -33,13 +33,13 @@ violation, report uncertainty or ask before expanding product behavior.
 | Change | Verification |
 | --- | --- |
 | Documentation or comments only | Review accuracy, links and the diff; confirm no runtime or tooling directives changed. No tests or app run needed. |
-| Logic, protocol or lifecycle behavior | Cover an uncovered failure at the public boundary by the ladder in [When to add a test](#when-to-add-a-test), in a focused module test. Run `node --test --import ./test/setup.ts features/<feature>/test/<name>.test.ts`. |
+| Logic, protocol or lifecycle behavior | Cover an uncovered failure at the public boundary by the [test ladder](#when-to-add-a-test), in a focused module test. Run `node --test --import ./test/setup.ts features/<feature>/test/<name>.test.ts`. |
 | Application behavior | Observe the affected journey on a [scratch instance](#scratch-instance), using an existing browser journey or a focused `agent-browser` check. Module tests alone do not prove the user journey. |
 | UI strings, controls or styling | Apply [UX](ux.md) and choose evidence by the [UI evidence scope](#ui-evidence-scope). |
 | New critical path | Add a journey in `test/browser/`; otherwise extend relevant existing coverage rather than adding another browser journey. |
 | New transcript row kind | Extend and run `node test/browser/transcript-rows.mjs <evidence-directory>`; see [Alignment](#alignment). |
 
-Locally, run the checks your claim needs and keep output under the evidence root in [Evidence directories](#evidence-directories).
+Locally, run the checks your claim needs and keep output under the [evidence root](#evidence-directories).
 `npm run verify` runs typecheck, lint, and the full module suite. For a browser behavior change, run
 the affected journey with `node test/browser/<journey>.mjs <evidence-directory>`.
 
@@ -53,7 +53,7 @@ Stop once the claim and relevant risk are covered and CI passes.
 
 For logic, protocol, lifecycle, application behavior or test changes, before opening the PR give a
 fresh-context reviewer (a subagent without your reasoning) only the diff and the
-[Completion evidence](#completion-evidence). Ask which check would stay green if its claim were
+[verification block](#completion-evidence). Ask which check would stay green if its claim were
 broken, what breakage no check covers, and where the code falls short of AGENTS.md and the documents
 it routes to. Fix each finding or answer it in the PR. Documentation, comments and other local edits
 skip the reviewer unless a named risk calls for one.
@@ -144,7 +144,7 @@ When changing HTML previews, use a scratch browser to check that page scripts st
 
 ## Feature verification map
 
-For a new or substantially changed feature, update its recipe in `features/<feature>/verify/` and its entry in the [Piano verification map](../.agents/skills/verify-piano/map.md#features). Link to its user guide and identify the relevant module tests and browser journey or focused check there. Choose coverage according to the risk of the change.
+For a new or substantially changed feature, update its recipe in `features/<feature>/verify/` and its entry in the [verification map](../.agents/skills/verify-piano/map.md#features). Link to its user guide and identify the relevant module tests and browser journey or focused check there. Choose coverage according to the risk of the change.
 
 ## UI evidence scope
 
@@ -234,7 +234,7 @@ Not checked: <claim or risk> — <why>
 Keep each cell to a line and link or collapse logs; a reviewer reads the block, not the output.
 For each skip or net-removed assertion that Test changes flagged, give its reason under the block. For new or
 substantially changed features, name the starting document from the
-[feature verification map](#feature-verification-map). Name the [When to add a test](#when-to-add-a-test) rung
+[feature verification map](#feature-verification-map). Name the [ladder](#when-to-add-a-test) rung
 each added test stands on, or say why existing coverage was sufficient.
 
 Evidence belongs to the PR, not the repository. Do not commit per-issue verification reports,

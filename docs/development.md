@@ -37,7 +37,7 @@ A feature keeps its browser code in `web/`, server services in `server/`, wire c
 
 Code outside a feature, including another feature, imports only its `contracts/` and its entry files. `server/index.ts` lists the server modules others use, `web/index.ts` lists browser logic that Node tests also load, and `web/browser.ts` lists React views and modules that rely on Vite aliases. Entry files only re-export.
 
-The [browser](../web/src/app) and [server](../server/app) compose features. Reusable code lives in [browser shared](../web/src/shared), [server shared](../server/shared) and the [portable protocol](../shared); `npm run lint` reports a shared module that only one feature uses. Oxlint checks runtime boundaries and feature entry points for imports, including type imports and re-exports. The [Piano verification map](../.agents/skills/verify-piano/map.md#features) lists the browser journeys.
+The [browser](../web/src/app) and [server](../server/app) compose features. Reusable code lives in [browser shared](../web/src/shared), [server shared](../server/shared) and the [portable protocol](../shared); `npm run lint` reports a shared module that only one feature uses. Oxlint checks runtime boundaries and feature entry points for imports, including type imports and re-exports. The [verification map](../.agents/skills/verify-piano/map.md#features) lists the browser journeys.
 
 ## Formatting and lint
 
@@ -73,7 +73,7 @@ installation, before the session arguments, so a repository cannot supply or sha
 
 `features/dispatch/server/SessionEndpoint.ts` gives each Pi child `PIANO_SESSION_WS_URL` and
 `PIANO_SESSION_ORIGIN`. The origin is chosen from the configured set, never added to it, so
-starting a child cannot widen the origin policy in [Browser origins](#browser-origins). See
+starting a child cannot widen the [origin policy](#browser-origins). See
 [Delegate work to another session](../features/dispatch/README.md).
 
 ### Registry storage

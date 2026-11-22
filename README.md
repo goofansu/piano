@@ -25,11 +25,11 @@ Piano has no login and runs commands as your user:
 - Keep it on `127.0.0.1`, or behind a private proxy that requires sign-in.
 - Never expose it to the internet.
 
-See [Usage](docs/usage.md) for each task.
+See the [Piano user guides](docs/usage.md) for each task.
 
 ## Develop Piano
 
 1. Install dependencies: `npm ci`.
 2. Run `npm run verify` for typechecking, lint, and the module tests.
 
-See [Development](docs/development.md) for prerequisites and [What to add and run](docs/testing.md#what-to-add-and-run) for build and browser checks.
+See [development setup](docs/development.md) for prerequisites and [what to add and run](docs/testing.md#what-to-add-and-run) for build and browser checks.

@@ -48,7 +48,7 @@ What Piano takes from it, in Moonstone's palette:
   control turns its own icon while it reads; a test delivery answers with a toast that names the
   HTTP status.
 - **Self-evident, so fewer words.** A control says what it does and no more ("Details", "New
-  webhook", "Save"); the checks every added string passes are in [Checks](ux.md#checks).
+  webhook", "Save"); the checks every added string passes are [quiet UI](ux.md#checks).
 - **Confirm what cannot be undone.** Deleting a webhook asks first, as Delete session does.
 
 ### The one memorable element: the keys play
@@ -111,8 +111,7 @@ Motion is opt-in: the reset at the end of `index.css` stops upstream motion exce
 
 #### Responsive ownership
 
-Name session layouts one-area-at-a-time and side-by-side, as the [Piano domain glossary](../GLOSSARY.md)
-does, not by device.
+Use [one-area-at-a-time and side-by-side](../GLOSSARY.md) for session layouts, not device names.
 Three independent signals retain distinct owners:
 
 - `panelLayout.ts` owns capacity: the actual areas-container width after sidebar/insets.
