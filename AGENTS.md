@@ -92,13 +92,6 @@ private authenticated access (INV-11).
   a PR for the user's review and merge. If checks cannot pass or the next step needs a user decision,
   stop and ask, naming the blocker.
 
-## GitHub on exe.dev
-
-Prefix GitHub CLI commands with `GH_HOST=github.int.exe.xyz`. Pass `--repo goofansu/piano` where
-supported; `gh repo view` takes `goofansu/piano` as a positional argument.
-For GitHub setup or permission failures, see
-[GitHub integration](https://exe.dev/docs/integrations-github.md).
-
 ## Agent skills
 
 ### Issue tracker
