@@ -93,13 +93,12 @@ private authenticated access (INV-11).
 
 ### Issue tracker
 
-Issues and specs live as local markdown under the gitignored `.scratch/<feature>/`. See
-[issue tracker](docs/agents/issue-tracker.md).
+Use Linear for shared issues and specs. Keep checkout-local working notes in the gitignored
+`.scratch/<feature>/`. See [issue tracker](docs/agents/issue-tracker.md).
 
 ### Triage labels
 
-The five default triage roles, recorded as a `Status:` line in each issue file. See
-[triage labels](docs/agents/triage-labels.md).
+See [triage labels](docs/agents/triage-labels.md) for recording a triage decision on a Linear issue.
 
 ### Domain docs
 

@@ -49,6 +49,8 @@ The [browser](../web/src/app) and [server](../server/app) compose features. Reus
 
 ## Tests
 
+Look in `features/<feature>/test/` for behavior owned by one feature, [`test/integration/<feature>/`](../test/integration) for interactions between modules or features, and [`test/browser/`](../test/browser) for journeys through the running app.
+
 Node options go before the test path; `npm test -- --test-name-pattern=…` does not select tests:
 
 ```sh

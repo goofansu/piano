@@ -30,6 +30,6 @@ See the [Piano user guides](docs/usage.md) for each task.
 ## Develop Piano
 
 1. Install dependencies: `npm ci`.
-2. Run the CI checks locally: `npm run verify`.
+2. Run `npm run verify` for typechecking, lint, and the module tests.
 
-See [development setup and checks](docs/development.md) for tools and focused checks.
+See [development setup](docs/development.md) for prerequisites and [what to add and run](docs/testing.md#what-to-add-and-run) for build and browser checks.
