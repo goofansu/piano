@@ -8,6 +8,18 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { run } from "../../test/browser/harness.mjs";
 const root = fileURLToPath(new URL("../../", import.meta.url));
+if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  console.log(`Usage: node scripts/bench/start-session.mjs [evidence-directory]
+Measure new-session startup: one isolated scratch backend and browser, torn down afterwards.
+Never targets a running Piano. Run benchmarks serially, without concurrent tests or builds.
+Evidence defaults to .scratch/browser/start-latency.
+Env:
+  BENCH_SAMPLES=<n>             sequential new sessions (default 10)
+  BENCH_FAKE=1                  use fake Pi instead of the real Pi CLI
+  NODE_DISABLE_COMPILE_CACHE=1  ablation check without Node's compile cache
+See scripts/bench/README.md.`);
+  process.exit(0);
+}
 const fake = process.env.BENCH_FAKE === "1";
 const scratch = mkdtempSync(join(tmpdir(), "piano-bench-cli-"));
 const shim = join(scratch, "cli.mjs");
