@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 Install or update Piano on the exe.dev VM this session runs on, and leave it running. This invocation authorizes cloning or fast-forwarding `/home/exedev/piano`, installing dependencies, building, installing the systemd units and restarting `piano.service`, even if that interrupts active Pi work, including this session. It does not authorize discarding local changes, copying credentials, or changing exe.dev access or integrations; those stay with the user.
 
-Everything runs on the VM. The skill never uses `ssh` or `ssh exe.dev`. The target is always current `main` from `https://github.int.exe.xyz/goofansu/piano.git`.
+Everything runs on the VM. The skill never uses `ssh` or `ssh exe.dev`. The target is always current `main` from `https://github.com/goofansu/piano.git`, a public repository that needs no credentials.
 
 ## 1. Check the VM
 
@@ -19,7 +19,7 @@ Everything runs on the VM. The skill never uses `ssh` or `ssh exe.dev`. The targ
 ## 2. Get the target revision
 
 ```bash
-repo=https://github.int.exe.xyz/goofansu/piano.git
+repo=https://github.com/goofansu/piano.git
 dir=/home/exedev/piano
 ```
 
@@ -37,8 +37,6 @@ dir=/home/exedev/piano
   ```
 
 Record the target with `target=$(git -C "$dir" rev-parse HEAD)`.
-
-A 403 from `github.int.exe.xyz` means the GitHub integration for `goofansu/piano` is not attached to this VM. Ask the user to attach it from the exe.dev dashboard, then retry. Right after attaching, the clone was observed to keep failing for a few minutes even though `https://reflection.int.exe.xyz/integrations` already listed it; retry `git ls-remote "$repo"` before asking again.
 
 On an update, the running backend and proxy keep serving from this checkout while it changes: until the restart, a new Pi start or the built UI can briefly see half-updated files. No data is at risk.
 
