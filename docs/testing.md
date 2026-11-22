@@ -1,4 +1,4 @@
-# Evidence-based development and testing
+# Testing
 
 The goal is justified confidence in changed behavior, not more tests or a coverage percentage.
 

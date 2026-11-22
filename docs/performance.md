@@ -1,4 +1,4 @@
-# Performance benchmarks
+# Performance
 
 Opt-in measurements for a performance claim. None is a CI gate or a latency budget: a result proves
 its bounded synthetic workload on the machine that ran it (INV-09), and correctness still comes

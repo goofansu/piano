@@ -1,4 +1,4 @@
-# Development invariants
+# Invariants
 
 These are Piano's target contracts, governed by [ADR 0001](0001-pi-rpc-workspace-workbench.md).
 They guide implementation and review; several are not yet implemented.

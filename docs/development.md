@@ -31,7 +31,7 @@ within the accepted direction.
 
 ## Feature inventory
 
-Start at [Using Piano](usage.md) for the user guides or browse the [feature directories](../features) to find the source.
+Start at [Usage](usage.md) for the user guides or browse the [feature directories](../features) to find the source.
 
 A feature keeps its browser code in `web/`, server services in `server/`, wire contracts in `contracts/`, Pi extensions in `extension/`, focused tests in `test/` and verification recipes for a scratch Piano in `verify/`. Only the directories the feature uses are present. A contract used by both the browser and server of one feature belongs in that feature.
 
