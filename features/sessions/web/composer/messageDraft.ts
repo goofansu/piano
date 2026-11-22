@@ -30,7 +30,7 @@ export const restoredQueueText = (messages: readonly { text: string }[]) =>
 
 export const QUEUE_RESTORED_NOTICE = "Queued text moved to the draft; reattach any images";
 export const QUEUE_IMAGES_REMOVED_NOTICE = "Queued images removed; reattach them to the draft";
-export type DraftNotify = (message: string, level: "info") => void;
+export type DraftNotify = (message: string, level: "info" | "error") => void;
 
 export interface ImageDraft {
   items: readonly Attachment[];
@@ -296,14 +296,13 @@ export function createDrafts(): Drafts {
           if (verdict.outcome === "not_sent" || verdict.outcome === "rejected")
             giveBack(verdict.inputId, sessionOf(m, source));
           else unconfirmed.delete(verdict.inputId);
-        else if (
-          m._tag === "action_result" &&
-          m.result._tag === "queue_restored" &&
-          m.result.messages.length
-        ) {
-          const restored = restoredQueueText(m.result.messages);
-          if (restored) paragraph(sessionDraftKey(m), restored);
-          notify(restored ? QUEUE_RESTORED_NOTICE : QUEUE_IMAGES_REMOVED_NOTICE, "info");
+        else if (m._tag === "action_result" && m.result._tag === "queue_restored") {
+          if (m.result.messages.length) {
+            const restored = restoredQueueText(m.result.messages);
+            if (restored) paragraph(sessionDraftKey(m), restored);
+            notify(restored ? QUEUE_RESTORED_NOTICE : QUEUE_IMAGES_REMOVED_NOTICE, "info");
+          }
+          if (m.result.stopError) notify(m.result.stopError, "error");
         }
       }),
   };
