@@ -61,7 +61,7 @@ node --test --test-name-pattern='<pattern>' --import ./test/setup.ts features/<f
 
 ### Environment variables
 
-Read where they are used: `grep -rn "process\.env\." server scripts web/vite.config.ts`.
+Read where they are used: `grep -rn "process\.env\." features server scripts web/vite.config.ts`.
 
 ### Piano's extensions
 
