@@ -22,7 +22,8 @@ violation, report uncertainty or ask before expanding product behavior.
 - Do not invent a reproduction result.
 - For a regression, show failure before the fix and success after it when feasible, and check
   that the failure was the intended defect, not a broken fixture or missing dependency.
-- On exe.dev, publish evidence by [PR evidence](development-on-exe-dev.md#pr-evidence).
+- On exe.dev, `gh pr comment --attach` fails: the VM's GitHub access rejects uploads. Put textual
+  results in the PR and say that visual evidence was captured locally, not published.
 - A passing test proves only its assertions; a build or agent summary proves no user journey.
 - For a behavior claim, read the result from state: a reply, a database row, DOM text. A
   screenshot proves appearance; pair it with a read value when the claim is about behavior.

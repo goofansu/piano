@@ -35,7 +35,7 @@ Read the matching entry before working on that surface; follow its linked detail
 | Writing Effect code or upgrading Effect | [Effect](docs/effect.md) |
 | Adding, renaming or moving browser-storage keys | [Browser storage](docs/browser-storage.md) |
 | Changing architecture or workflow | [Development direction](docs/README.md), then its ADR and invariants; cite affected invariant IDs in the PR |
-| User-authorized exe.dev deployment | [Deployment routes and policy](docs/hosted-development.md): `deploy-exe-dev`, run on the VM itself, installs or updates Piano there. It is user-invoked only; there is no SSH or remote deployment. |
+| User-authorized exe.dev deployment | The user-invoked [deploy-exe-dev](.agents/skills/deploy-exe-dev/SKILL.md) skill, run on the VM itself, installs or updates Piano there. There is no SSH or remote deployment. |
 
 ## Code comments
 
