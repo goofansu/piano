@@ -220,11 +220,6 @@ export function NewSessionComposer({
           onSend={submit}
           actions={<ComposerSend disabled={!ready} onClick={submit} />}
         />
-        {state.reconnecting && (
-          <p role="status" className="mt-2 text-sm text-ink-2">
-            Can’t connect to Piano. Retrying…
-          </p>
-        )}
         {checkoutMissing && (
           <Alert data-motion="fade" className="mt-2">
             <AlertDescription>
