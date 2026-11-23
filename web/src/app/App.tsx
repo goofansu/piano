@@ -1,6 +1,7 @@
 import { CommandPalette } from "@features/commands/web/browser";
 import {
   AppLayout,
+  ConnectionStatus,
   LayoutView,
   initialView,
   SidebarActivityContext,
@@ -125,6 +126,7 @@ function PianoApp() {
               }
               content={
                 <>
+                  {state.reconnecting && <ConnectionStatus />}
                   <LayoutView key={state.view.kind} active={!settings}>
                     {state.view.kind === "new" ? (
                       <NewSession

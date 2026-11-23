@@ -23,15 +23,31 @@ await run(
     if (process.env.PIANO_BROWSER_PRODUCTION === "1") {
       await page.open("/new");
     } else {
-      const retrying = "Can’t connect to Piano. Retrying…";
+      const retrying = "Reconnecting…";
       await page.restartBackend({
         beforeRestart: async () => {
+          await page.ab("set", "viewport", "390", "844");
+          for (const route of ["/new", "/projects/launch", "/settings/preferences"]) {
+            await page.open(route);
+            await page.see(retrying);
+            assert.equal(
+              await page.evaluate(
+                `document.querySelectorAll('[role="status"][aria-label="Connection"]').length`,
+              ),
+              1,
+              "one app connection pill on each screen",
+            );
+            assert.equal(
+              await page.evaluate(`document.body.innerText.includes("Can’t connect to Piano")`),
+              false,
+            );
+            await page.capture(`backend-unavailable-${route.split("/").at(-1)}`);
+          }
           await page.open("/new");
-          await page.see(retrying);
-          await page.capture("backend-unavailable");
         },
       });
       await page.until(`!document.body.innerText.includes(${JSON.stringify(retrying)})`);
+      await page.ab("set", "viewport", "1280", "800");
     }
 
     await page.choose("Directory", "Browse…");
@@ -210,6 +226,30 @@ await run(
       .find((r) => r.command === "start" && r.sessionId === dispatched.handle.sessionId);
     assert.equal(dispatchedStart.cwd, dispatched.cwd);
     await page.capture("4-structured-dispatch");
+    if (process.env.PIANO_BROWSER_PRODUCTION !== "1") {
+      await page.ab("set", "viewport", "390", "844");
+      await page.ab("fill", '[aria-label="Message"]', "Keep my reconnect draft");
+      await page.restartBackend({
+        beforeRestart: async () => {
+          await page.see("Reconnecting…");
+          assert.equal(
+            await page.evaluate(
+              `[...document.querySelectorAll('[role="status"]')].filter(e => e.textContent.includes('Reconnecting')).length`,
+            ),
+            1,
+            "existing session shows only the app connection pill",
+          );
+          await page.capture("session-reconnecting");
+        },
+      });
+      await page.until(`!document.querySelector('[role="status"][aria-label="Connection"]')`);
+      await page.until(`document.querySelector('[aria-label="Send"]')?.disabled === false`);
+      assert.equal(
+        await page.evaluate(`document.querySelector('[aria-label="Message"]').value`),
+        "Keep my reconnect draft",
+        "reconnecting retains the session draft",
+      );
+    }
   },
   {
     browserArgs:

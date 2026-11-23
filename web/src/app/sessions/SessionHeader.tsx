@@ -200,9 +200,11 @@ export function SessionHeader({
             <Skeleton className="h-4 w-40" />
           </div>
         )}
-        <span role="status" className="sr-only">
-          {status}
-        </span>
+        {!state.reconnecting && (
+          <span role="status" className="sr-only">
+            {status}
+          </span>
+        )}
         <div className="-mr-(--glyph-pad) flex shrink-0 items-center gap-0.5">
           <ArtifactsMenu state={state} />
           <ChangesToggle />

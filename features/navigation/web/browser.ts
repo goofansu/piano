@@ -1,3 +1,4 @@
+export * from "./ConnectionStatus.tsx";
 export * from "./AppLayout.tsx";
 export * from "./navigation.ts";
 export * from "./sidebar/ShowSidebarButton.tsx";
