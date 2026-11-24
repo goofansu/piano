@@ -83,11 +83,8 @@ export function DataControlsSettings({ state, client }: { state: AppState; clien
               return (
                 <ListRow
                   key={sessionKey(session)}
-                  title={
-                    <span className="truncate" title={session.label}>
-                      {session.label}
-                    </span>
-                  }
+                  title={session.label}
+                  titleClassName="block w-full min-w-0 line-clamp-none wrap-anywhere"
                   actions={
                     <PianoButton
                       variant="outline"
