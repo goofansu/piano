@@ -295,7 +295,8 @@ test("the palette offers every command the session header and the sidebar row me
 test("each session menu places its project section after the manage commands and before Archive and Delete", () => {
   const row = ids(sessionRowMenu(sessionCommands(base, other, {})).sections);
   assert.deepEqual(row, [
-    ["rename", "pin", "share", "copy-session-id"],
+    ["copy-session-id"],
+    ["rename", "pin", "share"],
     "project",
     ["archive", "delete"],
   ]);

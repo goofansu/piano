@@ -119,7 +119,8 @@ export function environmentRowMenu(
 
 const END_OF_LIFE = ["archive", "delete"] as const;
 const ROW_SECTIONS = [
-  ["rename", "pin", "share", "copy-session-id"],
+  ["copy-session-id"],
+  ["rename", "pin", "share"],
   "project",
   END_OF_LIFE,
 ] as const;
