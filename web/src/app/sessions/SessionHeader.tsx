@@ -113,16 +113,11 @@ export function SessionHeader({
   ) : (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger render={menuButton} />
-      <DropdownMenuContent align="start" className="w-96 max-w-[calc(100vw-2rem)]">
-        <DropdownMenuGroup>
-          {menu.details.map((c) => (
-            <SessionCommandMenuItem key={c.id} command={c} run={run} />
-          ))}
-        </DropdownMenuGroup>
-        {menu.sections.map((section) =>
+      <DropdownMenuContent align="start" className="w-56 max-w-[calc(100vw-2rem)]">
+        {menu.sections.map((section, i) =>
           section === "project" && !projectMenu ? null : (
             <Fragment key={typeof section === "string" ? section : section[0]?.id}>
-              <DropdownMenuSeparator />
+              {i > 0 && <DropdownMenuSeparator />}
               <DropdownMenuGroup>
                 {section === "project"
                   ? projectMenu && <ProjectMenu menu={projectMenu} run={run} />
