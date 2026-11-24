@@ -514,17 +514,17 @@ test("Session commands place the menus' sections in the menus' order, whatever t
     return group?.id === "session" ? group.rows.map((r) => r.label) : [];
   };
   const menu = [
+    "Copy session id",
     "Rename",
     "Pin",
     "Share",
-    "Copy session id",
     "Open project: Launch",
     "Move to project: New project",
     "Remove from project",
   ];
   for (const order of [(c: SessionCommand[]) => c, (c: SessionCommand[]) => c.reverse()]) {
     const shown = labels(order);
-    const at = shown.indexOf("Rename");
+    const at = shown.indexOf("Copy session id");
     assert.deepEqual(shown.slice(at, at + menu.length), menu);
     assert.deepEqual(shown.slice(-2), ["Archive", "Delete"]);
   }
