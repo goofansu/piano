@@ -99,7 +99,7 @@ test("a disabled command does nothing, whichever surface offers it", () => {
     newProjectCommand(offline, {})!,
     assignProjectCommand(offline, other, "p1"),
     folderCommands(offline, folder).close!,
-    ...sessionCommands(offline, other, {}),
+    ...sessionCommands(offline, other, {}).filter((c) => c.id !== "copy-session-id"),
   ];
   for (const command of disabled) {
     assert.equal(command.enabled, false, command.label);
@@ -110,6 +110,10 @@ test("a disabled command does nothing, whichever surface offers it", () => {
 test("enabled commands reach the effect their intent names", () => {
   const byId = <C extends Command>(list: C[], id: string) => list.find((c) => c.id === id)!;
   const cases: [Command, unknown[]][] = [
+    [
+      byId(sessionCommands({ ...online, connected: false }, other, {}), "copy-session-id"),
+      ["copy", "s2", "Session ID"],
+    ],
     [trustCommand(online, "/repo")!, ["decideTrust", "/repo", true]],
     [
       byId(

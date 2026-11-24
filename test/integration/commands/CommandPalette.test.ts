@@ -517,6 +517,7 @@ test("Session commands place the menus' sections in the menus' order, whatever t
     "Rename",
     "Pin",
     "Share",
+    "Copy session id",
     "Open project: Launch",
     "Move to project: New project",
     "Remove from project",
