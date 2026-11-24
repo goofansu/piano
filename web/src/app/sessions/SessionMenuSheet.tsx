@@ -203,8 +203,6 @@ export function SessionMenuSheet({
         {page === "actions" && (
           <>
             <SheetTitle className="sr-only">Session</SheetTitle>
-            {rows(menu.details)}
-            <Separator className="my-1" />
             {pr && (
               <LinkRow
                 to={pr.url}

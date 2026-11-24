@@ -106,6 +106,7 @@ test("session command availability: settled, disconnected, resyncing, unavailabl
   for (const id of ["rename", "archive", "delete"] as const)
     assert.equal(enabled(resync)[id], false, id);
   assert.deepEqual(enabled(resync, other), {
+    "copy-session-id": true,
     share: true,
     rename: true,
     pin: true,
@@ -145,6 +146,7 @@ test("session command availability: settled, disconnected, resyncing, unavailabl
       other,
     );
     assert.deepEqual(missingRow, {
+      "copy-session-id": true,
       share: true,
       rename: false,
       pin: true,
@@ -175,7 +177,7 @@ test("session command availability: settled, disconnected, resyncing, unavailabl
 
   assert.deepEqual(
     enabled({ ...base, session: null, selectionId: null, view: { kind: "new" } }, other),
-    { share: true, rename: true, pin: true, archive: true, delete: true },
+    { "copy-session-id": true, share: true, rename: true, pin: true, archive: true, delete: true },
   );
   assert.deepEqual(
     enabled({ ...base, session: null, selectionId: null, view: { kind: "new" } }),
@@ -266,8 +268,8 @@ const commandsOf = (sections: readonly (SessionMenuSection | "display")[]) =>
 const ids = (sections: readonly (SessionMenuSection | "display")[]) =>
   sections.map((s) => (typeof s === "string" ? s : s.map((c) => c.id)));
 
-const headerIds = ({ details, sections, display }: SessionHeaderMenu) => [
-  ...[...details, ...commandsOf(sections)].map((c) => c.id),
+const headerIds = ({ sections, display }: SessionHeaderMenu) => [
+  ...commandsOf(sections).map((c) => c.id),
   ...(display ? [display.id] : []),
 ];
 
@@ -292,7 +294,11 @@ test("the palette offers every command the session header and the sidebar row me
 
 test("each session menu places its project section after the manage commands and before Archive and Delete", () => {
   const row = ids(sessionRowMenu(sessionCommands(base, other, {})).sections);
-  assert.deepEqual(row, [["rename", "pin", "share"], "project", ["archive", "delete"]]);
+  assert.deepEqual(row, [
+    ["rename", "pin", "share", "copy-session-id"],
+    "project",
+    ["archive", "delete"],
+  ]);
   const reversed = sessionCommands(base, other, {}).reverse();
   assert.deepEqual(ids(sessionRowMenu(reversed).sections), row);
   assert.deepEqual(ids(sessionHeaderMenu(sessionCommands(base, undefined, {})).sections), [
@@ -303,13 +309,10 @@ test("each session menu places its project section after the manage commands and
   ]);
 });
 
-test("the header menu: copy session id, manage, a Messages only switch, then archive with delete", () => {
+test("the header menu: manage, a Messages only switch, then archive with delete", () => {
   for (const messagesOnly of [false, true]) {
     const menu = sessionHeaderMenu(sessionCommands(base, undefined, { messagesOnly }));
-    assert.deepEqual(
-      menu.details.map((c) => c.id),
-      ["copy-session-id"],
-    );
+    assert.ok(!headerIds(menu).includes("copy-session-id"));
     assert.ok(!headerIds(menu).includes("pull-request"), "PR linking lives in Changes");
     assert.ok(
       sessionCommands(base, undefined, {}).some((c) => c.id === "pull-request" && c.enabled),
@@ -326,9 +329,27 @@ test("the header menu: copy session id, manage, a Messages only switch, then arc
   const other = sessionHeaderMenu(
     sessionCommands(base, { cwd: "/work/other", sessionId: "s9" }, {}),
   );
-  assert.deepEqual(other.details, []);
+  assert.ok(!headerIds(other).includes("copy-session-id"));
   assert.equal(other.display, undefined);
   assert.ok(!other.sections.includes("display"));
+});
+
+test("row copy uses its own raw session id without selecting or hosting it", () => {
+  for (const state of [base, { ...base, session: null }]) {
+    for (const target of [other, { cwd: "/work/repo.feature", sessionId: "s1" }]) {
+      const command = rowCommands(sessionRowMenu(sessionCommands(state, target, {}))).find(
+        (c) => c.id === "copy-session-id",
+      );
+      assert.equal(command?.label, "Copy session id");
+      assert.equal(command?.icon, "hash");
+      assert.equal(command?.enabled, true);
+      assert.deepEqual(command?.intent, {
+        kind: "copy",
+        value: target.sessionId,
+        label: "Session ID",
+      });
+    }
+  }
 });
 
 test("archiving a working session asks first from its sidebar row", () => {

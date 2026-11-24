@@ -46,7 +46,7 @@ export type SessionCommandId =
   | "share";
 
 export type SessionCommandIcon =
-  | "id"
+  | "hash"
   | "copy"
   | "changes"
   | "wrap"
@@ -97,7 +97,6 @@ export interface SessionRowMenu {
 }
 
 export interface SessionHeaderMenu {
-  details: SessionCommand[];
   sections: (SessionMenuSection | "display")[];
   display?: SessionCommand;
 }
@@ -119,9 +118,12 @@ export function environmentRowMenu(
 }
 
 const END_OF_LIFE = ["archive", "delete"] as const;
-const ROW_SECTIONS = [["rename", "pin", "share"], "project", END_OF_LIFE] as const;
+const ROW_SECTIONS = [
+  ["rename", "pin", "share", "copy-session-id"],
+  "project",
+  END_OF_LIFE,
+] as const;
 const HEADER_SECTIONS = [["rename", "pin", "share"], "project", "display", END_OF_LIFE] as const;
-const HEADER_DETAILS = ["copy-session-id"] as const;
 
 const pick = (commands: readonly SessionCommand[], ids: readonly SessionCommandId[]) =>
   ids.flatMap((id) => commands.filter((c) => c.id === id));
@@ -145,7 +147,6 @@ export function sessionRowMenu(commands: readonly SessionCommand[]): SessionRowM
 export function sessionHeaderMenu(commands: readonly SessionCommand[]): SessionHeaderMenu {
   const display = commands.find((c) => c.id === "messages-only");
   return {
-    details: pick(commands, HEADER_DETAILS),
     sections: lay<"project" | "display">(
       commands,
       HEADER_SECTIONS,
@@ -243,13 +244,6 @@ export function sessionCommands(
           ]
         : []),
       {
-        id: "copy-session-id",
-        label: "Copy session id",
-        icon: "id",
-        enabled: !!ctx.sessionId,
-        intent: { kind: "copy", value: ctx.sessionId ?? "", label: "Session ID" },
-      },
-      {
         id: "copy-session-path",
         label: "Copy session path",
         icon: "copy",
@@ -323,6 +317,13 @@ export function sessionCommands(
     const mutable = !!subject && sessionMutable(state, subject);
     const reference = subject && sessionReference(state, subject);
     commands.push(
+      {
+        id: "copy-session-id",
+        label: "Copy session id",
+        icon: "hash",
+        enabled: !!subject?.sessionId,
+        intent: { kind: "copy", value: subject?.sessionId ?? "", label: "Session ID" },
+      },
       {
         id: "share",
         label: "Share",
