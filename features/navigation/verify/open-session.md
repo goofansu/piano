@@ -12,11 +12,11 @@ original, and Copy response retains the source (clipboard observation on Linux).
     ab set viewport 700 800;
     ab find role button click --name "Session information and actions" --exact;
     ab wait '[role=dialog]'`
-  - Result: heading `Session`, the session ID `verify-plan` with "Copy session path" beside it,
+  - Result: heading `Session`, a `Copy session id` action with an ID-card icon and no visible session ID,
     link `Pull request #222` and the actions above, not rail sections. Capture `05-phone-menu`.
-    `ab find role button click --name "Copy session path" --exact` closes the sheet and toasts
-    `Session path copied` (`ab wait --text "Session path copied"`); a headless browser that
-    refuses the clipboard toasts `Could not copy the session path.` instead. Dismiss the toast and
+    `ab find role button click --name "Copy session id" --exact` closes the sheet and toasts
+    `Session ID copied` (`ab wait --text "Session ID copied"`); paste into the composer and
+    confirm the clipboard contains only `verify-plan`, then clear the draft. Dismiss the toast and
     reopen the sheet with the same trigger. `ab find role button click --name "Move to project" --exact`
     opens the project picker; capture `06-project-picker`, then
     `ab find role button click --name "Back" --exact` returns to actions.

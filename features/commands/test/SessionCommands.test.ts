@@ -303,12 +303,12 @@ test("each session menu places its project section after the manage commands and
   ]);
 });
 
-test("the header menu: copy beside the details, manage, a Messages only switch, then archive with delete", () => {
+test("the header menu: copy session id, manage, a Messages only switch, then archive with delete", () => {
   for (const messagesOnly of [false, true]) {
     const menu = sessionHeaderMenu(sessionCommands(base, undefined, { messagesOnly }));
     assert.deepEqual(
       menu.details.map((c) => c.id),
-      ["copy-session-path"],
+      ["copy-session-id"],
     );
     assert.ok(!headerIds(menu).includes("pull-request"), "PR linking lives in Changes");
     assert.ok(

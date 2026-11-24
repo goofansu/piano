@@ -7,7 +7,7 @@ import {
 } from "@features/commands/web/browser";
 import { ProjectMenu } from "@features/projects/web/browser";
 import { ArtifactsMenu } from "@features/radius/web/browser";
-import { SessionIdDetails, sessionPlace } from "@features/sessions/web/browser";
+import { sessionPlace } from "@features/sessions/web/browser";
 import { type PullRequestControl, PullRequestLinkDialog } from "@features/workspace/web/browser";
 import { cn } from "cn";
 import { ListIcon, MoreHorizontalIcon } from "lucide-react";
@@ -30,7 +30,6 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
-  DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/shared/components/PianoDropdownMenu";
@@ -115,20 +114,9 @@ export function SessionHeader({
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger render={menuButton} />
       <DropdownMenuContent align="start" className="w-96 max-w-[calc(100vw-2rem)]">
-        <DropdownMenuGroup className="flex items-center">
-          <SessionIdDetails className="px-2" sessionId={sessionId} />
+        <DropdownMenuGroup>
           {menu.details.map((c) => (
-            <DropdownMenuItem
-              key={c.id}
-              nativeButton
-              disabled={!c.enabled}
-              onClick={() => run(c)}
-              render={
-                <IconButton variant="ghost" size="row" className="shrink-0" label={c.label} />
-              }
-            >
-              <CommandIcon icon={c.icon} />
-            </DropdownMenuItem>
+            <SessionCommandMenuItem key={c.id} command={c} run={run} />
           ))}
         </DropdownMenuGroup>
         {menu.sections.map((section) =>

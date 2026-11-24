@@ -1,4 +1,3 @@
-export * from "./SessionIdDetails.tsx";
 export * from "./composer/Composer.tsx";
 export * from "./composer/DraftEditor.tsx";
 export * from "./composer/Quotes.tsx";
