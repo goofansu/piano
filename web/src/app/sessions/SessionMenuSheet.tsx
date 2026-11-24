@@ -5,7 +5,6 @@ import {
   useSessionCommands,
   useSessionProjectMenu,
 } from "@features/commands/web/browser";
-import { SessionIdDetails } from "@features/sessions/web/browser";
 import { pullRequestView } from "@features/workspace/web/browser";
 import { cn } from "cn";
 import {
@@ -21,7 +20,6 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { IconButton } from "@/shared/components/IconButton";
 import { PianoLinkButton } from "@/shared/components/PianoButton";
 import { SheetClose, SheetContent, SheetTitle } from "@/shared/components/PianoSheet";
 import { ProjectCommandIconView } from "@/shared/components/ProjectCommandIcon";
@@ -134,39 +132,6 @@ function LinkRow({
   );
 }
 
-function SessionIdRow({
-  sessionId,
-  details,
-  run,
-}: {
-  sessionId?: string;
-  details: SessionCommand[];
-  run: (command: SessionCommand) => void;
-}) {
-  return (
-    <div data-session-details className="flex min-h-11 items-center gap-1 pl-3">
-      <SessionIdDetails sessionId={sessionId} />
-      {details.map((c) => (
-        <SheetClose
-          key={c.id}
-          render={
-            <IconButton
-              variant="ghost"
-              size="icon-lg"
-              className="size-11 shrink-0"
-              label={c.label}
-              disabled={!c.enabled}
-              onClick={() => run(c)}
-            >
-              <CommandIcon icon={c.icon} />
-            </IconButton>
-          }
-        />
-      ))}
-    </div>
-  );
-}
-
 function PaneHeader({ title, onBack }: { title: string; onBack: () => void }) {
   return (
     <div className="flex items-center gap-1">
@@ -195,7 +160,7 @@ export function SessionMenuSheet({
 }) {
   const { state } = useCommands();
   const { commands, run } = useSessionCommands();
-  const { pullRequest, sessionId } = sessionContext(state);
+  const { pullRequest } = sessionContext(state);
   const pr = pullRequestView({ link: pullRequest ?? null, pullRequest: null });
   const projects = useSessionProjectMenu();
   const left = useRef(false);
@@ -205,10 +170,7 @@ export function SessionMenuSheet({
   };
   const [page, setPage] = useState<Page>("actions");
   const pane = useRef<HTMLDivElement>(null);
-  const firstRow = () =>
-    pane.current?.querySelector<HTMLElement>(
-      "a[href], button:not(:disabled):not([data-session-details] button)",
-    );
+  const firstRow = () => pane.current?.querySelector<HTMLElement>("a[href], button:not(:disabled)");
   const previousPage = useRef(page);
   useLayoutEffect(() => {
     if (previousPage.current === page) return;
@@ -241,7 +203,7 @@ export function SessionMenuSheet({
         {page === "actions" && (
           <>
             <SheetTitle className="sr-only">Session</SheetTitle>
-            <SessionIdRow sessionId={sessionId} details={menu.details} run={run} />
+            {rows(menu.details)}
             <Separator className="my-1" />
             {pr && (
               <LinkRow

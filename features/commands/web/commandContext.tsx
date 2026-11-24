@@ -12,6 +12,7 @@ import {
   CopyIcon,
   FileDiffIcon,
   GitPullRequestIcon,
+  IdCardIcon,
   ListIcon,
   type LucideIcon,
   MessageSquareIcon,
@@ -33,6 +34,7 @@ import type { AppState } from "@/shared/state/state";
 
 const ICONS: Record<SessionCommandIcon, LucideIcon> = {
   copy: CopyIcon,
+  id: IdCardIcon,
   changes: FileDiffIcon,
   wrap: WrapTextIcon,
   artifacts: ShapesIcon,

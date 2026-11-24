@@ -46,6 +46,7 @@ export type SessionCommandId =
   | "share";
 
 export type SessionCommandIcon =
+  | "id"
   | "copy"
   | "changes"
   | "wrap"
@@ -120,7 +121,7 @@ export function environmentRowMenu(
 const END_OF_LIFE = ["archive", "delete"] as const;
 const ROW_SECTIONS = [["rename", "pin", "share"], "project", END_OF_LIFE] as const;
 const HEADER_SECTIONS = [["rename", "pin", "share"], "project", "display", END_OF_LIFE] as const;
-const HEADER_DETAILS = ["copy-session-path"] as const;
+const HEADER_DETAILS = ["copy-session-id"] as const;
 
 const pick = (commands: readonly SessionCommand[], ids: readonly SessionCommandId[]) =>
   ids.flatMap((id) => commands.filter((c) => c.id === id));
@@ -243,8 +244,8 @@ export function sessionCommands(
         : []),
       {
         id: "copy-session-id",
-        label: "Copy session ID",
-        icon: "copy",
+        label: "Copy session id",
+        icon: "id",
         enabled: !!ctx.sessionId,
         intent: { kind: "copy", value: ctx.sessionId ?? "", label: "Session ID" },
       },
