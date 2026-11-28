@@ -86,8 +86,8 @@ starting a child cannot widen the [origin policy](#browser-origins). See
 browser requests; it is not authentication, because a client outside a browser can set any
 `Origin`, and it does not replace private access. Never allow an origin that serves untrusted
 generated previews. Behind a proxy or on a custom Vite port, list the origin the browser uses,
-not the backend address. On exe.dev,
-[deploy-exe-dev](../.agents/skills/deploy-exe-dev/SKILL.md) sets the origin.
+not the backend address. For exe.dev, follow [deploy-exe-dev](../.agents/skills/deploy-exe-dev/SKILL.md)
+from a shell on the VM or over SSH. The guide sets the origin for the target VM.
 
 ## Browser storage
 

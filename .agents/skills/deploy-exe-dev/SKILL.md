@@ -1,19 +1,19 @@
 ---
 name: deploy-exe-dev
-description: Deploy Piano on the exe.dev VM this session runs on — a fresh install or an update of /home/exedev/piano to latest main — and leave it running on port 8000. Run on the VM itself; no SSH.
+description: Install or update Piano to latest main on an exe.dev VM and leave it running on port 8000. Use an on-VM shell or SSH into the named VM.
 disable-model-invocation: true
 ---
 
 # Deploy on exe.dev
 
-Install or update Piano on the exe.dev VM this session runs on, and leave it running. This invocation authorizes cloning or fast-forwarding `/home/exedev/piano`, installing dependencies, building, installing the systemd units and restarting `piano.service`, even if that interrupts active Pi work, including this session. It does not authorize discarding local changes, copying credentials, or changing exe.dev access or integrations; those stay with the user.
+Install or update Piano on the exe.dev VM the user authorized, and leave it running. This invocation authorizes cloning or fast-forwarding `/home/exedev/piano`, installing dependencies, building, installing the systemd units and restarting `piano.service`, even if that interrupts active Pi work, including this session. It does not authorize discarding local changes, copying credentials, or changing exe.dev access or integrations; those stay with the user.
 
-Everything runs on the VM. The skill never uses `ssh` or `ssh exe.dev`. The target is always current `main` from `https://github.com/goofansu/piano.git`, a public repository that needs no credentials.
+Use either an existing shell on the target VM, or connect to the user-authorized VM over SSH. Use the SSH command shown in the exe.dev dashboard or the connected exe.dev plugin's VM command tool. In either case, run the steps below on the VM as `exedev`, not on the computer you connect from. The source is current `main` from `https://github.com/goofansu/piano.git`, a public repository that needs no credentials.
 
 ## 1. Check the VM
 
 1. Confirm this is an exe.dev VM (`/exe.dev` exists) and `sudo -n true` succeeds.
-2. Read the VM's name and shared port from `curl -s https://reflection.int.exe.xyz/` and `curl -s https://reflection.int.exe.xyz/default_port`. The browser origin is `https://<name>.exe.xyz`. If the shared port is not 8000, stop and ask the user to share port 8000 from the exe.dev dashboard.
+2. Confirm the VM's name matches the user-authorized target and read the shared port from `curl -s https://reflection.int.exe.xyz/` and `curl -s https://reflection.int.exe.xyz/default_port`. The browser origin is `https://<name>.exe.xyz`. If the shared port is not 8000, stop and ask the user to share port 8000 from the exe.dev dashboard.
 3. Put Node 24 or later on PATH: `PATH="$HOME/node/bin:$HOME/.local/bin:$PATH"`, then `node --version`. The unit runs `/home/exedev/.local/bin/node`; if absent, `mkdir -p "$HOME/.local/bin" && ln -s /home/exedev/node/bin/node "$HOME/.local/bin/node"`. Install Node only if the required version is absent.
 
 ## 2. Get the target revision
@@ -76,7 +76,7 @@ In `$dir`, with Node on PATH:
      bash -c "systemctl restart piano.service && $dir/.agents/skills/deploy-exe-dev/scripts/check.sh $target"
    ```
 
-   Record the unit and log path before the restart, since this session may end. If a proxy unit changed, add `systemctl restart piano-web.socket piano-web.service &&` before the check.
+   Record the unit and log path before the restart, since an on-VM Piano session may end. Over SSH or another shell, read the same log to verify the result. If a proxy unit changed, add `systemctl restart piano-web.socket piano-web.service &&` before the check.
 
 ## 5. Completion
 
