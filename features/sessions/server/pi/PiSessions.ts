@@ -25,6 +25,7 @@ import type {
   SlashCommand,
   Snapshot,
 } from "../../../../shared/wire.ts";
+import { saveMessageFiles } from "../attachments/MessageFiles.ts";
 import { makePiHistory, type PiHistory } from "./PiHistory.ts";
 import {
   dispatchedFromOf,
@@ -406,6 +407,7 @@ const openSession = (
     const events: Stream.Stream<SessionFrame, DeliveryOverflow> = publication.subscribe(present);
 
     let stopping = false;
+    let abortRevision = 0;
     const exited = () =>
       refusedUnsent(
         "exited",
@@ -424,6 +426,33 @@ const openSession = (
           case "prompt":
           case "steer": {
             const exchange = yield* exchangeOf(piExchangeFor(action));
+            const files = action.attachments?.filter((attachment) => attachment.kind === "file");
+            const beforeSaving = abortRevision;
+            const paths = files?.length
+              ? yield* saveMessageFiles(spec.cwd, spec.sessionId, files).pipe(
+                  Effect.mapError(() =>
+                    refusedUnsent(
+                      "rejected",
+                      "Could not save attachments. Check local storage and try again.",
+                    ),
+                  ),
+                )
+              : [];
+            if (paths.length && announced()) return yield* exited();
+            if (paths.length && (stopping || abortRevision !== beforeSaving))
+              return yield* refusedUnsent(
+                "rejected",
+                "Pi stopped while saving attachments. Nothing was sent.",
+              );
+            const message = paths.length
+              ? [
+                  exchange.command.message,
+                  "AutoCAD drawings saved locally:",
+                  ...paths.map((path) => `- ${JSON.stringify(path)}`),
+                ]
+                  .filter(Boolean)
+                  .join("\n")
+              : exchange.command.message;
             aborting = undefined;
             promptOperations.add(operation);
             const id = ++submissionId;
@@ -446,19 +475,24 @@ const openSession = (
               const waitForDialog = action.text.startsWith("/")
                 ? dialogs.waitForCommandDialogs()
                 : undefined;
-              yield* child.request(exchange, { lane, waitForDialog }).pipe(
-                Effect.flatMap((disposition) => submit(disposition)),
-                Effect.catchTag("PiSessionError", (error) =>
-                  submit(
-                    error.notSent
-                      ? "not_sent"
-                      : error.reason === "rejected"
-                        ? "rejected"
-                        : "uncertain",
-                    error.detail,
-                  ).pipe(Effect.andThen(Effect.fail(error))),
-                ),
-              );
+              yield* child
+                .request(
+                  { ...exchange, command: { ...exchange.command, message } },
+                  { lane, waitForDialog },
+                )
+                .pipe(
+                  Effect.flatMap((disposition) => submit(disposition)),
+                  Effect.catchTag("PiSessionError", (error) =>
+                    submit(
+                      error.notSent
+                        ? "not_sent"
+                        : error.reason === "rejected"
+                          ? "rejected"
+                          : "uncertain",
+                      error.detail,
+                    ).pipe(Effect.andThen(Effect.fail(error))),
+                  ),
+                );
               yield* readbacks.refresh("state", operation);
               if (!(yield* publication.state).isStreaming) {
                 yield* readbacks.refresh("context");
@@ -473,6 +507,7 @@ const openSession = (
             return;
           }
           case "abort": {
+            abortRevision++;
             projector.abort();
             const exchange = yield* exchangeOf(piExchangeFor(action));
             const work = Effect.gen(function* () {

@@ -5,12 +5,12 @@ import { Attachment, type ServerMessage } from "../../../../shared/wire.ts";
 import { sessionDraftKey } from "../../../../web/src/shared/state/draftKey.ts";
 import { imageLabel } from "../../contracts/attachments.ts";
 import {
-  checkImages,
+  checkAttachments,
   createDrafts,
   type DraftMessage,
   EMPTY_DRAFT,
   hasContent,
-  type ImageCandidate,
+  type AttachmentCandidate,
   QUEUE_IMAGES_REMOVED_NOTICE,
   QUEUE_RESTORED_NOTICE,
   sendable,
@@ -23,7 +23,7 @@ const SIGNATURES = {
   "image/gif": [...Buffer.from("GIF89a"), 1, 0, 1, 0, 0, 0],
   "image/webp": [...Buffer.from("RIFF"), 0x24, 0, 0, 0, ...Buffer.from("WEBP")],
 } as const;
-const png = (name: string, size: number, type = "image/png"): ImageCandidate => ({
+const png = (name: string, size: number, type = "image/png"): AttachmentCandidate => ({
   name,
   size,
   type,
@@ -35,23 +35,37 @@ const held = (size: number): Attachment => ({
   mimeType: "image/png",
   data: Buffer.alloc(size).toString("base64"),
 });
-const rejected = (check: ReturnType<typeof checkImages>) => (check.ok ? undefined : check.reason);
+const rejected = (check: ReturnType<typeof checkAttachments>) =>
+  check.ok ? undefined : check.reason;
 
 test("each image may be up to exactly 10 MiB of original bytes and must not be empty", () => {
-  assert.deepEqual(checkImages([], [png("max.png", 10 * MiB)]), {
+  assert.deepEqual(checkAttachments([], [png("max.png", 10 * MiB)]), {
     ok: true,
     mimeTypes: ["image/png"],
   });
   assert.match(
-    rejected(checkImages([], [png("big.png", 10 * MiB + 1)])) ?? "",
+    rejected(checkAttachments([], [png("big.png", 10 * MiB + 1)])) ?? "",
     /big\.png.*up to 10 MiB/,
   );
-  assert.match(rejected(checkImages([], [png("empty.png", 0)])) ?? "", /empty\.png/);
+  assert.match(rejected(checkAttachments([], [png("empty.png", 0)])) ?? "", /empty\.png/);
+});
+
+test("DWG attachments require the file extension and header and allow up to 10 MiB", () => {
+  const file = {
+    name: "plan.DWG",
+    type: "application/octet-stream",
+    size: 10 * MiB,
+    head: Buffer.from("AC1032"),
+  };
+  assert.deepEqual(checkAttachments([], [file]), { ok: true, mimeTypes: ["image/vnd.dwg"] });
+  assert.equal(checkAttachments([], [{ ...file, size: file.size + 1 }]).ok, false);
+  assert.equal(checkAttachments([], [{ ...file, name: "plan.bin" }]).ok, false);
+  assert.equal(checkAttachments([], [{ ...file, head: Buffer.from("invalid") }]).ok, false);
 });
 
 test("a message holds ten images totalling at most 50 MiB, counting those already in the draft", () => {
   assert.equal(
-    checkImages(
+    checkAttachments(
       Array.from({ length: 8 }, () => held(1)),
       [png("i.png", 1), png("j.png", 1)],
     ).ok,
@@ -59,24 +73,24 @@ test("a message holds ten images totalling at most 50 MiB, counting those alread
   );
   assert.match(
     rejected(
-      checkImages(
+      checkAttachments(
         Array.from({ length: 9 }, () => held(1)),
         [png("j.png", 1), png("k.png", 1)],
       ),
     ) ?? "",
-    /up to 10 images/,
+    /up to 10 files/,
   );
   assert.match(
     rejected(
-      checkImages(
+      checkAttachments(
         [],
         Array.from({ length: 11 }, (_, i) => png(`${i}.png`, 1)),
       ),
     ) ?? "",
-    /up to 10 images/,
+    /up to 10 files/,
   );
   assert.equal(
-    checkImages(
+    checkAttachments(
       Array.from({ length: 4 }, () => held(10 * MiB)),
       [png("e.png", 10 * MiB)],
     ).ok,
@@ -85,7 +99,7 @@ test("a message holds ten images totalling at most 50 MiB, counting those alread
   );
   assert.match(
     rejected(
-      checkImages(
+      checkAttachments(
         Array.from({ length: 4 }, () => held(10 * MiB)),
         [png("e.png", 10 * MiB - 2), png("f.png", 3)],
       ),
@@ -97,23 +111,23 @@ test("a message holds ten images totalling at most 50 MiB, counting those alread
 test("PNG, JPEG, GIF and WebP are recognized by signature; the declared type must agree when given", () => {
   for (const [type, head] of Object.entries(SIGNATURES)) {
     assert.deepEqual(
-      checkImages([], [{ name: "x", size: 100, type, head: Uint8Array.from(head) }]),
+      checkAttachments([], [{ name: "x", size: 100, type, head: Uint8Array.from(head) }]),
       { ok: true, mimeTypes: [type] },
     );
     assert.deepEqual(
-      checkImages([], [{ name: "x", size: 100, type: "", head: Uint8Array.from(head) }]),
+      checkAttachments([], [{ name: "x", size: 100, type: "", head: Uint8Array.from(head) }]),
       { ok: true, mimeTypes: [type] },
       "an unknown browser type is fine",
     );
   }
-  const unsupported = /use PNG, JPEG, GIF or WebP/;
+  const unsupported = /use PNG, JPEG, GIF, WebP, or DWG/;
   assert.match(
-    rejected(checkImages([], [png("renamed.png", 100, "image/jpeg")])) ?? "",
+    rejected(checkAttachments([], [png("renamed.png", 100, "image/jpeg")])) ?? "",
     unsupported,
   );
   assert.match(
     rejected(
-      checkImages(
+      checkAttachments(
         [],
         [
           {
@@ -129,7 +143,7 @@ test("PNG, JPEG, GIF and WebP are recognized by signature; the declared type mus
   );
   assert.match(
     rejected(
-      checkImages(
+      checkAttachments(
         [],
         [
           {
@@ -493,7 +507,7 @@ test("Pi-rejected images returned while another is added stay editable past the 
     draft.images.items.map((a) => a.name),
     Array.from({ length: 11 }, (_, i) => `${i + 1}.png`),
   );
-  assert.match(draft.images.error, /up to 10 images/);
+  assert.match(draft.images.error, /up to 10 files/);
   assert.equal(drafts.sendable(key), false);
   assert.equal(
     drafts.submit(key, () => assert.fail("a message over the limit is not delivered")),

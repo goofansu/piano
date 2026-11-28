@@ -74,7 +74,7 @@ models, not the seed's.
 - `images` (local New or an existing session's Message composer)
   - Preconditions: a small valid PNG at `$RUN/pixel.png` and a text file at `$RUN/invalid.txt`.
     For example, use a screenshot already captured by this run as the PNG; no private image.
-  - Action: `ab upload 'input[aria-label="Image files"]' "$RUN/pixel.png";
+  - Action: `ab upload 'input[aria-label="Attachment files"]' "$RUN/pixel.png";
     ab wait '[aria-label="Remove pixel.png"]'`; capture `09-image-draft`.
     Send with a unique message (or as the `failed-start` input above).
   - Result: after the reply,
@@ -83,9 +83,13 @@ models, not the seed's.
     `/api/image-previews/<hash>` address, with `target=_blank` on the link. Reload and repeat
     the image wait: the audit still has one prompt, with one image's MIME type, byte count and hash.
   - Refusal/removal: upload the PNG again, then
-    `ab upload 'input[aria-label="Image files"]' "$RUN/invalid.txt";
-    ab wait --text "Other files aren't supported yet."`. The PNG remains; capture `11-image-refusal`.
+    `ab upload 'input[aria-label="Attachment files"]' "$RUN/invalid.txt";
+    ab wait --text "use PNG, JPEG, GIF, WebP, or DWG."`. The PNG remains; capture `11-image-refusal`.
     `ab find role button click --name 'Remove pixel.png' --exact` removes it.
+- `drawings` (covered by `test/browser/start-session.mjs`)
+  - Upload a DWG with **Attach files**. Its name and DWG label appear without an image preview.
+  - Send the drawing without text. The audit records a local path, not an image payload. Read the
+    file at that path and compare its bytes to the upload.
 - `not-sent` (last drive before Cleanup; ends this run)
   - Action: `ab open "$WEB_URL/new"; ab wait --text "What should we work on?";
     ab fill '[aria-label="First message"]' "keep this draft";

@@ -25,11 +25,17 @@ const byteSize = (bytes: number) =>
 export const imageLabel = (type: ImageType, bytes: number) =>
   `${IMAGE_TYPE_NAME[type]} · ${byteSize(bytes)}`;
 
+export const ATTACHMENT_TYPE_LIST = `${IMAGE_TYPE_NAMES.join(", ")}, or DWG`;
+export const drawingLabel = (bytes: number) => `DWG · ${byteSize(bytes)}`;
+export const hasDwgExtension = (name: string) => /\.dwg$/i.test(name);
+export const isDwg = (name: string, bytes: Uint8Array) =>
+  hasDwgExtension(name) && /^AC10[0-9]{2}$/.test(String.fromCharCode(...bytes.subarray(0, 6)));
+
 export const attachmentsRefusal = (count: number, bytes: number) =>
   count > MAX_ATTACHMENTS
-    ? `Attach up to ${MAX_ATTACHMENTS} images per message.`
+    ? `Attach up to ${MAX_ATTACHMENTS} files per message.`
     : bytes > MAX_ATTACHMENT_BYTES
-      ? `Images must total ${mebibytes(MAX_ATTACHMENT_BYTES)} or less.`
+      ? `Attachments must total ${mebibytes(MAX_ATTACHMENT_BYTES)} or less.`
       : "";
 export function imageType(bytes: Uint8Array): ImageType | undefined {
   const starts = (...prefix: number[]) => prefix.every((b, i) => bytes[i] === b);

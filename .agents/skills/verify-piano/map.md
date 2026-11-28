@@ -45,7 +45,7 @@ Add a recipe to [Features](#features) when you create one. Link each recipe to t
 
 - [Start a session](../../../features/sessions/verify/start-session.md).
   Docs: [Start or continue a session](../../../features/sessions/README.md),
-  [Attach an image](../../../features/sessions/image-attachments.md).
+  [Attach files](../../../features/sessions/image-attachments.md).
 - [Open and continue a session](../../../features/navigation/verify/open-session.md).
   Docs: [Navigate between sessions](../../../features/navigation/README.md),
   [Performance](../../../docs/performance.md),
