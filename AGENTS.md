@@ -35,7 +35,7 @@ Read the matching entry before working on that surface; follow its linked detail
 | Writing Effect code or upgrading Effect | [Effect](docs/effect.md) |
 | Adding, renaming or moving browser-storage keys | [Browser storage](docs/development.md#browser-storage) |
 | Changing architecture or workflow | The [ADRs](docs/adr) and [invariants](docs/adr/invariants.md); record a change in a new or superseding ADR and cite affected invariant IDs in the PR |
-| User-authorized exe.dev deployment | The user-invoked [deploy-exe-dev](.agents/skills/deploy-exe-dev/SKILL.md) skill, run on the VM itself, installs or updates Piano there. There is no SSH or remote deployment. |
+| User-authorized exe.dev deployment | The user-invoked [deploy-exe-dev](.agents/skills/deploy-exe-dev/SKILL.md) skill installs or updates Piano from a shell on the authorized VM, either directly or over SSH. |
 
 ## Code comments
 
