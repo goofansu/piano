@@ -662,7 +662,7 @@ test("image-only prompts reach Pi and survive authoritative refresh and late sna
   );
 });
 
-test("DWG bytes stay on local disk while Pi receives the file path in a mixed prompt", async () => {
+test("DWG, PDF, and text stay on disk while Pi receives local paths and native images", async () => {
   const root = mkdtempSync(join(tmpdir(), "piano-test-dwg-"));
   const previous = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = root;
@@ -674,6 +674,20 @@ test("DWG bytes stay on local disk while Pi receives the file path in a mixed pr
     mimeType: "image/vnd.dwg",
     name: "../../drawing.DWG",
     data: bytes.toString("base64"),
+  } as const;
+  const pdfBytes = Buffer.from("%PDF-1.7\n% fixture");
+  const codeBytes = Buffer.from("const greeting = '世界';\n");
+  const pdf = {
+    kind: "file",
+    mimeType: "application/pdf",
+    name: "docs.PDF",
+    data: pdfBytes.toString("base64"),
+  } as const;
+  const code = {
+    kind: "file",
+    mimeType: "text/plain",
+    name: "main.C",
+    data: codeBytes.toString("base64"),
   } as const;
   try {
     await run(
@@ -687,20 +701,44 @@ test("DWG bytes stay on local disk while Pi receives the file path in a mixed pr
           })
           .pipe(Effect.flip);
         assert.equal(invalid.reason, "rejected");
+        for (const forged of [
+          { ...pdf, data: code.data },
+          { ...code, data: Buffer.from([1, 0, 2]).toString("base64") },
+        ]) {
+          const refusal = yield* pi
+            .act({ _tag: "prompt", text: "", attachments: [forged] })
+            .pipe(Effect.flip);
+          assert.equal(refusal.reason, "rejected");
+        }
         assert.throws(() => statSync(join(root, "piano-attachments")), { code: "ENOENT" });
-        yield* pi.act({ _tag: "prompt", text: "Look at both", attachments: [image, drawing] });
+        yield* pi.act({
+          _tag: "prompt",
+          text: "Review the attachments",
+          attachments: [image, drawing, pdf, code],
+        });
         const [event] = yield* collectUntil(pi.events, (e) => e._tag === "snapshot");
         assert.ok(event._tag === "snapshot");
         const prompt = event.snapshot.messages.find((m) => m.role === "user");
         assert.equal(prompt?.attachments?.length, 1);
         assert.match(prompt?.attachments?.[0].url ?? "", /^\/api\/image-previews\//);
-        assert.match(prompt?.text ?? "", /^Look at both\nAutoCAD drawings saved locally:/);
-        const path: string = JSON.parse(prompt!.text.split("\n").at(-1)!.slice(2));
-        const stored = relative(root, path);
-        assert.ok(!isAbsolute(stored));
-        assert.match(stored, /^piano-attachments\/[a-f0-9]{64}\/message-[^/]+\/[^/]+\.dwg$/);
-        assert.equal(statSync(path).mode & 0o777, 0o600);
-        assert.deepEqual(readFileSync(path), bytes);
+        assert.match(prompt?.text ?? "", /^Review the attachments\nFiles saved locally:/);
+        const paths: string[] = prompt!.text
+          .split("\n")
+          .slice(-3)
+          .map((line) => JSON.parse(line.slice(2)));
+        for (const [i, [extension, original]] of [
+          [".dwg", bytes],
+          [".pdf", pdfBytes],
+          [".C", codeBytes],
+        ].entries()) {
+          const path = paths[i];
+          const stored = relative(root, path);
+          assert.ok(!isAbsolute(stored));
+          assert.match(stored, /^piano-attachments\/[a-f0-9]{64}\/message-[^/]+\/[^/]+$/);
+          assert.ok(stored.endsWith(extension as string), stored);
+          assert.equal(statSync(path).mode & 0o777, 0o600);
+          assert.deepEqual(readFileSync(path), original);
+        }
       }).pipe(Effect.timeout("10 seconds"), Effect.scoped),
     );
   } finally {

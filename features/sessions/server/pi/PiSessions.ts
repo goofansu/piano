@@ -447,7 +447,7 @@ const openSession = (
             const message = paths.length
               ? [
                   exchange.command.message,
-                  "AutoCAD drawings saved locally:",
+                  "Files saved locally:",
                   ...paths.map((path) => `- ${JSON.stringify(path)}`),
                 ]
                   .filter(Boolean)

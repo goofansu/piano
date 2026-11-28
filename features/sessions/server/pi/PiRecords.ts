@@ -38,7 +38,7 @@ import {
   askUserPrompt,
   askUserQuestions,
 } from "../../contracts/askUser.ts";
-import { ATTACHMENT_TYPE_LIST, imageType, isDwg, mebibytes } from "../../contracts/attachments.ts";
+import { ATTACHMENT_TYPE_LIST, attachmentType, mebibytes } from "../../contracts/attachments.ts";
 import { imagePreview } from "../attachments/ImagePreviews.ts";
 
 interface RawContent {
@@ -542,10 +542,7 @@ const attachmentsValid = (attachments: unknown) =>
   Schema.is(Attachments)(attachments) &&
   !attachments.some((a) => {
     const bytes = Buffer.from(a.data, "base64");
-    return (
-      bytes.toString("base64") !== a.data ||
-      (a.kind === "file" ? !isDwg(a.name, bytes) : imageType(bytes) !== a.mimeType)
-    );
+    return bytes.toString("base64") !== a.data || attachmentType(a.name, bytes) !== a.mimeType;
   });
 
 export const dialogCancellation = (id: string): PiCommand => ({

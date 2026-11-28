@@ -27,7 +27,7 @@ const png = (name: string, size: number, type = "image/png"): AttachmentCandidat
   name,
   size,
   type,
-  head: Uint8Array.from(SIGNATURES["image/png"]),
+  bytes: Uint8Array.from(SIGNATURES["image/png"]),
 });
 const held = (size: number): Attachment => ({
   kind: "image",
@@ -55,12 +55,12 @@ test("DWG attachments require the file extension and header and allow up to 10 M
     name: "plan.DWG",
     type: "application/octet-stream",
     size: 10 * MiB,
-    head: Buffer.from("AC1032"),
+    bytes: Buffer.from("AC1032\0"),
   };
   assert.deepEqual(checkAttachments([], [file]), { ok: true, mimeTypes: ["image/vnd.dwg"] });
   assert.equal(checkAttachments([], [{ ...file, size: file.size + 1 }]).ok, false);
   assert.equal(checkAttachments([], [{ ...file, name: "plan.bin" }]).ok, false);
-  assert.equal(checkAttachments([], [{ ...file, head: Buffer.from("invalid") }]).ok, false);
+  assert.equal(checkAttachments([], [{ ...file, bytes: Buffer.from("invalid") }]).ok, false);
 });
 
 test("a message holds ten images totalling at most 50 MiB, counting those already in the draft", () => {
@@ -111,52 +111,45 @@ test("a message holds ten images totalling at most 50 MiB, counting those alread
 test("PNG, JPEG, GIF and WebP are recognized by signature; the declared type must agree when given", () => {
   for (const [type, head] of Object.entries(SIGNATURES)) {
     assert.deepEqual(
-      checkAttachments([], [{ name: "x", size: 100, type, head: Uint8Array.from(head) }]),
+      checkAttachments([], [{ name: "x", size: 100, type, bytes: Uint8Array.from(head) }]),
       { ok: true, mimeTypes: [type] },
     );
     assert.deepEqual(
-      checkAttachments([], [{ name: "x", size: 100, type: "", head: Uint8Array.from(head) }]),
+      checkAttachments([], [{ name: "x", size: 100, type: "", bytes: Uint8Array.from(head) }]),
       { ok: true, mimeTypes: [type] },
       "an unknown browser type is fine",
     );
   }
-  const unsupported = /use PNG, JPEG, GIF, WebP, or DWG/;
   assert.match(
     rejected(checkAttachments([], [png("renamed.png", 100, "image/jpeg")])) ?? "",
-    unsupported,
+    /use PNG, JPEG, GIF, WebP, DWG, PDF, or UTF-8 plain text/,
   );
-  assert.match(
-    rejected(
-      checkAttachments(
-        [],
-        [
-          {
-            name: "logo.svg",
-            size: 100,
-            type: "image/svg+xml",
-            head: Uint8Array.from(Buffer.from('<svg xmlns="')),
-          },
-        ],
-      ),
-    ) ?? "",
-    unsupported,
-  );
-  assert.match(
-    rejected(
-      checkAttachments(
-        [],
-        [
-          {
-            name: "notes.txt",
-            size: 12,
-            type: "text/plain",
-            head: Uint8Array.from(Buffer.from("Not an image")),
-          },
-        ],
-      ),
-    ) ?? "",
-    unsupported,
-  );
+});
+
+test("documents are classified by bytes, including code and extensionless text", () => {
+  const file = (name: string, bytes: Buffer, type = "application/octet-stream") => ({
+    name,
+    size: bytes.length,
+    type,
+    bytes,
+  });
+  for (const [name, type] of [
+    ["main.ts", "application/typescript"],
+    ["Makefile", ""],
+    ["schema.json", "application/json"],
+    ["logo.svg", "image/svg+xml"],
+    ["notes.txt", "text/plain"],
+  ] as const) {
+    assert.deepEqual(checkAttachments([], [file(name, Buffer.from("hello 世界\r\n\t"), type)]), {
+      ok: true,
+      mimeTypes: ["text/plain"],
+    });
+  }
+  const pdf = file("brief.PDF", Buffer.from("%PDF-1.7\n"));
+  assert.deepEqual(checkAttachments([], [pdf]), { ok: true, mimeTypes: ["application/pdf"] });
+  assert.equal(checkAttachments([], [{ ...pdf, bytes: Buffer.from("not PDF") }]).ok, false);
+  assert.equal(checkAttachments([], [file("plain.txt", Buffer.from([65, 0, 66]))]).ok, false);
+  assert.equal(checkAttachments([], [file("plain.txt", Buffer.from([65, 0xff]))]).ok, false);
 });
 
 test("an image tile names its type and size as the refusals do, in binary units", () => {
@@ -183,7 +176,7 @@ test("an addition the policy refuses leaves the draft's accepted images in place
   );
   await drafts.addImages(
     key,
-    [new File(["Not an image"], "notes.txt", { type: "text/plain" })],
+    [new File([Uint8Array.of(65, 0, 66)], "notes.txt", { type: "text/plain" })],
     encode,
   );
   assert.deepEqual(

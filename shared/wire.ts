@@ -1,7 +1,7 @@
 import { Schema, type Types } from "effect";
 import {
   base64Bytes,
-  DWG_TYPE,
+  FILE_TYPES,
   IMAGE_TYPES,
   MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENT_NAME_LENGTH,
@@ -27,7 +27,7 @@ export const Attachment = Schema.Union([
   Schema.Struct({
     ...attachmentFields,
     kind: Schema.Literal("file"),
-    mimeType: Schema.Literal(DWG_TYPE),
+    mimeType: Schema.Literals(FILE_TYPES),
   }),
 ]).check(
   Schema.makeFilter(

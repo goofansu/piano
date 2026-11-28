@@ -173,21 +173,48 @@ await run(
     assert.deepEqual(page.prompts(), ["Plan the launch"], "a reload never sends the message again");
     await page.capture("3-after-reload");
 
-    const drawing = join(page.evidence, "plan.dwg");
-    const bytes = Buffer.from("AC1032test-drawing");
-    writeFileSync(drawing, bytes);
-    await page.ab("upload", 'input[aria-label="Attachment files"]', drawing);
-    await page.see("plan.dwg");
+    const picker = 'input[aria-label="Attachment files"]';
+    assert.equal(
+      await page.evaluate(
+        `document.querySelector(${JSON.stringify(picker)}).hasAttribute("accept")`,
+      ),
+      false,
+      "the OS picker must not hide unknown code extensions or extensionless text",
+    );
+    const files = [
+      ["plan.dwg", Buffer.from("AC1032test-drawing")],
+      ["brief.pdf", Buffer.from("%PDF-1.7\n% fixture")],
+      ["main.ts", Buffer.from("export const greeting = '世界';\n")],
+      ["Makefile", Buffer.from("all:\n\ttrue\n")],
+    ];
+    for (const [name, content] of files) {
+      const path = join(page.evidence, name);
+      writeFileSync(path, content);
+      await page.ab("upload", picker, path);
+      await page.see(name);
+    }
+    const invalid = join(page.evidence, "binary.txt");
+    writeFileSync(invalid, Buffer.from([65, 0, 66]));
+    await page.ab("upload", picker, invalid);
+    await page.see("binary.txt: use PNG, JPEG, GIF, WebP, DWG, PDF, or UTF-8 plain text.");
+    await page.see("main.ts");
     await page.until("document.querySelector('[aria-label=Send]')?.disabled === false");
-    await page.capture("dwg-attachment-draft");
+    await page.capture("file-attachment-draft");
     await page.click("button", "Send");
-    await page.see("AutoCAD drawings saved locally:");
-    const drawingPrompt = page.prompts().at(-1);
-    assert.match(drawingPrompt, /^AutoCAD drawings saved locally:\n- "/);
-    const storedDrawing = JSON.parse(drawingPrompt.split("\n").at(-1).slice(2));
-    assert.match(storedDrawing, /\/piano-attachments\/.*\/1-plan\.dwg$/);
-    assert.deepEqual(readFileSync(storedDrawing), bytes);
-    await page.capture("dwg-attachment-sent");
+    await page.see("Files saved locally:");
+    const filesPrompt = page.prompts().at(-1);
+    assert.match(filesPrompt, /^Files saved locally:\n- "/);
+    const stored = filesPrompt
+      .split("\n")
+      .slice(1)
+      .map((line) => JSON.parse(line.slice(2)));
+    assert.equal(stored.length, files.length);
+    for (const [index, [name, content]] of files.entries()) {
+      assert.ok(stored[index].includes("/piano-attachments/"));
+      assert.ok(stored[index].endsWith(`/${index + 1}-${name}`));
+      assert.deepEqual(readFileSync(stored[index]), content);
+    }
+    await page.capture("file-attachment-sent");
 
     const rejected = "Follow up without credentials";
     await page.ab("fill", '[aria-label="Message"]', rejected);
@@ -198,7 +225,7 @@ await run(
     );
     assert.deepEqual(
       page.prompts(),
-      ["Plan the launch", drawingPrompt, rejected],
+      ["Plan the launch", filesPrompt, rejected],
       "recovery does not resend",
     );
 
