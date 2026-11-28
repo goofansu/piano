@@ -173,16 +173,6 @@ await run(
     assert.deepEqual(page.prompts(), ["Plan the launch"], "a reload never sends the message again");
     await page.capture("3-after-reload");
 
-    const rejected = "Follow up without credentials";
-    await page.ab("fill", '[aria-label="Message"]', rejected);
-    await page.click("button", "Send");
-    await page.see("Message rejected.");
-    await page.until(
-      `document.querySelector('[aria-label="Message"]').value === ${JSON.stringify(rejected)}`,
-    );
-    assert.deepEqual(page.prompts(), ["Plan the launch", rejected], "recovery does not resend");
-
-    await page.ab("fill", '[aria-label="Message"]', "");
     const drawing = join(page.evidence, "plan.dwg");
     const bytes = Buffer.from("AC1032test-drawing");
     writeFileSync(drawing, bytes);
@@ -198,6 +188,19 @@ await run(
     assert.match(storedDrawing, /\/piano-attachments\/.*\/1-plan\.dwg$/);
     assert.deepEqual(readFileSync(storedDrawing), bytes);
     await page.capture("dwg-attachment-sent");
+
+    const rejected = "Follow up without credentials";
+    await page.ab("fill", '[aria-label="Message"]', rejected);
+    await page.click("button", "Send");
+    await page.see("Message rejected.");
+    await page.until(
+      `document.querySelector('[aria-label="Message"]').value === ${JSON.stringify(rejected)}`,
+    );
+    assert.deepEqual(
+      page.prompts(),
+      ["Plan the launch", drawingPrompt, rejected],
+      "recovery does not resend",
+    );
 
     const origin = await page.evaluate("location.origin");
     const marker = join(start.cwd, "shell-executed");
