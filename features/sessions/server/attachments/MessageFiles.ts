@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { extname, join } from "node:path";
 import { Effect } from "effect";
 import { agentDir, directoryPath } from "../../../../server/shared/PiEnv.ts";
+import { TEXT_TYPE } from "../../../../shared/session/attachments.ts";
 import type { FileAttachment } from "../../../../shared/wire.ts";
 
 const sessionFiles = (cwd: string, sessionId: string) =>
@@ -26,11 +27,12 @@ export const saveMessageFiles = (
     try {
       const paths: string[] = [];
       for (const [index, file] of files.entries()) {
-        const name = file.name
-          .slice(0, -4)
-          .replace(/[^A-Za-z0-9_.-]+/g, "-")
-          .slice(0, 120);
-        const path = join(message, `${index + 1}-${name || "drawing"}.dwg`);
+        const safeName = file.name.replace(/[^A-Za-z0-9_.-]+/g, "-");
+        const extension = extname(safeName);
+        const stem = safeName.slice(0, safeName.length - extension.length);
+        const suffix = file.mimeType === TEXT_TYPE ? extension : extension.toLowerCase();
+        const name = `${stem.slice(0, 120) || "attachment"}${suffix.slice(0, 24)}`;
+        const path = join(message, `${index + 1}-${name}`);
         await writeFile(path, Buffer.from(file.data, "base64"), { mode: 0o600, flag: "wx" });
         paths.push(path);
       }

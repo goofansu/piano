@@ -3,8 +3,10 @@ import { cutText } from "../../../../shared/cutText.ts";
 import {
   base64Bytes,
   DWG_TYPE,
+  isFileType,
   MAX_ATTACHMENT_NAME_LENGTH,
   MAX_SINGLE_ATTACHMENT_BYTES,
+  PDF_TYPE,
 } from "../../../../shared/session/attachments.ts";
 import { inputVerdictOf } from "../../../../shared/session/inputVerdict.ts";
 import type { SendDisposition } from "../../../../shared/transport/ws.ts";
@@ -16,9 +18,7 @@ import {
 import {
   attachmentsRefusal,
   ATTACHMENT_TYPE_LIST,
-  hasDwgExtension,
-  imageType,
-  isDwg,
+  attachmentType,
   mebibytes,
 } from "../../contracts/attachments.ts";
 
@@ -54,9 +54,30 @@ export interface AttachmentCandidate {
   name: string;
   size: number;
   type: string;
-  head: Uint8Array;
+  bytes: Uint8Array;
 }
-export const ATTACHMENT_HEAD_BYTES = 12;
+
+const checkSizes = (
+  current: readonly Attachment[],
+  files: readonly Pick<AttachmentCandidate, "name" | "size">[],
+) => {
+  const refusal = attachmentsRefusal(
+    current.length + files.length,
+    heldBytes(current) + files.reduce((sum, file) => sum + file.size, 0),
+  );
+  if (refusal) return refusal;
+  const invalid = files.find((file) => !file.size || file.size > MAX_SINGLE_ATTACHMENT_BYTES);
+  return invalid
+    ? `${invalid.name}: choose a file up to ${mebibytes(MAX_SINGLE_ATTACHMENT_BYTES)}.`
+    : "";
+};
+
+const checkType = (file: AttachmentCandidate) => {
+  const type = attachmentType(file.name, file.bytes);
+  return type && (isFileType(type) || !file.type || file.type === type) ? type : undefined;
+};
+
+const unsupported = (name: string) => `${name}: use ${ATTACHMENT_TYPE_LIST}.`;
 
 export type AttachmentCheck =
   | { ok: true; mimeTypes: Attachment["mimeType"][] }
@@ -66,31 +87,13 @@ export function checkAttachments(
   current: readonly Attachment[],
   files: readonly AttachmentCandidate[],
 ): AttachmentCheck {
-  const refusal = attachmentsRefusal(
-    current.length + files.length,
-    heldBytes(current) + files.reduce((n, f) => n + f.size, 0),
-  );
+  const refusal = checkSizes(current, files);
   if (refusal) return { ok: false, reason: refusal };
   const mimeTypes: Attachment["mimeType"][] = [];
   for (const file of files) {
-    if (!file.size || file.size > MAX_SINGLE_ATTACHMENT_BYTES)
-      return {
-        ok: false,
-        reason: `${file.name}: choose a file up to ${mebibytes(MAX_SINGLE_ATTACHMENT_BYTES)}.`,
-      };
-    if (hasDwgExtension(file.name)) {
-      if (!isDwg(file.name, file.head))
-        return { ok: false, reason: `${file.name}: choose a valid AutoCAD DWG drawing.` };
-      mimeTypes.push(DWG_TYPE);
-      continue;
-    }
-    const mimeType = imageType(file.head);
-    if (!mimeType || (file.type && file.type !== mimeType))
-      return {
-        ok: false,
-        reason: `${file.name}: use ${ATTACHMENT_TYPE_LIST}.`,
-      };
-    mimeTypes.push(mimeType);
+    const type = checkType(file);
+    if (!type) return { ok: false, reason: unsupported(file.name) };
+    mimeTypes.push(type);
   }
   return { ok: true, mimeTypes };
 }
@@ -244,27 +247,25 @@ export function createDrafts(): Drafts {
       if (!key || !files.length || before.busy) return;
       setImages(key, { ...before, busy: true, error: "" });
       try {
-        const candidates = await Promise.all(
-          files.map(async (f) => ({
-            name: f.name,
-            size: f.size,
-            type: f.type,
-            head: new Uint8Array(await f.slice(0, ATTACHMENT_HEAD_BYTES).arrayBuffer()),
-          })),
-        );
-        const check = checkAttachments(before.items, candidates);
-        if (!check.ok) throw new Error(check.reason);
+        const refusal = checkSizes(before.items, files);
+        if (refusal) throw new Error(refusal);
         const added: Attachment[] = [];
-        for (const [i, file] of files.entries()) {
-          const mimeType = check.mimeTypes[i];
+        for (const file of files) {
+          const mimeType = checkType({
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            bytes: new Uint8Array(await file.arrayBuffer()),
+          });
+          if (!mimeType) throw new Error(unsupported(file.name));
           const name =
-            mimeType === DWG_TYPE
+            mimeType === DWG_TYPE || mimeType === PDF_TYPE
               ? cutText(file.name.slice(0, -4), MAX_ATTACHMENT_NAME_LENGTH - 4) +
                 file.name.slice(-4)
               : cutText(file.name, MAX_ATTACHMENT_NAME_LENGTH);
           const data = await encode(file);
           added.push(
-            mimeType === DWG_TYPE
+            isFileType(mimeType)
               ? { kind: "file", name, mimeType, data }
               : { kind: "image", name, mimeType, data },
           );

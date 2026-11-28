@@ -1,5 +1,5 @@
 import type { Drafts, ImageDraft } from "@features/sessions/web/composer/messageDraft";
-import { base64Bytes, IMAGE_TYPES } from "@shared/session/attachments";
+import { base64Bytes } from "@shared/session/attachments";
 import type { RenderMsg } from "@shared/wire";
 import { FileIcon, ImageOffIcon, PaperclipIcon, XIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
@@ -21,7 +21,7 @@ import { IconButton } from "@/shared/components/IconButton";
 import { composerIcon } from "@/shared/lib/styles";
 import { wheelSideways } from "@/shared/lib/wheelSideways";
 import type { DraftKey } from "@/shared/state/draftKey";
-import { drawingLabel, IMAGE_TYPE_NAMES, imageLabel } from "../../contracts/attachments.ts";
+import { fileLabel, imageLabel } from "../../contracts/attachments.ts";
 
 const encode = (file: File) =>
   new Promise<string>((resolve, reject) => {
@@ -49,7 +49,6 @@ export function AttachButton({ draft, disabled }: { draft: AttachmentDraft; disa
         id={id}
         type="file"
         multiple
-        accept={[...IMAGE_TYPES, ".dwg"].join(",")}
         className="hidden"
         aria-label="Attachment files"
         disabled={disabled || draft.busy}
@@ -64,7 +63,7 @@ export function AttachButton({ draft, disabled }: { draft: AttachmentDraft; disa
         type="button"
         className={composerIcon}
         label="Attach files"
-        tooltip={`Attach files (${IMAGE_TYPE_NAMES.join(", ")}, DWG)`}
+        tooltip="Attach images, DWG, PDF, or plain text"
         aria-controls={id}
         disabled={disabled || draft.busy}
         onClick={() => input.current?.click()}
@@ -105,7 +104,7 @@ export function AttachmentDraftView({
                 <AttachmentDescription>
                   {a.kind === "image"
                     ? imageLabel(a.mimeType, base64Bytes(a.data))
-                    : drawingLabel(base64Bytes(a.data))}
+                    : fileLabel(a.mimeType, base64Bytes(a.data))}
                 </AttachmentDescription>
               </AttachmentContent>
               <AttachmentActions>
