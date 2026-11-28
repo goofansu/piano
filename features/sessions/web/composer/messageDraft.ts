@@ -2,8 +2,9 @@ import type { Attachment, ServerMessage } from "@shared/wire";
 import { cutText } from "../../../../shared/cutText.ts";
 import {
   base64Bytes,
+  DWG_TYPE,
   MAX_ATTACHMENT_NAME_LENGTH,
-  MAX_IMAGE_BYTES,
+  MAX_SINGLE_ATTACHMENT_BYTES,
 } from "../../../../shared/session/attachments.ts";
 import { inputVerdictOf } from "../../../../shared/session/inputVerdict.ts";
 import type { SendDisposition } from "../../../../shared/transport/ws.ts";
@@ -14,8 +15,10 @@ import {
 } from "../../../../web/src/shared/state/draftKey.ts";
 import {
   attachmentsRefusal,
-  IMAGE_TYPE_LIST,
+  ATTACHMENT_TYPE_LIST,
+  hasDwgExtension,
   imageType,
+  isDwg,
   mebibytes,
 } from "../../contracts/attachments.ts";
 
@@ -47,22 +50,22 @@ const overLimit = (items: readonly Attachment[]) =>
 export const sendable = (draft: { text: string; images: Pick<ImageDraft, "items" | "busy"> }) =>
   !draft.images.busy && hasContent(draft) && !overLimit(draft.images.items);
 
-export interface ImageCandidate {
+export interface AttachmentCandidate {
   name: string;
   size: number;
   type: string;
   head: Uint8Array;
 }
-export const IMAGE_HEAD_BYTES = 12;
+export const ATTACHMENT_HEAD_BYTES = 12;
 
-export type ImageCheck =
+export type AttachmentCheck =
   | { ok: true; mimeTypes: Attachment["mimeType"][] }
   | { ok: false; reason: string };
 
-export function checkImages(
+export function checkAttachments(
   current: readonly Attachment[],
-  files: readonly ImageCandidate[],
-): ImageCheck {
+  files: readonly AttachmentCandidate[],
+): AttachmentCheck {
   const refusal = attachmentsRefusal(
     current.length + files.length,
     heldBytes(current) + files.reduce((n, f) => n + f.size, 0),
@@ -70,16 +73,22 @@ export function checkImages(
   if (refusal) return { ok: false, reason: refusal };
   const mimeTypes: Attachment["mimeType"][] = [];
   for (const file of files) {
-    if (!file.size || file.size > MAX_IMAGE_BYTES)
+    if (!file.size || file.size > MAX_SINGLE_ATTACHMENT_BYTES)
       return {
         ok: false,
-        reason: `${file.name}: choose an image up to ${mebibytes(MAX_IMAGE_BYTES)}.`,
+        reason: `${file.name}: choose a file up to ${mebibytes(MAX_SINGLE_ATTACHMENT_BYTES)}.`,
       };
+    if (hasDwgExtension(file.name)) {
+      if (!isDwg(file.name, file.head))
+        return { ok: false, reason: `${file.name}: choose a valid AutoCAD DWG drawing.` };
+      mimeTypes.push(DWG_TYPE);
+      continue;
+    }
     const mimeType = imageType(file.head);
     if (!mimeType || (file.type && file.type !== mimeType))
       return {
         ok: false,
-        reason: `${file.name}: use ${IMAGE_TYPE_LIST}. Other files aren't supported yet.`,
+        reason: `${file.name}: use ${ATTACHMENT_TYPE_LIST}.`,
       };
     mimeTypes.push(mimeType);
   }
@@ -240,26 +249,33 @@ export function createDrafts(): Drafts {
             name: f.name,
             size: f.size,
             type: f.type,
-            head: new Uint8Array(await f.slice(0, IMAGE_HEAD_BYTES).arrayBuffer()),
+            head: new Uint8Array(await f.slice(0, ATTACHMENT_HEAD_BYTES).arrayBuffer()),
           })),
         );
-        const check = checkImages(before.items, candidates);
+        const check = checkAttachments(before.items, candidates);
         if (!check.ok) throw new Error(check.reason);
         const added: Attachment[] = [];
-        for (const [i, file] of files.entries())
-          added.push({
-            kind: "image",
-            name: cutText(file.name, MAX_ATTACHMENT_NAME_LENGTH),
-            mimeType: check.mimeTypes[i],
-            data: await encode(file),
-          });
+        for (const [i, file] of files.entries()) {
+          const mimeType = check.mimeTypes[i];
+          const name =
+            mimeType === DWG_TYPE
+              ? cutText(file.name.slice(0, -4), MAX_ATTACHMENT_NAME_LENGTH - 4) +
+                file.name.slice(-4)
+              : cutText(file.name, MAX_ATTACHMENT_NAME_LENGTH);
+          const data = await encode(file);
+          added.push(
+            mimeType === DWG_TYPE
+              ? { kind: "file", name, mimeType, data }
+              : { kind: "image", name, mimeType, data },
+          );
+        }
         const items = [...get(key).images.items, ...added];
         setImages(key, { items, busy: false, error: overLimit(items) });
       } catch (e) {
         setImages(key, {
           ...get(key).images,
           busy: false,
-          error: e instanceof Error ? e.message : "Could not read images.",
+          error: e instanceof Error ? e.message : "Could not read attachments.",
         });
       }
     },

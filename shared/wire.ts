@@ -1,29 +1,44 @@
 import { Schema, type Types } from "effect";
 import {
   base64Bytes,
+  DWG_TYPE,
   IMAGE_TYPES,
   MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENT_NAME_LENGTH,
   MAX_ATTACHMENTS,
-  MAX_IMAGE_BYTES,
+  MAX_SINGLE_ATTACHMENT_BYTES,
 } from "./session/attachments.ts";
 import { DISPOSITIONS } from "./session/dispatch.ts";
 
-export const Attachment = Schema.Struct({
-  kind: Schema.Literal("image"),
+const attachmentFields = {
   name: Schema.String.check(Schema.isMaxLength(MAX_ATTACHMENT_NAME_LENGTH)),
-  mimeType: Schema.Literals(IMAGE_TYPES),
   data: Schema.String.check(
-    Schema.isMaxLength(4 * Math.ceil(MAX_IMAGE_BYTES / 3)),
+    Schema.isMaxLength(4 * Math.ceil(MAX_SINGLE_ATTACHMENT_BYTES / 3)),
     Schema.isPattern(/^[A-Za-z0-9+/]*={0,2}$/),
   ),
-}).check(
+};
+
+export const Attachment = Schema.Union([
+  Schema.Struct({
+    ...attachmentFields,
+    kind: Schema.Literal("image"),
+    mimeType: Schema.Literals(IMAGE_TYPES),
+  }),
+  Schema.Struct({
+    ...attachmentFields,
+    kind: Schema.Literal("file"),
+    mimeType: Schema.Literal(DWG_TYPE),
+  }),
+]).check(
   Schema.makeFilter(
-    (a) =>
-      a.data.length % 4 === 0 && base64Bytes(a.data) > 0 && base64Bytes(a.data) <= MAX_IMAGE_BYTES,
+    ({ data }) =>
+      data.length % 4 === 0 &&
+      base64Bytes(data) > 0 &&
+      base64Bytes(data) <= MAX_SINGLE_ATTACHMENT_BYTES,
   ),
 );
 export type Attachment = typeof Attachment.Type;
+export type FileAttachment = Extract<Attachment, { kind: "file" }>;
 export const Attachments = Schema.Array(Attachment).check(
   Schema.isMaxLength(MAX_ATTACHMENTS),
   Schema.makeFilter(

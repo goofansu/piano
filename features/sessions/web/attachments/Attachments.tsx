@@ -1,7 +1,7 @@
 import type { Drafts, ImageDraft } from "@features/sessions/web/composer/messageDraft";
 import { base64Bytes, IMAGE_TYPES } from "@shared/session/attachments";
 import type { RenderMsg } from "@shared/wire";
-import { ImageOffIcon, PaperclipIcon, XIcon } from "lucide-react";
+import { FileIcon, ImageOffIcon, PaperclipIcon, XIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -21,7 +21,7 @@ import { IconButton } from "@/shared/components/IconButton";
 import { composerIcon } from "@/shared/lib/styles";
 import { wheelSideways } from "@/shared/lib/wheelSideways";
 import type { DraftKey } from "@/shared/state/draftKey";
-import { IMAGE_TYPE_NAMES, imageLabel } from "../../contracts/attachments.ts";
+import { drawingLabel, IMAGE_TYPE_NAMES, imageLabel } from "../../contracts/attachments.ts";
 
 const encode = (file: File) =>
   new Promise<string>((resolve, reject) => {
@@ -49,9 +49,9 @@ export function AttachButton({ draft, disabled }: { draft: AttachmentDraft; disa
         id={id}
         type="file"
         multiple
-        accept={IMAGE_TYPES.join(",")}
+        accept={[...IMAGE_TYPES, ".dwg"].join(",")}
         className="hidden"
-        aria-label="Image files"
+        aria-label="Attachment files"
         disabled={disabled || draft.busy}
         onChange={(e) => {
           const files = Array.from(e.target.files ?? []);
@@ -63,8 +63,8 @@ export function AttachButton({ draft, disabled }: { draft: AttachmentDraft; disa
         size="icon-sm"
         type="button"
         className={composerIcon}
-        label="Attach images"
-        tooltip={`Attach images (${IMAGE_TYPE_NAMES.join(", ")})`}
+        label="Attach files"
+        tooltip={`Attach files (${IMAGE_TYPE_NAMES.join(", ")}, DWG)`}
         aria-controls={id}
         disabled={disabled || draft.busy}
         onClick={() => input.current?.click()}
@@ -91,13 +91,21 @@ export function AttachmentDraftView({
         >
           {draft.items.map((a, i) => (
             <Attachment key={`${a.name}-${i}`} data-motion="enter" orientation="vertical">
-              <AttachmentMedia variant="image">
-                <img src={`data:${a.mimeType};base64,${a.data}`} alt={a.name} />
-              </AttachmentMedia>
+              {a.kind === "image" ? (
+                <AttachmentMedia variant="image">
+                  <img src={`data:${a.mimeType};base64,${a.data}`} alt={a.name} />
+                </AttachmentMedia>
+              ) : (
+                <AttachmentMedia>
+                  <FileIcon />
+                </AttachmentMedia>
+              )}
               <AttachmentContent>
                 <AttachmentTitle>{a.name}</AttachmentTitle>
                 <AttachmentDescription>
-                  {imageLabel(a.mimeType, base64Bytes(a.data))}
+                  {a.kind === "image"
+                    ? imageLabel(a.mimeType, base64Bytes(a.data))
+                    : drawingLabel(base64Bytes(a.data))}
                 </AttachmentDescription>
               </AttachmentContent>
               <AttachmentActions>
@@ -117,7 +125,7 @@ export function AttachmentDraftView({
                 <Spinner />
               </AttachmentMedia>
               <AttachmentContent>
-                <AttachmentTitle>Reading images…</AttachmentTitle>
+                <AttachmentTitle>Reading attachments…</AttachmentTitle>
               </AttachmentContent>
             </Attachment>
           )}

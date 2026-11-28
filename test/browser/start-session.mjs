@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { run } from "./harness.mjs";
 
@@ -94,7 +94,7 @@ await run(
             const send = document.querySelector('[aria-label="Send"]');
             const mic = document.querySelector('[aria-label="Voice input"]');
             return {
-              targets: ['[aria-label="Attach images"]', '[aria-label^="Model:"]',
+              targets: ['[aria-label="Attach files"]', '[aria-label^="Model:"]',
                 '[aria-label="Voice input"]', '[aria-label="Send"]'].map(s => box(document.querySelector(s))),
               face: box(send.firstElementChild),
               micFace: box(mic.firstElementChild),
@@ -173,6 +173,22 @@ await run(
     assert.deepEqual(page.prompts(), ["Plan the launch"], "a reload never sends the message again");
     await page.capture("3-after-reload");
 
+    const drawing = join(page.evidence, "plan.dwg");
+    const bytes = Buffer.from("AC1032test-drawing");
+    writeFileSync(drawing, bytes);
+    await page.ab("upload", 'input[aria-label="Attachment files"]', drawing);
+    await page.see("plan.dwg");
+    await page.until("document.querySelector('[aria-label=Send]')?.disabled === false");
+    await page.capture("dwg-attachment-draft");
+    await page.click("button", "Send");
+    await page.see("AutoCAD drawings saved locally:");
+    const drawingPrompt = page.prompts().at(-1);
+    assert.match(drawingPrompt, /^AutoCAD drawings saved locally:\n- "/);
+    const storedDrawing = JSON.parse(drawingPrompt.split("\n").at(-1).slice(2));
+    assert.match(storedDrawing, /\/piano-attachments\/.*\/1-plan\.dwg$/);
+    assert.deepEqual(readFileSync(storedDrawing), bytes);
+    await page.capture("dwg-attachment-sent");
+
     const rejected = "Follow up without credentials";
     await page.ab("fill", '[aria-label="Message"]', rejected);
     await page.click("button", "Send");
@@ -180,7 +196,11 @@ await run(
     await page.until(
       `document.querySelector('[aria-label="Message"]').value === ${JSON.stringify(rejected)}`,
     );
-    assert.deepEqual(page.prompts(), ["Plan the launch", rejected], "recovery does not resend");
+    assert.deepEqual(
+      page.prompts(),
+      ["Plan the launch", drawingPrompt, rejected],
+      "recovery does not resend",
+    );
 
     const origin = await page.evaluate("location.origin");
     const marker = join(start.cwd, "shell-executed");

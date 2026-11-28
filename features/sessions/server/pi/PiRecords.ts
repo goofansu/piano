@@ -13,7 +13,7 @@ import {
 import {
   MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENTS,
-  MAX_IMAGE_BYTES,
+  MAX_SINGLE_ATTACHMENT_BYTES,
 } from "../../../../shared/session/attachments.ts";
 import { DISPATCH_ENTRY, DISPATCHED_FROM_FLAG } from "../../../../shared/session/dispatch.ts";
 import { turnEnding } from "../../../../shared/session/turnEnding.ts";
@@ -38,7 +38,7 @@ import {
   askUserPrompt,
   askUserQuestions,
 } from "../../contracts/askUser.ts";
-import { IMAGE_TYPE_LIST, imageType, mebibytes } from "../../contracts/attachments.ts";
+import { ATTACHMENT_TYPE_LIST, imageType, isDwg, mebibytes } from "../../contracts/attachments.ts";
 import { imagePreview } from "../attachments/ImagePreviews.ts";
 
 interface RawContent {
@@ -538,11 +538,14 @@ export type PiCommand = { readonly type: string; readonly [key: string]: unknown
 
 export type PiRejection = { readonly rejected: string };
 
-const imagesValid = (attachments: unknown) =>
+const attachmentsValid = (attachments: unknown) =>
   Schema.is(Attachments)(attachments) &&
   !attachments.some((a) => {
     const bytes = Buffer.from(a.data, "base64");
-    return bytes.toString("base64") !== a.data || imageType(bytes) !== a.mimeType;
+    return (
+      bytes.toString("base64") !== a.data ||
+      (a.kind === "file" ? !isDwg(a.name, bytes) : imageType(bytes) !== a.mimeType)
+    );
   });
 
 export const dialogCancellation = (id: string): PiCommand => ({
@@ -591,16 +594,17 @@ export function piExchangeFor(
     case "prompt":
     case "steer": {
       const { attachments } = action;
-      if (attachments?.length && !imagesValid(attachments))
+      if (attachments?.length && !attachmentsValid(attachments))
         return {
-          rejected: `Invalid image attachments. Use ${IMAGE_TYPE_LIST}, up to ${mebibytes(MAX_IMAGE_BYTES)} each and ${mebibytes(MAX_ATTACHMENT_BYTES)} total (${MAX_ATTACHMENTS} images).`,
+          rejected: `Invalid attachments. Use ${ATTACHMENT_TYPE_LIST}, up to ${mebibytes(MAX_SINGLE_ATTACHMENT_BYTES)} each and ${mebibytes(MAX_ATTACHMENT_BYTES)} total (${MAX_ATTACHMENTS} files).`,
         };
+      const images = attachments?.filter((a) => a.kind === "image");
       return {
         command: {
           type: "prompt",
           message: skillCommandForPi(action.text),
-          ...(attachments && {
-            images: attachments.map((a) => ({ type: "image", data: a.data, mimeType: a.mimeType })),
+          ...(images?.length && {
+            images: images.map((a) => ({ type: "image", data: a.data, mimeType: a.mimeType })),
           }),
           streamingBehavior: action._tag === "steer" ? "steer" : "followUp",
         },

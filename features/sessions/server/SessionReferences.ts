@@ -9,6 +9,7 @@ import {
   type Snapshot,
   sessionKey,
 } from "../../../shared/wire.ts";
+import { removeSessionMessageFiles } from "./attachments/MessageFiles.ts";
 import { PiSessionError, PiSessions } from "./pi/PiSessions.ts";
 
 export interface Checkout {
@@ -214,6 +215,13 @@ export const SessionReferencesLive = Layer.effect(
         return entry.cwd;
       }),
       remove: Effect.fn("SessionReferences.remove")(function* (location: SessionLocation) {
+        yield* removeSessionMessageFiles(location.cwd, location.sessionId).pipe(
+          Effect.mapError(() =>
+            rejected(
+              "Could not delete locally saved attachments. Check local storage and try again.",
+            ),
+          ),
+        );
         const file = location.file;
         if (file)
           yield* Effect.tryPromise({

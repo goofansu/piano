@@ -1,5 +1,14 @@
 import assert from "node:assert/strict";
-import { appendFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { isAbsolute, join, relative } from "node:path";
 import { test } from "node:test";
 import { NodeServices } from "@effect/platform-node";
 import { Deferred, Effect, Exit, Fiber, Layer, Result, Schema, Scope, Stream } from "effect";
@@ -651,6 +660,66 @@ test("image-only prompts reach Pi and survive authoritative refresh and late sna
       );
     }).pipe(Effect.timeout("5 seconds"), Effect.scoped),
   );
+});
+
+test("DWG bytes stay on local disk while Pi receives the file path in a mixed prompt", async () => {
+  const root = mkdtempSync(join(tmpdir(), "piano-test-dwg-"));
+  const previous = process.env.PI_CODING_AGENT_DIR;
+  process.env.PI_CODING_AGENT_DIR = root;
+  const bytes = Buffer.alloc(10 * 1024 * 1024);
+  bytes.write("AC1032");
+  bytes.write("drawing fixture", 6);
+  const drawing = {
+    kind: "file",
+    mimeType: "image/vnd.dwg",
+    name: "../../drawing.DWG",
+    data: bytes.toString("base64"),
+  } as const;
+  try {
+    await run(
+      Effect.gen(function* () {
+        const pi = yield* (yield* PiSessions).open({ cwd: root, sessionId: "dwg" });
+        const invalid = yield* pi
+          .act({
+            _tag: "prompt",
+            text: "",
+            attachments: [{ ...drawing, data: Buffer.from("not a DWG").toString("base64") }],
+          })
+          .pipe(Effect.flip);
+        assert.equal(invalid.reason, "rejected");
+        assert.throws(() => statSync(join(root, "piano-attachments")), { code: "ENOENT" });
+        yield* pi.act({ _tag: "prompt", text: "Look at both", attachments: [image, drawing] });
+        const [event] = yield* collectUntil(pi.events, (e) => e._tag === "snapshot");
+        assert.ok(event._tag === "snapshot");
+        const prompt = event.snapshot.messages.find((m) => m.role === "user");
+        assert.equal(prompt?.attachments?.length, 1);
+        assert.match(prompt?.attachments?.[0].url ?? "", /^\/api\/image-previews\//);
+        assert.match(prompt?.text ?? "", /^Look at both\nAutoCAD drawings saved locally:/);
+        const path: string = JSON.parse(prompt!.text.split("\n").at(-1)!.slice(2));
+        const stored = relative(root, path);
+        assert.ok(!isAbsolute(stored));
+        assert.match(stored, /^piano-attachments\/[a-f0-9]{64}\/message-[^/]+\/[^/]+\.dwg$/);
+        assert.equal(statSync(path).mode & 0o777, 0o600);
+        assert.deepEqual(readFileSync(path), bytes);
+      }).pipe(Effect.timeout("10 seconds"), Effect.scoped),
+    );
+  } finally {
+    if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
+    else process.env.PI_CODING_AGENT_DIR = previous;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("DWG wire size is capped at exactly 10 MiB", () => {
+  const drawing = (bytes: number): Attachment => ({
+    kind: "file",
+    mimeType: "image/vnd.dwg",
+    name: "plan.dwg",
+    data: Buffer.alloc(bytes).toString("base64"),
+  });
+  const accepts = Schema.is(Attachments);
+  assert.equal(accepts([drawing(10 * 1024 * 1024)]), true);
+  assert.equal(accepts([drawing(10 * 1024 * 1024 + 1)]), false);
 });
 
 test("upload wire rejects unsupported kinds, oversized payloads and malformed base64", () => {
